@@ -4,6 +4,7 @@
 py-xiaozhi 是一个使用 Python 实现的小智语音客户端，旨在通过代码学习和在没有硬件条件下体验 AI 小智的语音功能。
 本仓库是基于zhh827的[py-xiaozhi](https://github.com/zhh827/py-xiaozhi/tree/main)优化再新增功能
 
+临时体验（windows）:https://wwny.lanzoub.com/iU3oO2pgij8j 密码:9gm3
 
 ## 项目背景
 - 原始硬件项目：[xiaozhi-esp32](https://github.com/78/xiaozhi-esp32)
