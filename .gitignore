@@ -4,6 +4,9 @@
 .venv
 **/__pycache__/
 
+.idea/
+venv/
+
 # 打包相关
 /build
 /dist
