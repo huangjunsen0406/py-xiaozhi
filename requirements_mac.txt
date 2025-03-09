@@ -17,11 +17,11 @@ pynput==1.8.0
 pyperclip==1.9.0
 pypinyin==0.53.0
 requests==2.32.3
-scipy==1.13.1
+scipy
 six==1.17.0
 srt==3.5.3
 tqdm==4.67.1
 urllib3==2.3.0
-vosk==0.3.45
+vosk==0.3.44
 webrtcvad-wheels==2.0.14
 websockets==11.0.3

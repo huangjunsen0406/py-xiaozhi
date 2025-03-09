@@ -93,7 +93,7 @@ pip install opuslib
 
 ```bash
 # 安装系统依赖
-brew install portaudio opus python-tk ffmpeg
+brew install portaudio opus python-tk ffmpeg gfortran
 ```
 
 ## 使用虚拟环境进行依赖安装

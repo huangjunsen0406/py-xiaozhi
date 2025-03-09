@@ -5,11 +5,14 @@ import pyaudio
 import opuslib
 from src.constants.constants import AudioConfig
 import time
+import sys
 
 logger = logging.getLogger("AudioCodec")
 
+
 class AudioCodec:
     """音频编解码器类，处理音频的录制和播放"""
+
     def __init__(self):
         """初始化音频编解码器"""
         self.audio = None
@@ -19,7 +22,7 @@ class AudioCodec:
         self.opus_decoder = None
         self.audio_decode_queue = queue.Queue()
         self._is_closing = False  # 添加关闭状态标志
-        
+
         self._initialize_audio()
 
     def _initialize_audio(self):
@@ -105,20 +108,23 @@ class AudioCodec:
                 # 转换为numpy数组
                 pcm_array = np.frombuffer(buffer, dtype=np.int16)
 
-                # 调试信息
-                logging.debug(f"[DEBUG] PCM数据: 大小={len(pcm_array)}, "
-                             f"最大值={np.max(np.abs(pcm_array))}, "
-                             f"均值={np.mean(np.abs(pcm_array))}")
-
                 # 播放音频
                 try:
-                    self.output_stream.write(pcm_array.tobytes())
-                    return True
-                except OSError as e:
-                    logger.error(f"播放音频时出错: {e}")
-                    # 如果是"Stream not open"错误，尝试重新初始化输出流
-                    if "Stream not open" in str(e):
+                    if self.output_stream and self.output_stream.is_active():
+                        self.output_stream.write(pcm_array.tobytes())
+                        return True
+                    else:
+                        # MAC 特定：如果流不活跃，尝试重新初始化
                         self._reinitialize_output_stream()
+                        if self.output_stream and self.output_stream.is_active():
+                            self.output_stream.write(pcm_array.tobytes())
+                            return True
+                except OSError as e:
+                    if "Stream closed" in str(e) or "Internal PortAudio error" in str(e):
+                        logger.error(f"播放音频时出错: {e}")
+                        self._reinitialize_output_stream()
+                    else:
+                        logger.error(f"播放音频时出错: {e}")
         except queue.Empty:
             pass
         except Exception as e:
@@ -146,7 +152,6 @@ class AudioCodec:
             except queue.Empty:
                 break
 
-
     def clear_audio_queue(self):
         """清空音频队列"""
         while not self.audio_decode_queue.empty():
@@ -173,12 +178,19 @@ class AudioCodec:
         """重新初始化音频输出流"""
         if self._is_closing:  # 如果正在关闭，不要重新初始化
             return
-            
+
         try:
             if self.output_stream:
-                if self.output_stream.is_active():
-                    self.output_stream.stop_stream()
-                self.output_stream.close()
+                try:
+                    if self.output_stream.is_active():
+                        self.output_stream.stop_stream()
+                    self.output_stream.close()
+                except Exception as e:
+                    logger.warning(f"关闭旧输出流时出错: {e}")
+
+            # 在 MAC 上添加短暂延迟
+            if sys.platform == 'darwin':
+                time.sleep(0.1)
 
             self.output_stream = self.audio.open(
                 format=pyaudio.paInt16,
@@ -196,14 +208,14 @@ class AudioCodec:
         """关闭音频编解码器，确保资源正确释放"""
         if self._is_closing:  # 防止重复关闭
             return
-            
+
         self._is_closing = True
         logger.info("开始关闭音频编解码器...")
-        
+
         try:
             # 等待并清理剩余音频数据
             self.wait_for_audio_complete()
-            
+
             # 关闭输入流
             if self.input_stream:
                 logger.debug("正在关闭输入流...")
@@ -238,7 +250,7 @@ class AudioCodec:
             # 清理编解码器
             self.opus_encoder = None
             self.opus_decoder = None
-            
+
             logger.info("音频编解码器关闭完成")
         except Exception as e:
             logger.error(f"关闭音频编解码器时发生错误: {e}")
