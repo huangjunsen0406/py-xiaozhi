@@ -186,10 +186,11 @@ class AudioCodec:
                         self.output_stream.stop_stream()
                     self.output_stream.close()
                 except Exception as e:
-                    logger.warning(f"关闭旧输出流时出错: {e}")
+                    # logger.warning(f"关闭旧输出流时出错: {e}")
+                    pass
 
             # 在 MAC 上添加短暂延迟
-            if sys.platform == 'darwin':
+            if sys.platform in ('darwin', 'linux'):
                 time.sleep(0.1)
 
             self.output_stream = self.audio.open(
