@@ -11,6 +11,7 @@ py-xiaozhi 是一个使用 Python 实现的小智语音客户端，旨在通过�
 - **如若使用xiaozhi-esp32-server作为服务端该项目只能自动对话才有反应**
 - 使用第三方服务端时tts选TTS302AI就可以使用小智同款湾湾小何了
 - windows系统无需挪动opus.dll，项目默认会自动引入
+- 相关文档请去docs里面查看
 - 使用conda环境时安装ffmpeg和Opus
   - conda install conda-forge::libopus
   - conda install conda-forge::ffmpeg
