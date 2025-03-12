@@ -21,6 +21,7 @@ class WebsocketProtocol(Protocol):
         self.connected = False
         self.hello_received = None  # 初始化时先设为 None
         self.WEBSOCKET_URL = self.config.get_config("NETWORK.WEBSOCKET_URL")
+        self.WEBSOCKET_ACCESS_TOKEN = self.config.get_config("NETWORK.WEBSOCKET_ACCESS_TOKEN")
         self.CLIENT_ID = self.config.get_client_id()
         self.DEVICE_ID = self.config.get_device_id()
 
@@ -29,10 +30,10 @@ class WebsocketProtocol(Protocol):
         try:
             # 在连接时创建 Event，确保在正确的事件循环中
             self.hello_received = asyncio.Event()
-            
+
             # 配置连接
             headers = {
-                "Authorization": f"Bearer {self.config.get_config('WEBSOCKET_ACCESS_TOKEN')}",
+                "Authorization": f"Bearer {self.WEBSOCKET_ACCESS_TOKEN}",
                 "Protocol-Version": "1",
                 "Device-Id": self.DEVICE_ID,  # 获取设备MAC地址
                 "Client-Id": self.CLIENT_ID
