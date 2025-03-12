@@ -265,12 +265,18 @@ class GuiDisplay(BaseDisplay):
 
     def start(self):
         """启动GUI"""
-        # 启动键盘监听
-        self.start_keyboard_listener()
-        # 启动更新线程
-        self.start_update_threads()
-        # 在主线程中运行主循环
-        self.root.mainloop()
+        try:
+            # 启动键盘监听
+            self.start_keyboard_listener()
+            # 启动更新线程
+            self.start_update_threads()
+            # 在主线程中运行主循环
+            self.logger.info("开始启动GUI主循环")
+            self.root.mainloop()
+        except Exception as e:
+            self.logger.error(f"GUI启动失败: {e}", exc_info=True)
+            # 尝试回退到CLI模式
+            print(f"GUI启动失败: {e}，请尝试使用CLI模式")
 
     def update_mode_button_status(self, text: str):
         """更新模式按钮状态"""

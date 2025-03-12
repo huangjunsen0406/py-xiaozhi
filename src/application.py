@@ -626,7 +626,9 @@ class Application:
 
         self.keep_listening = False
 
-        self.wake_word_detector.pause()
+        # 检查唤醒词检测器是否存在
+        if self.wake_word_detector:
+            self.wake_word_detector.pause()
 
         if self.device_state == DeviceState.IDLE:
             self.set_device_state(DeviceState.CONNECTING)  # 设置设备状态为连接中
@@ -640,7 +642,7 @@ class Application:
                         self.loop
                     )
                     # 等待操作完成并获取结果
-                    success = future.result(timeout=5.0)  # 添加超时时间
+                    success = future.result(timeout=10.0)  # 添加超时时间
                     
                     if not success:
                         self.alert("错误", "打开音频通道失败")  # 弹出错误提示
@@ -674,7 +676,9 @@ class Application:
 
     def toggle_chat_state(self):
         """切换聊天状态"""
-        self.wake_word_detector.pause()
+        # 检查唤醒词检测器是否存在
+        if self.wake_word_detector:
+            self.wake_word_detector.pause()
         self.schedule(self._toggle_chat_state_impl)
 
     def _toggle_chat_state_impl(self):
@@ -697,7 +701,7 @@ class Application:
                         self.loop
                     )
                     # 等待操作完成并获取结果
-                    success = future.result(timeout=5.0)  # 添加超时时间
+                    success = future.result(timeout=10.0)  # 添加超时时间
                     
                     if not success:
                         self.alert("错误", "打开音频通道失败")  # 弹出错误提示
@@ -851,7 +855,7 @@ class Application:
         """初始化唤醒词检测器"""
         try:
             from src.audio_processing.wake_word_detect import WakeWordDetector
-            self.wake_word_detector = WakeWordDetector(wake_words=self.config.get_config("WAKE_WORDS"),model_path=self.config.get_config("WAKE_WORD_MODEL_PATH"))
+            self.wake_word_detector = WakeWordDetector(wake_words=self.config.get_config("WAKE_WORDS"))
             # 注册唤醒词检测回调
             self.wake_word_detector.on_detected(self._on_wake_word_detected)
             logger.info("唤醒词检测器初始化成功")

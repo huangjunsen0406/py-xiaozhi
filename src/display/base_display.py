@@ -48,6 +48,17 @@ class BaseDisplay(ABC):
             import platform
             system = platform.system()
 
+            # 记录当前音量值
+            self.current_volume = volume
+            self.logger.info(f"设置音量: {volume}%")
+
+            # 在ARM架构上可能需要特殊处理
+            is_arm = platform.machine().startswith(('arm', 'aarch'))
+            if is_arm:
+                self.logger.info(f"检测到ARM架构，使用系统自带的音量控制")
+                # ARM架构上的替代方法
+                return
+
             if system == "Windows":
                 self._set_windows_volume(volume)
             elif system == "Darwin":  # macOS
@@ -56,10 +67,8 @@ class BaseDisplay(ABC):
                 self._set_linux_volume(volume)
             else:
                 self.logger.warning(f"不支持的操作系统: {system}，无法调整音量")
-            
-            self.current_volume = volume
         except Exception as e:
-            self.logger.error(f"设置音量失败: {e}")
+            self.logger.error(f"设置音量失败: {e}", exc_info=True)
 
     def _set_windows_volume(self, volume: int):
         """设置Windows系统音量"""

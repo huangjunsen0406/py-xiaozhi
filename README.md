@@ -47,7 +47,7 @@ py-xiaozhi 是一个使用 Python 实现的小智语音客户端，旨在通过�
 - **CLI 模式**：支持命令行运行，适用于嵌入式设备或无 GUI 环境。  
 - **自动验证码处理**：首次使用时，程序自动复制验证码并打开浏览器，简化用户操作。  
 - **唤醒词**：支持语音唤醒，免去手动操作的烦恼。  
-- **键盘按键**监听可以最小化视口
+- **键盘按键**：监听可以最小化视口
 
 ## 完整状态流转图
 
@@ -103,7 +103,6 @@ brew install portaudio opus python-tk ffmpeg gfortran
 python3 -m venv .venv
 # 激活虚拟环境：
 source .venv/bin/activate
-pip3 install -r requirements.txt
 ```
 
 ## 唤醒词模型
@@ -116,9 +115,9 @@ pip3 install -r requirements.txt
 
 ```bash
 # 安装项目所需的 Python 包 
-pip install -r requirements.txt
+pip install -r requirements.txt -i https://mirrors.aliyun.com/pypi/simple
 # mac
-pip install -r requirements_mac.txt
+pip install -r requirements_mac.txt -i https://mirrors.aliyun.com/pypi/simple
 ```
 
 ## GUI模式运行
