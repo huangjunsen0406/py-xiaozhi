@@ -62,7 +62,7 @@ class WakeWordDetector:
 
         # 初始化模型
         if model_path is None:
-            model_path = config.get_config('WAKE_WORD_MODEL_PATH', "./models/vosk-model-small-cn-0.22")
+            model_path = model_path
 
         # 检查模型路径
         if not os.path.exists(model_path):

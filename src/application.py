@@ -851,7 +851,7 @@ class Application:
         """初始化唤醒词检测器"""
         try:
             from src.audio_processing.wake_word_detect import WakeWordDetector
-            self.wake_word_detector = WakeWordDetector(wake_words=self.config.get_config("WAKE_WORDS"))
+            self.wake_word_detector = WakeWordDetector(wake_words=self.config.get_config("WAKE_WORDS"),model_path=self.config.get_config("WAKE_WORD_MODEL_PATH"))
             # 注册唤醒词检测回调
             self.wake_word_detector.on_detected(self._on_wake_word_detected)
             logger.info("唤醒词检测器初始化成功")
