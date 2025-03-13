@@ -245,9 +245,28 @@ class WakeWordDetector:
                 error_count = 0  # 重置错误计数
 
                 # 处理音频数据
-                if self.recognizer.AcceptWaveform(data):
+                is_final = self.recognizer.AcceptWaveform(data)
+                
+                # 处理部分结果，实现实时唤醒词检测
+                partial_result = json.loads(self.recognizer.PartialResult())
+                partial_text = partial_result.get('partial', '')
+                if partial_text.strip():
+                    detected, wake_word = self._check_wake_word(partial_text)
+                    if detected:
+                        logger.info(f"实时检测到唤醒词: '{wake_word}' (部分文本: {partial_text})")
+                        # 触发回调
+                        for callback in self.on_detected_callbacks:
+                            try:
+                                callback(wake_word, partial_text)
+                            except Exception as e:
+                                logger.error(f"执行唤醒词检测回调时出错: {e}")
+                        # 重置识别器，准备下一轮检测
+                        self.recognizer.Reset()
+                        continue  # 跳过后续处理
+
+                # 处理最终结果
+                if is_final:
                     result = json.loads(self.recognizer.Result())
-                    print("语音检测",result)
                     if "text" in result and result["text"].strip():
                         text = result["text"]
                         logger.debug(f"识别文本: {text}")
@@ -263,6 +282,8 @@ class WakeWordDetector:
                                     callback(wake_word, text)
                                 except Exception as e:
                                     logger.error(f"执行唤醒词检测回调时出错: {e}")
+                            # 重置识别器，准备下一轮检测
+                            self.recognizer.Reset()
 
             except Exception as e:
                 logger.error(f"唤醒词检测循环出错: {e}")
