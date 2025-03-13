@@ -4,17 +4,9 @@
 py-xiaozhi 是一个使用 Python 实现的小智语音客户端，旨在通过代码学习和在没有硬件条件下体验 AI 小智的语音功能。
 本仓库是基于[xiaozhi-esp32](https://github.com/78/xiaozhi-esp32)移植
 
-临时体验（windows）:https://wwny.lanzoub.com/iU3oO2pgij8j 密码:9gm3
+## 请先看这里！
+- 仔细阅读/docs/使用文档.md 启动教程和文件说明都在里面了
 
-
-## 注意点：
-- **如若使用xiaozhi-esp32-server作为服务端该项目只能自动对话才有反应**
-- 使用第三方服务端时tts选TTS302AI就可以使用小智同款湾湾小何了
-- windows系统无需挪动opus.dll，项目默认会自动引入
-- 相关文档请去docs里面查看
-- 使用conda环境时安装ffmpeg和Opus
-  - conda install conda-forge::libopus
-  - conda install conda-forge::ffmpeg
 ## 环境要求
 - Python 3.9.13+（推荐 3.12）
 - Windows/Linux/macOS
@@ -31,14 +23,10 @@ py-xiaozhi 是一个使用 Python 实现的小智语音客户端，旨在通过�
 [xiaozhi-esp32-server（第三方服务端）](https://github.com/xinnan-tech/xiaozhi-esp32-server)
 
 
-
-
-
 ## 演示
 - [Bilibili 演示视频](https://www.bilibili.com/video/BV1HmPjeSED2/#reply255921347937)
 
-![Image](https://github.com/user-attachments/assets/dd6ad32c-89ef-4d43-ad4d-63b1c9517923)
-
+![Image](https://github.com/user-attachments/assets/df8bd5d2-a8e6-4203-8084-46789fc8e9ad)
 ## 功能特点
 - **语音交互**：支持语音输入与识别，实现智能人机交互。  
 - **图形化界面**：提供直观易用的 GUI，方便用户操作。  
@@ -50,7 +38,7 @@ py-xiaozhi 是一个使用 Python 实现的小智语音客户端，旨在通过�
 - **唤醒词**：支持语音唤醒，免去手动操作的烦恼。  
 - **键盘按键**：监听可以最小化视口
 
-## 完整状态流转图
+## 状态流转图
 
 ```
                         +----------------+
@@ -66,79 +54,52 @@ py-xiaozhi 是一个使用 Python 实现的小智语音客户端，旨在通过�
      完成播放 +------------+
 ```
 
-## 安装依赖
+## 项目结构
 
-### Windows
-
-1. 下载 FFmpeg：
-   - 访问 https://ffmpeg.org/download.html
-   - 将 bin 目录添加到系统 PATH
-
-2. 如果 opus.dll 缺失：
-   - 将 /libs/windows的 opus.dll 复制到应用程序目录或 C:\Windows\System32
-
-
-### Linux (Debian/Ubuntu)
-
-```bash
-# 安装系统依赖
-sudo apt-get update
-sudo apt-get install python3-pyaudio portaudio19-dev ffmpeg libopus0 libopus-dev
-
-# 安装 Python 包
-pip install opuslib
 ```
-
-
-## macOS
-
-```bash
-# 安装系统依赖
-brew install portaudio opus python-tk ffmpeg gfortran
+├── .github                          # GitHub 相关配置
+│   └── ISSUE_TEMPLATE               # Issue 模板目录
+│       ├── bug_report.md            # Bug 报告模板
+│       ├── code_improvement.md      # 代码改进建议模板
+│       ├── documentation_improvement.md  # 文档改进建议模板
+│       └── feature_request.md       # 功能请求模板
+├── config                           # 配置文件目录
+│   └── config.json                  # 应用程序配置文件
+├── docs                             # 文档目录
+│   ├── 使用文档.md                  # 用户使用指南
+│   └── 异常汇总.md                  # 常见错误及解决方案
+├── libs                             # 依赖库目录
+│   └── windows                      # Windows 平台特定库
+│       └── opus.dll                 # Opus 音频编解码库
+├── models                           # 语音模型目录（用于语音唤醒）
+├── src                              # 源代码目录
+│   ├── audio_codecs                 # 音频编解码模块
+│   │   └── audio_codec.py           # 音频编解码器实现
+│   ├── audio_processing             # 音频处理模块
+│   │   └── wake_word_detect.py      # 语音唤醒词检测实现
+│   ├── constants                    # 常量定义
+│   │   └── constants.py             # 应用程序常量（状态、事件类型等）
+│   ├── display                      # 显示界面模块
+│   │   ├── base_display.py          # 显示界面基类
+│   │   ├── cli_display.py           # 命令行界面实现
+│   │   └── gui_display.py           # 图形用户界面实现
+│   ├── protocols                    # 通信协议模块
+│   │   ├── mqtt_protocol.py         # MQTT 协议实现（用于设备通信）
+│   │   ├── protocol.py              # 协议基类
+│   │   └── websocket_protocol.py    # WebSocket 协议实现
+│   ├── utils                        # 工具类模块
+│   │   ├── config_manager.py        # 配置管理器（单例模式）
+│   │   ├── logging_config.py        # 日志配置
+│   │   └── system_info.py           # 系统信息工具（处理 opus.dll 加载等）
+│   └── application.py               # 应用程序主类（核心业务逻辑）
+├── .gitignore                       # Git 忽略文件配置
+├── LICENSE                          # 项目许可证
+├── README.md                        # 项目说明文档
+├── main.py                          # 程序入口点
+├── requirements.txt                 # Python 依赖包列表（通用）
+├── requirements_mac.txt             # macOS 特定依赖包列表
+└── xiaozhi.spec                     # PyInstaller 打包配置文件
 ```
-
-## 使用虚拟环境进行依赖安装
-
-```bash
-# 创建虚拟环境：
-python3 -m venv .venv
-# 激活虚拟环境：
-source .venv/bin/activate
-```
-
-## 唤醒词模型
-- [唤醒词模型下载](https://alphacephei.com/vosk/models)
-- 下载完成后放至根目录/models
-- 默认读取vosk-model-small-cn-0.22小模型
-- ![Image](https://github.com/user-attachments/assets/ed534f03-ccdb-418d-88b4-ff5b4ceb5f9e)
-
-## 通用 Python 依赖（所有平台）
-
-```bash
-# 安装项目所需的 Python 包 
-pip install -r requirements.txt -i https://mirrors.aliyun.com/pypi/simple
-# mac
-pip install -r requirements_mac.txt -i https://mirrors.aliyun.com/pypi/simple
-```
-
-## GUI模式运行
-```bash
-python main.py
-```
-
-
-## CLI模式运行
-```bash
-python main.py --mode cli
-```
-
-## 使用说明
-- 启动应用程序后，GUI 界面会自动连接
-- 点击并按住 "按住说话" 按钮开始语音交互
-- 松开按钮结束语音输入
-- 自动模式点击开始对话即可
-- gui模式-f2长按说话-f3打断
-- cli模式-f2按一次自动对话-f3打断
 
 ## 已实现功能
 
@@ -176,9 +137,6 @@ python main.py --mode cli
 ## 贡献
 欢迎提交 Issues 和 Pull Requests！
 
-## 免责声明
-本项目仅用于学习和研究目的，不得用于商业用途。
-
 ## 感谢以下开源人员-排名不分前后
 [Xiaoxia](https://github.com/78)
 
@@ -189,6 +147,8 @@ python main.py --mode cli
 [HonestQiao](https://github.com/HonestQiao)
 
 [vonweller](https://github.com/vonweller)
+
+[孙卫公](https://space.bilibili.com/416954647)
 
 
 ## Star History

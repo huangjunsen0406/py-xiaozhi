@@ -9,6 +9,8 @@ a = Analysis(
     datas=[
         # 只包含实际存在的文件和目录
         ('libs/windows/opus.dll', 'libs/windows'),
+        ('config', 'config'),  # 添加配置文件目录
+        ('models', 'models'),  # 添加模型目录
     ],
     hiddenimports=[
         'engineio.async_drivers.threading',
@@ -24,6 +26,8 @@ a = Analysis(
         'ctypes',
         'socketio',
         'engineio',
+        'websockets',  # 添加 websockets 依赖
+        'vosk',  # 添加语音识别依赖
     ],
     hookspath=[],
     hooksconfig={},
