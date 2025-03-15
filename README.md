@@ -85,6 +85,13 @@ py-xiaozhi 是一个使用 Python 实现的小智语音客户端，旨在通过�
 │   │   ├── base_display.py          # 显示界面基类
 │   │   ├── cli_display.py           # 命令行界面实现
 │   │   └── gui_display.py           # 图形用户界面实现
+│   ├── iot                          # IoT设备相关模块
+│   │   ├── things                   # 具体设备实现目录
+│   │   │   ├── lamp.py              # 智能灯具控制实现
+│   │   │   ├── music_player.py      # 音乐播放器实现
+│   │   │   └── speaker.py           # 智能音箱控制实现
+│   │   ├── thing.py                 # IoT设备基类定义
+│   │   └── thing_manager.py         # IoT设备管理器（统一管理各类设备）
 │   ├── protocols                    # 通信协议模块
 │   │   ├── mqtt_protocol.py         # MQTT 协议实现（用于设备通信）
 │   │   ├── protocol.py              # 协议基类
