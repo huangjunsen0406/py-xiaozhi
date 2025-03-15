@@ -97,5 +97,4 @@ class Protocol:
             "type": "iot",
             "states": json.loads(states) if isinstance(states, str) else states
         }
-        print("iot：=======",json.dumps(message))
         await self.send_text(json.dumps(message))

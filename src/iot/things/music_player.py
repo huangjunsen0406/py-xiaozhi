@@ -18,7 +18,7 @@ logger = logging.getLogger("MusicPlayer")
 
 class MusicPlayer(Thing):
     def __init__(self):
-        super().__init__("MusicPlayer", "在线音乐播放器，当你歌单里面不存在的歌曲才会走这个")
+        super().__init__("MusicPlayer", "在线音乐播放器，优先播放本地音乐如果没有再播放在线音乐")
         self.current_song = ""  # 当前歌曲名称
         self.playing = False    # 播放状态
         self.audio_decode_queue = queue.Queue(maxsize=100)  # 音频解码队列
