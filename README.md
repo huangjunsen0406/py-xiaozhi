@@ -152,10 +152,4 @@ py-xiaozhi 是一个使用 Python 实现的小智语音客户端，旨在通过�
 
 
 ## Star History
-<a href="https://star-history.com/#Huang-junsen/py-xiaozhi&Date">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=Huang-junsen/py-xiaozhi&type=Date&theme=dark" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=Huang-junsen/py-xiaozhi&type=Date" />
-   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=Huang-junsen/py-xiaozhi&type=Date" />
- </picture>
-</a>
+[![Star History Chart](https://api.star-history.com/svg?repos=Huang-junsen/py-xiaozhi&type=Date)](https://www.star-history.com/#Huang-junsen/py-xiaozhi&Date)
