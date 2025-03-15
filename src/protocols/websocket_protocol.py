@@ -39,11 +39,19 @@ class WebsocketProtocol(Protocol):
                 "Client-Id": self.CLIENT_ID
             }
 
-            # 建立WebSocket连接
-            self.websocket = await websockets.connect(
-                self.WEBSOCKET_URL, 
-                extra_headers=headers # 高版本这里改为additional_headers=headers
-            )
+            # 建立WebSocket连接 (兼容不同Python版本的写法)
+            try:
+                # 新的写法 (在Python 3.11+版本中)
+                self.websocket = await websockets.connect(
+                    uri=self.WEBSOCKET_URL, 
+                    additional_headers=headers
+                )
+            except TypeError:
+                # 旧的写法 (在较早的Python版本中)
+                self.websocket = await websockets.connect(
+                    self.WEBSOCKET_URL, 
+                    extra_headers=headers
+                )
 
             # 启动消息处理循环
             asyncio.create_task(self._message_handler())
