@@ -86,7 +86,7 @@ class Protocol:
         message = {
             "session_id": self.session_id,
             "type": "iot",
-            "descriptors": json.loads(descriptors)  # 确保descriptors是有效的JSON
+            "descriptors": json.loads(descriptors) if isinstance(descriptors, str) else descriptors
         }
         await self.send_text(json.dumps(message))
 
@@ -95,6 +95,7 @@ class Protocol:
         message = {
             "session_id": self.session_id,
             "type": "iot",
-            "states": json.loads(states)  # 确保states是有效的JSON
+            "states": json.loads(states) if isinstance(states, str) else states
         }
+        print("iot：=======",json.dumps(message))
         await self.send_text(json.dumps(message))

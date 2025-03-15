@@ -108,6 +108,9 @@ class Application:
         # 初始化应用程序（移除自动连接）
         asyncio.run_coroutine_threadsafe(self._initialize_without_connect(), self.loop)
 
+        # 初始化物联网设备
+        self._initialize_iot_devices()
+
         # 启动主循环线程
         main_loop_thread = threading.Thread(target=self._main_loop)
         main_loop_thread.daemon = True
@@ -151,6 +154,13 @@ class Application:
             from src.audio_codecs.audio_codec import AudioCodec
             self.audio_codec = AudioCodec()
             logger.info("音频编解码器初始化成功")
+            
+            # 记录音量控制状态
+            if hasattr(self.display, 'volume_controller') and self.display.volume_controller:
+                logger.info("系统音量控制已启用")
+            else:
+                logger.info("系统音量控制未启用，将使用模拟音量控制")
+            
         except Exception as e:
             logger.error(f"初始化音频设备失败: {e}")
             self.alert("错误", f"初始化音频设备失败: {e}")
@@ -348,6 +358,8 @@ class Application:
                 self._handle_stt_message(data)
             elif msg_type == "llm":
                 self._handle_llm_message(data)
+            elif msg_type == "iot":
+                self._handle_iot_message(data)
             else:
                 logger.warning(f"收到未知类型的消息: {msg_type}")
         except Exception as e:
@@ -418,6 +430,14 @@ class Application:
         """音频通道打开回调"""
         logger.info("音频通道已打开")
         self.schedule(lambda: self._start_audio_streams())
+        
+        # 发送物联网设备描述符
+        from src.iot.thing_manager import ThingManager
+        thing_manager = ThingManager.get_instance()
+        asyncio.run_coroutine_threadsafe(
+            self.protocol.send_iot_descriptors(thing_manager.get_descriptors_json()),
+            self.loop
+        )
 
     def _start_audio_streams(self):
         """启动音频流"""
@@ -933,3 +953,50 @@ class Application:
                 logger.info("唤醒词检测器重新启动成功")
             except Exception as e:
                 logger.error(f"重新启动唤醒词检测器失败: {e}")
+
+    def _initialize_iot_devices(self):
+        """初始化物联网设备"""
+        from src.iot.thing_manager import ThingManager
+        from src.iot.things.lamp import Lamp
+        from src.iot.things.speaker import Speaker
+        from src.iot.things.music_player import MusicPlayer
+        # 获取物联网设备管理器实例
+        thing_manager = ThingManager.get_instance()
+        
+        # 添加设备
+        thing_manager.add_thing(Lamp())
+        thing_manager.add_thing(Speaker())
+        thing_manager.add_thing(MusicPlayer())
+        logger.info("物联网设备初始化完成")
+
+    def _handle_iot_message(self, data):
+        """处理物联网消息"""
+        from src.iot.thing_manager import ThingManager
+        thing_manager = ThingManager.get_instance()
+        
+        commands = data.get("commands", [])
+        print(commands)
+        for command in commands:
+            try:
+                result = thing_manager.invoke(command)
+                logger.info(f"执行物联网命令结果: {result}")
+                
+                # 命令执行后更新设备状态
+                self.schedule(lambda: self._update_iot_states())
+            except Exception as e:
+                logger.error(f"执行物联网命令失败: {e}")
+
+    def _update_iot_states(self):
+        """更新物联网设备状态"""
+        from src.iot.thing_manager import ThingManager
+        thing_manager = ThingManager.get_instance()
+        
+        # 获取当前设备状态
+        states_json = thing_manager.get_states_json()
+        
+        # 发送状态更新
+        asyncio.run_coroutine_threadsafe(
+            self.protocol.send_iot_states(states_json),
+            self.loop
+        )
+        logger.info("物联网设备状态已更新")

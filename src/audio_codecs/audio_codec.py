@@ -30,21 +30,26 @@ class AudioCodec:
         try:
             self.audio = pyaudio.PyAudio()
 
+            # **自动选择默认输入/输出设备**
+            input_device_index = self._get_default_or_first_available_device(is_input=True)
+            output_device_index = self._get_default_or_first_available_device(is_input=False)
+
             # 初始化音频输入流
             self.input_stream = self.audio.open(
                 format=pyaudio.paInt16,
                 channels=AudioConfig.CHANNELS,
                 rate=AudioConfig.SAMPLE_RATE,
                 input=True,
+                input_device_index=input_device_index,  # 选择的麦克风
                 frames_per_buffer=AudioConfig.FRAME_SIZE
             )
 
-            # 初始化音频输出流
             self.output_stream = self.audio.open(
                 format=pyaudio.paInt16,
                 channels=AudioConfig.CHANNELS,
                 rate=AudioConfig.SAMPLE_RATE,
                 output=True,
+                output_device_index=output_device_index,  # 选择的扬声器
                 frames_per_buffer=AudioConfig.FRAME_SIZE
             )
 
@@ -66,6 +71,31 @@ class AudioCodec:
             logger.error(f"初始化音频设备失败: {e}")
             raise
 
+    def _get_default_or_first_available_device(self, is_input=True):
+        """获取默认设备或第一个可用的输入/输出设备"""
+        try:
+            if is_input:
+                default_device = self.audio.get_default_input_device_info()
+            else:
+                default_device = self.audio.get_default_output_device_info()
+            logger.info(f"使用默认设备: {default_device['name']} (Index: {default_device['index']})")
+            return int(default_device["index"])
+        except Exception:
+            logger.warning("未找到默认设备，正在查找第一个可用的设备...")
+
+        # 遍历所有设备，寻找第一个可用的输入/输出设备
+        for i in range(self.audio.get_device_count()):
+            device_info = self.audio.get_device_info_by_index(i)
+            if is_input and device_info["maxInputChannels"] > 0:
+                logger.info(f"找到可用的麦克风: {device_info['name']} (Index: {i})")
+                return i
+            if not is_input and device_info["maxOutputChannels"] > 0:
+                logger.info(f"找到可用的扬声器: {device_info['name']} (Index: {i})")
+                return i
+
+        logger.error("未找到可用的音频设备")
+        raise RuntimeError("没有可用的音频设备")
+
     def read_audio(self):
         """读取音频输入数据并编码"""
         try:
@@ -82,12 +112,12 @@ class AudioCodec:
         self.audio_decode_queue.put(opus_data)
 
     def play_audio(self):
-        """处理并播放队列中的音频数据"""
+        """处理并播放队列中的音频数据，返回处理后的音频数据用于VAD检测"""
         try:
             # 批量处理多个音频包以减少处理延迟
             batch_size = min(10, self.audio_decode_queue.qsize())
             if batch_size == 0:
-                return False
+                return None
 
             # 创建缓冲区存储解码后的数据
             buffer = bytearray()
@@ -112,13 +142,13 @@ class AudioCodec:
                 try:
                     if self.output_stream and self.output_stream.is_active():
                         self.output_stream.write(pcm_array.tobytes())
-                        return True
+                        return pcm_array.tobytes()  # 返回音频数据用于VAD检测
                     else:
                         # MAC 特定：如果流不活跃，尝试重新初始化
                         self._reinitialize_output_stream()
                         if self.output_stream and self.output_stream.is_active():
                             self.output_stream.write(pcm_array.tobytes())
-                            return True
+                            return pcm_array.tobytes()  # 返回音频数据用于VAD检测
                 except OSError as e:
                     if "Stream closed" in str(e) or "Internal PortAudio error" in str(e):
                         logger.error(f"播放音频时出错: {e}")
@@ -131,7 +161,7 @@ class AudioCodec:
             logger.error(f"播放音频时出错: {e}")
             self._reinitialize_output_stream()
 
-        return False
+        return None
 
     def has_pending_audio(self):
         """检查是否还有待播放的音频数据"""

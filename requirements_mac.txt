@@ -3,7 +3,6 @@ certifi==2025.1.31
 cffi==1.17.1
 charset-normalizer==3.4.1
 colorama==0.4.6
-comtypes==1.4.6
 cryptography==44.0.1
 idna==3.10
 numpy==2.0.2
@@ -11,17 +10,16 @@ opuslib==3.0.1
 paho-mqtt==2.1.0
 psutil==7.0.0
 PyAudio==0.2.14
-pycaw==20240210
 pycparser==2.22
 pynput==1.8.0
 pyperclip==1.9.0
 pypinyin==0.53.0
 requests==2.32.3
-scipy
+scipy==1.13.1
 six==1.17.0
 srt==3.5.3
 tqdm==4.67.1
 urllib3==2.3.0
-vosk==0.3.44
+vosk==0.3.45
 webrtcvad-wheels==2.0.14
 websockets==11.0.3

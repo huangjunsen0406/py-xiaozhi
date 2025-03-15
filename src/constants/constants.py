@@ -8,6 +8,7 @@ class AbortReason:
     """中止原因"""
     NONE = "none"
     WAKE_WORD_DETECTED = "wake_word_detected"
+    USER_INTERRUPTION = "user_interruption"
 
 class DeviceState:
     """设备状态"""
