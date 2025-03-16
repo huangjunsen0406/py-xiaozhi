@@ -10,7 +10,7 @@ py-xiaozhi 是一个使用 Python 实现的小智语音客户端，旨在通过�
 
 
 ## 环境要求
-- Python 3.9.13+（推荐 3.12）
+- Python 3.9.13+（推荐 3.12）最大支持版本3.12
 - Windows/Linux/macOS
 
 ## 相关分支
@@ -160,6 +160,10 @@ py-xiaozhi 是一个使用 Python 实现的小智语音客户端，旨在通过�
 [vonweller](https://github.com/vonweller)
 
 [孙卫公](https://space.bilibili.com/416954647)
+
+[isamu2025](https://github.com/isamu2025)
+
+[Rain120](https://github.com/Rain120)
 
 
 ## Star History
