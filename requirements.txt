@@ -5,6 +5,7 @@ colorama==0.4.6
 comtypes==1.4.6
 cryptography==44.0.1
 idna==3.10
+keyboard==0.13.5
 numpy==2.0.2
 opuslib==3.0.1
 paho-mqtt==2.1.0

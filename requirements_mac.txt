@@ -4,6 +4,7 @@ cffi==1.17.1
 charset-normalizer==3.4.1
 colorama==0.4.6
 cryptography==44.0.1
+keyboard==0.13.5
 idna==3.10
 numpy==2.0.2
 opuslib==3.0.1
