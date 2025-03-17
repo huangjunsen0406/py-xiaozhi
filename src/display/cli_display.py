@@ -4,8 +4,8 @@ import time
 from typing import Optional, Callable
 
 from src.display.base_display import BaseDisplay
-# 替换pynput导入为keyboard
-import keyboard
+# 替换keyboard导入为pynput
+from pynput import keyboard as pynput_keyboard
 
 logger = logging.getLogger("CliDisplay")
 
@@ -37,8 +37,8 @@ class CliDisplay(BaseDisplay):
         self.last_emotion = None
         self.last_volume = None
 
-        # 键盘监听标志
-        self.keyboard_hooked = False
+        # 键盘监听器
+        self.keyboard_listener = None
 
     def set_callbacks(self,
                       press_callback: Optional[Callable] = None,
@@ -81,36 +81,34 @@ class CliDisplay(BaseDisplay):
     def start_keyboard_listener(self):
         """启动键盘监听"""
         try:
-            # F2按键处理函数
-            def handle_f2(event):
-                # 只处理按下事件
-                if event.event_type == 'down':
-                    if self.auto_callback:
-                        self.auto_callback()
+            def on_press(key):
+                try:
+                    # F2 按键处理 - 自动对话
+                    if key == pynput_keyboard.Key.f2:
+                        if self.auto_callback:
+                            self.auto_callback()
+                    # F3 按键处理 - 打断
+                    elif key == pynput_keyboard.Key.f3:
+                        if self.abort_callback:
+                            self.abort_callback()
+                except Exception as e:
+                    self.logger.error(f"键盘事件处理错误: {e}")
 
-            # F3按键处理函数
-            def handle_f3(event):
-                # 只处理按下事件
-                if event.event_type == 'down':
-                    if self.abort_callback:
-                        self.abort_callback()
-
-            # 注册热键监听
-            keyboard.hook_key('f2', handle_f2)
-            keyboard.hook_key('f3', handle_f3)
-            
-            self.keyboard_hooked = True
+            # 创建并启动监听器
+            self.keyboard_listener = pynput_keyboard.Listener(
+                on_press=on_press
+            )
+            self.keyboard_listener.start()
             self.logger.info("键盘监听器初始化成功")
         except Exception as e:
             self.logger.error(f"键盘监听器初始化失败: {e}")
 
     def stop_keyboard_listener(self):
         """停止键盘监听"""
-        if self.keyboard_hooked:
+        if self.keyboard_listener:
             try:
-                # 移除所有键盘钩子
-                keyboard.unhook_all()
-                self.keyboard_hooked = False
+                self.keyboard_listener.stop()
+                self.keyboard_listener = None
                 self.logger.info("键盘监听器已停止")
             except Exception as e:
                 self.logger.error(f"停止键盘监听器失败: {e}")
