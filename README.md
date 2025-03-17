@@ -1,14 +1,14 @@
 # py-xiaozhi
 
+## 项目简介
+py-xiaozhi 是一个使用 Python 实现的小智语音客户端，旨在通过代码学习和在没有硬件条件下体验 AI 小智的语音功能。
+本仓库是基于[xiaozhi-esp32](https://github.com/78/xiaozhi-esp32)移植
+
 ## 请先看这里！
 - 仔细阅读/docs/使用文档.md 启动教程和文件说明都在里面了
 - main是最新代码，每次更新都需要手动重新安装一次pip依赖防止我新增依赖后你们本地没有
 
 [从零开始使用小智客户端（视频教程）](https://www.bilibili.com/video/BV1dWQhYEEmq/?vd_source=2065ec11f7577e7107a55bbdc3d12fce)
-
-## 项目简介
-py-xiaozhi 是一个使用 Python 实现的小智语音客户端，旨在通过代码学习和在没有硬件条件下体验 AI 小智的语音功能。
-本仓库是基于[xiaozhi-esp32](https://github.com/78/xiaozhi-esp32)移植
 
 
 ## 环境要求
@@ -70,16 +70,23 @@ py-xiaozhi 是一个使用 Python 实现的小智语音客户端，旨在通过�
 ├── config                           # 配置文件目录
 │   └── config.json                  # 应用程序配置文件
 ├── docs                             # 文档目录
+│   ├── images                       # 文档图片资源
+│   │   ├── QQ音乐接口配置.png       # QQ音乐接口配置示例图
+│   │   ├── 唤醒词.png               # 唤醒词设置示例图
+│   │   └── 群聊.jpg                 # 社区交流群图片
 │   ├── 使用文档.md                  # 用户使用指南
 │   └── 异常汇总.md                  # 常见错误及解决方案
 ├── libs                             # 依赖库目录
 │   └── windows                      # Windows 平台特定库
 │       └── opus.dll                 # Opus 音频编解码库
-├── models                           # 语音模型目录（用于语音唤醒）
+├── scripts                          # 实用脚本目录
+│   ├── dir_tree.py                  # 生成目录树结构脚本
+│   └── py_audio_scanner.py          # 音频设备扫描工具
 ├── src                              # 源代码目录
 │   ├── audio_codecs                 # 音频编解码模块
 │   │   └── audio_codec.py           # 音频编解码器实现
 │   ├── audio_processing             # 音频处理模块
+│   │   ├── vad_detector.py          # 语音活动检测实现（用于实时打断）
 │   │   └── wake_word_detect.py      # 语音唤醒词检测实现
 │   ├── constants                    # 常量定义
 │   │   └── constants.py             # 应用程序常量（状态、事件类型等）
@@ -89,6 +96,9 @@ py-xiaozhi 是一个使用 Python 实现的小智语音客户端，旨在通过�
 │   │   └── gui_display.py           # 图形用户界面实现
 │   ├── iot                          # IoT设备相关模块
 │   │   ├── things                   # 具体设备实现目录
+│   │   │   ├── CameraVL             # 摄像头与视觉识别模块
+│   │   │   │   ├── Camera.py        # 摄像头控制实现
+│   │   │   │   └── VL.py            # 视觉识别实现
 │   │   │   ├── lamp.py              # 智能灯具控制实现
 │   │   │   ├── music_player.py      # 音乐播放器实现
 │   │   │   └── speaker.py           # 智能音箱控制实现
@@ -101,11 +111,15 @@ py-xiaozhi 是一个使用 Python 实现的小智语音客户端，旨在通过�
 │   ├── utils                        # 工具类模块
 │   │   ├── config_manager.py        # 配置管理器（单例模式）
 │   │   ├── logging_config.py        # 日志配置
-│   │   └── system_info.py           # 系统信息工具（处理 opus.dll 加载等）
+│   │   ├── system_info.py           # 系统信息工具（处理 opus.dll 加载等）
+│   │   └── volume_controller.py     # 音量控制工具（跨平台音量调节）
 │   └── application.py               # 应用程序主类（核心业务逻辑）
 ├── .gitignore                       # Git 忽略文件配置
 ├── LICENSE                          # 项目许可证
 ├── README.md                        # 项目说明文档
+├── demo.py                          # 演示脚本1
+├── demo02.py                        # 演示脚本2
+├── demo03.py                        # 演示脚本3
 ├── main.py                          # 程序入口点
 ├── requirements.txt                 # Python 依赖包列表（通用）
 ├── requirements_mac.txt             # macOS 特定依赖包列表
@@ -127,6 +141,7 @@ py-xiaozhi 是一个使用 Python 实现的小智语音客户端，旨在通过�
 - [x] **联网音乐播放**
 - [x] **新增 Volume控制类统一声音改变**
 - [x] **实时语音打断功能**（自动对话模式）  
+- [x] **新增 视觉多模态**
 
 ## 待测试功能（不够稳定）
 - [x] **实时对话模式**（未集成，但已实现 demo）  
