@@ -13,7 +13,7 @@ logger = logging.getLogger("Camera")
 
 class Camera(Thing):
     # 配置文件路径
-    CONFIG_DIR = Path(__file__).parent.parent.parent / "config"
+    CONFIG_DIR = Path(__file__).parent.parent.parent.parent.parent / "config"
     CONFIG_FILE = CONFIG_DIR / "camera_VL_config.json"
     # 默认配置
     DEFAULT_CONFIG = {
@@ -21,7 +21,7 @@ class Camera(Thing):
         "frame_width": 640,  # 帧宽度
         "frame_height": 480,  # 帧高度
         "fps": 30,  # 帧率
-        "Loacl_VL_url": "XXXXX",  # 修改为你对应的llm地址
+        "Loacl_VL_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",  # 修改为你对应的llm地址
         "VLapi_key": 'XXXXXX',  # 修改为你的api key
     }
     def __init__(self):
