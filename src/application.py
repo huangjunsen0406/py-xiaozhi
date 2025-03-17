@@ -59,7 +59,7 @@ class Application:
 
         # 音频处理相关
         self.audio_codec = None  # 将在 _initialize_audio 中初始化
-
+        self.is_tts_playing = False
         # 事件循环和线程
         self.loop = asyncio.new_event_loop()
         self.loop_thread = None
@@ -270,7 +270,7 @@ class Application:
         """处理音频输出"""
         if self.device_state != DeviceState.SPEAKING:
             return
-
+        self.is_tts_playing = True
         self.audio_codec.play_audio()
 
     def _on_network_error(self, message):
@@ -398,9 +398,9 @@ class Application:
         if self.device_state == DeviceState.IDLE or self.device_state == DeviceState.LISTENING:
             self.set_device_state(DeviceState.SPEAKING)
             
-            # 恢复VAD检测器，用于检测打断
-            if hasattr(self, 'vad_detector') and self.vad_detector:
-                self.vad_detector.resume()
+            # 注释掉恢复VAD检测器的代码
+            # if hasattr(self, 'vad_detector') and self.vad_detector:
+            #     self.vad_detector.resume()
 
     def _handle_tts_stop(self):
         """处理TTS停止事件"""
@@ -536,16 +536,16 @@ class Application:
         if old_state == DeviceState.SPEAKING:
             self.audio_codec.wait_for_audio_complete()
             
-            # 暂停VAD检测器
-            if hasattr(self, 'vad_detector') and self.vad_detector:
-                self.vad_detector.pause()
+            # 注释掉暂停VAD检测器的代码
+            # if hasattr(self, 'vad_detector') and self.vad_detector:
+            #     self.vad_detector.pause()
 
-        # 如果进入 SPEAKING 状态，重置aborted标志并恢复VAD检测器
+        # 如果进入 SPEAKING 状态，重置aborted标志并注释掉恢复VAD检测器的代码
         if state == DeviceState.SPEAKING:
             self.aborted = False
-            # 恢复VAD检测器
-            if hasattr(self, 'vad_detector') and self.vad_detector:
-                self.vad_detector.resume()
+            # 注释掉恢复VAD检测器的代码
+            # if hasattr(self, 'vad_detector') and self.vad_detector:
+            #     self.vad_detector.resume()
 
         self.device_state = state
         logger.info(f"状态变更: {old_state} -> {state}")
@@ -797,9 +797,9 @@ class Application:
         logger.info(f"中止语音输出，原因: {reason}")
         self.aborted = True
         
-        # 确保VAD检测器暂停
-        if hasattr(self, 'vad_detector') and self.vad_detector:
-            self.vad_detector.pause()
+        # 注释掉确保VAD检测器暂停的代码
+        # if hasattr(self, 'vad_detector') and self.vad_detector:
+        #     self.vad_detector.pause()
         
         asyncio.run_coroutine_threadsafe(
             self.protocol.send_abort_speaking(reason),
