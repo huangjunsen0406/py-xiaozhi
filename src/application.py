@@ -156,10 +156,10 @@ class Application:
             logger.info("音频编解码器初始化成功")
             
             # 初始化VAD检测器
-            from src.audio_processing.vad_detector import VADDetector
-            self.vad_detector = VADDetector(self.audio_codec, self.protocol, self, self.loop)
-            self.vad_detector.start()
-            logger.info("VAD检测器初始化成功")
+            # from src.audio_processing.vad_detector import VADDetector
+            # self.vad_detector = VADDetector(self.audio_codec, self.protocol, self, self.loop)
+            # self.vad_detector.start()
+            # logger.info("VAD检测器初始化成功")
             
             # 记录音量控制状态
             if hasattr(self.display, 'volume_controller') and self.display.volume_controller:
@@ -409,7 +409,10 @@ class Application:
             def delayed_state_change():
                 # 等待音频队列清空
                 self.audio_codec.wait_for_audio_complete()
-
+                
+                # 设置TTS播放状态为False
+                self.is_tts_playing = False
+                
                 # 状态转换
                 if self.keep_listening:
                     asyncio.run_coroutine_threadsafe(
@@ -532,9 +535,10 @@ class Application:
 
         old_state = self.device_state
 
-        # 如果从 SPEAKING 状态切换出去，确保音频播放完成
+        # 如果从 SPEAKING 状态切换出去，确保音频播放完成并设置TTS播放状态为False
         if old_state == DeviceState.SPEAKING:
             self.audio_codec.wait_for_audio_complete()
+            self.is_tts_playing = False
             
             # 注释掉暂停VAD检测器的代码
             # if hasattr(self, 'vad_detector') and self.vad_detector:
@@ -797,6 +801,9 @@ class Application:
         logger.info(f"中止语音输出，原因: {reason}")
         self.aborted = True
         
+        # 设置TTS播放状态为False
+        self.is_tts_playing = False
+        
         # 注释掉确保VAD检测器暂停的代码
         # if hasattr(self, 'vad_detector') and self.vad_detector:
         #     self.vad_detector.pause()
@@ -857,8 +864,8 @@ class Application:
             self.wake_word_detector.stop()
 
         # 关闭VAD检测器
-        if hasattr(self, 'vad_detector') and self.vad_detector:
-            self.vad_detector.stop()
+        # if hasattr(self, 'vad_detector') and self.vad_detector:
+        #     self.vad_detector.stop()
 
         logger.info("应用程序已关闭")
 
