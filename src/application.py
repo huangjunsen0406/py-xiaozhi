@@ -995,6 +995,7 @@ class Application:
         from src.iot.things.lamp import Lamp
         from src.iot.things.speaker import Speaker
         from src.iot.things.music_player import MusicPlayer
+        from src.iot.things.CameraVL.Camera import Camera
         # 获取物联网设备管理器实例
         thing_manager = ThingManager.get_instance()
         
@@ -1002,6 +1003,7 @@ class Application:
         thing_manager.add_thing(Lamp())
         thing_manager.add_thing(Speaker())
         thing_manager.add_thing(MusicPlayer())
+        thing_manager.add_thing(Camera())
         logger.info("物联网设备初始化完成")
 
     def _handle_iot_message(self, data):
