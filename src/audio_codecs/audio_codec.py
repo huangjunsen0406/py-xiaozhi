@@ -112,7 +112,7 @@ class AudioCodec:
         self.audio_decode_queue.put(opus_data)
 
     def play_audio(self):
-        """处理并播放队列中的音频数据，返回处理后的音频数据用于VAD检测"""
+        """处理并播放队列中的音频数据"""
         try:
             # 批量处理多个音频包以减少处理延迟
             batch_size = min(10, self.audio_decode_queue.qsize())
@@ -142,13 +142,11 @@ class AudioCodec:
                 try:
                     if self.output_stream and self.output_stream.is_active():
                         self.output_stream.write(pcm_array.tobytes())
-                        return pcm_array.tobytes()  # 返回音频数据用于VAD检测
                     else:
                         # MAC 特定：如果流不活跃，尝试重新初始化
                         self._reinitialize_output_stream()
                         if self.output_stream and self.output_stream.is_active():
                             self.output_stream.write(pcm_array.tobytes())
-                            return pcm_array.tobytes()  # 返回音频数据用于VAD检测
                 except OSError as e:
                     if "Stream closed" in str(e) or "Internal PortAudio error" in str(e):
                         logger.error(f"播放音频时出错: {e}")
@@ -160,8 +158,6 @@ class AudioCodec:
         except Exception as e:
             logger.error(f"播放音频时出错: {e}")
             self._reinitialize_output_stream()
-
-        return None
 
     def has_pending_audio(self):
         """检查是否还有待播放的音频数据"""

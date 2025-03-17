@@ -155,6 +155,12 @@ class Application:
             self.audio_codec = AudioCodec()
             logger.info("音频编解码器初始化成功")
             
+            # 初始化VAD检测器
+            from src.audio_processing.vad_detector import VADDetector
+            self.vad_detector = VADDetector(self.audio_codec, self.protocol, self, self.loop)
+            self.vad_detector.start()
+            logger.info("VAD检测器初始化成功")
+            
             # 记录音量控制状态
             if hasattr(self.display, 'volume_controller') and self.display.volume_controller:
                 logger.info("系统音量控制已启用")
@@ -391,6 +397,10 @@ class Application:
 
         if self.device_state == DeviceState.IDLE or self.device_state == DeviceState.LISTENING:
             self.set_device_state(DeviceState.SPEAKING)
+            
+            # 恢复VAD检测器，用于检测打断
+            if hasattr(self, 'vad_detector') and self.vad_detector:
+                self.vad_detector.resume()
 
     def _handle_tts_stop(self):
         """处理TTS停止事件"""
@@ -525,6 +535,17 @@ class Application:
         # 如果从 SPEAKING 状态切换出去，确保音频播放完成
         if old_state == DeviceState.SPEAKING:
             self.audio_codec.wait_for_audio_complete()
+            
+            # 暂停VAD检测器
+            if hasattr(self, 'vad_detector') and self.vad_detector:
+                self.vad_detector.pause()
+
+        # 如果进入 SPEAKING 状态，重置aborted标志并恢复VAD检测器
+        if state == DeviceState.SPEAKING:
+            self.aborted = False
+            # 恢复VAD检测器
+            if hasattr(self, 'vad_detector') and self.vad_detector:
+                self.vad_detector.resume()
 
         self.device_state = state
         logger.info(f"状态变更: {old_state} -> {state}")
@@ -768,8 +789,18 @@ class Application:
 
     def abort_speaking(self, reason):
         """中止语音输出"""
+        # 如果已经中止，不要重复处理
+        if self.aborted:
+            logger.debug(f"已经中止，忽略重复的中止请求: {reason}")
+            return
+        
         logger.info(f"中止语音输出，原因: {reason}")
         self.aborted = True
+        
+        # 确保VAD检测器暂停
+        if hasattr(self, 'vad_detector') and self.vad_detector:
+            self.vad_detector.pause()
+        
         asyncio.run_coroutine_threadsafe(
             self.protocol.send_abort_speaking(reason),
             self.loop
@@ -777,7 +808,7 @@ class Application:
         self.set_device_state(DeviceState.IDLE)
 
         # 添加此代码：当用户主动打断时自动进入录音模式
-        if reason == AbortReason.WAKE_WORD_DETECTED and self.keep_listening:
+        if reason == AbortReason.WAKE_WORD_DETECTED and self.keep_listening and self.protocol.is_audio_channel_opened():
             # 短暂延迟确保abort命令被处理
             def start_listening_after_abort():
                 time.sleep(0.2)  # 短暂延迟
@@ -824,6 +855,10 @@ class Application:
         # 停止唤醒词检测
         if self.wake_word_detector:
             self.wake_word_detector.stop()
+
+        # 关闭VAD检测器
+        if hasattr(self, 'vad_detector') and self.vad_detector:
+            self.vad_detector.stop()
 
         logger.info("应用程序已关闭")
 
