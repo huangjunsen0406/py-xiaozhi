@@ -404,8 +404,21 @@ class Application:
             # 给音频播放一个缓冲时间，确保所有音频都播放完毕
             def delayed_state_change():
                 # 等待音频队列清空
-                self.audio_codec.wait_for_audio_complete()
+                # 增加等待重试次数，确保音频可以完全播放完毕
+                max_wait_attempts = 30  # 增加等待尝试次数
+                wait_interval = 0.1  # 每次等待的时间间隔
+                attempts = 0
                 
+                # 等待直到队列为空或超过最大尝试次数
+                while not self.audio_codec.audio_decode_queue.empty() and attempts < max_wait_attempts:
+                    time.sleep(wait_interval)
+                    attempts += 1
+                    
+                # 确保所有数据都被播放出来
+                # 再额外等待一点时间确保最后的数据被处理
+                if self.is_tts_playing:
+                    time.sleep(0.5)
+                    
                 # 设置TTS播放状态为False
                 self.is_tts_playing = False
                 
@@ -495,10 +508,27 @@ class Application:
 
     def _audio_output_event_trigger(self):
         """音频输出事件触发器"""
-        while self.running and self.audio_codec.output_stream and self.audio_codec.output_stream.is_active():
-            # 当队列中有数据时才触发事件
-            if not self.audio_codec.audio_decode_queue.empty():  # 修改为使用 audio_codec 的队列
-                self.events[EventType.AUDIO_OUTPUT_READY_EVENT].set()
+        while self.running:
+            try:
+                # 确保输出流是活跃的
+                if (self.device_state == DeviceState.SPEAKING and 
+                    self.audio_codec and 
+                    self.audio_codec.output_stream):
+                    
+                    # 如果输出流不活跃，尝试重新激活
+                    if not self.audio_codec.output_stream.is_active():
+                        try:
+                            self.audio_codec.output_stream.start_stream()
+                        except Exception as e:
+                            logger.warning(f"启动输出流失败，尝试重新初始化: {e}")
+                            self.audio_codec._reinitialize_output_stream()
+                    
+                    # 当队列中有数据时才触发事件
+                    if not self.audio_codec.audio_decode_queue.empty():
+                        self.events[EventType.AUDIO_OUTPUT_READY_EVENT].set()
+            except Exception as e:
+                logger.error(f"音频输出事件触发器错误: {e}")
+                
             time.sleep(0.02)  # 稍微延长检查间隔
 
     async def _on_audio_channel_closed(self):

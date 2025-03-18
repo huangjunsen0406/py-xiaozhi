@@ -533,7 +533,7 @@ class MusicPlayer(Thing):
             total_pause_time: 总暂停时间
         """
         # 检查应用程序是否正在播放TTS
-        if self.app and self.app.is_tts_playing:
+        if self.app and self.app.is_tts_playing and not self.app.aborted:
             if not paused_for_tts and stream.is_active():
                 logger.info("TTS正在播放，暂停音乐播放")
                 paused_for_tts = True
