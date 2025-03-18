@@ -172,6 +172,8 @@ py-xiaozhi 是一个使用 Python 实现的小智语音客户端，旨在通过�
 
 [Rain120](https://github.com/Rain120)
 
+[kejily](https://github.com/kejily)
+
 
 ## Star History
 [![Star History Chart](https://api.star-history.com/svg?repos=Huang-junsen/py-xiaozhi&type=Date)](https://www.star-history.com/#Huang-junsen/py-xiaozhi&Date)

@@ -136,9 +136,7 @@ class Application:
 
         # 初始化并启动唤醒词检测
         self._initialize_wake_word_detector()
-        if self.wake_word_detector:
-            self.wake_word_detector.start()
-
+        
         # 设置协议回调
         self.protocol.on_network_error = self._on_network_error
         self.protocol.on_incoming_audio = self._on_incoming_audio
@@ -154,12 +152,6 @@ class Application:
             from src.audio_codecs.audio_codec import AudioCodec
             self.audio_codec = AudioCodec()
             logger.info("音频编解码器初始化成功")
-            
-            # 初始化VAD检测器
-            # from src.audio_processing.vad_detector import VADDetector
-            # self.vad_detector = VADDetector(self.audio_codec, self.protocol, self, self.loop)
-            # self.vad_detector.start()
-            # logger.info("VAD检测器初始化成功")
             
             # 记录音量控制状态
             if hasattr(self.display, 'volume_controller') and self.display.volume_controller:
@@ -259,6 +251,7 @@ class Application:
         if self.device_state != DeviceState.LISTENING:
             return
 
+        # 读取并发送音频数据
         encoded_data = self.audio_codec.read_audio()
         if encoded_data and self.protocol and self.protocol.is_audio_channel_opened():
             asyncio.run_coroutine_threadsafe(
@@ -277,12 +270,15 @@ class Application:
         """网络错误回调"""
         self.keep_listening = False
         self.set_device_state(DeviceState.IDLE)
-        self.wake_word_detector.resume()
+        # 恢复唤醒词检测
+        if self.wake_word_detector and self.wake_word_detector.paused:
+            self.wake_word_detector.resume()
+        
         if self.device_state != DeviceState.CONNECTING:
             logger.info("检测到连接断开")
             self.set_device_state(DeviceState.IDLE)
-
-            # 关闭现有连接
+            
+            # 关闭现有连接，但不关闭音频流
             if self.protocol:
                 asyncio.run_coroutine_threadsafe(
                     self.protocol.close_audio_channel(),
@@ -455,18 +451,22 @@ class Application:
     def _start_audio_streams(self):
         """启动音频流"""
         try:
-            # 确保流已关闭后再重新打开
-            if self.audio_codec.input_stream and self.audio_codec.input_stream.is_active():
-                self.audio_codec.input_stream.stop_stream()
+            # 不再关闭和重新打开流，只确保它们处于活跃状态
+            if self.audio_codec.input_stream and not self.audio_codec.input_stream.is_active():
+                try:
+                    self.audio_codec.input_stream.start_stream()
+                except Exception as e:
+                    logger.warning(f"启动输入流时出错: {e}")
+                    # 只有在出错时才重新初始化
+                    self.audio_codec._reinitialize_input_stream()
 
-            # 重新打开流
-            self.audio_codec.input_stream.start_stream()
-
-            if self.audio_codec.output_stream and self.audio_codec.output_stream.is_active():
-                self.audio_codec.output_stream.stop_stream()
-
-            # 重新打开流
-            self.audio_codec.output_stream.start_stream()
+            if self.audio_codec.output_stream and not self.audio_codec.output_stream.is_active():
+                try:
+                    self.audio_codec.output_stream.start_stream()
+                except Exception as e:
+                    logger.warning(f"启动输出流时出错: {e}")
+                    # 只有在出错时才重新初始化
+                    self.audio_codec._reinitialize_output_stream()
 
             # 设置事件触发器
             threading.Thread(target=self._audio_input_event_trigger, daemon=True).start()
@@ -480,15 +480,16 @@ class Application:
         """音频输入事件触发器"""
         while self.running:
             try:
-                if self.audio_codec.input_stream and self.audio_codec.input_stream.is_active():
+                # 只有在主动监听状态下才触发输入事件
+                if self.device_state == DeviceState.LISTENING and self.audio_codec.input_stream:
                     self.events[EventType.AUDIO_INPUT_READY_EVENT].set()
             except OSError as e:
                 logger.error(f"音频输入流错误: {e}")
-                # 如果流已关闭，尝试重新打开或者退出循环
-                if "Stream not open" in str(e):
-                    break
+                # 不要退出循环，继续尝试
+                time.sleep(0.5)
             except Exception as e:
                 logger.error(f"音频输入事件触发器错误: {e}")
+                time.sleep(0.5)
 
             time.sleep(AudioConfig.FRAME_DURATION / 1000)  # 按帧时长触发
 
@@ -503,30 +504,26 @@ class Application:
     async def _on_audio_channel_closed(self):
         """音频通道关闭回调"""
         logger.info("音频通道已关闭")
+        # 设置为空闲状态但不关闭音频流
         self.set_device_state(DeviceState.IDLE)
         self.keep_listening = False
-        # 在空闲状态下启动唤醒词检测
+        
+        # 确保唤醒词检测正常工作
         if self.wake_word_detector:
             if not self.wake_word_detector.is_running():
                 logger.info("在空闲状态下启动唤醒词检测")
-                self.wake_word_detector.start()
+                # 获取最新的共享流
+                if hasattr(self, 'audio_codec') and self.audio_codec:
+                    shared_stream = self.audio_codec.get_shared_input_stream()
+                    if shared_stream:
+                        self.wake_word_detector.start(shared_stream)
+                    else:
+                        self.wake_word_detector.start()
+                else:
+                    self.wake_word_detector.start()
             elif self.wake_word_detector.paused:
                 logger.info("在空闲状态下恢复唤醒词检测")
                 self.wake_word_detector.resume()
-        self.schedule(lambda: self._stop_audio_streams())
-
-    def _stop_audio_streams(self):
-        """停止音频流"""
-        try:
-            if self.audio_codec.input_stream and self.audio_codec.input_stream.is_active():
-                self.audio_codec.input_stream.stop_stream()
-
-            if self.audio_codec.output_stream and self.audio_codec.output_stream.is_active():
-                self.audio_codec.output_stream.stop_stream()
-
-            logger.info("音频流已停止")
-        except Exception as e:
-            logger.error(f"停止音频流失败: {e}")
 
     def set_device_state(self, state):
         """设置设备状态"""
@@ -539,17 +536,6 @@ class Application:
         if old_state == DeviceState.SPEAKING:
             self.audio_codec.wait_for_audio_complete()
             self.is_tts_playing = False
-            
-            # 注释掉暂停VAD检测器的代码
-            # if hasattr(self, 'vad_detector') and self.vad_detector:
-            #     self.vad_detector.pause()
-
-        # 如果进入 SPEAKING 状态，重置aborted标志并注释掉恢复VAD检测器的代码
-        if state == DeviceState.SPEAKING:
-            self.aborted = False
-            # 注释掉恢复VAD检测器的代码
-            # if hasattr(self, 'vad_detector') and self.vad_detector:
-            #     self.vad_detector.resume()
 
         self.device_state = state
         logger.info(f"状态变更: {old_state} -> {state}")
@@ -558,44 +544,35 @@ class Application:
         if state == DeviceState.IDLE:
             self.display.update_status("待命")
             self.display.update_emotion("😶")
-            # 停止输出流但不关闭它
-            if self.audio_codec.output_stream and self.audio_codec.output_stream.is_active():
-                try:
-                    self.audio_codec.output_stream.stop_stream()
-                except Exception as e:
-                    logger.warning(f"停止输出流时出错: {e}")
+            # 恢复唤醒词检测
+            if self.wake_word_detector and self.wake_word_detector.paused:
+                self.wake_word_detector.resume()
+            logger.info("唤醒词检测已恢复")
+            # 恢复音频输入流
+            if self.audio_codec and self.audio_codec.is_input_paused():
+                self.audio_codec.resume_input()
         elif state == DeviceState.CONNECTING:
             self.display.update_status("连接中...")
         elif state == DeviceState.LISTENING:
             self.display.update_status("聆听中...")
             self.display.update_emotion("🙂")
-            if self.audio_codec.input_stream and not self.audio_codec.input_stream.is_active():
-                try:
-                    self.audio_codec.input_stream.start_stream()
-                except Exception as e:
-                    logger.warning(f"启动输入流时出错: {e}")
-                    # 使用 AudioCodec 类中的方法重新初始化
-                    self.audio_codec._reinitialize_input_stream()
-        elif state == DeviceState.SPEAKING:
-            self.display.update_status("说话中...")
-            # 确保输出流处于活跃状态
-            if self.audio_codec.output_stream:
-                if not self.audio_codec.output_stream.is_active():
-                    try:
-                        self.audio_codec.output_stream.start_stream()
-                    except Exception as e:
-                        logger.warning(f"启动输出流时出错: {e}")
-                        # 使用 AudioCodec 类中的方法重新初始化
-                        self.audio_codec._reinitialize_output_stream()
-            # 停止输入流
-            if self.audio_codec.input_stream and self.audio_codec.input_stream.is_active():
-                try:
-                    self.audio_codec.input_stream.stop_stream()
-                except Exception as e:
-                    logger.warning(f"停止输入流时出错: {e}")
-            # 非空闲状态暂停唤醒词检测
+            # 暂停唤醒词检测
             if self.wake_word_detector and self.wake_word_detector.is_running():
                 self.wake_word_detector.pause()
+            logger.info("唤醒词检测已暂停")
+            # 确保音频输入流活跃
+            if self.audio_codec:
+                if self.audio_codec.is_input_paused():
+                    self.audio_codec.resume_input()
+        elif state == DeviceState.SPEAKING:
+            self.display.update_status("说话中...")
+            # 暂停唤醒词检测
+            if self.wake_word_detector and self.wake_word_detector.is_running():
+                self.wake_word_detector.pause()
+            logger.info("唤醒词检测已暂停")
+            # 暂停音频输入流以避免自我监听
+            if self.audio_codec and not self.audio_codec.is_input_paused():
+                self.audio_codec.pause_input()
 
         # 通知状态变化
         for callback in self.on_state_changed_callbacks:
@@ -917,7 +894,10 @@ class Application:
         """初始化唤醒词检测器"""
         try:
             from src.audio_processing.wake_word_detect import WakeWordDetector
-            self.wake_word_detector = WakeWordDetector(wake_words=self.config.get_config("WAKE_WORDS"),model_path=self.config.get_config("WAKE_WORD_MODEL_PATH"))
+            self.wake_word_detector = WakeWordDetector(
+                wake_words=self.config.get_config("WAKE_WORDS"),
+                model_path=self.config.get_config("WAKE_WORD_MODEL_PATH")
+            )
             # 注册唤醒词检测回调
             self.wake_word_detector.on_detected(self._on_wake_word_detected)
             logger.info("唤醒词检测器初始化成功")
@@ -930,6 +910,19 @@ class Application:
                     self.schedule(lambda: self._restart_wake_word_detector())
 
             self.wake_word_detector.on_error = on_error
+
+            # 确保音频编解码器已初始化
+            if hasattr(self, 'audio_codec') and self.audio_codec:
+                shared_stream = self.audio_codec.get_shared_input_stream()
+                if shared_stream:
+                    logger.info("使用共享的音频输入流启动唤醒词检测器")
+                    self.wake_word_detector.start(shared_stream)
+                else:
+                    logger.warning("无法获取共享输入流，唤醒词检测器将使用独立音频流")
+                    self.wake_word_detector.start()
+            else:
+                logger.warning("音频编解码器尚未初始化，唤醒词检测器将使用独立音频流")
+                self.wake_word_detector.start()
 
         except Exception as e:
             logger.error(f"初始化唤醒词检测器失败: {e}")
@@ -987,14 +980,29 @@ class Application:
     def _restart_wake_word_detector(self):
         """重新启动唤醒词检测器"""
         logger.info("尝试重新启动唤醒词检测器")
-        if self.wake_word_detector:
-            self.wake_word_detector.stop()
-            time.sleep(0.5)  # 给予一些时间让资源释放
-            try:
+        try:
+            # 停止现有的检测器
+            if self.wake_word_detector:
+                self.wake_word_detector.stop()
+                time.sleep(0.5)  # 给予一些时间让资源释放
+            
+            # 确保使用最新的共享音频输入流
+            if hasattr(self, 'audio_codec') and self.audio_codec:
+                shared_stream = self.audio_codec.get_shared_input_stream()
+                if shared_stream:
+                    self.wake_word_detector.start(shared_stream)
+                    logger.info("使用共享的音频流重新启动唤醒词检测器")
+                else:
+                    # 如果无法获取共享流，尝试让检测器创建自己的流
+                    self.wake_word_detector.start()
+                    logger.info("使用独立的音频流重新启动唤醒词检测器")
+            else:
                 self.wake_word_detector.start()
-                logger.info("唤醒词检测器重新启动成功")
-            except Exception as e:
-                logger.error(f"重新启动唤醒词检测器失败: {e}")
+                logger.info("使用独立的音频流重新启动唤醒词检测器")
+            
+            logger.info("唤醒词检测器重新启动成功")
+        except Exception as e:
+            logger.error(f"重新启动唤醒词检测器失败: {e}")
 
     def _initialize_iot_devices(self):
         """初始化物联网设备"""
@@ -1003,6 +1011,7 @@ class Application:
         from src.iot.things.speaker import Speaker
         from src.iot.things.music_player import MusicPlayer
         from src.iot.things.CameraVL.Camera import Camera
+        from src.iot.things.query_bridge_rag import QueryBridgeRAG
         # 获取物联网设备管理器实例
         thing_manager = ThingManager.get_instance()
         
@@ -1011,6 +1020,7 @@ class Application:
         thing_manager.add_thing(Speaker())
         thing_manager.add_thing(MusicPlayer())
         thing_manager.add_thing(Camera())
+        thing_manager.add_thing(QueryBridgeRAG())
         logger.info("物联网设备初始化完成")
 
     def _handle_iot_message(self, data):
@@ -1044,3 +1054,11 @@ class Application:
             self.loop
         )
         logger.info("物联网设备状态已更新")
+
+    def _update_wake_word_detector_stream(self):
+        """更新唤醒词检测器的音频流"""
+        if self.wake_word_detector and self.audio_codec:
+            shared_stream = self.audio_codec.get_shared_input_stream()
+            if shared_stream and self.wake_word_detector.is_running():
+                self.wake_word_detector.update_stream(shared_stream)
+                logger.info("已更新唤醒词检测器的音频流")

@@ -6,6 +6,7 @@ import opuslib
 from src.constants.constants import AudioConfig
 import time
 import sys
+import threading
 
 logger = logging.getLogger("AudioCodec")
 
@@ -22,6 +23,9 @@ class AudioCodec:
         self.opus_decoder = None
         self.audio_decode_queue = queue.Queue()
         self._is_closing = False  # 添加关闭状态标志
+        self._is_input_paused = False  # 添加输入流暂停状态标志
+        self._input_paused_lock = threading.Lock()  # 添加线程锁
+        self._stream_lock = threading.Lock()  # 添加流操作锁
 
         self._initialize_audio()
 
@@ -96,13 +100,61 @@ class AudioCodec:
         logger.error("未找到可用的音频设备")
         raise RuntimeError("没有可用的音频设备")
 
+    def pause_input(self):
+        """暂停输入流但不关闭它"""
+        with self._input_paused_lock:
+            self._is_input_paused = True
+        logger.info("音频输入已暂停")
+
+    def resume_input(self):
+        """恢复输入流"""
+        with self._input_paused_lock:
+            self._is_input_paused = False
+        logger.info("音频输入已恢复")
+
+    def is_input_paused(self):
+        """检查输入流是否暂停"""
+        with self._input_paused_lock:
+            return self._is_input_paused
+
     def read_audio(self):
         """读取音频输入数据并编码"""
+        if self.is_input_paused():
+            return None
+        
         try:
-            data = self.input_stream.read(AudioConfig.FRAME_SIZE, exception_on_overflow=False)
+            with self._stream_lock:
+                # 检查并确保输入流可用
+                if not self.input_stream or not self.input_stream.is_active():
+                    try:
+                        if self.input_stream:
+                            # 尝试重新启动流
+                            try:
+                                self.input_stream.start_stream()
+                                logger.info("重新启动了音频输入流")
+                            except Exception as e:
+                                logger.warning(f"无法重新启动音频输入流: {e}")
+                                self._reinitialize_input_stream()
+                        else:
+                            self._reinitialize_input_stream()
+                    except Exception as e:
+                        logger.error(f"无法初始化音频输入流: {e}")
+                        return None
+                    
+                # 读取音频数据
+                data = self.input_stream.read(AudioConfig.FRAME_SIZE, exception_on_overflow=False)
+                
             if not data:
                 return None
+            
             return self.opus_encoder.encode(data, AudioConfig.FRAME_SIZE)
+        except OSError as e:
+            if "Stream not open" in str(e) or "Stream closed" in str(e) or "Stream is stopped" in str(e):
+                logger.warning(f"音频输入流问题: {e}，尝试重新初始化")
+                self._reinitialize_input_stream()
+            else:
+                logger.error(f"读取音频输入时出错: {e}")
+            return None
         except Exception as e:
             logger.error(f"读取音频输入时出错: {e}")
             return None
@@ -231,6 +283,55 @@ class AudioCodec:
             logger.error(f"重新初始化音频输出流失败: {e}")
             raise
 
+    def _reinitialize_input_stream(self):
+        """重新初始化音频输入流"""
+        if self._is_closing:  # 如果正在关闭，不要重新初始化
+            return
+
+        with self._stream_lock:  # 使用锁确保线程安全
+            try:
+                if self.input_stream:
+                    try:
+                        if self.input_stream.is_active():
+                            self.input_stream.stop_stream()
+                        self.input_stream.close()
+                    except Exception as e:
+                        logger.warning(f"关闭旧输入流时出错: {e}")
+
+                # 在 MAC 上添加短暂延迟
+                if sys.platform in ('darwin', 'linux'):
+                    time.sleep(0.1)
+
+                # 确保audio对象存在
+                if not self.audio:
+                    self.audio = pyaudio.PyAudio()
+                    logger.info("重新创建了PyAudio实例")
+
+                input_device_index = self._get_default_or_first_available_device(is_input=True)
+                self.input_stream = self.audio.open(
+                    format=pyaudio.paInt16,
+                    channels=AudioConfig.CHANNELS,
+                    rate=AudioConfig.SAMPLE_RATE,
+                    input=True,
+                    input_device_index=input_device_index,
+                    frames_per_buffer=AudioConfig.FRAME_SIZE
+                )
+                logger.info("音频输入流重新初始化成功")
+            except Exception as e:
+                logger.error(f"重新初始化音频输入流失败: {e}")
+                self.input_stream = None  # 清除引用以防止后续尝试使用失败的流
+
+    def get_shared_input_stream(self):
+        """获取可共享的输入流，如果不可用则返回None"""
+        with self._stream_lock:
+            if not self.input_stream or not self.input_stream.is_active():
+                try:
+                    self._reinitialize_input_stream()
+                except Exception as e:
+                    logger.error(f"无法获取可共享的输入流: {e}")
+                    return None
+            return self.input_stream
+
     def close(self):
         """关闭音频编解码器，确保资源正确释放"""
         if self._is_closing:  # 防止重复关闭
@@ -243,36 +344,37 @@ class AudioCodec:
             # 等待并清理剩余音频数据
             self.wait_for_audio_complete()
 
-            # 关闭输入流
-            if self.input_stream:
-                logger.debug("正在关闭输入流...")
-                try:
-                    if self.input_stream.is_active():
-                        self.input_stream.stop_stream()
-                    self.input_stream.close()
-                except Exception as e:
-                    logger.error(f"关闭输入流时出错: {e}")
-                self.input_stream = None
+            with self._stream_lock:  # 使用锁确保线程安全
+                # 关闭输入流
+                if self.input_stream:
+                    logger.debug("正在关闭输入流...")
+                    try:
+                        if self.input_stream.is_active():
+                            self.input_stream.stop_stream()
+                        self.input_stream.close()
+                    except Exception as e:
+                        logger.error(f"关闭输入流时出错: {e}")
+                    self.input_stream = None
 
-            # 关闭输出流
-            if self.output_stream:
-                logger.debug("正在关闭输出流...")
-                try:
-                    if self.output_stream.is_active():
-                        self.output_stream.stop_stream()
-                    self.output_stream.close()
-                except Exception as e:
-                    logger.error(f"关闭输出流时出错: {e}")
-                self.output_stream = None
+                # 关闭输出流
+                if self.output_stream:
+                    logger.debug("正在关闭输出流...")
+                    try:
+                        if self.output_stream.is_active():
+                            self.output_stream.stop_stream()
+                        self.output_stream.close()
+                    except Exception as e:
+                        logger.error(f"关闭输出流时出错: {e}")
+                    self.output_stream = None
 
-            # 关闭 PyAudio 实例
-            if self.audio:
-                logger.debug("正在终止 PyAudio...")
-                try:
-                    self.audio.terminate()
-                except Exception as e:
-                    logger.error(f"终止 PyAudio 时出错: {e}")
-                self.audio = None
+                # 关闭 PyAudio 实例
+                if self.audio:
+                    logger.debug("正在终止 PyAudio...")
+                    try:
+                        self.audio.terminate()
+                    except Exception as e:
+                        logger.error(f"终止 PyAudio 时出错: {e}")
+                    self.audio = None
 
             # 清理编解码器
             self.opus_encoder = None

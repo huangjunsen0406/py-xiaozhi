@@ -90,6 +90,10 @@ class WakeWordDetector:
         for i, word in enumerate(self.wake_words):
             logger.debug(f"唤醒词 {i + 1}: {word} (拼音: {self.wake_words_pinyin[i]})")
 
+        # 共享的音频流和是否为外部流标志
+        self.external_stream = False
+        self.stream_lock = threading.Lock()  # 添加流操作锁
+
     def start(self, audio_stream=None):
         """启动唤醒词检测"""
         if not getattr(self, 'enabled', True):
@@ -101,18 +105,23 @@ class WakeWordDetector:
         
         try:
             # 初始化音频
-            if audio_stream:
-                self.stream = audio_stream
-                self.audio = None
-            else:
-                self.audio = pyaudio.PyAudio()
-                self.stream = self.audio.open(
-                    format=pyaudio.paInt16,
-                    channels=1,
-                    rate=self.sample_rate,
-                    input=True,
-                    frames_per_buffer=self.buffer_size
-                )
+            with self.stream_lock:
+                if audio_stream:
+                    self.stream = audio_stream
+                    self.audio = None
+                    self.external_stream = True
+                    logger.info("唤醒词检测器使用外部音频流")
+                else:
+                    self.audio = pyaudio.PyAudio()
+                    self.stream = self.audio.open(
+                        format=pyaudio.paInt16,
+                        channels=1,
+                        rate=self.sample_rate,
+                        input=True,
+                        frames_per_buffer=self.buffer_size
+                    )
+                    self.external_stream = False
+                    logger.info("唤醒词检测器使用内部音频流")
 
             # 启动检测线程
             self.running = True
@@ -143,7 +152,8 @@ class WakeWordDetector:
                 self.detection_thread.join(timeout=1.0)
                 self.detection_thread = None
             
-            if self.stream:
+            # 只有当使用内部流时才关闭
+            if not self.external_stream and self.stream:
                 try:
                     if self.stream.is_active():
                         self.stream.stop_stream()
@@ -151,6 +161,9 @@ class WakeWordDetector:
                     self.stream = None
                 except Exception as e:
                     logger.error(f"停止音频流时出错: {e}")
+            else:
+                # 如果是外部流，只设置为None但不关闭
+                self.stream = None
             
             if self.audio:
                 try:
@@ -213,6 +226,28 @@ class WakeWordDetector:
 
         return False, None
 
+    def update_stream(self, new_stream):
+        """更新唤醒词检测器使用的音频流"""
+        if not self.running:
+            logger.warning("唤醒词检测器未运行，无法更新流")
+            return False
+        
+        with self.stream_lock:
+            # 如果当前使用的是内部流，需要先清理
+            if not self.external_stream and self.stream:
+                try:
+                    if self.stream.is_active():
+                        self.stream.stop_stream()
+                    self.stream.close()
+                except Exception as e:
+                    logger.warning(f"关闭旧流时出错: {e}")
+            
+            # 更新为新的流
+            self.stream = new_stream
+            self.external_stream = True
+            logger.info("已更新唤醒词检测器的音频流")
+        return True
+
     def _detection_loop(self):
         """唤醒词检测主循环"""
         if not getattr(self, 'enabled', True):
@@ -220,7 +255,8 @@ class WakeWordDetector:
             
         logger.info("唤醒词检测循环已启动")
         error_count = 0
-        max_errors = 3
+        max_errors = 5  # 错误容忍度
+        stream_error_time = None  # 记录流错误的开始时间
 
         while self.running:
             try:
@@ -230,13 +266,59 @@ class WakeWordDetector:
 
                 # 读取音频数据
                 try:
-                    data = self.stream.read(self.buffer_size // 2, exception_on_overflow=False)
+                    with self.stream_lock:
+                        if not self.stream:
+                            if stream_error_time is None:
+                                stream_error_time = time.time()
+                                logger.error("音频流不可用，等待恢复")
+                            elif time.time() - stream_error_time > 5.0:  # 5秒后尝试获取新流
+                                if self.on_error:
+                                    self.on_error("音频流长时间不可用，需要重新获取")
+                                stream_error_time = None
+                            time.sleep(0.5)
+                            continue
+                            
+                        # 尝试检查流状态
+                        try:
+                            if not self.stream.is_active() and not self.external_stream:
+                                self.stream.start_stream()
+                        except Exception:
+                            pass
+                            
+                        data = self.stream.read(self.buffer_size // 2, exception_on_overflow=False)
+                        
+                    # 重置流错误时间
+                    stream_error_time = None
+                    
+                except OSError as e:
+                    error_str = str(e)
+                    if "Stream not open" in error_str or "Stream closed" in error_str or "Stream is stopped" in error_str:
+                        error_count += 1
+                        logger.warning(f"音频流问题 ({error_count}/{max_errors}): {e}")
+                        time.sleep(0.5)
+                        if error_count >= max_errors:
+                            if self.on_error:
+                                self.on_error(f"音频流多次出错: {e}")
+                            error_count = 0  # 重置计数，允许继续尝试
+                            time.sleep(1.0)  # 等待时间长一些
+                        continue
+                    else:
+                        error_count += 1
+                        logger.error(f"读取音频失败 ({error_count}/{max_errors}): {e}")
+                        if error_count >= max_errors:
+                            if self.on_error:
+                                self.on_error(f"连续读取音频失败 {max_errors} 次: {e}")
+                            error_count = 0  # 重置计数，允许继续尝试
+                        time.sleep(0.5)
+                        continue
                 except Exception as e:
                     error_count += 1
+                    logger.error(f"读取音频异常 ({error_count}/{max_errors}): {e}")
                     if error_count >= max_errors:
                         if self.on_error:
                             self.on_error(f"连续读取音频失败 {max_errors} 次: {e}")
-                        break
+                        error_count = 0  # 重置计数，允许继续尝试
+                    time.sleep(0.5)
                     continue
 
                 if len(data) == 0:
@@ -289,4 +371,4 @@ class WakeWordDetector:
                 logger.error(f"唤醒词检测循环出错: {e}")
                 if self.on_error:
                     self.on_error(str(e))
-                time.sleep(0.1)
+                time.sleep(0.5)  # 增加等待时间，减少CPU使用
