@@ -117,9 +117,6 @@ py-xiaozhi 是一个使用 Python 实现的小智语音客户端，旨在通过�
 ├── .gitignore                       # Git 忽略文件配置
 ├── LICENSE                          # 项目许可证
 ├── README.md                        # 项目说明文档
-├── demo.py                          # 演示脚本1
-├── demo02.py                        # 演示脚本2
-├── demo03.py                        # 演示脚本3
 ├── main.py                          # 程序入口点
 ├── requirements.txt                 # Python 依赖包列表（通用）
 ├── requirements_mac.txt             # macOS 特定依赖包列表
