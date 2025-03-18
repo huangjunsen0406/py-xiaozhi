@@ -2,18 +2,13 @@ from src.application import Application
 from src.constants.constants import DeviceState
 from src.iot.thing import Thing, Parameter, ValueType
 import os
-import sys
-import tempfile
 import requests
-from urllib.parse import urlparse
-from pathlib import Path
 import subprocess
 import pyaudio
 import queue
 import threading
 import time
-from typing import Optional, Dict, Any, Tuple, List
-from tqdm import tqdm
+from typing import Dict, Any, Tuple
 import logging
 import json
 
@@ -29,7 +24,7 @@ class MusicPlayer(Thing):
     
     def __init__(self):
         """初始化音乐播放器"""
-        super().__init__("MusicPlayer", "在线音乐播放器，优先播放本地音乐如果没有再播放在线音乐")
+        super().__init__("MusicPlayer", "在线音乐播放器，优先播放本地音乐如果没有再播放在线音乐，iot设备不受通信断开影响")
         
         # 播放状态相关属性
         self.current_song = ""  # 当前歌曲名称
@@ -436,6 +431,10 @@ class MusicPlayer(Thing):
             tts_check_time = 0  # 上次检查TTS状态的时间
             pause_start_time = 0  # 暂停开始时间
             total_pause_time = 0  # 总暂停时间
+            
+            # 添加最后一次数据接收时间
+            last_data_time = time.time()
+            data_timeout = 5.0  # 5秒没有新数据就认为播放结束
 
             while not self.stop_event.is_set():
                 # TTS优先级处理：每200ms检查一次应用程序是否正在说话
@@ -454,6 +453,9 @@ class MusicPlayer(Thing):
                 try:
                     # 从队列获取音频数据
                     chunk = self.audio_decode_queue.get(timeout=1)
+                    
+                    # 更新最后一次数据接收时间
+                    last_data_time = time.time()
                     
                     # 处理流结束标记
                     if chunk is None:
@@ -484,13 +486,24 @@ class MusicPlayer(Thing):
                     self.audio_decode_queue.task_done()
                     
                 except queue.Empty:
+                    # 检查是否超时（长时间没有新数据）
+                    if playback_started and total_chunks > 0 and (time.time() - last_data_time) > data_timeout:
+                        logger.info(f"数据接收超时，认为播放已结束")
+                        # 设置当前位置为总时长，确保进度显示为100%
+                        self.current_position = self.total_duration
+                        self._update_progress_display()
+                        break
+                    
                     # 如果队列为空但播放已经开始，可能是因为下载速度慢
                     if playback_started and total_chunks > 0:
                         logger.debug("音频队列暂时为空，等待更多数据...")
                     continue
 
             # 播放完成时更新位置
-            if not self.stop_event.is_set() and playback_started and total_chunks > 100:
+            if playback_started and total_chunks > 0:
+                # 确保最终进度显示为100%
+                self.current_position = self.total_duration
+                self._update_progress_display()
                 logger.info(f"歌曲 '{self.current_song}' 播放完成")
                 self.playing = False
 
@@ -519,21 +532,24 @@ class MusicPlayer(Thing):
             pause_start_time: 暂停开始时间
             total_pause_time: 总暂停时间
         """
-        # 检查应用程序是否正在说话
-        if self.app and self.app.device_state == DeviceState.SPEAKING:
+        # 检查应用程序是否正在播放TTS
+        if self.app and self.app.is_tts_playing:
             if not paused_for_tts and stream.is_active():
-                logger.info("应用程序正在说话，暂停音乐播放")
+                logger.info("TTS正在播放，暂停音乐播放")
                 paused_for_tts = True
                 pause_start_time = current_time
                 stream.stop_stream()
         elif paused_for_tts:
             # 如果之前因为TTS而暂停，现在恢复播放
-            logger.info("应用程序说话结束，恢复音乐播放")
+            logger.info("TTS播放结束，恢复音乐播放")
             paused_for_tts = False
             # 计算暂停时间
             total_pause_time += (current_time - pause_start_time)
             if not stream.is_active():
                 stream.start_stream()
+                # 将应用状态设置为SPEAKING，防止自动模式切换到聆听状态
+                if self.app:
+                    self.app.set_device_state(DeviceState.SPEAKING)
         
         return paused_for_tts, pause_start_time, total_pause_time
 
@@ -569,6 +585,16 @@ class MusicPlayer(Thing):
         position_str = self._format_time(self.current_position)
         duration_str = self._format_time(self.total_duration)
         status_text = f"播放中: {position_str}/{duration_str} ({progress}%)"
+        
+        # 检查是否接近播放结束（允许1秒误差）
+        if self.total_duration > 0 and (self.total_duration - self.current_position) <= 1:
+            logger.info(f"歌曲 '{self.current_song}' 播放完成")
+            self.playing = False
+            # 根据自动模式设置应用状态
+            self.app.set_device_state(DeviceState.IDLE)
+            # 设置停止事件，确保资源被释放
+            self.stop_event.set()
+            return
 
         # 更新Application显示
         if self.app and self.app.display:
@@ -759,7 +785,7 @@ class MusicPlayer(Thing):
         在适当的时间点显示对应的歌词，考虑TTS优先级
         """
         # 如果没有歌词或应用程序正在说话，不更新歌词
-        if not self.lyrics or (self.app and self.app.device_state == DeviceState.SPEAKING):
+        if not self.lyrics or (self.app and self.app.is_tts_playing):
             return
 
         current_time = self.current_position
@@ -813,16 +839,15 @@ class MusicPlayer(Thing):
             time_sec, text = self.lyrics[current_index]
             
             # 只在应用程序不在说话时更新UI
-            if self.app and self.app.device_state != DeviceState.SPEAKING:
-                # 创建歌词文本副本，避免引用可能变化的变量
-                lyric_text = text
-                
-                # 可选：在歌词前添加时间和进度信息
-                # position_str = self._format_time(self.current_position)
-                # duration_str = self._format_time(self.total_duration)
-                # progress = self._get_progress()
-                # display_text = f"[{position_str}/{duration_str}] {lyric_text}"
-                
-                # 使用schedule方法安全地更新UI
-                self.app.schedule(lambda: self.app.set_chat_message("assistant", lyric_text))
-                logger.debug(f"显示歌词: {lyric_text}")
+            # 创建歌词文本副本，避免引用可能变化的变量
+            lyric_text = text
+
+            # 可选：在歌词前添加时间和进度信息
+            # position_str = self._format_time(self.current_position)
+            # duration_str = self._format_time(self.total_duration)
+            # progress = self._get_progress()
+            # display_text = f"[{position_str}/{duration_str}] {lyric_text}"
+
+            # 使用schedule方法安全地更新UI
+            self.app.schedule(lambda: self.app.set_chat_message("assistant", lyric_text))
+            logger.debug(f"显示歌词: {lyric_text}")
