@@ -102,7 +102,7 @@ class Camera(Thing):
         path: 点分隔的配置路径，如 "camera_index"
         """
         try:
-            value = self._config
+            value = self._load_config()
             for key in path.split('.'):
                 value = value[key]
             return value
