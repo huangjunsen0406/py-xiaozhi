@@ -96,27 +96,18 @@ class MusicPlayer(Thing):
         返回:
             Dict[str, Any]: 音乐播放器配置
         """
-        try:
-            config_path = os.path.join("config", "config.json")
-            with open(config_path, 'r', encoding='utf-8') as f:
-                config = json.load(f)
-            return config.get("MUSIC_PLAYER", {})
-        except Exception as e:
-            logger.error(f"加载配置文件失败: {str(e)}")
-            # 返回默认配置
-            return {
+        return {
                 "API": {
-                    "BASE_URL": "http://localhost:3200",
-                    "SEARCH_ENDPOINT": "/getSearchByKey",
-                    "PLAY_ENDPOINT": "/getMusicPlay",
-                    "LYRIC_ENDPOINT": "/getLyric"
+                    "SEARCH_URL": "http://search.kuwo.cn/r.s",
+                    "PLAY_URL": "http://api.xiaodaokg.com/kuwo.php",
+                    "LYRIC_URL": "http://m.kuwo.cn/newh5/singles/songinfoandlrc"
                 },
                 "HEADERS": {
                     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
                     "Accept": "*/*",
                     "Accept-Encoding": "identity",
                     "Connection": "keep-alive",
-                    "Referer": "https://y.qq.com/",
+                    "Referer": "https://y.kuwo.cn/",
                     "Cookie": ""
                 }
             }
@@ -187,8 +178,8 @@ class MusicPlayer(Thing):
         # 通过API搜索获取歌曲信息
         try:
             # 获取歌曲ID和播放URL
-            song_mid, url = self._get_song_info(song_name)
-            if not song_mid or not url:
+            song_id, url = self._get_song_info(song_name)
+            if not song_id or not url:
                 return {"status": "error", "message": f"未找到歌曲 '{song_name}' 或无法获取播放链接"}
             
             logger.info(f"正在播放: {song_name}, URL: {url}")
@@ -221,59 +212,147 @@ class MusicPlayer(Thing):
         """
         # 从配置中获取请求头和API URL
         headers = self.config.get("HEADERS", {})
-        base_url = self.config.get("API", {}).get("BASE_URL", "http://localhost:3200")
-        search_endpoint = self.config.get("API", {}).get("SEARCH_ENDPOINT", "/getSearchByKey")
-        play_endpoint = self.config.get("API", {}).get("PLAY_ENDPOINT", "/getMusicPlay")
+        search_url = self.config.get("API", {}).get("SEARCH_URL", "http://search.kuwo.cn/r.s")
+        play_url = self.config.get("API", {}).get("PLAY_URL", "http://api.xiaodaokg.com/kuwo.php")
         
-        # 1. 先搜索歌曲获取ID
-        search_url = f"{base_url}{search_endpoint}?key={song_name}"
-        logger.info(f"搜索歌曲URL: {search_url}")
+        # 1. 搜索歌曲获取ID
+        search_params = {
+            "all": song_name,
+            "ft": "music",
+            "newsearch": "1",
+            "alflac": "1",
+            "itemset": "web_2013",
+            "client": "kt",
+            "cluster": "0",
+            "pn": "0",
+            "rn": "1",
+            "vermerge": "1",
+            "rformat": "json",
+            "encoding": "utf8",
+            "show_copyright_off": "1",
+            "pcmp4": "1",
+            "ver": "mbox",
+            "vipver": "MUSIC_8.7.6.0.BCS31",
+            "plat": "pc",
+            "devid": "0"
+        }
         
-        response = requests.get(search_url, headers=headers, timeout=10)
-        response.raise_for_status()
-        data = response.json()
+        logger.info(f"搜索歌曲: {song_name}")
         
-        # 获取第一首歌曲的ID
-        if (data.get('response') and data['response'].get('data') and 
-            data['response']['data'].get('song') and 
-            data['response']['data']['song'].get('list') and 
-            len(data['response']['data']['song']['list']) > 0):
+        try:
+            response = requests.get(search_url, params=search_params, headers=headers, timeout=10)
+            response.raise_for_status()
             
-            song_info = data['response']['data']['song']['list'][0]
-            song_mid = song_info['songmid']
-            logger.info(f"获取到歌曲ID: {song_mid}")
+            # 记录响应内容到日志（调试用）
+            logger.debug(f"搜索API响应内容: {response.text[:200]}...")
             
-            # 获取歌曲时长（秒）
-            if 'interval' in song_info:
-                self.total_duration = song_info['interval']
-                logger.info(f"歌曲时长: {self.total_duration}秒")
-            else:
-                self.total_duration = 0
-                logger.warning("无法获取歌曲时长")
+            # 处理响应文本
+            response_text = response.text.replace("'", '"')  # 替换单引号为双引号
             
-            # 获取歌词
-            self._fetch_lyrics(song_mid)
+            # 提取歌曲ID
+            song_id = ""
+            dc_targetid_pos = response_text.find('"DC_TARGETID":"')
+            if dc_targetid_pos != -1:
+                start_pos = dc_targetid_pos + len('"DC_TARGETID":"')
+                end_pos = response_text.find('"', start_pos)
+                if end_pos != -1:
+                    song_id = response_text[start_pos:end_pos]
+                    logger.info(f"提取到歌曲ID: {song_id}")
             
-            # 2. 通过ID获取实际播放链接
-            url_api = f"{base_url}{play_endpoint}?songmid={song_mid}"
-            logger.info(f"获取歌曲URL的API: {url_api}")
+            # 如果没有找到歌曲ID，返回失败
+            if not song_id:
+                logger.warning(f"未找到歌曲 '{song_name}' 的ID")
+                return "", ""
             
-            url_response = requests.get(url_api, headers=headers, timeout=10)
-            url_response.raise_for_status()
-            url_data = url_response.json()
+            # 提取歌曲时长
+            duration = 0
+            duration_pos = response_text.find('"DURATION":"')
+            if duration_pos != -1:
+                start_pos = duration_pos + len('"DURATION":"')
+                end_pos = response_text.find('"', start_pos)
+                if end_pos != -1:
+                    try:
+                        duration = int(response_text[start_pos:end_pos])
+                        self.total_duration = duration
+                        logger.info(f"提取到歌曲时长: {duration}秒")
+                    except ValueError:
+                        logger.warning(f"歌曲时长解析失败: {response_text[start_pos:end_pos]}")
             
-            if (url_data.get('data') and url_data['data'].get('playUrl') and 
-                url_data['data']['playUrl'].get(song_mid) and 
-                url_data['data']['playUrl'][song_mid].get('url')):
-                
-                url = url_data['data']['playUrl'][song_mid]['url']
-                logger.info(f"获取到歌曲URL: {url}")
-                return song_mid, url
-            else:
-                logger.warning(f"API未返回有效的URL")
-                return song_mid, ""
-        else:
-            logger.warning(f"未找到歌曲 '{song_name}'")
+            # 提取艺术家
+            artist = ""
+            artist_pos = response_text.find('"ARTIST":"')
+            if artist_pos != -1:
+                start_pos = artist_pos + len('"ARTIST":"')
+                end_pos = response_text.find('"', start_pos)
+                if end_pos != -1:
+                    artist = response_text[start_pos:end_pos]
+            
+            # 提取歌曲名
+            title = song_name
+            name_pos = response_text.find('"NAME":"')
+            if name_pos != -1:
+                start_pos = name_pos + len('"NAME":"')
+                end_pos = response_text.find('"', start_pos)
+                if end_pos != -1:
+                    title = response_text[start_pos:end_pos]
+            
+            # 提取专辑名
+            album = ""
+            album_pos = response_text.find('"ALBUM":"')
+            if album_pos != -1:
+                start_pos = album_pos + len('"ALBUM":"')
+                end_pos = response_text.find('"', start_pos)
+                if end_pos != -1:
+                    album = response_text[start_pos:end_pos]
+            
+            # 更新当前歌曲信息
+            display_name = title
+            if artist:
+                display_name = f"{title} - {artist}"
+                if album:
+                    display_name += f" ({album})"
+            self.current_song = display_name
+            
+            logger.info(f"获取到歌曲: {self.current_song}, ID: {song_id}, 时长: {duration}秒")
+            
+            # 2. 获取歌曲播放链接
+            play_api_url = f"{play_url}?ID={song_id}"
+            logger.info(f"获取歌曲播放链接: {play_api_url}")
+            
+            for attempt in range(3):
+                try:
+                    url_response = requests.get(play_api_url, headers=headers, timeout=10)
+                    url_response.raise_for_status()
+                    
+                    # 获取播放链接（直接返回的文本）
+                    play_url_text = url_response.text.strip()
+                    
+                    # 检查URL是否有效
+                    if play_url_text and play_url_text.startswith("http"):
+                        logger.info(f"获取到有效的歌曲URL: {play_url_text[:60]}...")
+                        
+                        # 3. 获取歌词
+                        self._fetch_lyrics(song_id)
+                        
+                        return song_id, play_url_text
+                    else:
+                        logger.warning(f"返回的播放链接格式不正确: {play_url_text[:100]}")
+                        if attempt < 2:
+                            logger.info(f"尝试重新获取播放链接 ({attempt+1}/3)")
+                            time.sleep(1)
+                        else:
+                            return song_id, ""
+                except Exception as e:
+                    logger.error(f"获取播放链接时出错: {str(e)}")
+                    if attempt < 2:
+                        logger.info(f"尝试重新获取播放链接 ({attempt+1}/3)")
+                        time.sleep(1)
+                    else:
+                        return song_id, ""
+            
+            return song_id, ""
+        except Exception as e:
+            logger.error(f"获取歌曲信息失败: {str(e)}")
             return "", ""
 
     def _pause(self) -> Dict[str, Any]:
@@ -711,72 +790,55 @@ class MusicPlayer(Thing):
             except:
                 pass
 
-    def _fetch_lyrics(self, song_mid: str):
+    def _fetch_lyrics(self, song_id: str):
         """
         获取歌词
         
         参数:
-            song_mid: 歌曲ID
+            song_id: 歌曲ID
         """
         try:
             # 从配置中获取请求头和API URL
             headers = self.config.get("HEADERS", {})
-            base_url = self.config.get("API", {}).get("BASE_URL", "http://localhost:3200")
-            lyric_endpoint = self.config.get("API", {}).get("LYRIC_ENDPOINT", "/getLyric")
-
-            lyric_url = f"{base_url}{lyric_endpoint}?songmid={song_mid}"
-            logger.info(f"获取歌词URL: {lyric_url}")
-
-            response = requests.get(lyric_url, headers=headers, timeout=10)
+            lyric_url = self.config.get("API", {}).get("LYRIC_URL", "http://m.kuwo.cn/newh5/singles/songinfoandlrc")
+            
+            # 构建歌词API请求
+            lyric_api_url = f"{lyric_url}?musicId={song_id}"
+            logger.info(f"获取歌词URL: {lyric_api_url}")
+            
+            response = requests.get(lyric_api_url, headers=headers, timeout=10)
             response.raise_for_status()
-            data = response.json()
-
-            if data.get('response') and data['response'].get('lyric'):
-                raw_lyric = data['response']['lyric']
-                self._parse_lyrics(raw_lyric)
-                logger.info(f"成功获取歌词，共 {len(self.lyrics)} 行")
-            else:
-                logger.warning("未获取到歌词")
+            
+            # 添加错误处理
+            try:
+                # 尝试解析JSON
+                data = response.json()
+                
+                # 解析歌词
+                if data.get("status") == 200 and data.get("data") and data["data"].get("lrclist"):
+                    lrc_list = data["data"]["lrclist"]
+                    self.lyrics = []
+                    
+                    for lrc in lrc_list:
+                        time_sec = float(lrc.get("time", "0"))
+                        text = lrc.get("lineLyric", "").strip()
+                        
+                        # 跳过空歌词和元信息歌词
+                        if (text and not text.startswith("作词") and not text.startswith("作曲") 
+                                and not text.startswith("编曲")):
+                            self.lyrics.append((time_sec, text))
+                    
+                    logger.info(f"成功获取歌词，共 {len(self.lyrics)} 行")
+                else:
+                    logger.warning(f"未获取到歌词或歌词格式错误: {data.get('msg', '')}")
+            except ValueError as e:
+                logger.warning(f"歌词API返回非JSON格式数据: {str(e)}")
+                # 记录部分响应内容
+                if hasattr(response, 'text') and response.text:
+                    sample = response.text[:100] + "..." if len(response.text) > 100 else response.text
+                    logger.warning(f"歌词API响应内容: {sample}")
         except Exception as e:
             logger.error(f"获取歌词失败: {str(e)}")
-
-    def _parse_lyrics(self, raw_lyric: str):
-        """
-        解析歌词文本，提取时间标签和歌词内容
-        
-        参数:
-            raw_lyric: 原始歌词文本
-        """
-        self.lyrics = []
-        lines = raw_lyric.split('\n')
-
-        for line in lines:
-            # 匹配时间标签 [mm:ss.xx]
-            if line.startswith('[') and ']' in line:
-                time_end = line.find(']')
-                time_str = line[1:time_end]
-
-                # 跳过非时间标签（元数据标签）
-                if not (time_str.startswith('ti:') or time_str.startswith('ar:') or 
-                        time_str.startswith('al:') or time_str.startswith('by:') or 
-                        time_str.startswith('offset:')):
-                    try:
-                        # 解析时间
-                        minutes, seconds = time_str.split(':')
-                        time_seconds = float(minutes) * 60 + float(seconds)
-
-                        # 提取歌词文本
-                        lyric_text = line[time_end + 1:].strip()
-                        
-                        # 只添加非空歌词
-                        if lyric_text:
-                            self.lyrics.append((time_seconds, lyric_text))
-                    except Exception as e:
-                        logger.warning(f"解析歌词行失败: {line}, 错误: {str(e)}")
-
-        # 按时间排序
-        self.lyrics.sort(key=lambda x: x[0])
-        logger.debug(f"解析完成，共 {len(self.lyrics)} 行有效歌词")
 
     def _update_lyrics(self):
         """

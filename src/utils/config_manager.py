@@ -39,23 +39,7 @@ class ConfigManager:
             "小智",
             "你好小明"
         ],
-        "WAKE_WORD_MODEL_PATH": "./models/vosk-model-small-cn-0.22",
-        "MUSIC_PLAYER": {
-            "API": {
-                "BASE_URL": "http://localhost:3200",
-                "SEARCH_ENDPOINT": "/getSearchByKey",
-                "PLAY_ENDPOINT": "/getMusicPlay",
-                "LYRIC_ENDPOINT": "/getLyric"
-            },
-            "HEADERS": {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-                "Accept": "*/*",
-                "Accept-Encoding": "identity",
-                "Connection": "keep-alive",
-                "Referer": "https://y.qq.com/",
-                "Cookie": ""
-            }
-        }
+        "WAKE_WORD_MODEL_PATH": "./models/vosk-model-small-cn-0.22"
     }
 
     def __new__(cls):
