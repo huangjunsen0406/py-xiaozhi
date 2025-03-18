@@ -63,16 +63,18 @@ class WakeWordDetector:
         self.detection_thread = None
         self.audio_stream = None
         
+        # 初始化状态变量（始终创建，不管是否启用）
+        self.paused = False
+        self.audio = None
+        self.stream = None
+        self.external_stream = False
+        self.stream_lock = threading.Lock()  # 添加流操作锁
+        self.on_error = None  # 添加错误处理回调
+        
         # 检查是否启用唤醒词功能
         config = ConfigManager.get_instance()
         if not config.get_config('USE_WAKE_WORD', False):
             logger.info("唤醒词功能已禁用")
-            self.enabled = False
-            return
-            
-        # 检查 Vosk 是否可用
-        if not VOSK_AVAILABLE:
-            logger.error("Vosk 库不可用，唤醒词功能将被禁用")
             self.enabled = False
             return
             
@@ -114,11 +116,6 @@ class WakeWordDetector:
                 logger.error(error_msg)
                 self.enabled = False
                 raise FileNotFoundError(error_msg)
-
-            # 状态变量
-            self.paused = False
-            self.audio = None
-            self.stream = None
 
             # 回调函数
             self.on_error = None  # 添加错误处理回调

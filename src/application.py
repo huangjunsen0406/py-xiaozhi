@@ -574,10 +574,10 @@ class Application:
         if state == DeviceState.IDLE:
             self.display.update_status("待命")
             self.display.update_emotion("😶")
-            # 恢复唤醒词检测
-            if self.wake_word_detector and self.wake_word_detector.paused:
+            # 恢复唤醒词检测（添加安全检查）
+            if self.wake_word_detector and hasattr(self.wake_word_detector, 'paused') and self.wake_word_detector.paused:
                 self.wake_word_detector.resume()
-            logger.info("唤醒词检测已恢复")
+                logger.info("唤醒词检测已恢复")
             # 恢复音频输入流
             if self.audio_codec and self.audio_codec.is_input_paused():
                 self.audio_codec.resume_input()
@@ -586,20 +586,20 @@ class Application:
         elif state == DeviceState.LISTENING:
             self.display.update_status("聆听中...")
             self.display.update_emotion("🙂")
-            # 暂停唤醒词检测
-            if self.wake_word_detector and self.wake_word_detector.is_running():
+            # 暂停唤醒词检测（添加安全检查）
+            if self.wake_word_detector and hasattr(self.wake_word_detector, 'is_running') and self.wake_word_detector.is_running():
                 self.wake_word_detector.pause()
-            logger.info("唤醒词检测已暂停")
+                logger.info("唤醒词检测已暂停")
             # 确保音频输入流活跃
             if self.audio_codec:
                 if self.audio_codec.is_input_paused():
                     self.audio_codec.resume_input()
         elif state == DeviceState.SPEAKING:
             self.display.update_status("说话中...")
-            # 暂停唤醒词检测
-            if self.wake_word_detector and self.wake_word_detector.is_running():
+            # 暂停唤醒词检测（添加安全检查）
+            if self.wake_word_detector and hasattr(self.wake_word_detector, 'is_running') and self.wake_word_detector.is_running():
                 self.wake_word_detector.pause()
-            logger.info("唤醒词检测已暂停")
+                logger.info("唤醒词检测已暂停")
             # 暂停音频输入流以避免自我监听
             if self.audio_codec and not self.audio_codec.is_input_paused():
                 self.audio_codec.pause_input()
@@ -922,6 +922,12 @@ class Application:
 
     def _initialize_wake_word_detector(self):
         """初始化唤醒词检测器"""
+        # 首先检查配置中是否启用了唤醒词功能
+        if not self.config.get_config('USE_WAKE_WORD', False):
+            logger.info("唤醒词功能已在配置中禁用，跳过初始化")
+            self.wake_word_detector = None
+            return
+        
         try:
             from src.audio_processing.wake_word_detect import WakeWordDetector
             import sys
@@ -944,6 +950,8 @@ class Application:
             # 检查模型路径
             if not os.path.exists(model_path):
                 logger.error(f"模型路径不存在: {model_path}")
+                # 自动禁用唤醒词功能
+                self.config.update_config("USE_WAKE_WORD", False)
                 self.wake_word_detector = None
                 return
             
@@ -951,6 +959,14 @@ class Application:
                 wake_words=self.config.get_config("WAKE_WORDS"),
                 model_path=model_path
             )
+            
+            # 如果唤醒词检测器被禁用（内部故障），则更新配置
+            if not getattr(self.wake_word_detector, 'enabled', True):
+                logger.warning("唤醒词检测器被禁用（内部故障）")
+                self.config.update_config("USE_WAKE_WORD", False)
+                self.wake_word_detector = None
+                return
+            
             # 注册唤醒词检测回调
             self.wake_word_detector.on_detected(self._on_wake_word_detected)
             logger.info("唤醒词检测器初始化成功")
@@ -981,6 +997,10 @@ class Application:
             logger.error(f"初始化唤醒词检测器失败: {e}")
             import traceback
             logger.error(traceback.format_exc())
+            
+            # 禁用唤醒词功能，但不影响程序其他功能
+            self.config.update_config("USE_WAKE_WORD", False)
+            logger.info("由于初始化失败，唤醒词功能已禁用，但程序将继续运行")
             self.wake_word_detector = None
 
     def _on_wake_word_detected(self, wake_word, full_text):
