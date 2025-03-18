@@ -4,13 +4,39 @@ import threading
 import time
 import pyaudio
 import os
-from vosk import Model, KaldiRecognizer, SetLogLevel
-from pypinyin import lazy_pinyin
+import sys
+import vosk
+
+# 尝试导入 vosk 及相关组件
+try:
+    # 先定位 vosk 的 DLL 目录
+    if getattr(sys, 'frozen', False):
+        # 在打包环境中
+        vosk_dir = os.path.join(sys._MEIPASS, 'vosk')
+        if os.path.exists(vosk_dir):
+            # 添加 vosk 目录到 DLL 搜索路径
+            os.add_dll_directory(vosk_dir)
+            logging.getLogger("Application").info(f"已添加 Vosk DLL 目录: {vosk_dir}")
+    
+    from vosk import Model, KaldiRecognizer, SetLogLevel
+    from pypinyin import lazy_pinyin
+    VOSK_AVAILABLE = True
+except ImportError as e:
+    logging.getLogger("Application").error(f"导入 Vosk 失败: {e}")
+    VOSK_AVAILABLE = False
+except Exception as e:
+    logging.getLogger("Application").error(f"初始化 Vosk 失败: {e}")
+    import traceback
+    logging.getLogger("Application").error(traceback.format_exc())
+    VOSK_AVAILABLE = False
+
 from src.utils.config_manager import ConfigManager
 
 # 配置日志
 logger = logging.getLogger("Application")
 
+vosk_path = os.path.dirname(vosk.__file__)
+print(f"Vosk 路径: {vosk_path}")
 
 class WakeWordDetector:
     """唤醒词检测类"""
@@ -44,6 +70,12 @@ class WakeWordDetector:
             self.enabled = False
             return
             
+        # 检查 Vosk 是否可用
+        if not VOSK_AVAILABLE:
+            logger.error("Vosk 库不可用，唤醒词功能将被禁用")
+            self.enabled = False
+            return
+            
         self.enabled = True
         self.sample_rate = sample_rate
         self.buffer_size = buffer_size
@@ -61,38 +93,59 @@ class WakeWordDetector:
         self.wake_words_pinyin = [''.join(lazy_pinyin(word)) for word in self.wake_words]
 
         # 初始化模型
-        if model_path is None:
-            model_path = model_path
+        try:
+            if model_path is None:
+                model_path_config = config.get_config('WAKE_WORD_MODEL_PATH', 'models/vosk-model-small-cn-0.22')
+                
+                # 对于打包环境
+                if getattr(sys, 'frozen', False):
+                    base_path = os.path.dirname(sys.executable) if not hasattr(sys, '_MEIPASS') else sys._MEIPASS
+                    model_path = os.path.join(base_path, model_path_config)
+                    logger.info(f"打包环境下使用模型路径: {model_path}")
+                else:
+                    # 开发环境
+                    base_path = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+                    model_path = os.path.join(base_path, model_path_config)
+                    logger.info(f"开发环境下使用模型路径: {model_path}")
 
-        # 检查模型路径
-        if not os.path.exists(model_path):
-            raise FileNotFoundError(f"模型路径不存在: {model_path}")
+            # 检查模型路径
+            if not os.path.exists(model_path):
+                error_msg = f"模型路径不存在: {model_path}"
+                logger.error(error_msg)
+                self.enabled = False
+                raise FileNotFoundError(error_msg)
 
-        # 状态变量
-        self.paused = False
-        self.audio = None
-        self.stream = None
+            # 状态变量
+            self.paused = False
+            self.audio = None
+            self.stream = None
 
-        # 回调函数
-        self.on_error = None  # 添加错误处理回调
+            # 回调函数
+            self.on_error = None  # 添加错误处理回调
 
-        # 初始化模型
-        logger.info(f"正在加载语音识别模型: {model_path}")
-        # 设置 Vosk 日志级别为 -1 (SILENT)
-        SetLogLevel(-1)
-        self.model = Model(model_path=model_path)
-        self.recognizer = KaldiRecognizer(self.model, self.sample_rate)
-        self.recognizer.SetWords(True)
-        logger.info("模型加载完成")
+            # 初始化模型
+            logger.info(f"正在加载语音识别模型: {model_path}")
+            # 设置 Vosk 日志级别为 -1 (SILENT)
+            SetLogLevel(-1)
+            self.model = Model(model_path=model_path)
+            self.recognizer = KaldiRecognizer(self.model, self.sample_rate)
+            self.recognizer.SetWords(True)
+            logger.info("模型加载完成")
 
-        # 调试信息
-        logger.info(f"已配置 {len(self.wake_words)} 个唤醒词")
-        for i, word in enumerate(self.wake_words):
-            logger.debug(f"唤醒词 {i + 1}: {word} (拼音: {self.wake_words_pinyin[i]})")
+            # 调试信息
+            logger.info(f"已配置 {len(self.wake_words)} 个唤醒词")
+            for i, word in enumerate(self.wake_words):
+                logger.debug(f"唤醒词 {i + 1}: {word} (拼音: {self.wake_words_pinyin[i]})")
 
-        # 共享的音频流和是否为外部流标志
-        self.external_stream = False
-        self.stream_lock = threading.Lock()  # 添加流操作锁
+            # 共享的音频流和是否为外部流标志
+            self.external_stream = False
+            self.stream_lock = threading.Lock()  # 添加流操作锁
+            
+        except Exception as e:
+            logger.error(f"初始化唤醒词检测器失败: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            self.enabled = False
 
     def start(self, audio_stream=None):
         """启动唤醒词检测"""

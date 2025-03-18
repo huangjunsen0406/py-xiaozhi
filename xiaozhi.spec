@@ -10,7 +10,7 @@ a = Analysis(
         # 只包含实际存在的文件和目录
         ('libs/windows/opus.dll', 'libs/windows'),
         ('config', 'config'),  # 添加配置文件目录
-        ('models', 'models'),  # 添加模型目录
+        ('models/vosk-model-small-cn-0.22', 'models/vosk-model-small-cn-0.22'),  # 只包含需要的模型
     ],
     hiddenimports=[
         'engineio.async_drivers.threading',
@@ -28,10 +28,11 @@ a = Analysis(
         'engineio',
         'websockets',  # 添加 websockets 依赖
         'vosk',  # 添加语音识别依赖
+        'vosk.vosk_cffi',  # 添加 vosk cffi 模块
     ],
-    hookspath=[],
+    hookspath=['hooks'],  # 添加自定义钩子目录
     hooksconfig={},
-    runtime_hooks=[],
+    runtime_hooks=['hooks/runtime_hook.py'],  # 添加运行时钩子
     excludes=[],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,

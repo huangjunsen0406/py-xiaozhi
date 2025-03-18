@@ -6,6 +6,7 @@ import threading
 import requests
 import socket
 import uuid
+import sys
 
 logger = logging.getLogger("ConfigManager")
 
@@ -39,7 +40,7 @@ class ConfigManager:
             "小智",
             "你好小明"
         ],
-        "WAKE_WORD_MODEL_PATH": "./models/vosk-model-small-cn-0.22"
+        "WAKE_WORD_MODEL_PATH": "models/vosk-model-small-cn-0.22"
     }
 
     def __new__(cls):
@@ -64,6 +65,20 @@ class ConfigManager:
     def _load_config(self) -> Dict[str, Any]:
         """加载配置文件，如果不存在则创建"""
         try:
+            # 先尝试从当前工作目录加载
+            config_file = Path("config/config.json")
+            if config_file.exists():
+                config = json.loads(config_file.read_text(encoding='utf-8'))
+                return self._merge_configs(self.DEFAULT_CONFIG, config)
+            
+            # 再尝试从打包目录加载
+            if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+                config_file = Path(sys._MEIPASS) / "config/config.json"
+                if config_file.exists():
+                    config = json.loads(config_file.read_text(encoding='utf-8'))
+                    return self._merge_configs(self.DEFAULT_CONFIG, config)
+            
+            # 最后尝试从开发环境目录加载    
             if self.CONFIG_FILE.exists():
                 config = json.loads(self.CONFIG_FILE.read_text(encoding='utf-8'))
                 return self._merge_configs(self.DEFAULT_CONFIG, config)
@@ -294,3 +309,12 @@ class ConfigManager:
         except requests.RequestException as e:
             self.logger.error(f"OTA请求失败: {e}")
             raise ValueError("无法连接到OTA服务器，请检查网络连接！")
+
+    def get_app_path(self) -> Path:
+        """获取应用程序的基础路径（支持开发环境和打包环境）"""
+        if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+            # 如果是通过 PyInstaller 打包运行
+            return Path(sys._MEIPASS)
+        else:
+            # 如果是开发环境运行
+            return Path(__file__).parent.parent.parent

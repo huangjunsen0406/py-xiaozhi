@@ -924,9 +924,32 @@ class Application:
         """初始化唤醒词检测器"""
         try:
             from src.audio_processing.wake_word_detect import WakeWordDetector
+            import sys
+            import os
+            
+            # 获取模型路径
+            model_path_config = self.config.get_config("WAKE_WORD_MODEL_PATH", "models/vosk-model-small-cn-0.22")
+            
+            # 对于打包环境
+            if getattr(sys, 'frozen', False):
+                base_path = os.path.dirname(sys.executable) if not hasattr(sys, '_MEIPASS') else sys._MEIPASS
+                model_path = os.path.join(base_path, model_path_config)
+                logger.info(f"打包环境下使用模型路径: {model_path}")
+            else:
+                # 开发环境
+                base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                model_path = os.path.join(base_path, model_path_config)
+                logger.info(f"开发环境下使用模型路径: {model_path}")
+            
+            # 检查模型路径
+            if not os.path.exists(model_path):
+                logger.error(f"模型路径不存在: {model_path}")
+                self.wake_word_detector = None
+                return
+            
             self.wake_word_detector = WakeWordDetector(
                 wake_words=self.config.get_config("WAKE_WORDS"),
-                model_path=self.config.get_config("WAKE_WORD_MODEL_PATH")
+                model_path=model_path
             )
             # 注册唤醒词检测回调
             self.wake_word_detector.on_detected(self._on_wake_word_detected)
@@ -956,6 +979,8 @@ class Application:
 
         except Exception as e:
             logger.error(f"初始化唤醒词检测器失败: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
             self.wake_word_detector = None
 
     def _on_wake_word_detected(self, wake_word, full_text):

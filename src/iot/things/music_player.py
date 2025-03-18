@@ -678,7 +678,7 @@ class MusicPlayer(Thing):
         # 更新Application显示
         if self.app and self.app.display:
             # 更新状态栏显示播放进度
-            self.app.display.update_status(status_text)
+            # self.app.display.update_status(status_text)
             logger.debug(f"更新播放进度: {status_text}")
 
     def _format_time(self, seconds: float) -> str:
