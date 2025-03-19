@@ -8,7 +8,6 @@ import shutil
 import platform
 import subprocess
 from pathlib import Path
-import re
 
 def print_step(message):
     """打印带有明显分隔符的步骤信息"""
@@ -18,7 +17,6 @@ def print_step(message):
 
 def get_project_root():
     """获取项目根目录"""
-    # 假设本脚本位于 scripts 目录下
     return Path(__file__).parent.parent
 
 def read_config():
@@ -290,11 +288,18 @@ def build_executable(temp_spec_path):
     project_root = get_project_root()
     os.chdir(project_root)  # 切换到项目根目录
     
+    # 清理输出目录
+    dist_dir = project_root / "dist"
+    if dist_dir.exists():
+        shutil.rmtree(dist_dir)
+        print("已清理输出目录")
+    
     # 基本命令
     cmd = [
         sys.executable, 
         "-m", "PyInstaller",
         "--clean",  # 清除临时文件
+        "--noconfirm",  # 不询问确认
         str(temp_spec_path)
     ]
     

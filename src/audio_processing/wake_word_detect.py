@@ -6,6 +6,7 @@ import pyaudio
 import os
 import sys
 import vosk
+import platform
 
 from src.constants.constants import AudioConfig
 
@@ -17,7 +18,7 @@ try:
         vosk_dir = os.path.join(sys._MEIPASS, 'vosk')
         if os.path.exists(vosk_dir):
             # 添加 vosk 目录到 DLL 搜索路径
-            os.add_dll_directory(vosk_dir)
+            add_dll_directory(vosk_dir)
             logging.getLogger("Application").info(f"已添加 Vosk DLL 目录: {vosk_dir}")
     
     from vosk import Model, KaldiRecognizer, SetLogLevel
@@ -39,6 +40,17 @@ logger = logging.getLogger("Application")
 
 vosk_path = os.path.dirname(vosk.__file__)
 print(f"Vosk 路径: {vosk_path}")
+
+def add_dll_directory(path):
+    """跨平台的dll目录添加函数"""
+    if platform.system() == 'Windows':
+        if hasattr(os, 'add_dll_directory'):
+            os.add_dll_directory(path)
+    # 在Mac/Linux上，可以使用LD_LIBRARY_PATH环境变量
+    else:
+        library_path = os.environ.get('LD_LIBRARY_PATH', '')
+        if path not in library_path:
+            os.environ['LD_LIBRARY_PATH'] = f"{path}:{library_path}"
 
 class WakeWordDetector:
     """唤醒词检测类"""
