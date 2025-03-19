@@ -2,6 +2,8 @@ from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 import os
 import json
 from pathlib import Path
+import site
+import sys
 
 # 收集 vosk 的所有子模块
 hiddenimports = collect_submodules('vosk')
@@ -11,6 +13,26 @@ datas = collect_data_files('vosk')
 
 # 确保 vosk_cffi 被包含
 hiddenimports += ['vosk_cffi', '_cffi_backend']
+
+# 手动添加 vosk 目录到二进制文件中
+# 查找 vosk 库的实际位置
+def find_vosk_dir():
+    try:
+        import vosk
+        vosk_dir = os.path.dirname(vosk.__file__)
+        print(f"找到 Vosk 目录: {vosk_dir}")
+        return vosk_dir
+    except ImportError:
+        print("无法导入 vosk 模块")
+        return None
+
+vosk_dir = find_vosk_dir()
+if vosk_dir:
+    datas.append((vosk_dir, 'vosk'))
+    # 如果有特定的 DLL 目录，也添加它
+    dll_dir = os.path.join(vosk_dir, 'dll')
+    if os.path.exists(dll_dir):
+        datas.append((dll_dir, 'vosk/dll'))
 
 # 读取配置文件获取模型路径
 def get_model_path_from_config():

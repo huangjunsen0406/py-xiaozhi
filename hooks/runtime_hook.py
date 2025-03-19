@@ -63,7 +63,7 @@ if hasattr(sys, '_MEIPASS'):
 def runtime_init():
     # 如果是 PyInstaller 打包环境
     if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
-        # 尝试添加额外的 DLL 搜索路径
+        # 查找 Vosk 相关的 DLL 文件，而不是仅依赖特定目录
         vosk_dir = os.path.join(sys._MEIPASS, 'vosk')
         if os.path.exists(vosk_dir):
             try:
@@ -73,6 +73,25 @@ def runtime_init():
                 print(f"添加 Vosk DLL 目录失败: {e}")
         else:
             print(f"Vosk 目录不存在: {vosk_dir}")
+            
+            # 尝试查找其他可能的位置
+            for possible_dir in [
+                os.path.join(sys._MEIPASS, 'lib', 'vosk'),
+                os.path.join(sys._MEIPASS, 'site-packages', 'vosk'),
+                os.path.join(sys._MEIPASS, 'Lib', 'site-packages', 'vosk'),
+                # 如果 vosk 模块已经被打包到根目录下的 vosk.pyd
+                os.path.dirname(sys._MEIPASS),
+            ]:
+                if os.path.exists(possible_dir):
+                    try:
+                        os.add_dll_directory(possible_dir)
+                        print(f"已添加替代 Vosk DLL 目录: {possible_dir}")
+                        break
+                    except Exception as e:
+                        print(f"添加替代 Vosk DLL 目录失败: {e}")
+            
+            # 尝试直接从系统 PATH 中加载
+            print("尝试从系统 PATH 中加载 Vosk 库")
 
 # 执行初始化
 runtime_init() 
