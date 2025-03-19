@@ -141,6 +141,10 @@ class AudioCodec:
                         logger.error(f"无法初始化音频输入流: {e}")
                         return None
                     
+                # 在读取前清空缓冲区中的残留数据
+                while self.input_stream.get_read_available() > AudioConfig.FRAME_SIZE:
+                    self.input_stream.read(AudioConfig.FRAME_SIZE, exception_on_overflow=False)
+                
                 # 读取音频数据
                 data = self.input_stream.read(AudioConfig.FRAME_SIZE, exception_on_overflow=False)
                 
@@ -288,38 +292,35 @@ class AudioCodec:
         if self._is_closing:  # 如果正在关闭，不要重新初始化
             return
 
-        with self._stream_lock:  # 使用锁确保线程安全
-            try:
-                if self.input_stream:
-                    try:
-                        if self.input_stream.is_active():
-                            self.input_stream.stop_stream()
-                        self.input_stream.close()
-                    except Exception as e:
-                        logger.warning(f"关闭旧输入流时出错: {e}")
+        try:
+            if self.input_stream:
+                try:
+                    if self.input_stream.is_active():
+                        # 在关闭前清空缓冲区
+                        while self.input_stream.get_read_available() > 0:
+                            self.input_stream.read(AudioConfig.FRAME_SIZE, exception_on_overflow=False)
+                        self.input_stream.stop_stream()
+                    self.input_stream.close()
+                except Exception as e:
+                    logger.warning(f"关闭旧输入流时出错: {e}")
 
-                # 在 MAC 上添加短暂延迟
-                if sys.platform in ('darwin', 'linux'):
-                    time.sleep(0.1)
+            # 在 MAC 上添加短暂延迟
+            if sys.platform in ('darwin', 'linux'):
+                time.sleep(0.1)
 
-                # 确保audio对象存在
-                if not self.audio:
-                    self.audio = pyaudio.PyAudio()
-                    logger.info("重新创建了PyAudio实例")
-
-                input_device_index = self._get_default_or_first_available_device(is_input=True)
-                self.input_stream = self.audio.open(
-                    format=pyaudio.paInt16,
-                    channels=AudioConfig.CHANNELS,
-                    rate=AudioConfig.SAMPLE_RATE,
-                    input=True,
-                    input_device_index=input_device_index,
-                    frames_per_buffer=AudioConfig.FRAME_SIZE
-                )
-                logger.info("音频输入流重新初始化成功")
-            except Exception as e:
-                logger.error(f"重新初始化音频输入流失败: {e}")
-                self.input_stream = None  # 清除引用以防止后续尝试使用失败的流
+            input_device_index = self._get_default_or_first_available_device(is_input=True)
+            self.input_stream = self.audio.open(
+                format=pyaudio.paInt16,
+                channels=AudioConfig.CHANNELS,
+                rate=AudioConfig.SAMPLE_RATE,
+                input=True,
+                input_device_index=input_device_index,
+                frames_per_buffer=AudioConfig.FRAME_SIZE
+            )
+            logger.info("音频输入流重新初始化成功")
+        except Exception as e:
+            logger.error(f"重新初始化音频输入流失败: {e}")
+            raise
 
     def get_shared_input_stream(self):
         """获取可共享的输入流，如果不可用则返回None"""

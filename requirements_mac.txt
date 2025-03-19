@@ -34,6 +34,6 @@ srt==3.5.3
 tqdm==4.67.1
 typing_extensions==4.12.2
 urllib3==2.3.0
-vosk==0.3.45
+vosk==0.3.44
 webrtcvad-wheels==2.0.14
 websockets==11.0.3

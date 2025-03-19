@@ -388,7 +388,7 @@ class Application:
     def _handle_tts_start(self):
         """处理TTS开始事件"""
         self.aborted = False
-
+        self.is_tts_playing = True
         # 清空可能存在的旧音频数据
         self.audio_codec.clear_audio_queue()
 
