@@ -10,6 +10,17 @@ import platform
 
 from src.constants.constants import AudioConfig
 
+def add_dll_directory(path):
+    """跨平台的dll目录添加函数"""
+    if platform.system() == 'Windows':
+        if hasattr(os, 'add_dll_directory'):
+            os.add_dll_directory(path)
+    # 在Mac/Linux上，可以使用LD_LIBRARY_PATH环境变量
+    else:
+        library_path = os.environ.get('LD_LIBRARY_PATH', '')
+        if path not in library_path:
+            os.environ['LD_LIBRARY_PATH'] = f"{path}:{library_path}"
+
 # 尝试导入 vosk 及相关组件
 try:
     # 先定位 vosk 的 DLL 目录
@@ -40,17 +51,6 @@ logger = logging.getLogger("Application")
 
 vosk_path = os.path.dirname(vosk.__file__)
 print(f"Vosk 路径: {vosk_path}")
-
-def add_dll_directory(path):
-    """跨平台的dll目录添加函数"""
-    if platform.system() == 'Windows':
-        if hasattr(os, 'add_dll_directory'):
-            os.add_dll_directory(path)
-    # 在Mac/Linux上，可以使用LD_LIBRARY_PATH环境变量
-    else:
-        library_path = os.environ.get('LD_LIBRARY_PATH', '')
-        if path not in library_path:
-            os.environ['LD_LIBRARY_PATH'] = f"{path}:{library_path}"
 
 class WakeWordDetector:
     """唤醒词检测类"""
