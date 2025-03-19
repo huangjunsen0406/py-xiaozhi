@@ -5,9 +5,9 @@ import os
 import sys
 import json
 import shutil
+import platform
 import subprocess
 from pathlib import Path
-import tempfile
 import re
 
 def print_step(message):
@@ -31,9 +31,43 @@ def read_config():
         print(f"读取配置文件时出错: {e}")
         return {}
 
+def get_platform_info():
+    """获取当前平台信息"""
+    system = platform.system().lower()
+    
+    # 平台类型
+    if system == 'darwin':
+        platform_type = 'macos'
+    elif system == 'linux':
+        platform_type = 'linux'
+    else:
+        platform_type = 'windows'
+    
+    # 架构
+    machine = platform.machine().lower()
+    if machine in ('x86_64', 'amd64'):
+        arch = 'x64'
+    elif machine in ('i386', 'i686', 'x86'):
+        arch = 'x86'
+    elif machine in ('arm64', 'aarch64'):
+        arch = 'arm64'
+    elif machine.startswith('arm'):
+        arch = 'arm'
+    else:
+        arch = machine
+    
+    return {
+        'system': system,
+        'platform': platform_type,
+        'arch': arch,
+        'is_windows': system == 'windows',
+        'is_macos': system == 'darwin',
+        'is_linux': system == 'linux'
+    }
+
 def fix_opuslib_syntax():
     """修复 opuslib 中的语法警告"""
-    print_step("修复 opuslib 中的语法警告")
+    print_step("检查 opuslib 语法")
     
     try:
         import opuslib
@@ -43,28 +77,29 @@ def fix_opuslib_syntax():
         with open(decoder_path, 'r', encoding='utf-8') as f:
             content = f.read()
         
-        # 创建备份
-        backup_path = decoder_path.with_suffix('.py.bak')
-        shutil.copy2(decoder_path, backup_path)
-        print(f"已创建备份: {backup_path}")
-        
-        # 修改文件内容
+        # 如果需要修复
         if 'is not 0' in content:
+            # 创建备份
+            backup_path = decoder_path.with_suffix('.py.bak')
+            shutil.copy2(decoder_path, backup_path)
+            print(f"已创建备份: {backup_path}")
+            
+            # 修改文件内容
             content = content.replace('is not 0', '!= 0')
             
             with open(decoder_path, 'w', encoding='utf-8') as f:
                 f.write(content)
                 
             print("已修复 'is not 0' 为 '!= 0'")
+            return backup_path
         else:
-            print("未发现需要修复的语法问题")
-            
-        return backup_path
+            print("opuslib 语法检查通过，无需修复")
+            return None
     except ImportError:
-        print("未找到 opuslib 模块，跳过修复")
+        print("未找到 opuslib 模块，跳过检查")
         return None
     except Exception as e:
-        print(f"修复时出错: {e}")
+        print(f"检查 opuslib 时出错: {e}")
         return None
 
 def restore_opuslib(backup_path):
@@ -80,97 +115,187 @@ def restore_opuslib(backup_path):
         except Exception as e:
             print(f"恢复 opuslib 时出错: {e}")
 
-def update_spec_file(config):
-    """直接修改现有的 spec 文件"""
-    print_step("更新打包配置文件")
+def create_new_spec_file(config, platform_info):
+    """创建全新的 spec 文件而不是修改现有文件"""
+    print_step("创建新的打包配置文件")
     
     project_root = get_project_root()
-    spec_path = project_root / "xiaozhi.spec"
-    
-    if not spec_path.exists():
-        print(f"错误: 找不到 spec 文件 {spec_path}")
-        return None
-    
-    # 读取原始 spec 文件
-    with open(spec_path, 'r', encoding='utf-8') as f:
-        spec_content = f.read()
-    
-    # 备份原始 spec 文件
-    backup_path = spec_path.with_suffix('.spec.bak')
-    with open(backup_path, 'w', encoding='utf-8') as f:
-        f.write(spec_content)
-    print(f"已创建 spec 文件备份: {backup_path}")
+    original_spec_path = project_root / "xiaozhi.spec"
+    temp_spec_path = project_root / "xiaozhi_temp.spec"
     
     # 获取唤醒词配置
     use_wake_word = config.get("USE_WAKE_WORD", True)
     model_path = config.get("WAKE_WORD_MODEL_PATH", "models/vosk-model-small-cn-0.22")
     
     print(f"打包配置: USE_WAKE_WORD={use_wake_word}, MODEL_PATH={model_path}")
+    print(f"平台信息: {platform_info['platform']}-{platform_info['arch']}")
     
-    # 创建带条件判断的 datas 部分
-    datas_code = """# 准备要添加的数据文件
+    # 根据平台设置可执行文件名称
+    if platform_info['is_windows']:
+        exe_name = "小智"
+    elif platform_info['is_macos']:
+        exe_name = "小智_mac"
+    else:
+        exe_name = "小智_linux"
+    
+    # 创建全新的 spec 文件内容
+    spec_content = f"""# -*- mode: python ; coding: utf-8 -*-
+import json
+import os
+import sys
+from pathlib import Path
+
+block_cipher = None
+
+# 准备要添加的数据文件
 datas = [
-    ('libs/windows/opus.dll', 'libs/windows'),
     ('config', 'config'),  # 添加配置文件目录
 ]
+
+# 根据不同平台添加特定库文件
+if sys.platform == 'win32':
+    # Windows 平台
+    if os.path.exists('libs/windows/opus.dll'):
+        datas.append(('libs/windows/opus.dll', 'libs/windows'))
+        print("添加 Windows opus 库到打包资源")
+elif sys.platform == 'darwin':
+    # macOS 平台
+    if os.path.exists('libs/macos/libopus.dylib'):
+        datas.append(('libs/macos/libopus.dylib', 'libs/macos'))
+        print("添加 macOS opus 库到打包资源")
+else:
+    # Linux 平台
+    for lib_file in ['libopus.so', 'libopus.so.0', 'libopus.so.0.8.0']:
+        if os.path.exists(f'libs/linux/{{lib_file}}'):
+            datas.append((f'libs/linux/{{lib_file}}', 'libs/linux'))
+            print(f"添加 Linux opus 库 {{lib_file}} 到打包资源")
+            break
 
 # 如果使用唤醒词，添加模型到打包资源
 if {use_wake_word}:
     model_dir = "{model_path}"  # 例如 "models/vosk-model-small-cn-0.22"
     if os.path.exists(model_dir):
-        print(f"spec: 添加唤醒词模型目录到打包资源: {{model_dir}}")
+        print(f"添加唤醒词模型目录到打包资源: {{model_dir}}")
         datas.append((model_dir, model_dir))
     else:
-        print(f"spec: 警告 - 唤醒词模型目录不存在: {{model_dir}}")
+        print(f"警告 - 唤醒词模型目录不存在: {{model_dir}}")
 else:
-    print("spec: 配置为不使用唤醒词，跳过添加模型目录")
-""".format(use_wake_word=str(use_wake_word), model_path=model_path)
-    
-    # 替换原始 datas 部分
-    # 匹配 datas = [...] 部分
-    datas_pattern = r"datas\s*=\s*\[\s*\(.*?\)\s*,(?:\s*\(.*?\)\s*,)*\s*\]"
-    if re.search(datas_pattern, spec_content, re.DOTALL):
-        new_spec_content = re.sub(datas_pattern, datas_code, spec_content, flags=re.DOTALL)
-    else:
-        # 如果找不到匹配的模式，在 a = Analysis 之前插入代码
-        analysis_pattern = r"a\s*=\s*Analysis\s*\("
-        new_spec_content = re.sub(analysis_pattern, datas_code + "\n\na = Analysis(", spec_content)
-    
-    # 更新 spec 文件中的 datas 引用
-    new_spec_content = re.sub(r"datas=\[.*?\]", "datas=datas", new_spec_content, flags=re.DOTALL)
-    
-    # 写入修改后的 spec 文件
-    with open(spec_path, 'w', encoding='utf-8') as f:
-        f.write(new_spec_content)
-    
-    print(f"已更新 spec 文件: {spec_path}")
-    return spec_path, backup_path
+    print("配置为不使用唤醒词，跳过添加模型目录")
 
-def restore_spec_file(backup_path):
-    """恢复原始 spec 文件"""
-    if backup_path and backup_path.exists():
-        try:
-            project_root = get_project_root()
-            spec_path = project_root / "xiaozhi.spec"
-            
-            shutil.copy2(backup_path, spec_path)
-            backup_path.unlink()  # 删除备份
+a = Analysis(
+    ['main.py'],
+    pathex=[],
+    binaries=[],
+    datas=datas,
+    hiddenimports=[
+        'engineio.async_drivers.threading',
+        'opuslib',
+        'pyaudiowpatch',
+        'numpy',
+        'tkinter',
+        'queue',
+        'json',
+        'asyncio',
+        'threading',
+        'logging',
+        'ctypes',
+        'socketio',
+        'engineio',
+        'websockets',  # 添加 websockets 依赖
+        'vosk',  # 添加语音识别依赖
+        'vosk.vosk_cffi',  # 添加 vosk cffi 模块
+    ],
+    hookspath=['hooks'],  # 添加自定义钩子目录
+    hooksconfig={{}},
+    runtime_hooks=['hooks/runtime_hook.py'],  # 添加运行时钩子
+    excludes=[],
+    win_no_prefer_redirects=False,
+    win_private_assemblies=False,
+    cipher=block_cipher,
+    noarchive=False,
+)
+
+import PyInstaller.config
+PyInstaller.config.CONF['disablewindowedtraceback'] = True
+
+pyz = PYZ(
+    a.pure,
+    a.zipped_data,
+    cipher=block_cipher
+)
+
+exe = EXE(
+    pyz,
+    a.scripts,
+    a.binaries,
+    a.zipfiles,
+    a.datas,
+    [],
+    name='{exe_name}',
+    debug=False,
+    bootloader_ignore_signals=False,
+    strip=False,
+    upx=True,
+    upx_exclude=[],
+    runtime_tmpdir=None,
+    console=True,
+    disable_windowed_traceback=False,
+    target_arch=None,
+    codesign_identity=None,
+    entitlements_file=None,
+)
+
+# 导入并执行 setup_opus
+try:
+    from src.utils.system_info import setup_opus
+    setup_opus()
+except Exception as e:
+    print(f"初始化 opus 库时出错: {{e}}")
+"""
+    
+    # 备份原始 spec 文件
+    if original_spec_path.exists():
+        backup_path = original_spec_path.with_suffix('.spec.bak')
+        shutil.copy2(original_spec_path, backup_path)
+        print(f"已创建 spec 文件备份: {backup_path}")
+    
+    # 写入新的 spec 文件
+    with open(temp_spec_path, 'w', encoding='utf-8') as f:
+        f.write(spec_content)
+    
+    print(f"已创建新的 spec 文件: {temp_spec_path}")
+    return temp_spec_path, original_spec_path
+
+def cleanup_spec_files(temp_spec_path, original_spec_path):
+    """清理临时 spec 文件并恢复原始文件"""
+    try:
+        # 删除临时 spec 文件
+        if temp_spec_path.exists():
+            temp_spec_path.unlink()
+            print(f"已删除临时 spec 文件: {temp_spec_path}")
+        
+        # 恢复原始 spec 文件
+        backup_path = original_spec_path.with_suffix('.spec.bak')
+        if backup_path.exists():
+            shutil.copy2(backup_path, original_spec_path)
+            backup_path.unlink()
             print(f"已恢复原始 spec 文件并删除备份")
-        except Exception as e:
-            print(f"恢复 spec 文件时出错: {e}")
+    except Exception as e:
+        print(f"清理 spec 文件时出错: {e}")
 
-def build_executable():
+def build_executable(temp_spec_path):
     """使用 PyInstaller 构建可执行文件"""
     print_step("开始构建可执行文件")
     
     project_root = get_project_root()
     os.chdir(project_root)  # 切换到项目根目录
     
+    # 基本命令
     cmd = [
         sys.executable, 
         "-m", "PyInstaller",
         "--clean",  # 清除临时文件
-        "xiaozhi.spec"
+        str(temp_spec_path)
     ]
     
     print(f"执行命令: {' '.join(cmd)}")
@@ -200,9 +325,24 @@ def build_executable():
         print(f"构建过程中出错: {e}")
         return False
 
+def get_output_file_path(platform_info):
+    """获取输出文件路径"""
+    project_root = get_project_root()
+    
+    if platform_info['is_windows']:
+        return project_root / "dist" / "小智.exe"
+    elif platform_info['is_macos']:
+        return project_root / "dist" / "小智_mac"
+    else:
+        return project_root / "dist" / "小智_linux"
+
 def main():
     """主函数"""
     print_step("开始构建小智应用")
+    
+    # 获取平台信息
+    platform_info = get_platform_info()
+    print(f"当前平台: {platform_info['platform']} {platform_info['arch']}")
     
     # 读取配置
     config = read_config()
@@ -210,24 +350,24 @@ def main():
     # 修复 opuslib
     opuslib_backup = fix_opuslib_syntax()
     
-    # 更新 spec 文件
-    spec_result = update_spec_file(config)
+    # 创建新的 spec 文件
+    spec_result = create_new_spec_file(config, platform_info)
     
     if spec_result:
-        spec_path, spec_backup = spec_result
+        temp_spec_path, original_spec_path = spec_result
         try:
             # 构建可执行文件
-            success = build_executable()
+            success = build_executable(temp_spec_path)
             
             if success:
-                dist_path = get_project_root() / "dist" / "小智.exe"
-                if dist_path.exists():
-                    print(f"\n构建完成! 可执行文件位于: {dist_path}")
+                output_path = get_output_file_path(platform_info)
+                if output_path.exists():
+                    print(f"\n构建完成! 可执行文件位于: {output_path}")
                 else:
                     print("\n构建似乎成功，但未找到输出文件")
         finally:
-            # 恢复原始 spec 文件
-            restore_spec_file(spec_backup)
+            # 清理临时文件
+            cleanup_spec_files(temp_spec_path, original_spec_path)
     
     # 恢复 opuslib 原始文件
     restore_opuslib(opuslib_backup)
