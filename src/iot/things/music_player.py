@@ -1,5 +1,5 @@
 from src.application import Application
-from src.constants.constants import DeviceState
+from src.constants.constants import DeviceState, AudioConfig
 from src.iot.thing import Thing, Parameter, ValueType
 import os
 import requests
@@ -492,10 +492,10 @@ class MusicPlayer(Thing):
             p = pyaudio.PyAudio()
             stream = p.open(
                 format=pyaudio.paInt16,
-                channels=1,
-                rate=24000,
+                channels=AudioConfig.CHANNELS,
+                rate=AudioConfig.SAMPLE_RATE,
                 output=True,
-                frames_per_buffer=4096
+                frames_per_buffer=AudioConfig.FRAME_SIZE
             )
 
             logger.info("开始播放音频流...")
