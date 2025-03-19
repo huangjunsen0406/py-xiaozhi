@@ -170,9 +170,9 @@ class MqttProtocol(Protocol):
                 "transport": "udp",
                 "audio_params": {
                     "format": "opus",
-                    "sample_rate": 16000,
-                    "channels": 1,
-                    "frame_duration": 60
+                    "sample_rate": AudioConfig.SAMPLE_RATE,
+                    "channels": AudioConfig.CHANNELS,
+                    "frame_duration": AudioConfig.FRAME_DURATION,
                 }
             }
 
@@ -247,6 +247,20 @@ class MqttProtocol(Protocol):
                 # 获取音频参数
                 audio_params = data.get("audio_params", {})
                 if audio_params:
+                    # 更新全局音频配置
+                    updated = AudioConfig.update_from_server(audio_params)
+                    if updated:
+                        logger.info(f"根据服务器配置更新音频参数: 采样率={AudioConfig.SAMPLE_RATE}, " 
+                                   f"声道={AudioConfig.CHANNELS}, 帧时长={AudioConfig.FRAME_DURATION}ms, "
+                                   f"帧大小={AudioConfig.FRAME_SIZE}")
+                        
+                        # 通知音频配置已更改
+                        if self.on_audio_config_changed:
+                            asyncio.run_coroutine_threadsafe(
+                                self.on_audio_config_changed(AudioConfig),
+                                self.loop
+                            )
+                    
                     self.server_sample_rate = audio_params.get("sample_rate", AudioConfig.SAMPLE_RATE)
 
                 # 获取UDP配置

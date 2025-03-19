@@ -34,17 +34,17 @@ class AudioCodec:
         try:
             self.audio = pyaudio.PyAudio()
 
-            # **自动选择默认输入/输出设备**
+            # 自动选择默认输入/输出设备
             input_device_index = self._get_default_or_first_available_device(is_input=True)
             output_device_index = self._get_default_or_first_available_device(is_input=False)
 
-            # 初始化音频输入流
+            # 初始化音频输入流 - 使用最新的AudioConfig参数
             self.input_stream = self.audio.open(
                 format=pyaudio.paInt16,
                 channels=AudioConfig.CHANNELS,
                 rate=AudioConfig.SAMPLE_RATE,
                 input=True,
-                input_device_index=input_device_index,  # 选择的麦克风
+                input_device_index=input_device_index,
                 frames_per_buffer=AudioConfig.FRAME_SIZE
             )
 

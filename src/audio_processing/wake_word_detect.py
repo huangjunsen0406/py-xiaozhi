@@ -7,6 +7,8 @@ import os
 import sys
 import vosk
 
+from src.constants.constants import AudioConfig
+
 # 尝试导入 vosk 及相关组件
 try:
     # 先定位 vosk 的 DLL 目录
@@ -45,8 +47,8 @@ class WakeWordDetector:
                  wake_words=None,
                  model_path=None,
                  sensitivity=0.5,
-                 sample_rate=16000,
-                 buffer_size=4000):
+                 sample_rate=AudioConfig.SAMPLE_RATE,
+                 buffer_size=AudioConfig.FRAME_SIZE):
         """
         初始化唤醒词检测器
 
@@ -165,7 +167,7 @@ class WakeWordDetector:
                     self.audio = pyaudio.PyAudio()
                     self.stream = self.audio.open(
                         format=pyaudio.paInt16,
-                        channels=1,
+                        channels=AudioConfig.CHANNELS,
                         rate=self.sample_rate,
                         input=True,
                         frames_per_buffer=self.buffer_size
