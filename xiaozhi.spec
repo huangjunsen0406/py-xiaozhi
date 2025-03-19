@@ -11,6 +11,9 @@ a = Analysis(
         ('libs/windows/opus.dll', 'libs/windows'),
         ('config', 'config'),  # 添加配置文件目录
         ('models/vosk-model-small-cn-0.22', 'models/vosk-model-small-cn-0.22'),  # 只包含需要的模型
+        # 显式添加 vosk 模块的数据文件
+        # 如果您的环境中有 site-packages/vosk 目录，可以添加：
+        # (site_packages_path + '/vosk', 'vosk'),
     ],
     hiddenimports=[
         'engineio.async_drivers.threading',
@@ -69,3 +72,6 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
 )
+
+from src.utils.system_info import setup_opus
+setup_opus()

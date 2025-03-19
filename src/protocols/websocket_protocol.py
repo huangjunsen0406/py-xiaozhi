@@ -168,6 +168,7 @@ class WebsocketProtocol(Protocol):
             if not transport or transport != "websocket":
                 logger.error(f"不支持的传输方式: {transport}")
                 return
+            print("服务链接返回初始化配置", data)
 
             # 获取音频参数
             audio_params = data.get("audio_params")

@@ -235,6 +235,7 @@ class MqttProtocol(Protocol):
                 return
 
             elif msg_type == "hello":
+                print("服务链接返回初始化配置", data)
                 # 处理服务器hello响应
                 transport = data.get("transport")
                 if transport != "udp":
