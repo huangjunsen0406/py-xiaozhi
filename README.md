@@ -1,5 +1,6 @@
 # py-xiaozhi
 
+
 ## 项目简介
 py-xiaozhi 是一个使用 Python 实现的小智语音客户端，旨在通过代码学习和在没有硬件条件下体验 AI 小智的语音功能。
 本仓库是基于[xiaozhi-esp32](https://github.com/78/xiaozhi-esp32)移植
@@ -7,6 +8,11 @@ py-xiaozhi 是一个使用 Python 实现的小智语音客户端，旨在通过�
 ## 请先看这里！
 - 仔细阅读/docs/使用文档.md 启动教程和文件说明都在里面了
 - main是最新代码，每次更新都需要手动重新安装一次pip依赖防止我新增依赖后你们本地没有
+
+## 有没有大佬可以加入的
+- 目前在树莓派b4、b5、jetson等设备运行有问题
+- mac的话 m1、m2等会出现找不到opuslib，目前有人提示说是python版本问题
+- 跪求大佬加入！！！
 
 [从零开始使用小智客户端（视频教程）](https://www.bilibili.com/video/BV1dWQhYEEmq/?vd_source=2065ec11f7577e7107a55bbdc3d12fce)
 
