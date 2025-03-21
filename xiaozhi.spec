@@ -26,7 +26,7 @@ use_wake_word, model_path = get_model_config()
 # 准备要添加的数据文件
 datas = [
     ('libs/windows/opus.dll', 'libs/windows'),
-    ('config', 'config'),  # 添加配置文件目录
+    ('config', 'config', ['config.json']),  # 添加配置目录但排除config.json
 ]
 
 # 如果使用唤醒词，添加模型到打包资源

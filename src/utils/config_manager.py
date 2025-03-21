@@ -73,7 +73,7 @@ class ConfigManager:
             
             # 再尝试从打包目录加载
             if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
-                config_file = Path(sys._MEIPASS) / "config/config.json"
+                config_file = Path(sys._MEIPASS) / "config" / "config.json"
                 if config_file.exists():
                     config = json.loads(config_file.read_text(encoding='utf-8'))
                     return self._merge_configs(self.DEFAULT_CONFIG, config)

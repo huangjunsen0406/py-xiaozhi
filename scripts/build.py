@@ -147,36 +147,39 @@ block_cipher = None
 
 # 准备要添加的数据文件
 datas = [
-    ('config', 'config'),  # 添加配置文件目录
+    ('config', 'config'),  # 包含整个config目录，此时config.json已经是模板版本
 ]
 
 # 根据不同平台添加特定库文件
 if sys.platform == 'win32':
     # Windows 平台
-    if os.path.exists('libs/windows/opus.dll'):
+    if Path('libs/windows/opus.dll').exists():
         datas.append(('libs/windows/opus.dll', 'libs/windows'))
         print("添加 Windows opus 库到打包资源")
 elif sys.platform == 'darwin':
     # macOS 平台
-    if os.path.exists('libs/macos/libopus.dylib'):
+    if Path('libs/macos/libopus.dylib').exists():
         datas.append(('libs/macos/libopus.dylib', 'libs/macos'))
         print("添加 macOS opus 库到打包资源")
 else:
     # Linux 平台
     for lib_file in ['libopus.so', 'libopus.so.0', 'libopus.so.0.8.0']:
-        if os.path.exists(f'libs/linux/{{lib_file}}'):
-            datas.append((f'libs/linux/{{lib_file}}', 'libs/linux'))
+        lib_path = Path(f'libs/linux/{{lib_file}}')
+        if lib_path.exists():
+            datas.append((str(lib_path), str(lib_path.parent)))
             print(f"添加 Linux opus 库 {{lib_file}} 到打包资源")
             break
 
 # 如果使用唤醒词，添加模型到打包资源
 if {use_wake_word}:
-    model_dir = "{model_path}"  # 例如 "models/vosk-model-small-cn-0.22"
-    if os.path.exists(model_dir):
-        print(f"添加唤醒词模型目录到打包资源: {{model_dir}}")
-        datas.append((model_dir, model_dir))
+    model_path_str = "{model_path}"
+    model_dir = Path(model_path_str)
+    if model_dir.exists():
+        print(f"添加唤醒词模型目录到打包资源: {{model_path_str}}")
+        # 注意这里的变化：直接使用字符串路径，保持目录结构
+        datas.append((model_path_str, model_path_str))
     else:
-        print(f"警告 - 唤醒词模型目录不存在: {{model_dir}}")
+        print(f"警告 - 唤醒词模型目录不存在: {{model_path_str}}")
 else:
     print("配置为不使用唤醒词，跳过添加模型目录")
 
@@ -341,6 +344,54 @@ def get_output_file_path(platform_info):
     else:
         return project_root / "dist" / "小智_linux"
 
+def create_template_config():
+    """创建模板配置文件用于打包，保留原始配置的结构和值，但清除身份信息"""
+    print_step("创建模板配置文件")
+    
+    project_root = get_project_root()
+    config_path = project_root / "config" / "config.json"
+    backup_path = project_root / "config" / "config.json.bak"
+    
+    # 如果配置文件不存在，则无需处理
+    if not config_path.exists():
+        print("未找到配置文件，打包将使用默认配置")
+        return None
+    
+    # 读取当前配置
+    try:
+        with open(config_path, 'r', encoding='utf-8') as f:
+            current_config = json.load(f)
+        
+        # 创建备份
+        shutil.copy2(config_path, backup_path)
+        print(f"已创建配置文件备份: {backup_path}")
+        
+        # 修改关键字段，保留其他所有配置
+        modified_config = current_config.copy()
+        modified_config["CLIENT_ID"] = None
+        modified_config["DEVICE_ID"] = None
+        
+        # 写入修改后的配置
+        with open(config_path, 'w', encoding='utf-8') as f:
+            json.dump(modified_config, f, indent=2, ensure_ascii=False)
+        
+        print("已创建模板配置文件用于打包")
+        return backup_path
+    except Exception as e:
+        print(f"处理配置文件时出错: {e}")
+        return None
+
+def restore_config(backup_path):
+    """恢复原始配置文件"""
+    if backup_path and backup_path.exists():
+        try:
+            config_path = get_project_root() / "config" / "config.json"
+            shutil.copy2(backup_path, config_path)
+            backup_path.unlink()  # 删除备份
+            print(f"已恢复原始配置文件并删除备份")
+        except Exception as e:
+            print(f"恢复配置文件时出错: {e}")
+
 def main():
     """主函数"""
     print_step("开始构建小智应用")
@@ -349,18 +400,22 @@ def main():
     platform_info = get_platform_info()
     print(f"当前平台: {platform_info['platform']} {platform_info['arch']}")
     
-    # 读取配置
-    config = read_config()
-    
     # 修复 opuslib
     opuslib_backup = fix_opuslib_syntax()
+    
+    # 创建模板配置文件（仅修改身份信息为None）
+    config_backup = create_template_config()
+    
+    # 读取修改后的配置（用于获取打包需要的其他设置）
+    config = read_config()
     
     # 创建新的 spec 文件
     spec_result = create_new_spec_file(config, platform_info)
     
-    if spec_result:
-        temp_spec_path, original_spec_path = spec_result
-        try:
+    try:
+        if spec_result:
+            temp_spec_path, original_spec_path = spec_result
+            
             # 构建可执行文件
             success = build_executable(temp_spec_path)
             
@@ -370,8 +425,12 @@ def main():
                     print(f"\n构建完成! 可执行文件位于: {output_path}")
                 else:
                     print("\n构建似乎成功，但未找到输出文件")
-        finally:
-            # 清理临时文件
+    finally:
+        # 恢复原始配置文件
+        restore_config(config_backup)
+        
+        # 清理临时文件
+        if 'spec_result' in locals() and spec_result:
             cleanup_spec_files(temp_spec_path, original_spec_path)
     
     # 恢复 opuslib 原始文件

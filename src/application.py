@@ -5,6 +5,7 @@ import threading
 import time
 import sys
 from src.utils.system_info import setup_opus
+from pathlib import Path
 
 
 # 在导入 opuslib 之前处理 opus 动态库
@@ -934,22 +935,25 @@ class Application:
             import sys
             import os
             
-            # 获取模型路径
+            # 获取模型路径配置
             model_path_config = self.config.get_config("WAKE_WORD_MODEL_PATH", "models/vosk-model-small-cn-0.22")
-            
+
             # 对于打包环境
             if getattr(sys, 'frozen', False):
-                base_path = os.path.dirname(sys.executable) if not hasattr(sys, '_MEIPASS') else sys._MEIPASS
-                model_path = os.path.join(base_path, model_path_config)
+                if hasattr(sys, '_MEIPASS'):
+                    base_path = Path(sys._MEIPASS)
+                else:
+                    base_path = Path(sys.executable).parent
+                model_path = base_path / model_path_config
                 logger.info(f"打包环境下使用模型路径: {model_path}")
             else:
                 # 开发环境
-                base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-                model_path = os.path.join(base_path, model_path_config)
+                base_path = Path(__file__).parent.parent
+                model_path = base_path / model_path_config
                 logger.info(f"开发环境下使用模型路径: {model_path}")
             
             # 检查模型路径
-            if not os.path.exists(model_path):
+            if not model_path.exists():
                 logger.error(f"模型路径不存在: {model_path}")
                 # 自动禁用唤醒词功能
                 self.config.update_config("USE_WAKE_WORD", False)
@@ -958,7 +962,7 @@ class Application:
             
             self.wake_word_detector = WakeWordDetector(
                 wake_words=self.config.get_config("WAKE_WORDS"),
-                model_path=model_path
+                model_path=str(model_path)  # 转为字符串，因为Vosk API可能需要字符串路径
             )
             
             # 如果唤醒词检测器被禁用（内部故障），则更新配置

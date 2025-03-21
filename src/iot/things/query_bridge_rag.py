@@ -56,6 +56,11 @@ class QueryBridgeRAG(Thing):
         try:
             # 调用逻辑层的 RAG 知识库查询
             result = get_rag_result(query)
+            # rag 查询
+
+            # 其他的联网方式例如dify
+
+
             return result
         except Exception as e:
             print(f"查询信息失败: {e}")

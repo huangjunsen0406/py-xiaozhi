@@ -1,6 +1,5 @@
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules
-import sys
-import os
+from pathlib import Path
 
 # 收集 opuslib 的所有子模块
 hiddenimports = collect_submodules('opuslib')
@@ -24,9 +23,10 @@ datas += collect_data_files('vosk')
 def patch_opuslib_syntax():
     try:
         import opuslib
-        decoder_path = os.path.join(os.path.dirname(opuslib.__file__), 'api', 'decoder.py')
+        # 使用 pathlib 处理路径
+        decoder_path = Path(opuslib.__file__).parent / 'api' / 'decoder.py'
         
-        if os.path.exists(decoder_path):
+        if decoder_path.exists():
             with open(decoder_path, 'r', encoding='utf-8') as f:
                 content = f.read()
             
