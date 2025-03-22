@@ -61,10 +61,13 @@ class Application:
         # 音频处理相关
         self.audio_codec = None  # 将在 _initialize_audio 中初始化
         self.is_tts_playing = False
+
         # 事件循环和线程
         self.loop = asyncio.new_event_loop()
         self.loop_thread = None
         self.running = False
+        self.input_event_thread = None
+        self.output_event_thread = None
 
         # 任务队列和锁
         self.main_tasks = []
@@ -484,8 +487,18 @@ class Application:
                     self.audio_codec._reinitialize_output_stream()
 
             # 设置事件触发器
-            threading.Thread(target=self._audio_input_event_trigger, daemon=True).start()
-            threading.Thread(target=self._audio_output_event_trigger, daemon=True).start()
+            if self.input_event_thread is None or not self.input_event_thread.is_alive():
+                self.input_event_thread = threading.Thread(
+                    target=self._audio_input_event_trigger, daemon=True)
+                self.input_event_thread.start()
+                logger.info("已启动输入事件触发线程")
+
+            # 检查输出事件线程
+            if self.output_event_thread is None or not self.output_event_thread.is_alive():
+                self.output_event_thread = threading.Thread(
+                    target=self._audio_output_event_trigger, daemon=True)
+                self.output_event_thread.start()
+                logger.info("已启动输出事件触发线程")
 
             logger.info("音频流已启动")
         except Exception as e:
