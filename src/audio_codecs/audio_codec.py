@@ -170,22 +170,28 @@ class AudioCodec:
     def play_audio(self):
         """处理并播放队列中的音频数据"""
         try:
-            # 批量处理多个音频包以减少处理延迟
-            batch_size = min(10, self.audio_decode_queue.qsize())
-            if batch_size == 0:
+            # 检查队列状态
+            if self.audio_decode_queue.empty():
                 return None
 
+            # 批量处理多个音频包以减少处理延迟
+            batch_size = min(10, self.audio_decode_queue.qsize())
+            
             # 创建缓冲区存储解码后的数据
             buffer = bytearray()
-
+            
+            # 从队列中获取数据并解码
             for _ in range(batch_size):
-                if self.audio_decode_queue.empty():
-                    break
-
-                opus_data = self.audio_decode_queue.get_nowait()
                 try:
-                    pcm_data = self.opus_decoder.decode(opus_data, AudioConfig.FRAME_SIZE, decode_fec=False)
+                    opus_data = self.audio_decode_queue.get_nowait()
+                    pcm_data = self.opus_decoder.decode(
+                        opus_data, 
+                        AudioConfig.FRAME_SIZE, 
+                        decode_fec=False
+                    )
                     buffer.extend(pcm_data)
+                except queue.Empty:
+                    break
                 except Exception as e:
                     logger.error(f"解码音频数据时出错: {e}")
 
@@ -194,25 +200,34 @@ class AudioCodec:
                 # 转换为numpy数组
                 pcm_array = np.frombuffer(buffer, dtype=np.int16)
 
-                # 播放音频
-                try:
+                # 使用锁保护输出流操作
+                with self._stream_lock:
+                    # 检查流状态并播放
                     if self.output_stream and self.output_stream.is_active():
-                        self.output_stream.write(pcm_array.tobytes())
-                    else:
-                        # MAC 特定：如果流不活跃，尝试重新初始化
-                        self._reinitialize_output_stream()
-                        if self.output_stream and self.output_stream.is_active():
+                        try:
                             self.output_stream.write(pcm_array.tobytes())
-                except OSError as e:
-                    if "Stream closed" in str(e) or "Internal PortAudio error" in str(e):
-                        logger.error(f"播放音频时出错: {e}")
-                        self._reinitialize_output_stream()
+                        except OSError as e:
+                            error_msg = str(e)
+                            if ("Stream closed" in error_msg or 
+                                    "Internal PortAudio error" in error_msg):
+                                logger.error(f"播放音频时出错: {e}")
+                                # 释放锁后再重新初始化，避免死锁
+                                self._reinitialize_output_stream()
+                            else:
+                                logger.error(f"播放音频时出错: {e}")
                     else:
-                        logger.error(f"播放音频时出错: {e}")
-        except queue.Empty:
-            pass
+                        # 如果流不活跃，尝试重新初始化
+                        self._reinitialize_output_stream()
+                        # 重新检查并尝试播放
+                        if self.output_stream and self.output_stream.is_active():
+                            try:
+                                self.output_stream.write(pcm_array.tobytes())
+                            except Exception as e:
+                                logger.error(f"重新初始化后播放音频时出错: {e}")
+                                
         except Exception as e:
             logger.error(f"播放音频时出错: {e}")
+            # 流可能已损坏，尝试重新初始化
             self._reinitialize_output_stream()
 
     def has_pending_audio(self):
@@ -343,7 +358,14 @@ class AudioCodec:
 
         try:
             # 等待并清理剩余音频数据
-            self.wait_for_audio_complete()
+            timeout = 2.0  # 设置超时，避免无限等待
+            try:
+                self.wait_for_audio_complete(timeout=timeout)
+            except Exception as e:
+                logger.warning(f"等待音频完成时出错: {e}")
+            
+            # 强制清空音频队列
+            self.clear_audio_queue()
 
             with self._stream_lock:  # 使用锁确保线程安全
                 # 关闭输入流
@@ -355,7 +377,8 @@ class AudioCodec:
                         self.input_stream.close()
                     except Exception as e:
                         logger.error(f"关闭输入流时出错: {e}")
-                    self.input_stream = None
+                    finally:
+                        self.input_stream = None
 
                 # 关闭输出流
                 if self.output_stream:
@@ -366,7 +389,8 @@ class AudioCodec:
                         self.output_stream.close()
                     except Exception as e:
                         logger.error(f"关闭输出流时出错: {e}")
-                    self.output_stream = None
+                    finally:
+                        self.output_stream = None
 
                 # 关闭 PyAudio 实例
                 if self.audio:
@@ -375,7 +399,8 @@ class AudioCodec:
                         self.audio.terminate()
                     except Exception as e:
                         logger.error(f"终止 PyAudio 时出错: {e}")
-                    self.audio = None
+                    finally:
+                        self.audio = None
 
             # 清理编解码器
             self.opus_encoder = None

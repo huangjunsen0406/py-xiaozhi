@@ -4,25 +4,27 @@ import logging
 import threading
 import time
 import sys
-from src.utils.system_info import setup_opus
 from pathlib import Path
 
-
 # 在导入 opuslib 之前处理 opus 动态库
+from src.utils.system_info import setup_opus
 setup_opus()
 
 # 现在导入 opuslib
 try:
-    import opuslib
+    import opuslib  # noqa: F401
 except Exception as e:
     print(f"导入 opuslib 失败: {e}")
     print("请确保 opus 动态库已正确安装或位于正确的位置")
     sys.exit(1)
 
 from src.protocols.mqtt_protocol import MqttProtocol
-from src.constants.constants import DeviceState, EventType, AudioConfig, AbortReason, ListeningMode
-from src.display import gui_display,cli_display
 from src.protocols.websocket_protocol import WebsocketProtocol
+from src.constants.constants import (
+    DeviceState, EventType, AudioConfig, 
+    AbortReason, ListeningMode
+)
+from src.display import gui_display, cli_display
 from src.utils.config_manager import ConfigManager
 
 # 配置日志
@@ -159,7 +161,11 @@ class Application:
             logger.info("音频编解码器初始化成功")
             
             # 记录音量控制状态
-            if hasattr(self.display, 'volume_controller') and self.display.volume_controller:
+            has_volume_control = (
+                hasattr(self.display, 'volume_controller') and 
+                self.display.volume_controller
+            )
+            if has_volume_control:
                 logger.info("系统音量控制已启用")
             else:
                 logger.info("系统音量控制未启用，将使用模拟音量控制")
@@ -181,14 +187,18 @@ class Application:
             emotion_callback=self._get_current_emotion,
             mode_callback=self._on_mode_changed,
             auto_callback=self.toggle_chat_state,
-            abort_callback=lambda: self.abort_speaking(AbortReason.WAKE_WORD_DETECTED)
+            abort_callback=lambda: self.abort_speaking(
+                AbortReason.WAKE_WORD_DETECTED
+            )
         )
 
     def _initialize_cli(self):
         self.display = cli_display.CliDisplay()
         self.display.set_callbacks(
             auto_callback=self.toggle_chat_state,
-            abort_callback=lambda: self.abort_speaking(AbortReason.WAKE_WORD_DETECTED),
+            abort_callback=lambda: self.abort_speaking(
+                AbortReason.WAKE_WORD_DETECTED
+            ),
             status_callback=self._get_status_text,
             text_callback=self._get_current_text,
             emotion_callback=self._get_current_emotion
@@ -246,7 +256,11 @@ class Application:
             # 如果是中止语音的任务，检查是否已经存在相同类型的任务
             if 'abort_speaking' in str(callback):
                 # 如果已经有中止任务在队列中，就不再添加
-                if any('abort_speaking' in str(task) for task in self.main_tasks):
+                has_abort_task = any(
+                    'abort_speaking' in str(task) 
+                    for task in self.main_tasks
+                )
+                if has_abort_task:
                     return
             self.main_tasks.append(callback)
         self.events[EventType.SCHEDULE_EVENT].set()
@@ -258,7 +272,8 @@ class Application:
 
         # 读取并发送音频数据
         encoded_data = self.audio_codec.read_audio()
-        if encoded_data and self.protocol and self.protocol.is_audio_channel_opened():
+        if (encoded_data and self.protocol and 
+                self.protocol.is_audio_channel_opened()):
             asyncio.run_coroutine_threadsafe(
                 self.protocol.send_audio(encoded_data),
                 self.loop
@@ -946,10 +961,14 @@ class Application:
         try:
             from src.audio_processing.wake_word_detect import WakeWordDetector
             import sys
-            import os
             
             # 获取模型路径配置
-            model_path_config = self.config.get_config("WAKE_WORD_MODEL_PATH", "models/vosk-model-small-cn-0.22")
+            model_path_config = (
+                self.config.get_config(
+                    "WAKE_WORD_MODEL_PATH", 
+                    "models/vosk-model-small-cn-0.22"
+                )
+            )
 
             # 对于打包环境
             if getattr(sys, 'frozen', False):
@@ -1042,7 +1061,7 @@ class Application:
                 self.loop
             )
 
-    async def _connect_and_start_listening(self,wake_word):
+    async def _connect_and_start_listening(self, wake_word):
         """连接服务器并开始监听"""
         # 首先尝试连接服务器
         if not await self.protocol.connect():
