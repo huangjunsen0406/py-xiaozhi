@@ -93,7 +93,6 @@ class Application:
 
         # 添加唤醒词检测器
         self.wake_word_detector = None
-        self._initialize_wake_word_detector()
 
     def run(self, **kwargs):
         """启动应用程序"""
@@ -370,7 +369,6 @@ class Application:
                 data = json.loads(json_data)
             else:
                 data = json_data
-            print("data", data)
             # 处理不同类型的消息
             msg_type = data.get("type", "")
             if msg_type == "tts":

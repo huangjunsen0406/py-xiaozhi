@@ -14,10 +14,7 @@ from src.utils.config_manager import ConfigManager
 from vosk import Model, KaldiRecognizer, SetLogLevel
 from pypinyin import lazy_pinyin
 # 配置日志
-logger = logging.getLogger("Application")
-
-vosk_path = os.path.dirname(vosk.__file__)
-print(f"Vosk 路径: {vosk_path}")
+logger = logging.getLogger("WakeWordDetector")
 
 class WakeWordDetector:
     """唤醒词检测类"""

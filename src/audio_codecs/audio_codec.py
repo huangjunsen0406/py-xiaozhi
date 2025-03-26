@@ -52,10 +52,6 @@ class AudioCodec:
                 frames_per_buffer=AudioConfig.INPUT_FRAME_SIZE
             )
 
-            print(AudioConfig.INPUT_FRAME_SIZE)
-            print(AudioConfig.OUTPUT_FRAME_SIZE)
-            print(AudioConfig.FRAME_DURATION)
-
             # 初始化音频输出流 - 使用24kHz采样率
             self.output_stream = self.audio.open(
                 format=pyaudio.paInt16,
@@ -159,7 +155,6 @@ class AudioCodec:
 
                 # 如果缓冲区累积了太多数据，清空一部分以避免延迟
                 if available > AudioConfig.INPUT_FRAME_SIZE * 3:
-                    logger.warning(f"输入缓冲区累积了{available}帧，清空多余数据")
                     # 保留最新的两个帧的数据
                     to_skip = available - (AudioConfig.INPUT_FRAME_SIZE * 2)
                     if to_skip > 0:
