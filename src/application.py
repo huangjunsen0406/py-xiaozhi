@@ -149,7 +149,6 @@ class Application:
         self.protocol.on_incoming_json = self._on_incoming_json
         self.protocol.on_audio_channel_opened = self._on_audio_channel_opened
         self.protocol.on_audio_channel_closed = self._on_audio_channel_closed
-        self.protocol.on_audio_config_changed = self._on_audio_config_changed  # 添加音频配置变更回调
 
         logger.info("应用程序初始化完成")
 
@@ -286,7 +285,7 @@ class Application:
         self.is_tts_playing = True
         self.audio_codec.play_audio()
 
-    def _on_network_error(self, message):
+    def _on_network_error(self):
         """网络错误回调"""
         self.keep_listening = False
         self.set_device_state(DeviceState.IDLE)
@@ -1060,6 +1059,11 @@ class Application:
                 self._connect_and_start_listening(wake_word),
                 self.loop
             )
+        elif self.device_state == DeviceState.SPEAKING:
+            asyncio.run_coroutine_threadsafe(
+                self.protocol.send_wake_word_detected(AbortReason.WAKE_WORD_DETECTED),
+                self.loop
+            )
 
     async def _connect_and_start_listening(self, wake_word):
         """连接服务器并开始监听"""
@@ -1174,28 +1178,3 @@ class Application:
             if shared_stream and self.wake_word_detector.is_running():
                 self.wake_word_detector.update_stream(shared_stream)
                 logger.info("已更新唤醒词检测器的音频流")
-
-    async def _on_audio_config_changed(self, new_config):
-        """处理音频配置变更"""
-        logger.info(f"音频配置已变更，重新初始化音频编解码器")
-        
-        # 安全地关闭旧的编解码器
-        if self.audio_codec:
-            # 暂停任何活动的操作
-            current_state = self.device_state
-            self.set_device_state(DeviceState.IDLE)
-
-            # 关闭旧的编解码器
-            self.audio_codec.close()
-            self.audio_codec = None
-            
-            # 重新初始化音频编解码器
-            self._initialize_audio()
-            
-            # 恢复之前的状态
-            self.set_device_state(current_state)
-            
-            # 如果有唤醒词检测器，更新其音频流
-            self._update_wake_word_detector_stream()
-            
-            logger.info("音频编解码器重新初始化完成")

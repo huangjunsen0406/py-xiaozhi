@@ -10,42 +10,9 @@ import platform
 
 from src.constants.constants import AudioConfig
 
-def add_dll_directory(path):
-    """跨平台的dll目录添加函数"""
-    if platform.system() == 'Windows':
-        if hasattr(os, 'add_dll_directory'):
-            os.add_dll_directory(path)
-    # 在Mac/Linux上，可以使用LD_LIBRARY_PATH环境变量
-    else:
-        library_path = os.environ.get('LD_LIBRARY_PATH', '')
-        if path not in library_path:
-            os.environ['LD_LIBRARY_PATH'] = f"{path}:{library_path}"
-
-# 尝试导入 vosk 及相关组件
-try:
-    # 先定位 vosk 的 DLL 目录
-    if getattr(sys, 'frozen', False):
-        # 在打包环境中
-        vosk_dir = os.path.join(sys._MEIPASS, 'vosk')
-        if os.path.exists(vosk_dir):
-            # 添加 vosk 目录到 DLL 搜索路径
-            add_dll_directory(vosk_dir)
-            logging.getLogger("Application").info(f"已添加 Vosk DLL 目录: {vosk_dir}")
-    
-    from vosk import Model, KaldiRecognizer, SetLogLevel
-    from pypinyin import lazy_pinyin
-    VOSK_AVAILABLE = True
-except ImportError as e:
-    logging.getLogger("Application").error(f"导入 Vosk 失败: {e}")
-    VOSK_AVAILABLE = False
-except Exception as e:
-    logging.getLogger("Application").error(f"初始化 Vosk 失败: {e}")
-    import traceback
-    logging.getLogger("Application").error(traceback.format_exc())
-    VOSK_AVAILABLE = False
-
 from src.utils.config_manager import ConfigManager
-
+from vosk import Model, KaldiRecognizer, SetLogLevel
+from pypinyin import lazy_pinyin
 # 配置日志
 logger = logging.getLogger("Application")
 
