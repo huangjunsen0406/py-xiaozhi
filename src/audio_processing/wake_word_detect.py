@@ -26,8 +26,8 @@ class WakeWordDetector:
                  wake_words=None,
                  model_path=None,
                  sensitivity=0.5,
-                 sample_rate=AudioConfig.SAMPLE_RATE,
-                 buffer_size=AudioConfig.FRAME_SIZE):
+                 sample_rate=AudioConfig.OUTPUT_SAMPLE_RATE,
+                 buffer_size=AudioConfig.OUTPUT_FRAME_SIZE):
         """
         初始化唤醒词检测器
 
