@@ -42,6 +42,8 @@ class AudioCodec:
                 is_input=False
             )
 
+            AudioConfig.FRAME_DURATION = AudioConfig.get_frame_duration()
+
             # 初始化音频输入流 - 使用16kHz采样率
             self.input_stream = self.audio.open(
                 format=pyaudio.paInt16,
