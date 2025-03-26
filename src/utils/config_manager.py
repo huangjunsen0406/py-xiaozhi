@@ -75,12 +75,16 @@ class ConfigManager:
             if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
                 config_file = Path(sys._MEIPASS) / "config" / "config.json"
                 if config_file.exists():
-                    config = json.loads(config_file.read_text(encoding='utf-8'))
+                    config = json.loads(
+                        config_file.read_text(encoding='utf-8')
+                    )
                     return self._merge_configs(self.DEFAULT_CONFIG, config)
             
             # 最后尝试从开发环境目录加载    
             if self.CONFIG_FILE.exists():
-                config = json.loads(self.CONFIG_FILE.read_text(encoding='utf-8'))
+                config = json.loads(
+                    self.CONFIG_FILE.read_text(encoding='utf-8')
+                )
                 return self._merge_configs(self.DEFAULT_CONFIG, config)
             else:
                 # 创建默认配置
@@ -109,7 +113,8 @@ class ConfigManager:
         """递归合并配置字典"""
         result = default.copy()
         for key, value in custom.items():
-            if key in result and isinstance(result[key], dict) and isinstance(value, dict):
+            if (key in result and isinstance(result[key], dict) 
+                    and isinstance(value, dict)):
                 result[key] = ConfigManager._merge_configs(result[key], value)
             else:
                 result[key] = value
@@ -235,7 +240,6 @@ class ConfigManager:
             # 发生错误时返回已保存的配置
             return self.get_config("MQTT_INFO")
 
-
     def _get_ota_version(self):
         """获取OTA服务器的MQTT信息"""
         MAC_ADDR = self.get_device_id()
@@ -287,20 +291,27 @@ class ConfigManager:
             # 检查HTTP状态码
             if response.status_code != 200:
                 self.logger.error(f"OTA服务器错误: HTTP {response.status_code}")
-                raise ValueError(f"OTA服务器返回错误状态码: {response.status_code}")
+                raise ValueError(
+                    f"OTA服务器返回错误状态码: {response.status_code}"
+                )
             
             # 解析JSON数据
             response_data = response.json()
             # 调试信息：打印完整的OTA响应
-            self.logger.debug(f"OTA服务器返回数据: {json.dumps(response_data, indent=4, ensure_ascii=False)}")
+            self.logger.debug(
+                f"OTA服务器返回数据: "
+                f"{json.dumps(response_data, indent=4, ensure_ascii=False)}"
+            )
             
             # 确保"mqtt"信息存在
             if "mqtt" in response_data:
-                self.logger.info(f"MQTT服务器信息已更新")
+                self.logger.info("MQTT服务器信息已更新")
                 return response_data["mqtt"]
             else:
                 self.logger.error("OTA服务器返回的数据无效: MQTT信息缺失")
-                raise ValueError("OTA服务器返回的数据无效，请检查服务器状态或MAC地址！")
+                raise ValueError(
+                    "OTA服务器返回的数据无效，请检查服务器状态或MAC地址！"
+                )
                 
         except requests.Timeout:
             self.logger.error("OTA请求超时，请检查网络或服务器状态")

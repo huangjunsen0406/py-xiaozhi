@@ -1,77 +1,83 @@
-from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+"""
+PyInstaller 钩子文件: vosk
+
+解决 vosk 在打包时找不到模型或依赖库的问题
+"""
+
 import os
-import json
-from pathlib import Path
-import site
 import sys
+import json
+import logging
+from pathlib import Path
+from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs, copy_metadata
 
-# 收集 vosk 的所有子模块
-hiddenimports = collect_submodules('vosk')
+logger = logging.getLogger('hook-vosk')
 
-# 收集 vosk 的所有数据文件
-datas = collect_data_files('vosk')
+# 收集 datas 和 binaries
+datas = []
+binaries = []
 
-# 确保 vosk_cffi 被包含
-hiddenimports += ['vosk_cffi', '_cffi_backend']
+# 收集 vosk 的元数据
+datas.extend(copy_metadata('vosk'))
 
-# 手动添加 vosk 目录到二进制文件中
-# 查找 vosk 库的实际位置
-def find_vosk_dir():
+# 收集 vosk 可能用到的动态库
+binaries.extend(collect_dynamic_libs('vosk'))
+
+# 读取配置文件获取模型路径
+def get_model_path_from_config():
+    """从配置文件读取 Vosk 模型路径"""
     try:
-        import vosk
-        # 使用 pathlib 获取目录
-        vosk_dir = Path(vosk.__file__).parent
-        print(f"找到 Vosk 目录: {vosk_dir}")
-        return str(vosk_dir)  # 返回字符串以兼容现有代码
-    except ImportError:
-        print("无法导入 vosk 模块")
-        return None
-
-vosk_dir = find_vosk_dir()
-if vosk_dir:
-    datas.append((vosk_dir, 'vosk'))
-    # 如果有特定的 DLL 目录，也添加它
-    dll_dir = Path(vosk_dir) / 'dll'
-    if dll_dir.exists():
-        datas.append((str(dll_dir), 'vosk/dll'))
-
-# 读取配置文件获取模型配置信息
-def get_model_config():
-    try:
-        # 尝试从多个可能的位置加载配置文件
         config_paths = [
-            Path("config") / "config.json",
-            Path(__file__).parent.parent / "config" / "config.json",
+            Path('config/config.json'),
+            Path(Path.cwd() / 'config' / 'config.json'),
         ]
         
         for config_path in config_paths:
             if config_path.exists():
                 with open(config_path, 'r', encoding='utf-8') as f:
                     config = json.load(f)
-                    # 获取是否使用唤醒词和模型路径
-                    use_wake_word = config.get("USE_WAKE_WORD", True)
-                    model_path = config.get("WAKE_WORD_MODEL_PATH", "models/vosk-model-small-cn-0.22")
-                    return use_wake_word, model_path
+                    model_path = config.get(
+                        "WAKE_WORD_MODEL_PATH", 
+                        "models/vosk-model-small-cn-0.22"
+                    )
+                    return Path(model_path)
         
-        # 如果找不到配置文件，返回默认值
-        return True, "models/vosk-model-small-cn-0.22"
+        # 默认路径
+        return Path("models/vosk-model-small-cn-0.22")
     except Exception as e:
-        print(f"读取配置文件获取模型配置时出错: {e}")
-        return True, "models/vosk-model-small-cn-0.22"
+        logger.error(f"读取配置获取模型路径时出错: {e}")
+        return Path("models/vosk-model-small-cn-0.22")  # 默认路径
 
-# 获取模型配置
-use_wake_word, model_path = get_model_config()
+# 获取模型路径
+model_path = get_model_path_from_config()
+model_dir = Path.cwd() / model_path
 
-# 只有在需要使用唤醒词时才添加模型
-if use_wake_word:
-    # 使用 pathlib 处理路径
-    model_dir = str(Path(model_path))
+if model_dir.exists() and model_dir.is_dir():
+    logger.info(f"发现 Vosk 模型目录: {model_dir}")
     
-    # 如果存在模型目录，添加到 datas
-    if Path(model_dir).exists():
-        print(f"找到模型目录: {model_dir}，添加到打包资源")
-        datas += [(model_dir, model_path)]
+    # 收集模型目录下的所有文件
+    model_files = []
+    for root, dirs, files in os.walk(model_dir):
+        rel_dir = Path(root).relative_to(Path.cwd())
+        for file in files:
+            src_file = Path(root) / file
+            # 确保是相对路径
+            model_files.append((str(src_file), str(rel_dir)))
+    
+    if model_files:
+        logger.info(f"添加 {len(model_files)} 个模型文件到打包资源")
+        datas.extend(model_files)
     else:
-        print(f"警告：模型目录不存在: {model_dir}")
+        logger.warning(f"模型目录存在但没有找到文件: {model_dir}")
 else:
-    print("用户配置不使用唤醒词，跳过添加语音模型") 
+    logger.warning(f"未找到 Vosk 模型目录: {model_dir}")
+
+# 确保加载 vosk 所需的所有模块
+hiddenimports = [
+    'vosk',
+    'vosk.vosk_cffi',  # 必要的 C 接口
+    'cffi',  # vosk 依赖的 cffi
+    'packaging.version',  # vosk 检查版本
+    'numpy',  # 音频处理
+    'sounddevice',  # 录音功能
+] 

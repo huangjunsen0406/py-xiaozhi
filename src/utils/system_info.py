@@ -28,8 +28,12 @@ def setup_opus_windows():
     possible_base_dirs = [
         Path(__file__).parent.parent.parent,  # 项目根目录
         Path.cwd(),  # 当前工作目录
-        Path(getattr(sys, '_MEIPASS', '')) if hasattr(sys, '_MEIPASS') else None,  # PyInstaller 打包路径
-        Path(sys.executable).parent if getattr(sys, 'frozen', False) else None,  # 可执行文件目录
+        # PyInstaller 打包路径
+        (Path(getattr(sys, '_MEIPASS', ''))
+         if hasattr(sys, '_MEIPASS') else None),
+        # 可执行文件目录
+        (Path(sys.executable).parent
+         if getattr(sys, 'frozen', False) else None),
     ]
     
     lib_path = None
@@ -83,7 +87,8 @@ def setup_opus_windows():
     
     # 尝试直接加载
     try:
-        opus_lib = ctypes.CDLL(lib_path)
+        # 加载DLL并存储引用以防止垃圾回收
+        _ = ctypes.CDLL(lib_path)
         print(f"已成功加载 opus.dll: {lib_path}")
         sys._opus_loaded = True
         return True
@@ -97,7 +102,11 @@ def setup_opus_unix(system):
     try:
         if getattr(sys, 'frozen', False):
             # PyInstaller 打包后路径
-            base_path = Path(sys._MEIPASS) if hasattr(sys, '_MEIPASS') else Path(sys.executable).parent
+            base_path = (
+                Path(sys._MEIPASS)
+                if hasattr(sys, '_MEIPASS')
+                else Path(sys.executable).parent
+            )
             
             if system == 'darwin':  # macOS
                 lib_paths = [
@@ -133,7 +142,8 @@ def setup_opus_unix(system):
         # 尝试加载所有可能的路径
         for lib_path in lib_paths:
             if lib_path.exists():
-                opus_lib = ctypes.cdll.LoadLibrary(str(lib_path))
+                # 加载库并存储引用以防止垃圾回收
+                _ = ctypes.cdll.LoadLibrary(str(lib_path))
                 print(f"成功加载 opus 库: {lib_path}")
                 sys._opus_loaded = True
                 return True
@@ -148,7 +158,7 @@ def setup_opus_unix(system):
                 try:
                     ctypes.cdll.LoadLibrary(lib_name)
                     break
-                except:
+                except Exception:
                     continue
                     
         print("已从系统路径加载 opus 库")
