@@ -593,7 +593,7 @@ class MusicPlayer(Thing):
             process: FFmpeg进程
         """
         try:
-            buffer_size = AudioConfig.OUTPUT_SAMPLE_RATE  # 增加读取缓冲区大小提高效率
+            buffer_size = 8192  # 增加读取缓冲区大小提高效率
             
             while not self.stop_event.is_set():
                 # 读取固定大小的数据块
@@ -618,7 +618,7 @@ class MusicPlayer(Thing):
                 channels=AudioConfig.CHANNELS,
                 rate=AudioConfig.OUTPUT_SAMPLE_RATE,
                 output=True,
-                frames_per_buffer=AudioConfig.OUTPUT_SAMPLE_RATE
+                frames_per_buffer=AudioConfig.OUTPUT_FRAME_SIZE
             )
 
             logger.info("开始播放音频流...")
