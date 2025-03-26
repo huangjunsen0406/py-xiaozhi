@@ -17,7 +17,6 @@ class WebsocketProtocol(Protocol):
         # 获取配置管理器实例
         self.config = ConfigManager.get_instance()
         self.websocket = None
-        self.server_sample_rate = AudioConfig.SAMPLE_RATE
         self.connected = False
         self.hello_received = None  # 初始化时先设为 None
         self.WEBSOCKET_URL = self.config.get_config("NETWORK.WEBSOCKET_URL")
@@ -63,7 +62,7 @@ class WebsocketProtocol(Protocol):
                 "transport": "websocket",
                 "audio_params": {
                     "format": "opus",
-                    "sample_rate": AudioConfig.SAMPLE_RATE,
+                    "sample_rate": AudioConfig.INPUT_SAMPLE_RATE,
                     "channels": AudioConfig.CHANNELS,
                     "frame_duration": AudioConfig.FRAME_DURATION,
                 }

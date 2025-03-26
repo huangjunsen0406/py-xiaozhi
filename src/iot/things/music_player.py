@@ -593,7 +593,7 @@ class MusicPlayer(Thing):
             process: FFmpeg进程
         """
         try:
-            buffer_size = 8192  # 增加读取缓冲区大小提高效率
+            buffer_size = AudioConfig.OUTPUT_SAMPLE_RATE  # 增加读取缓冲区大小提高效率
             
             while not self.stop_event.is_set():
                 # 读取固定大小的数据块
@@ -616,9 +616,9 @@ class MusicPlayer(Thing):
             self.stream = self.pyaudio.open(
                 format=pyaudio.paInt16,
                 channels=AudioConfig.CHANNELS,
-                rate=AudioConfig.SAMPLE_RATE,
+                rate=AudioConfig.OUTPUT_SAMPLE_RATE,
                 output=True,
-                frames_per_buffer=AudioConfig.FRAME_SIZE
+                frames_per_buffer=AudioConfig.OUTPUT_SAMPLE_RATE
             )
 
             logger.info("开始播放音频流...")
@@ -844,8 +844,8 @@ class MusicPlayer(Thing):
                 '-f', 'mp3',
                 '-i', 'pipe:0',
                 '-f', 's16le',
-                '-ar', AudioConfig.SAMPLE_RATE,
-                '-ac', '1',
+                '-ar', str(AudioConfig.OUTPUT_SAMPLE_RATE),
+                '-ac', str(AudioConfig.CHANNELS),
                 'pipe:1'
             ]
             self.convert_process = subprocess.Popen(
@@ -966,8 +966,8 @@ class MusicPlayer(Thing):
                 'ffmpeg',
                 '-i', cache_path,
                 '-f', 's16le',
-                '-ar', '24000',
-                '-ac', '1',
+                '-ar', str(AudioConfig.OUTPUT_SAMPLE_RATE),  # 使用配置中的采样率
+                '-ac', str(AudioConfig.CHANNELS),  # 使用配置中的声道数
                 'pipe:1'
             ]
             self.convert_process = subprocess.Popen(
@@ -977,33 +977,36 @@ class MusicPlayer(Thing):
             )
 
             # 创建解码线程
-            decode_thread = threading.Thread(
+            decode_thread = self._create_thread(
                 target=self._decode_audio_stream,
-                args=(self.convert_process,),
-                daemon=True
+                name="cache_decode",
+                args=(self.convert_process,)
             )
             decode_thread.start()
 
             # 创建播放线程
-            play_thread = threading.Thread(
+            play_thread = self._create_thread(
                 target=self._play_audio_stream,
-                daemon=True
+                name="cache_play"
             )
             play_thread.start()
 
             # 等待播放完成
             if not self.stop_event.is_set():
                 decode_thread.join()
+                self._remove_thread(decode_thread)
                 play_thread.join()
+                self._remove_thread(play_thread)
 
         except Exception as e:
             logger.error(f"播放缓存文件失败: {str(e)}")
         finally:
-            if 'convert_process' in locals():
+            if self.convert_process:
                 try:
                     self.convert_process.terminate()
-                except:
-                    pass
+                except Exception as e:
+                    logger.debug(f"终止转换进程时出错: {str(e)}")
+                self.convert_process = None
 
     def _feed_download_to_converter(self, download_queue: queue.Queue, convert_process: subprocess.Popen):
         """
