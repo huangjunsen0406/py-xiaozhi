@@ -167,6 +167,7 @@ py-xiaozhi 是一个使用 Python 实现的小智语音客户端，旨在通过�
 [isamu2025](https://github.com/isamu2025)
 [Rain120](https://github.com/Rain120)
 [kejily](https://github.com/kejily)
+[电波bilibili君](https://space.bilibili.com/119751)
 
 ### 赞助支持
 
