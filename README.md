@@ -175,10 +175,10 @@ py-xiaozhi 是一个使用 Python 实现的小智语音客户端，旨在通过�
   <h3>感谢所有赞助者的支持 ❤️</h3>
   <p>无论是接口资源、设备兼容测试还是资金支持，每一份帮助都让项目更加完善</p>
   
-  <a href="docs/sponsors/sponsors.html">
+  <a href="https://py-xiaozhi-gbfyh0ni4-junsens-projects.vercel.app/sponsors.html">
     <img src="https://img.shields.io/badge/查看-赞助者名单-brightgreen?style=for-the-badge&logo=github" alt="赞助者名单">
   </a>
-  <a href="docs/sponsors/sponsors.html">
+  <a href="https://py-xiaozhi-gbfyh0ni4-junsens-projects.vercel.app/sponsors.html">
     <img src="https://img.shields.io/badge/成为-项目赞助者-orange?style=for-the-badge&logo=heart" alt="成为赞助者">
   </a>
 </div>
