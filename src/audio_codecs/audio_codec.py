@@ -42,8 +42,6 @@ class AudioCodec:
                 is_input=False
             )
 
-            AudioConfig.FRAME_DURATION = AudioConfig.get_frame_duration()
-
             # 初始化音频输入流 - 使用16kHz采样率
             self.input_stream = self.audio.open(
                 format=pyaudio.paInt16,
@@ -156,12 +154,13 @@ class AudioCodec:
                     return None
 
                 # 如果缓冲区累积了太多数据，清空一部分以避免延迟
-                if available > AudioConfig.INPUT_FRAME_SIZE * 3:
-                    # 保留最新的两个帧的数据
-                    to_skip = available - (AudioConfig.INPUT_FRAME_SIZE * 2)
+                # 降低阈值，以避免在大帧长度下清除太多数据
+                if available > AudioConfig.INPUT_FRAME_SIZE * 2:
+                    # 降低清除量，保留更多最近的数据
+                    to_skip = available - (AudioConfig.INPUT_FRAME_SIZE * 1.5)
                     if to_skip > 0:
                         self.input_stream.read(
-                            to_skip,
+                            int(to_skip),
                             exception_on_overflow=False
                         )
                 

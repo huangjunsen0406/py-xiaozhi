@@ -467,7 +467,11 @@ class Application:
             except Exception as e:
                 logger.error(f"音频输入事件触发器错误: {e}")
                 time.sleep(0.5)
-            time.sleep(AudioConfig.FRAME_DURATION / 1000)  # 按帧时长触发
+            
+            # 确保触发频率足够高，即使帧长度较大
+            # 使用20ms作为最大触发间隔，确保即使帧长度为60ms也能有足够的采样率
+            sleep_time = min(20, AudioConfig.FRAME_DURATION) / 1000
+            time.sleep(sleep_time)  # 按帧时长触发，但确保最小触发频率
 
     def _audio_output_event_trigger(self):
         """音频输出事件触发器"""
