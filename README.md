@@ -1,6 +1,6 @@
 # py-xiaozhi
 
-[English](README.en.md) | 简体中文
+简体中文 | [English](README.en.md)
 
 ## 项目简介
 py-xiaozhi 是一个使用 Python 实现的小智语音客户端，旨在通过代码学习和在没有硬件条件下体验 AI 小智的语音功能。
