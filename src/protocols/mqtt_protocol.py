@@ -43,9 +43,6 @@ class MqttProtocol(Protocol):
         self.local_sequence = 0
         self.remote_sequence = 0
 
-        # 会话信息
-        self.server_sample_rate = AudioConfig.SAMPLE_RATE  # 使用常量中定义的采样率
-
         # 事件
         self.server_hello_event = asyncio.Event()
 
@@ -88,8 +85,7 @@ class MqttProtocol(Protocol):
 
         # 创建新的MQTT客户端
         self.mqtt_client = mqtt.Client(
-            client_id=self.client_id,
-            protocol=mqtt.MQTTv5,
+            client_id=self.client_id
         )
         self.mqtt_client.username_pw_set(self.username, self.password)
 
@@ -170,7 +166,7 @@ class MqttProtocol(Protocol):
                 "transport": "udp",
                 "audio_params": {
                     "format": "opus",
-                    "sample_rate": AudioConfig.SAMPLE_RATE,
+                    "sample_rate": AudioConfig.OUTPUT_SAMPLE_RATE,
                     "channels": AudioConfig.CHANNELS,
                     "frame_duration": AudioConfig.FRAME_DURATION,
                 }
@@ -244,25 +240,6 @@ class MqttProtocol(Protocol):
 
                 # 获取会话ID
                 self.session_id = data.get("session_id", "")
-
-                # 获取音频参数
-                audio_params = data.get("audio_params", {})
-                if audio_params:
-                    # 更新全局音频配置
-                    updated = AudioConfig.update_from_server(audio_params)
-                    if updated:
-                        logger.info(f"根据服务器配置更新音频参数: 采样率={AudioConfig.SAMPLE_RATE}, " 
-                                   f"声道={AudioConfig.CHANNELS}, 帧时长={AudioConfig.FRAME_DURATION}ms, "
-                                   f"帧大小={AudioConfig.FRAME_SIZE}")
-                        
-                        # 通知音频配置已更改
-                        if self.on_audio_config_changed:
-                            asyncio.run_coroutine_threadsafe(
-                                self.on_audio_config_changed(AudioConfig),
-                                self.loop
-                            )
-                    
-                    self.server_sample_rate = audio_params.get("sample_rate", AudioConfig.SAMPLE_RATE)
 
                 # 获取UDP配置
                 udp = data.get("udp")
@@ -459,10 +436,6 @@ class MqttProtocol(Protocol):
     def is_audio_channel_opened(self):
         """检查音频通道是否已打开"""
         return self.udp_socket is not None
-
-    def get_server_sample_rate(self):
-        """获取服务器采样率"""
-        return self.server_sample_rate
 
     def aes_ctr_encrypt(self, key, nonce, plaintext):
         """AES-CTR模式加密函数

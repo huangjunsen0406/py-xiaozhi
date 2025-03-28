@@ -12,8 +12,6 @@ class Protocol:
         self.on_audio_channel_opened = None
         self.on_audio_channel_closed = None
         self.on_network_error = None
-        # 添加音频配置变更回调
-        self.on_audio_config_changed = None
 
     def on_incoming_json(self, callback):
         """设置JSON消息接收回调函数"""
