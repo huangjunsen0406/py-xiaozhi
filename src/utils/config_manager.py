@@ -7,6 +7,9 @@ import requests
 import socket
 import uuid
 import sys
+import platform
+import subprocess
+import re
 
 logger = logging.getLogger("ConfigManager")
 
@@ -170,9 +173,60 @@ class ConfigManager:
         return cls._instance
 
     def get_mac_address(self):
-        mac = uuid.UUID(int=uuid.getnode()).hex[-12:]
-
-        return ":".join([mac[i:i + 2] for i in range(0, 12, 2)])
+        """获取本机MAC地址
+        
+        Returns:
+            str: MAC地址，格式如 "00:11:22:33:44:55"
+        """
+        try:
+            # 尝试使用系统命令获取真实MAC地址
+            system = platform.system()
+            
+            if system == "Darwin":  # macOS
+                cmd = "ifconfig -a | grep ether"
+                try:
+                    process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE)
+                    output = process.stdout.read().decode('utf-8')
+                    mac_addresses = re.findall(r'ether\s+([0-9a-fA-F:]{17})', output)
+                    if mac_addresses:
+                        # 过滤掉本地回环地址
+                        for mac in mac_addresses:
+                            if not mac.startswith(('00:00:00', '02:00:00')):
+                                return mac
+                except Exception as e:
+                    self.logger.warning(f"通过ifconfig获取MAC地址失败: {e}")
+                    
+            elif system == "Windows":
+                cmd = "getmac /v /fo csv"
+                try:
+                    process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE)
+                    output = process.stdout.read().decode('utf-8')
+                    mac_addresses = re.findall(r'([0-9A-F]{2}(-[0-9A-F]{2}){5})', output)
+                    if mac_addresses:
+                        # 将Windows格式转换为标准格式
+                        return mac_addresses[0][0].replace('-', ':').lower()
+                except Exception as e:
+                    self.logger.warning(f"通过getmac获取MAC地址失败: {e}")
+                    
+            elif system == "Linux":
+                cmd = "ip link show | grep -E 'link/ether ([0-9a-f]{2}:){5}[0-9a-f]{2}'"
+                try:
+                    process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE)
+                    output = process.stdout.read().decode('utf-8')
+                    mac_addresses = re.findall(r'link/ether\s+([0-9a-f:]{17})', output)
+                    if mac_addresses:
+                        return mac_addresses[0]
+                except Exception as e:
+                    self.logger.warning(f"通过ip命令获取MAC地址失败: {e}")
+                    
+            # 如果系统命令获取失败
+            self.logger.info("尝试使用备用方法获取MAC地址")
+            mac = uuid.UUID(int=uuid.getnode()).hex[-12:]
+            return ":".join([mac[i:i + 2] for i in range(0, 12, 2)])
+            
+        except Exception as e:
+            self.logger.error(f"获取MAC地址失败: {e}")
+            return "00:00:00:00:00:00"  # 返回默认MAC地址
 
     def generate_uuid(self) -> str:
         """
