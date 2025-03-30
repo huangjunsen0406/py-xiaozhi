@@ -38,3 +38,5 @@ vosk==0.3.44
 webrtcvad-wheels==2.0.14
 websockets==11.0.3
 colorlog==6.9.0
+edge-tts==6.1.17
+soundfile>=0.12.1

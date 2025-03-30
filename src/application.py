@@ -4,10 +4,19 @@ import logging
 import threading
 import time
 import sys
+import traceback
 from pathlib import Path
 
 # 在导入 opuslib 之前处理 opus 动态库
 from src.utils.system_info import setup_opus
+from src.utils.tts_utility import TtsUtility
+from src.constants.constants import (
+    DeviceState, EventType, AudioConfig, 
+    AbortReason, ListeningMode
+)
+from src.display import gui_display, cli_display
+from src.utils.config_manager import ConfigManager
+
 setup_opus()
 
 # 现在导入 opuslib
@@ -20,12 +29,6 @@ except Exception as e:
 
 from src.protocols.mqtt_protocol import MqttProtocol
 from src.protocols.websocket_protocol import WebsocketProtocol
-from src.constants.constants import (
-    DeviceState, EventType, AudioConfig, 
-    AbortReason, ListeningMode
-)
-from src.display import gui_display, cli_display
-from src.utils.config_manager import ConfigManager
 
 # 配置日志
 logger = logging.getLogger("Application")
@@ -206,7 +209,8 @@ class Application:
                 ),
                 status_callback=self._get_status_text,
                 text_callback=self._get_current_text,
-                emotion_callback=self._get_current_emotion
+                emotion_callback=self._get_current_emotion,
+                send_text_callback=self._send_text_tts
             )
 
     def _main_loop(self):
@@ -261,6 +265,51 @@ class Application:
                 self.protocol.send_audio(encoded_data),
                 self.loop
             )
+
+    async def _send_text_tts(self, text):
+        """将文本转换为语音并发送"""
+        try:
+            tts_utility = TtsUtility(AudioConfig)
+
+            # 生成 Opus 音频数据包
+            opus_frames = await tts_utility.text_to_opus_audio(text)
+            
+            # 尝试打开音频通道
+            if (not self.protocol.is_audio_channel_opened() and 
+                    DeviceState.IDLE == self.device_state):
+                # 打开音频通道
+                success = await self.protocol.open_audio_channel()
+                if not success:
+                    logger.error("打开音频通道失败")
+                    return
+            
+            # 确认opus帧生成成功
+            if opus_frames:
+                logger.info(f"生成了 {len(opus_frames)} 个 Opus 音频帧")
+                
+                # 设置状态为说话中
+                self.set_device_state(DeviceState.SPEAKING)
+                
+                # 发送音频数据
+                for i, frame in enumerate(opus_frames):
+                    await self.protocol.send_audio(frame)
+                    await asyncio.sleep(0.06)
+
+                # 设置聊天消息
+                self.set_chat_message("user", text)
+                await self.protocol.send_text(
+                    json.dumps({"session_id": "", "type": "listen", "state": "stop"}))
+                await self.protocol.send_text(b'')
+                
+                return True
+            else:
+                logger.error("生成音频失败")
+                return False
+                
+        except Exception as e:
+            logger.error(f"发送文本到TTS时出错: {e}")
+            logger.error(traceback.format_exc())
+            return False
 
     def _handle_output_audio(self):
         """处理音频输出"""
