@@ -184,7 +184,7 @@ py-xiaozhi 是一个使用 Python 实现的小智语音客户端，旨在通过�
 </div>
 
 ## 项目统计
-[![Star History Chart](https://api.star-history.com/svg?repos=JunsenHuang/py-xiaozhi&type=Date)](https://www.star-history.com/#JunsenHuang/py-xiaozhi&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=huangjunsen0406/py-xiaozhi&type=Date)](https://www.star-history.com/#JunsenHuang/py-xiaozhi&Date)
 
 ## 许可证
 [MIT License](LICENSE)

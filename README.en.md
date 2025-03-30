@@ -185,7 +185,7 @@ We welcome issue reports and code contributions. Please ensure you follow these 
 </div>
 
 ## Project Statistics
-[![Star History Chart](https://api.star-history.com/svg?repos=JunsenHuang/py-xiaozhi&type=Date)](https://www.star-history.com/#JunsenHuang/py-xiaozhi&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=huangjunsen0406/py-xiaozhi&type=Date)](https://www.star-history.com/#JunsenHuang/py-xiaozhi&Date)
 
 ## License
 [MIT License](LICENSE) 
