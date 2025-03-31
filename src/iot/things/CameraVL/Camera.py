@@ -23,6 +23,7 @@ class Camera(Thing):
         "fps": 30,  # 帧率
         "Loacl_VL_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",  # 修改为你对应的llm地址
         "VLapi_key": 'XXXXXX',  # 修改为你的api key
+        "Loacl_VL_Modle":"qwen-omni-turbo"
     }
     def __init__(self):
         super().__init__("Camera", "摄像头管理")
@@ -37,7 +38,7 @@ class Camera(Thing):
         self.camera_thread = None
         self.result=""
         # 摄像头控制器
-        self.VL=VL.ImageAnalyzer.get_instance().init(self._config['VLapi_key'], self._config['Loacl_VL_url'])
+        VL.ImageAnalyzer.get_instance().init(self._config['VLapi_key'], self._config['Loacl_VL_url'],self._config['Loacl_VL_Modle'])
         self.VL= VL.ImageAnalyzer.get_instance()
         print(f"[虚拟设备] 摄像头设备初始化完成")
 
@@ -185,7 +186,8 @@ class Camera(Thing):
 
         # 将 JPEG 图像转换为 Base64 编码
         frame_base64 = base64.b64encode(buffer).decode('utf-8')
-        self.result=self.VL.analyze_image(frame_base64)
+        self.result=str(self.VL.analyze_image(frame_base64))
+        print(self.result)
         logger.info("画面已经识别到啦")
         print(f"[虚拟设备] 画面已经识别完成")
         return {"status": 'success', "message": "识别成功","result":self.result}
