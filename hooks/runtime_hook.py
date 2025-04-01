@@ -1,142 +1,166 @@
-import os
+"""
+小智应用程序 PyInstaller 运行时钩子
+
+此钩子在应用程序启动时执行，用于:
+1. 初始化日志系统
+2. 预加载 opus 库
+3. 设置必要的环境变量
+"""
+
 import sys
-import json
-import glob
+import os
 import ctypes
-import platform
+import logging
 from pathlib import Path
+import platform
 
-# 获取应用程序运行路径
-base_path = Path(sys.executable).parent if getattr(sys, 'frozen', False) else Path(__file__).parent
 
-# 从配置文件读取模型配置
-def get_model_config_from_file():
-    try:
-        # 对于打包环境
-        if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
-            config_path = Path(sys._MEIPASS) / 'config' / 'config.json'
-            if config_path.exists():
-                with open(config_path, 'r', encoding='utf-8') as f:
-                    config = json.load(f)
-                    use_wake_word = config.get("USE_WAKE_WORD", True)
-                    model_path = config.get("WAKE_WORD_MODEL_PATH", "models/vosk-model-small-cn-0.22")
-                    return use_wake_word, model_path
-        
-        # 尝试从当前目录读取
-        config_path = Path('config') / 'config.json'
-        if config_path.exists():
-            with open(config_path, 'r', encoding='utf-8') as f:
-                config = json.load(f)
-                use_wake_word = config.get("USE_WAKE_WORD", True)
-                model_path = config.get("WAKE_WORD_MODEL_PATH", "models/vosk-model-small-cn-0.22")
-                return use_wake_word, model_path
-                
-        # 默认值
-        return True, "models/vosk-model-small-cn-0.22"
-    except Exception as e:
-        print(f"读取配置文件获取模型配置时出错: {e}")
-        return True, "models/vosk-model-small-cn-0.22"
+# 配置日志系统
+def setup_logging():
+    """设置基本日志配置"""
+    log_format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    logging.basicConfig(
+        level=logging.INFO,
+        format=log_format
+    )
+    logger = logging.getLogger("RuntimeHook")
+    logger.info("运行时钩子已加载")
+    return logger
 
-# 添加必要的库路径
-if hasattr(sys, '_MEIPASS'):
-    # 获取系统类型
+
+# 加载 opus 库
+def setup_opus_early():
+    """尽早加载 opus 库"""
+    logger = logging.getLogger("RuntimeHook")
+    logger.info("正在预加载 opus 库...")
+    
+    # 设置 _MEIPASS 为基准路径
+    base_path = (Path(sys._MEIPASS)
+                 if hasattr(sys, '_MEIPASS')
+                 else Path.cwd())
+    logger.info(f"应用程序基础路径: {base_path}")
+    
+    # 检测运行平台
     system = platform.system().lower()
     
-    # 根据不同平台添加相应的库路径
-    if system == 'windows':
-        libs_dir = Path(sys._MEIPASS) / 'libs' / 'windows'
-        opus_lib_name = 'opus.dll'
-    elif system == 'darwin':  # macOS
-        libs_dir = Path(sys._MEIPASS) / 'libs' / 'macos'
-        opus_lib_name = 'libopus.dylib'
-    else:  # Linux
-        libs_dir = Path(sys._MEIPASS) / 'libs' / 'linux'
-        opus_lib_name = 'libopus.so'  # 可能需要尝试不同的版本
-    
-    # 添加库目录到环境变量
-    if libs_dir.exists():
-        os.environ['PATH'] = str(libs_dir) + os.pathsep + os.environ['PATH']
-        
-        # 在 Linux 下，还需要添加 LD_LIBRARY_PATH
-        if system == 'linux':
-            os.environ['LD_LIBRARY_PATH'] = str(libs_dir) + os.pathsep + os.environ.get('LD_LIBRARY_PATH', '')
-    
-    # 尝试预加载 opus 库
     try:
-        opus_path = libs_dir / opus_lib_name
-        if opus_path.exists():
-            opus_lib = ctypes.cdll.LoadLibrary(str(opus_path))
-            print(f"runtime_hook: 成功加载 opus 库: {opus_path}")
-    except Exception as e:
-        print(f"runtime_hook: 加载 opus 库失败: {e}")
-    
-    # 获取唤醒词配置
-    use_wake_word, model_path = get_model_config_from_file()
-    
-    # 只有在需要使用唤醒词时才设置模型路径
-    if use_wake_word:
-        # 使用 pathlib 处理路径
-        model_dir = Path(sys._MEIPASS) / Path(model_path)
-
-        if model_dir.exists():
-            os.environ['VOSK_MODEL_PATH'] = str(model_dir)
-            print(f"runtime_hook: 设置 VOSK_MODEL_PATH={model_dir}")
-        else:
-            print(f"runtime_hook: 警告 - 模型路径不存在: {model_dir}")
-    else:
-        print("runtime_hook: 配置为不使用唤醒词，跳过设置模型路径")
-    
-    # 确保 Python 能找到所有需要的模块
-    sys.path.insert(0, sys._MEIPASS)
-
-# 在程序启动时执行
-def runtime_init():
-    # 如果是 PyInstaller 打包环境
-    if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
-        # 获取系统类型
-        system = platform.system().lower()
-        
-        # 查找 Vosk 相关的 DLL/SO 文件
-        vosk_dir = Path(sys._MEIPASS) / 'vosk'
-        if vosk_dir.exists():
-            try:
-                # Windows 需要使用 add_dll_directory
-                if system == 'windows' and hasattr(os, 'add_dll_directory'):
-                    os.add_dll_directory(str(vosk_dir))
-                    print(f"已添加 Vosk DLL 目录: {vosk_dir}")
-                # Linux/macOS 设置 LD_LIBRARY_PATH
-                elif system in ('linux', 'darwin'):
-                    os.environ['LD_LIBRARY_PATH'] = str(vosk_dir) + os.pathsep + os.environ.get('LD_LIBRARY_PATH', '')
-                    print(f"已添加 Vosk 库目录到 LD_LIBRARY_PATH: {vosk_dir}")
-            except Exception as e:
-                print(f"添加 Vosk 库目录失败: {e}")
-        else:
-            print(f"Vosk 目录不存在: {vosk_dir}")
+        if system == 'windows':
+            # Windows 平台
+            lib_path = base_path / 'libs' / 'windows' / 'opus.dll'
             
-            # 尝试查找其他可能的位置
-            possible_dirs = [
-                Path(sys._MEIPASS) / 'lib' / 'vosk',
-                Path(sys._MEIPASS) / 'site-packages' / 'vosk',
-                Path(sys._MEIPASS) / 'Lib' / 'site-packages' / 'vosk',
-                # 如果 vosk 模块已经被打包到根目录下
-                Path(sys._MEIPASS).parent,
-            ]
-
-            for possible_dir in possible_dirs:
-                if possible_dir.exists():
+            if lib_path.exists():
+                logger.info(f"opus库文件路径: {lib_path}")
+                
+                # 添加到环境变量
+                libs_dir = str(lib_path.parent)
+                os.environ['PATH'] = (libs_dir + os.pathsep +
+                                      os.environ.get('PATH', ''))
+                
+                # 添加DLL搜索路径 (Windows 10+)
+                if hasattr(os, 'add_dll_directory'):
                     try:
-                        if system == 'windows' and hasattr(os, 'add_dll_directory'):
-                            os.add_dll_directory(str(possible_dir))
-                            print(f"已添加替代 Vosk DLL 目录: {possible_dir}")
-                        elif system in ('linux', 'darwin'):
-                            os.environ['LD_LIBRARY_PATH'] = str(possible_dir) + os.pathsep + os.environ.get('LD_LIBRARY_PATH', '')
-                            print(f"已添加替代 Vosk 库目录到 LD_LIBRARY_PATH: {possible_dir}")
-                        break
+                        os.add_dll_directory(libs_dir)
+                        logger.info(f"已添加DLL搜索路径: {libs_dir}")
                     except Exception as e:
-                        print(f"添加替代 Vosk 库目录失败: {e}")
+                        logger.error(f"添加DLL搜索路径失败: {e}")
+                
+                # 尝试加载
+                try:
+                    _ = ctypes.CDLL(str(lib_path))
+                    logger.info("opus库加载成功")
+                    sys._opus_loaded = True
+                except Exception as e:
+                    logger.error(f"opus库加载失败: {e}")
+            else:
+                logger.warning(f"未找到opus库文件: {lib_path}")
+        
+        elif system == 'darwin':
+            # macOS
+            lib_path = base_path / 'libs' / 'macos' / 'libopus.dylib'
+            if lib_path.exists():
+                logger.info(f"opus库文件路径: {lib_path}")
+                
+                # 设置DYLD_LIBRARY_PATH
+                lib_dir = str(lib_path.parent)
+                os.environ['DYLD_LIBRARY_PATH'] = (
+                    lib_dir + os.pathsep +
+                    os.environ.get('DYLD_LIBRARY_PATH', '')
+                )
+                
+                try:
+                    _ = ctypes.CDLL(str(lib_path))
+                    logger.info("opus库加载成功")
+                    sys._opus_loaded = True
+                except Exception as e:
+                    logger.error(f"opus库加载失败: {e}")
+            else:
+                logger.warning(f"未找到opus库文件: {lib_path}")
+        
+        else:
+            # Linux
+            lib_path = base_path / 'libs' / 'linux' / 'libopus.so'
+            if not lib_path.exists():
+                lib_path = base_path / 'libs' / 'linux' / 'libopus.so.0'
             
-            # 尝试直接从系统 PATH 中加载
-            print("尝试从系统路径中加载 Vosk 库")
+            if lib_path.exists():
+                logger.info(f"opus库文件路径: {lib_path}")
+                
+                # 设置LD_LIBRARY_PATH
+                lib_dir = str(lib_path.parent)
+                os.environ['LD_LIBRARY_PATH'] = (
+                    lib_dir + os.pathsep +
+                    os.environ.get('LD_LIBRARY_PATH', '')
+                )
+                
+                try:
+                    _ = ctypes.CDLL(str(lib_path))
+                    logger.info("opus库加载成功")
+                    sys._opus_loaded = True
+                except Exception as e:
+                    logger.error(f"opus库加载失败: {e}")
+            else:
+                logger.warning(f"未找到opus库文件: {lib_path}")
+    
+    except Exception as e:
+        logger.error(f"opus库初始化过程中出错: {e}")
 
-# 执行初始化
-runtime_init() 
+
+# 预初始化Vosk模型路径
+def setup_vosk_model_path():
+    """设置Vosk模型路径环境变量"""
+    logger = logging.getLogger("RuntimeHook")
+    
+    base_path = (Path(sys._MEIPASS)
+                 if hasattr(sys, '_MEIPASS')
+                 else Path.cwd())
+    model_path = base_path / 'models' / 'vosk-model-small-cn-0.22'
+    
+    if model_path.exists() and model_path.is_dir():
+        logger.info(f"找到Vosk模型目录: {model_path}")
+        os.environ['VOSK_MODEL_PATH'] = str(model_path)
+    else:
+        logger.warning(f"未找到Vosk模型目录: {model_path}")
+
+
+# 设置可执行文件路径
+def setup_executable_path():
+    """记录可执行文件路径信息"""
+    logger = logging.getLogger("RuntimeHook")
+    try:
+        logger.info(f"可执行文件路径: {sys.executable}")
+        logger.info(f"当前工作目录: {os.getcwd()}")
+        if hasattr(sys, '_MEIPASS'):
+            logger.info(f"PyInstaller临时目录: {sys._MEIPASS}")
+    except Exception as e:
+        logger.error(f"获取路径信息时出错: {e}")
+
+
+# 运行所有钩子函数
+logger = setup_logging()
+logger.info("启动运行时初始化...")
+
+setup_executable_path()
+setup_opus_early()
+setup_vosk_model_path()
+
+logger.info("运行时初始化完成") 

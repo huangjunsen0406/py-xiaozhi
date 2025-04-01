@@ -7,6 +7,9 @@ import requests
 import socket
 import uuid
 import sys
+import platform
+import subprocess
+import re
 
 logger = logging.getLogger("ConfigManager")
 
@@ -75,12 +78,16 @@ class ConfigManager:
             if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
                 config_file = Path(sys._MEIPASS) / "config" / "config.json"
                 if config_file.exists():
-                    config = json.loads(config_file.read_text(encoding='utf-8'))
+                    config = json.loads(
+                        config_file.read_text(encoding='utf-8')
+                    )
                     return self._merge_configs(self.DEFAULT_CONFIG, config)
             
             # 最后尝试从开发环境目录加载    
             if self.CONFIG_FILE.exists():
-                config = json.loads(self.CONFIG_FILE.read_text(encoding='utf-8'))
+                config = json.loads(
+                    self.CONFIG_FILE.read_text(encoding='utf-8')
+                )
                 return self._merge_configs(self.DEFAULT_CONFIG, config)
             else:
                 # 创建默认配置
@@ -109,7 +116,8 @@ class ConfigManager:
         """递归合并配置字典"""
         result = default.copy()
         for key, value in custom.items():
-            if key in result and isinstance(result[key], dict) and isinstance(value, dict):
+            if (key in result and isinstance(result[key], dict) 
+                    and isinstance(value, dict)):
                 result[key] = ConfigManager._merge_configs(result[key], value)
             else:
                 result[key] = value
@@ -165,9 +173,60 @@ class ConfigManager:
         return cls._instance
 
     def get_mac_address(self):
-        mac = uuid.UUID(int=uuid.getnode()).hex[-12:]
-
-        return ":".join([mac[i:i + 2] for i in range(0, 12, 2)])
+        """获取本机MAC地址
+        
+        Returns:
+            str: MAC地址，格式如 "00:11:22:33:44:55"
+        """
+        try:
+            # 尝试使用系统命令获取真实MAC地址
+            system = platform.system()
+            
+            if system == "Darwin":  # macOS
+                cmd = "ifconfig -a | grep ether"
+                try:
+                    process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE)
+                    output = process.stdout.read().decode('utf-8')
+                    mac_addresses = re.findall(r'ether\s+([0-9a-fA-F:]{17})', output)
+                    if mac_addresses:
+                        # 过滤掉本地回环地址
+                        for mac in mac_addresses:
+                            if not mac.startswith(('00:00:00', '02:00:00')):
+                                return mac
+                except Exception as e:
+                    self.logger.warning(f"通过ifconfig获取MAC地址失败: {e}")
+                    
+            elif system == "Windows":
+                cmd = "getmac /v /fo csv"
+                try:
+                    process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE)
+                    output = process.stdout.read().decode('utf-8')
+                    mac_addresses = re.findall(r'([0-9A-F]{2}(-[0-9A-F]{2}){5})', output)
+                    if mac_addresses:
+                        # 将Windows格式转换为标准格式
+                        return mac_addresses[0][0].replace('-', ':').lower()
+                except Exception as e:
+                    self.logger.warning(f"通过getmac获取MAC地址失败: {e}")
+                    
+            elif system == "Linux":
+                cmd = "ip link show | grep -E 'link/ether ([0-9a-f]{2}:){5}[0-9a-f]{2}'"
+                try:
+                    process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE)
+                    output = process.stdout.read().decode('utf-8')
+                    mac_addresses = re.findall(r'link/ether\s+([0-9a-f:]{17})', output)
+                    if mac_addresses:
+                        return mac_addresses[0]
+                except Exception as e:
+                    self.logger.warning(f"通过ip命令获取MAC地址失败: {e}")
+                    
+            # 如果系统命令获取失败
+            self.logger.info("尝试使用备用方法获取MAC地址")
+            mac = uuid.UUID(int=uuid.getnode()).hex[-12:]
+            return ":".join([mac[i:i + 2] for i in range(0, 12, 2)])
+            
+        except Exception as e:
+            self.logger.error(f"获取MAC地址失败: {e}")
+            return "00:00:00:00:00:00"  # 返回默认MAC地址
 
     def generate_uuid(self) -> str:
         """
@@ -235,7 +294,6 @@ class ConfigManager:
             # 发生错误时返回已保存的配置
             return self.get_config("MQTT_INFO")
 
-
     def _get_ota_version(self):
         """获取OTA服务器的MQTT信息"""
         MAC_ADDR = self.get_device_id()
@@ -287,20 +345,27 @@ class ConfigManager:
             # 检查HTTP状态码
             if response.status_code != 200:
                 self.logger.error(f"OTA服务器错误: HTTP {response.status_code}")
-                raise ValueError(f"OTA服务器返回错误状态码: {response.status_code}")
+                raise ValueError(
+                    f"OTA服务器返回错误状态码: {response.status_code}"
+                )
             
             # 解析JSON数据
             response_data = response.json()
             # 调试信息：打印完整的OTA响应
-            self.logger.debug(f"OTA服务器返回数据: {json.dumps(response_data, indent=4, ensure_ascii=False)}")
+            self.logger.debug(
+                f"OTA服务器返回数据: "
+                f"{json.dumps(response_data, indent=4, ensure_ascii=False)}"
+            )
             
             # 确保"mqtt"信息存在
             if "mqtt" in response_data:
-                self.logger.info(f"MQTT服务器信息已更新")
+                self.logger.info("MQTT服务器信息已更新")
                 return response_data["mqtt"]
             else:
                 self.logger.error("OTA服务器返回的数据无效: MQTT信息缺失")
-                raise ValueError("OTA服务器返回的数据无效，请检查服务器状态或MAC地址！")
+                raise ValueError(
+                    "OTA服务器返回的数据无效，请检查服务器状态或MAC地址！"
+                )
                 
         except requests.Timeout:
             self.logger.error("OTA请求超时，请检查网络或服务器状态")

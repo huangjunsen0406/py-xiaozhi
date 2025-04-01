@@ -10,47 +10,11 @@ import platform
 
 from src.constants.constants import AudioConfig
 
-def add_dll_directory(path):
-    """跨平台的dll目录添加函数"""
-    if platform.system() == 'Windows':
-        if hasattr(os, 'add_dll_directory'):
-            os.add_dll_directory(path)
-    # 在Mac/Linux上，可以使用LD_LIBRARY_PATH环境变量
-    else:
-        library_path = os.environ.get('LD_LIBRARY_PATH', '')
-        if path not in library_path:
-            os.environ['LD_LIBRARY_PATH'] = f"{path}:{library_path}"
-
-# 尝试导入 vosk 及相关组件
-try:
-    # 先定位 vosk 的 DLL 目录
-    if getattr(sys, 'frozen', False):
-        # 在打包环境中
-        vosk_dir = os.path.join(sys._MEIPASS, 'vosk')
-        if os.path.exists(vosk_dir):
-            # 添加 vosk 目录到 DLL 搜索路径
-            add_dll_directory(vosk_dir)
-            logging.getLogger("Application").info(f"已添加 Vosk DLL 目录: {vosk_dir}")
-    
-    from vosk import Model, KaldiRecognizer, SetLogLevel
-    from pypinyin import lazy_pinyin
-    VOSK_AVAILABLE = True
-except ImportError as e:
-    logging.getLogger("Application").error(f"导入 Vosk 失败: {e}")
-    VOSK_AVAILABLE = False
-except Exception as e:
-    logging.getLogger("Application").error(f"初始化 Vosk 失败: {e}")
-    import traceback
-    logging.getLogger("Application").error(traceback.format_exc())
-    VOSK_AVAILABLE = False
-
 from src.utils.config_manager import ConfigManager
-
+from vosk import Model, KaldiRecognizer, SetLogLevel
+from pypinyin import lazy_pinyin
 # 配置日志
-logger = logging.getLogger("Application")
-
-vosk_path = os.path.dirname(vosk.__file__)
-print(f"Vosk 路径: {vosk_path}")
+logger = logging.getLogger("WakeWordDetector")
 
 class WakeWordDetector:
     """唤醒词检测类"""
@@ -59,8 +23,8 @@ class WakeWordDetector:
                  wake_words=None,
                  model_path=None,
                  sensitivity=0.5,
-                 sample_rate=AudioConfig.SAMPLE_RATE,
-                 buffer_size=AudioConfig.FRAME_SIZE):
+                 sample_rate=AudioConfig.INPUT_SAMPLE_RATE,
+                 buffer_size=AudioConfig.INPUT_FRAME_SIZE):
         """
         初始化唤醒词检测器
 
@@ -76,7 +40,7 @@ class WakeWordDetector:
         self.running = False
         self.detection_thread = None
         self.audio_stream = None
-        
+
         # 初始化状态变量（始终创建，不管是否启用）
         self.paused = False
         self.audio = None
@@ -84,14 +48,14 @@ class WakeWordDetector:
         self.external_stream = False
         self.stream_lock = threading.Lock()  # 添加流操作锁
         self.on_error = None  # 添加错误处理回调
-        
+
         # 检查是否启用唤醒词功能
         config = ConfigManager.get_instance()
         if not config.get_config('USE_WAKE_WORD', False):
             logger.info("唤醒词功能已禁用")
             self.enabled = False
             return
-            
+
         self.enabled = True
         self.sample_rate = sample_rate
         self.buffer_size = buffer_size
@@ -112,7 +76,7 @@ class WakeWordDetector:
         try:
             if model_path is None:
                 model_path_config = config.get_config('WAKE_WORD_MODEL_PATH', 'models/vosk-model-small-cn-0.22')
-                
+
                 # 对于打包环境
                 if getattr(sys, 'frozen', False):
                     base_path = os.path.dirname(sys.executable) if not hasattr(sys, '_MEIPASS') else sys._MEIPASS
@@ -151,7 +115,7 @@ class WakeWordDetector:
             # 共享的音频流和是否为外部流标志
             self.external_stream = False
             self.stream_lock = threading.Lock()  # 添加流操作锁
-            
+
         except Exception as e:
             logger.error(f"初始化唤醒词检测器失败: {e}")
             import traceback
@@ -163,10 +127,10 @@ class WakeWordDetector:
         if not getattr(self, 'enabled', True):
             logger.info("唤醒词功能已禁用，无法启动")
             return False
-            
+
         # 先停止现有的检测
         self.stop()
-        
+
         try:
             # 初始化音频
             with self.stream_lock:
@@ -211,11 +175,11 @@ class WakeWordDetector:
         if self.running:
             self.running = False
             self.paused = False
-            
+
             if self.detection_thread and self.detection_thread.is_alive():
                 self.detection_thread.join(timeout=1.0)
                 self.detection_thread = None
-            
+
             # 只有当使用内部流时才关闭
             if not self.external_stream and self.stream:
                 try:
@@ -228,7 +192,7 @@ class WakeWordDetector:
             else:
                 # 如果是外部流，只设置为None但不关闭
                 self.stream = None
-            
+
             if self.audio:
                 try:
                     self.audio.terminate()
@@ -295,7 +259,7 @@ class WakeWordDetector:
         if not self.running:
             logger.warning("唤醒词检测器未运行，无法更新流")
             return False
-        
+
         with self.stream_lock:
             # 如果当前使用的是内部流，需要先清理
             if not self.external_stream and self.stream:
@@ -305,7 +269,7 @@ class WakeWordDetector:
                     self.stream.close()
                 except Exception as e:
                     logger.warning(f"关闭旧流时出错: {e}")
-            
+
             # 更新为新的流
             self.stream = new_stream
             self.external_stream = True
@@ -316,7 +280,7 @@ class WakeWordDetector:
         """唤醒词检测主循环"""
         if not getattr(self, 'enabled', True):
             return
-            
+
         logger.info("唤醒词检测循环已启动")
         error_count = 0
         max_errors = 5  # 错误容忍度
@@ -341,19 +305,19 @@ class WakeWordDetector:
                                 stream_error_time = None
                             time.sleep(0.5)
                             continue
-                            
+
                         # 尝试检查流状态
                         try:
                             if not self.stream.is_active() and not self.external_stream:
                                 self.stream.start_stream()
                         except Exception:
                             pass
-                            
+
                         data = self.stream.read(self.buffer_size // 2, exception_on_overflow=False)
-                        
+
                     # 重置流错误时间
                     stream_error_time = None
-                    
+
                 except OSError as e:
                     error_str = str(e)
                     if "Stream not open" in error_str or "Stream closed" in error_str or "Stream is stopped" in error_str:
@@ -392,7 +356,7 @@ class WakeWordDetector:
 
                 # 处理音频数据
                 is_final = self.recognizer.AcceptWaveform(data)
-                
+
                 # 处理部分结果，实现实时唤醒词检测
                 partial_result = json.loads(self.recognizer.PartialResult())
                 partial_text = partial_result.get('partial', '')

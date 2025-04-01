@@ -7,6 +7,10 @@
 .idea/
 venv/
 
+# 音乐缓存
+cache/
+
+
 /models
 
 # 打包相关

@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>py-xiaozhi 赞助者名单</title>
+    <link rel="stylesheet" href="sponsors.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>感谢所有赞助者的支持</h1>
+            <p>您的支持都促进了 py-xiaozhi 项目的发展</p>
+        </div>
+        
+        <div class="sponsor-list-container">
+            <h2><i class="fas fa-heart"></i> 赞助者名单</h2>
+            <div class="sponsor-list" id="all-sponsors"></div>
+        </div>
+        
+        <div class="become-sponsor">
+            <a href="#" class="sponsor-button" id="show-sponsor-modal">
+                <i class="fas fa-heart"></i> 成为赞助者
+            </a>
+            <p class="sponsor-note">您的赞助将支持设备兼容性测试、新功能开发和项目维护</p>
+        </div>
+        
+        <!-- 赞助方式弹窗 -->
+        <div id="sponsor-modal" class="modal">
+            <div class="modal-content">
+                <span class="close-modal">&times;</span>
+                <h2>选择赞助方式</h2>
+                <p>感谢您支持 py-xiaozhi 项目！您可以通过以下方式进行赞助：</p>
+                
+                <div class="payment-methods">
+                    <div class="payment-method">
+                        <button class="payment-btn" id="alipay-btn">
+                            <i class="fab fa-alipay"></i> 支付宝支付
+                        </button>
+                    </div>
+                    <div class="payment-method">
+                        <button class="payment-btn" id="wechat-btn">
+                            <i class="fab fa-weixin"></i> 微信支付
+                        </button>
+                    </div>
+                </div>
+
+
+                <div class="qr-container" id="wechat-qr">
+                    <h3>微信扫码赞助</h3>
+                    <div class="qr-code">
+                        <img src="https://tuchuang.junsen.online/i/2025/03/28/43rpw7.jpg" alt="微信收款码">
+                    </div>
+                </div>
+
+                
+                <div class="qr-container" id="alipay-qr">
+                    <h3>支付宝扫码赞助</h3>
+                    <div class="qr-code">
+                        <img src="https://tuchuang.junsen.online/i/2025/03/28/43u3eo.jpg" alt="支付宝收款码">
+                    </div>
+                </div>
+
+                <div class="sponsor-info">
+                    <p>赞助后，请联系项目维护者将您加入赞助者名单：</p>
+                    <ul>
+                        <li>在 GitHub 上提交 Issue 或 PR</li>
+                        <li>发送邮件至项目维护者（邮箱见 <a href="https://github.com/huangjunsen0406" target="_blank">GitHub主页</a>）</li>
+                    </ul>
+                    <div class="device-note">
+                        <h4><i class="fas fa-mobile-alt"></i> 设备兼容性支持</h4>
+                        <p>您可以通过以下方式支持设备兼容性：</p>
+                        <ul>
+                            <li>在赞助备注中说明您的设备型号，我会优先支持这些设备</li>
+                            <li>直接赞助/捐赠硬件设备，帮助我进行开发和适配测试</li>
+                            <li>提供设备的详细参数和使用场景，便于我更好地进行开发</li>
+                        </ul>
+                        <p class="note-small">硬件赞助请通过GitHub主页的邮箱联系我，以便协商寄送方式和地址</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <footer>
+            <p>© 2025 py-xiaozhi 项目 - <a href="https://github.com/huangjunsen0406/py-xiaozhi">GitHub</a></p>
+        </footer>
+    </div>
+    
+    <script src="sponsors.js"></script>
+</body>
+</html> 

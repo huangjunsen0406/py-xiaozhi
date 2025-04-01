@@ -32,7 +32,8 @@ class BaseDisplay(ABC):
                      emotion_callback: Optional[Callable] = None,
                      mode_callback: Optional[Callable] = None,
                      auto_callback: Optional[Callable] = None,
-                     abort_callback: Optional[Callable] = None):  # 添加打断回调参数
+                     abort_callback: Optional[Callable] = None,
+                     send_text_callback: Optional[Callable] = None):  # 添加打断回调参数
         """设置回调函数"""
         pass
 

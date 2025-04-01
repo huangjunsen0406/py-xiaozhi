@@ -8,9 +8,9 @@ import pyaudio
 import queue
 import threading
 import time
+import io
 from typing import Dict, Any, Tuple
 import logging
-import json
 
 logger = logging.getLogger("MusicPlayer")
 
@@ -24,7 +24,10 @@ class MusicPlayer(Thing):
     
     def __init__(self):
         """初始化音乐播放器"""
-        super().__init__("MusicPlayer", "在线音乐播放器，优先播放本地音乐如果没有再播放在线音乐，iot设备不受通信断开影响")
+        super().__init__(
+            "MusicPlayer", 
+            "在线音乐播放器，支持本地缓存"
+        )
         
         # 播放状态相关属性
         self.current_song = ""  # 当前歌曲名称
@@ -34,19 +37,35 @@ class MusicPlayer(Thing):
         self.position_update_time = 0  # 上次更新播放位置的时间
         
         # 播放控制相关
-        self.audio_decode_queue = queue.Queue(maxsize=100)  # 音频解码队列
+        self.audio_decode_queue = queue.Queue(maxsize=100)  
         self.play_thread = None  # 播放线程
         self.stop_event = threading.Event()  # 停止事件
+        self.stream = None  # 音频流对象
+        self.pyaudio = None  # PyAudio对象
+        self.convert_process = None  # FFmpeg转换进程
+        
+        # 线程管理
+        self.cleanup_lock = threading.Lock()  # 清理锁
+        self.is_cleaning = False  # 清理状态标志
+        self.active_threads = set()  # 活动线程集合
+        self.thread_lock = threading.Lock()  # 线程管理锁
         
         # 歌词相关
         self.lyrics = []  # 歌词列表，格式为 [(时间, 文本), ...]
         self.current_lyric_index = 0  # 当前歌词索引
+        
+        # 缓存相关
+        self.cache_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))), "cache", "music")
+        self._ensure_cache_dir()
         
         # 获取应用程序实例
         self.app = Application.get_instance()
         
         # 加载配置文件
         self.config = self._load_config()
+        
+        # 下载管理
+        self.current_temp_file = None  # 当前正在下载的临时文件路径
         
         logger.info("音乐播放器初始化完成")
         
@@ -122,12 +141,8 @@ class MusicPlayer(Thing):
         if not self.playing:
             return self.current_position
         
-        # 如果正在播放，计算当前时间与上次更新时间的差值
-        elapsed = 0
-        if self.position_update_time > 0:
-            elapsed = time.time() - self.position_update_time
-        
-        return min(self.total_duration, self.current_position + elapsed)
+        # 如果正在播放，返回当前位置
+        return min(self.total_duration, self.current_position)
     
     def _get_progress(self) -> float:
         """
@@ -152,7 +167,7 @@ class MusicPlayer(Thing):
         """
         # 如果已经在播放，先停止当前播放
         if self.playing:
-            self._pause()
+            self._stop_playback()
             # 添加短暂延迟确保之前的播放线程完全停止
             time.sleep(0.5)
         
@@ -168,7 +183,6 @@ class MusicPlayer(Thing):
         self.current_song = song_name
         self.playing = True
         self.current_position = 0
-        self.position_update_time = time.time()
         self.lyrics = []  # 清空歌词
         self.current_lyric_index = -1  # 重置歌词索引为-1，确保第一句歌词能显示
         
@@ -187,7 +201,7 @@ class MusicPlayer(Thing):
             # 创建并启动播放线程
             self.play_thread = threading.Thread(
                 target=self._process_audio,
-                args=(url,),
+                args=(url, song_id),
                 daemon=True
             )
             self.play_thread.start()
@@ -199,6 +213,96 @@ class MusicPlayer(Thing):
             logger.error(f"播放歌曲失败: {str(e)}")
             self.playing = False
             return {"status": "error", "message": f"播放歌曲失败: {str(e)}"}
+
+    def _stop_playback(self):
+        """停止当前播放并清理资源"""
+        # 使用锁防止重复清理
+        with self.cleanup_lock:
+            if self.is_cleaning:
+                logger.debug("资源清理已在进行中，跳过重复清理")
+                return
+            self.is_cleaning = True
+            
+            try:
+                logger.info("停止当前播放并清理资源")
+                self.stop_event.set()
+                self.playing = False
+                
+                # 清理临时下载文件
+                if self.current_temp_file and os.path.exists(self.current_temp_file):
+                    try:
+                        os.remove(self.current_temp_file)
+                        logger.info(f"已清理临时下载文件: {self.current_temp_file}")
+                    except Exception as e:
+                        logger.error(f"清理临时文件失败: {str(e)}")
+                    finally:
+                        self.current_temp_file = None
+                
+                # 清空音频队列
+                self._clear_audio_queue()
+                
+                # 关闭音频流
+                if self.stream:
+                    try:
+                        if self.stream.is_active():
+                            self.stream.stop_stream()
+                        self.stream.close()
+                        self.stream = None
+                    except Exception as e:
+                        logger.debug(
+                            f"关闭音频流时出现预期内的错误: {str(e)}"
+                        )
+                
+                # 终止PyAudio
+                if self.pyaudio:
+                    try:
+                        self.pyaudio.terminate()
+                        self.pyaudio = None
+                    except Exception as e:
+                        logger.debug(
+                            f"终止PyAudio时出现预期内的错误: {str(e)}"
+                        )
+                
+                # 终止转换进程
+                if self.convert_process:
+                    try:
+                        self.convert_process.terminate()
+                        self.convert_process = None
+                    except Exception as e:
+                        logger.debug(
+                            f"终止转换进程时出现预期内的错误: {str(e)}"
+                        )
+                
+                # 等待所有活动线程结束
+                with self.thread_lock:
+                    active_threads = list(self.active_threads)
+                    self.active_threads.clear()
+                
+                for thread in active_threads:
+                    if (thread.is_alive() and 
+                        thread != threading.current_thread()):
+                        try:
+                            thread.join(timeout=2.0)
+                        except RuntimeError:
+                            logger.debug(
+                                f"跳过等待线程 {thread.name} 结束"
+                            )
+                
+                logger.info("所有播放资源已清理完成")
+            finally:
+                self.is_cleaning = False
+
+    def _create_thread(self, target, name=None, args=()):
+        """创建并注册线程"""
+        thread = threading.Thread(target=target, name=name, args=args, daemon=True)
+        with self.thread_lock:
+            self.active_threads.add(thread)
+        return thread
+
+    def _remove_thread(self, thread):
+        """移除已完成的线程"""
+        with self.thread_lock:
+            self.active_threads.discard(thread)
 
     def _get_song_info(self, song_name: str) -> Tuple[str, str]:
         """
@@ -402,13 +506,14 @@ class MusicPlayer(Thing):
             except queue.Empty:
                 break
 
-    def _download_stream(self, url: str, chunk_queue: queue.Queue):
+    def _download_stream(self, url: str, chunk_queue: queue.Queue, cache_file: io.BufferedWriter = None):
         """
         流式下载音频文件
         
         参数:
             url: 音频文件URL
             chunk_queue: 数据块队列
+            cache_file: 缓存文件
         """
         try:
             # 使用配置中的请求头
@@ -437,11 +542,22 @@ class MusicPlayer(Thing):
                             logger.info("下载被中止")
                             break
                         if chunk:
+                            # 写入缓存文件
+                            if cache_file:
+                                try:
+                                    cache_file.write(chunk)
+                                    cache_file.flush()  # 确保数据写入磁盘
+                                except Exception as e:
+                                    logger.error(f"写入缓存文件失败: {str(e)}")
+                            
+                            # 放入播放队列
                             chunk_queue.put(chunk)
                             downloaded += len(chunk)
+                            
                             # 每下载10%更新一次日志
                             if total_size > 0 and downloaded % (total_size // 10) < 32768:
-                                logger.info(f"下载进度: {downloaded * 100 // total_size}%")
+                                progress = downloaded * 100 // total_size
+                                logger.info(f"下载进度: {progress}%")
                     
                     # 下载成功，跳出重试循环
                     break
@@ -457,6 +573,17 @@ class MusicPlayer(Thing):
         finally:
             # 标记下载结束
             chunk_queue.put(None)
+            # 关闭缓存文件
+            if cache_file:
+                try:
+                    cache_file.close()
+                    logger.info("缓存文件已保存并关闭")
+                except Exception as e:
+                    logger.error(f"关闭缓存文件失败: {str(e)}")
+                    try:
+                        cache_file.close()
+                    except:
+                        pass
 
     def _decode_audio_stream(self, process: subprocess.Popen):
         """
@@ -466,7 +593,7 @@ class MusicPlayer(Thing):
             process: FFmpeg进程
         """
         try:
-            buffer_size = 8192  # 增加读取缓冲区大小提高效率
+            buffer_size = AudioConfig.OUTPUT_FRAME_SIZE  # 增加读取缓冲区大小提高效率
             
             while not self.stop_event.is_set():
                 # 读取固定大小的数据块
@@ -482,20 +609,16 @@ class MusicPlayer(Thing):
             self.audio_decode_queue.put(None)
 
     def _play_audio_stream(self):
-        """
-        播放解码后的音频流
-        
-        处理音频播放、暂停、恢复等逻辑，同时更新播放进度和歌词显示
-        """
+        """播放解码后的音频流"""
         try:
             # 初始化PyAudio
-            p = pyaudio.PyAudio()
-            stream = p.open(
+            self.pyaudio = pyaudio.PyAudio()
+            self.stream = self.pyaudio.open(
                 format=pyaudio.paInt16,
                 channels=AudioConfig.CHANNELS,
-                rate=AudioConfig.SAMPLE_RATE,
+                rate=AudioConfig.OUTPUT_SAMPLE_RATE,
                 output=True,
-                frames_per_buffer=AudioConfig.FRAME_SIZE
+                frames_per_buffer=AudioConfig.OUTPUT_FRAME_SIZE
             )
 
             logger.info("开始播放音频流...")
@@ -503,28 +626,30 @@ class MusicPlayer(Thing):
             # 播放状态跟踪变量
             total_chunks = 0
             start_time = time.time()
-            playback_started = False  # 标记是否已经开始播放
+            playback_started = False
             
             # TTS优先级处理相关变量
-            paused_for_tts = False  # 标记是否因为TTS而暂停
-            tts_check_time = 0  # 上次检查TTS状态的时间
-            pause_start_time = 0  # 暂停开始时间
-            total_pause_time = 0  # 总暂停时间
+            paused_for_tts = False
+            tts_check_time = 0
+            pause_start_time = 0
+            total_pause_time = 0
             
             # 添加最后一次数据接收时间
             last_data_time = time.time()
-            data_timeout = 5.0  # 5秒没有新数据就认为播放结束
+            data_timeout = 5.0
 
             while not self.stop_event.is_set():
-                # TTS优先级处理：每200ms检查一次应用程序是否正在说话
+                # TTS优先级处理
                 current_time = time.time()
                 if current_time - tts_check_time >= 0.2:
                     tts_check_time = current_time
-                    paused_for_tts, pause_start_time, total_pause_time = self._handle_tts_priority(
-                        stream, current_time, paused_for_tts, pause_start_time, total_pause_time
+                    paused_for_tts, pause_start_time, total_pause_time = (
+                        self._handle_tts_priority(
+                            self.stream, current_time, paused_for_tts,
+                            pause_start_time, total_pause_time
+                        )
                     )
 
-                # 如果因为TTS暂停了，就不处理音频数据
                 if paused_for_tts:
                     time.sleep(0.1)
                     continue
@@ -532,90 +657,72 @@ class MusicPlayer(Thing):
                 try:
                     # 从队列获取音频数据
                     chunk = self.audio_decode_queue.get(timeout=1)
-                    
-                    # 更新最后一次数据接收时间
                     last_data_time = time.time()
                     
-                    # 处理流结束标记
                     if chunk is None:
-                        if self._check_stream_end(stream, total_chunks):
+                        if self._check_stream_end(self.stream, total_chunks):
                             break
                         continue
 
                     # 播放音频数据
-                    stream.write(chunk)
-                    total_chunks += 1
+                    if not self.stop_event.is_set():
+                        self.stream.write(chunk)
+                        total_chunks += 1
 
-                    # 标记播放已经开始（确保有足够的数据已经播放）
-                    if not playback_started and total_chunks > 5:
-                        playback_started = True
-                        logger.info("音频播放已开始")
+                        if not playback_started and total_chunks > 5:
+                            playback_started = True
+                            logger.info("音频播放已开始")
 
-                    # 更新播放位置，考虑暂停时间
-                    self.current_position = (time.time() - start_time - total_pause_time)
-                    self.position_update_time = time.time()
+                        # 更新播放位置
+                        self.current_position = (
+                            time.time() - start_time - total_pause_time
+                        )
+                        self.position_update_time = time.time()
 
-                    # 显示歌词
-                    self._update_lyrics()
+                        # 显示歌词
+                        self._update_lyrics()
 
-                    # 更新播放进度显示（约每秒更新一次）
-                    if total_chunks % 50 == 0:
-                        self._update_progress_display()
-                        
+                        # 更新播放进度显示
+                        if total_chunks % 50 == 0:
+                            self._update_progress_display()
+                    
                     self.audio_decode_queue.task_done()
                     
                 except queue.Empty:
-                    # 检查是否超时（长时间没有新数据）
-                    if playback_started and total_chunks > 0 and (time.time() - last_data_time) > data_timeout:
-                        logger.info(f"数据接收超时，认为播放已结束")
-                        # 设置当前位置为总时长，确保进度显示为100%
+                    if (playback_started and total_chunks > 0 and 
+                            (time.time() - last_data_time) > data_timeout):
+                        logger.info("数据接收超时，认为播放已结束")
                         self.current_position = self.total_duration
                         self._update_progress_display()
                         break
                     
-                    # 如果队列为空但播放已经开始，可能是因为下载速度慢
                     if playback_started and total_chunks > 0:
                         logger.debug("音频队列暂时为空，等待更多数据...")
                     continue
 
-            # 播放完成时更新位置
+            # 播放完成时的处理
             if playback_started and total_chunks > 0:
-                # 确保最终进度显示为100%
                 self.current_position = self.total_duration
                 self._update_progress_display()
-                logger.info(f"歌曲 '{self.current_song}' 播放完成")
-                self.playing = False
+                logger.info("歌曲播放完成")
 
         except Exception as e:
             logger.error(f"播放过程中出错: {str(e)}")
         finally:
-            # 清理资源
-            if 'stream' in locals():
-                stream.stop_stream()
-                stream.close()
-            if 'p' in locals():
-                p.terminate()
-            self.playing = False
-            logger.info("音频播放结束，资源已释放")
+            # 在播放线程中调用_stop_playback时，不等待自己结束
+            self.play_thread = None
+            self._stop_playback()
     
     def _handle_tts_priority(self, stream, current_time, paused_for_tts, pause_start_time, total_pause_time):
         """
-        处理TTS优先级逻辑
-        
-        在应用程序说话时暂停音乐播放，说话结束后恢复播放
-        
-        参数:
-            stream: 音频流
-            current_time: 当前时间
-            paused_for_tts: 是否因为TTS而暂停
-            pause_start_time: 暂停开始时间
-            total_pause_time: 总暂停时间
+        处理TTS优先级逻辑和打断处理
         """
-        print("检测播放状态",self.app.is_tts_playing, self.app.aborted)
+        # 检查是否被打断
         if self.app.aborted:
-            # 打断暂停播放
-            self._pause()
-            return
+            logger.info("检测到打断指令，停止播放")
+            self._stop_playback()
+            return paused_for_tts, pause_start_time, total_pause_time
+
         # 检查应用程序是否正在播放TTS
         if self.app and self.app.is_tts_playing:
             if not paused_for_tts and stream.is_active():
@@ -700,71 +807,207 @@ class MusicPlayer(Thing):
         seconds = int(seconds) % 60
         return f"{minutes:02d}:{seconds:02d}"
 
-    def _process_audio(self, url: str):
-        """
-        处理音频URL，实现并行的流式下载、转换和播放
-        
-        参数:
-            url: 音频URL
-        """
+    def _process_audio(self, url: str, song_id: str = None):
+        """处理音频URL，实现并行的流式下载、转换和播放"""
         try:
+            # 检查是否有缓存
+            if song_id and self._is_song_cached(song_id):
+                cache_path = self._get_cache_path(song_id)
+                # 直接播放缓存文件
+                self._play_cached_file(cache_path)
+                return
+
             # 创建下载队列
             download_queue = queue.Queue(maxsize=100)
+            
+            # 如果有song_id，启动单独的下载线程保存完整MP3文件
+            if song_id:
+                cache_path = self._get_cache_path(song_id)
+                download_thread = self._create_thread(
+                    target=self._download_mp3,
+                    name="mp3_download",
+                    args=(url, cache_path)
+                )
+                download_thread.start()
 
-            # 创建下载线程
-            download_thread = threading.Thread(target=self._download_stream, args=(url, download_queue))
-            download_thread.daemon = True
-            download_thread.start()
+            # 创建流式下载线程（用于实时播放）
+            stream_thread = self._create_thread(
+                target=self._download_stream,
+                name="stream_download",
+                args=(url, download_queue)
+            )
+            stream_thread.start()
 
             # 创建FFmpeg转换进程
             cmd = [
                 'ffmpeg',
-                '-f', 'mp3',  # 指定输入格式
-                '-i', 'pipe:0',  # 从标准输入读取
-                '-f', 's16le',  # 输出格式
-                '-ar', '24000',  # 采样率
-                '-ac', '1',      # 单声道
-                'pipe:1'  # 输出到标准输出
+                '-f', 'mp3',
+                '-i', 'pipe:0',
+                '-f', 's16le',
+                '-ar', str(AudioConfig.OUTPUT_SAMPLE_RATE),
+                '-ac', str(AudioConfig.CHANNELS),
+                'pipe:1'
             ]
-            convert_process = subprocess.Popen(
-                cmd, 
-                stdin=subprocess.PIPE, 
-                stdout=subprocess.PIPE, 
+            self.convert_process = subprocess.Popen(
+                cmd,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE
             )
 
             # 创建解码线程
-            decode_thread = threading.Thread(target=self._decode_audio_stream, args=(convert_process,))
-            decode_thread.daemon = True
+            decode_thread = self._create_thread(
+                target=self._decode_audio_stream,
+                name="audio_decode",
+                args=(self.convert_process,)
+            )
             decode_thread.start()
 
             # 创建播放线程
-            play_thread = threading.Thread(target=self._play_audio_stream)
-            play_thread.daemon = True
+            play_thread = self._create_thread(
+                target=self._play_audio_stream,
+                name="audio_play"
+            )
             play_thread.start()
 
             # 从下载队列读取数据并写入转换进程
-            self._feed_download_to_converter(download_queue, convert_process)
+            self._feed_download_to_converter(
+                download_queue, 
+                self.convert_process
+            )
 
             # 如果没有被中止，等待所有线程完成
             if not self.stop_event.is_set():
-                download_thread.join()
+                stream_thread.join()
+                self._remove_thread(stream_thread)
+                
                 decode_thread.join()
+                self._remove_thread(decode_thread)
+                
                 play_thread.join()
+                self._remove_thread(play_thread)
+                
+                if song_id:
+                    download_thread.join()
+                    self._remove_thread(download_thread)
 
         except Exception as e:
             logger.error(f"音频处理过程中出错: {str(e)}")
         finally:
-            # 清理资源
-            if 'convert_process' in locals():
+            self._stop_playback()
+
+    def _download_mp3(self, url: str, cache_path: str):
+        """
+        下载完整的MP3文件到缓存目录
+        
+        参数:
+            url: 音频URL
+            cache_path: 缓存文件路径
+        """
+        try:
+            # 使用配置中的请求头
+            headers = self.config.get("HEADERS", {}).copy()
+            headers.update({
+                'Accept-Encoding': 'gzip, deflate, br',
+                'Referer': 'https://music.163.com/'
+            })
+            
+            # 创建临时文件路径
+            temp_path = cache_path + '.temp'
+            self.current_temp_file = temp_path  # 记录当前临时文件路径
+            
+            with requests.get(url, stream=True, headers=headers, timeout=30) as response:
+                response.raise_for_status()
+                total_size = int(response.headers.get('content-length', 0))
+                downloaded = 0
+                
+                with open(temp_path, 'wb') as f:
+                    for chunk in response.iter_content(chunk_size=32768):
+                        if self.stop_event.is_set():
+                            logger.info("缓存下载被中止")
+                            break
+                        if chunk:
+                            f.write(chunk)
+                            downloaded += len(chunk)
+                            # 每下载10%更新一次日志
+                            if total_size > 0 and downloaded % (total_size // 10) < 32768:
+                                progress = downloaded * 100 // total_size
+                                logger.info(f"缓存下载进度: {progress}%")
+                
+                # 下载完成后，将临时文件重命名为正式文件
+                if not self.stop_event.is_set() and downloaded == total_size:
+                    os.replace(temp_path, cache_path)
+                    logger.info("MP3文件已缓存到本地")
+                    self.current_temp_file = None
+                else:
+                    # 如果下载被中止或不完整，删除临时文件
+                    if os.path.exists(temp_path):
+                        os.remove(temp_path)
+                        logger.info("已清理未完成的临时文件")
+                    self.current_temp_file = None
+            
+        except Exception as e:
+            logger.error(f"下载MP3文件失败: {str(e)}")
+            # 清理临时文件
+            if self.current_temp_file and os.path.exists(self.current_temp_file):
                 try:
-                    convert_process.terminate()
-                except:
-                    pass
-            # 如果播放被中止，设置playing为False
-            if self.stop_event.is_set():
-                self.playing = False
-    
+                    os.remove(self.current_temp_file)
+                    logger.info("已清理临时文件")
+                except Exception as e:
+                    logger.error(f"清理临时文件失败: {str(e)}")
+                finally:
+                    self.current_temp_file = None
+
+    def _play_cached_file(self, cache_path: str):
+        """播放缓存文件"""
+        try:
+            # 创建FFmpeg转换进程
+            cmd = [
+                'ffmpeg',
+                '-i', cache_path,
+                '-f', 's16le',
+                '-ar', str(AudioConfig.OUTPUT_SAMPLE_RATE),  # 使用配置中的采样率
+                '-ac', str(AudioConfig.CHANNELS),  # 使用配置中的声道数
+                'pipe:1'
+            ]
+            self.convert_process = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE
+            )
+
+            # 创建解码线程
+            decode_thread = self._create_thread(
+                target=self._decode_audio_stream,
+                name="cache_decode",
+                args=(self.convert_process,)
+            )
+            decode_thread.start()
+
+            # 创建播放线程
+            play_thread = self._create_thread(
+                target=self._play_audio_stream,
+                name="cache_play"
+            )
+            play_thread.start()
+
+            # 等待播放完成
+            if not self.stop_event.is_set():
+                decode_thread.join()
+                self._remove_thread(decode_thread)
+                play_thread.join()
+                self._remove_thread(play_thread)
+
+        except Exception as e:
+            logger.error(f"播放缓存文件失败: {str(e)}")
+        finally:
+            if self.convert_process:
+                try:
+                    self.convert_process.terminate()
+                except Exception as e:
+                    logger.debug(f"终止转换进程时出错: {str(e)}")
+                self.convert_process = None
+
     def _feed_download_to_converter(self, download_queue: queue.Queue, convert_process: subprocess.Popen):
         """
         将下载的数据喂给转换进程
@@ -780,20 +1023,28 @@ class MusicPlayer(Thing):
                     if chunk is None:
                         logger.info("下载完成，关闭转换进程输入")
                         break
-                    convert_process.stdin.write(chunk)
+                    if convert_process.poll() is None:  # 检查进程是否还在运行
+                        convert_process.stdin.write(chunk)
+                    else:
+                        logger.warning("转换进程已终止")
+                        break
                     download_queue.task_done()
                 except queue.Empty:
                     continue
                 except BrokenPipeError:
                     logger.error("管道已断开")
                     break
+                except Exception as e:
+                    logger.error(f"写入转换进程时出错: {str(e)}")
+                    break
         finally:
             # 关闭转换进程的输入
             try:
-                convert_process.stdin.close()
-                logger.debug("已关闭转换进程输入")
-            except:
-                pass
+                if convert_process.poll() is None:
+                    convert_process.stdin.close()
+                    logger.debug("已关闭转换进程输入")
+            except Exception as e:
+                logger.debug(f"关闭转换进程输入时出错: {str(e)}")
 
     def _fetch_lyrics(self, song_id: str):
         """
@@ -918,3 +1169,21 @@ class MusicPlayer(Thing):
             # 使用schedule方法安全地更新UI
             self.app.schedule(lambda: self.app.set_chat_message("assistant", lyric_text))
             logger.debug(f"显示歌词: {lyric_text}")
+
+    def _ensure_cache_dir(self):
+        """确保缓存目录存在"""
+        try:
+            if not os.path.exists(self.cache_dir):
+                os.makedirs(self.cache_dir)
+                logger.info(f"创建音乐缓存目录: {self.cache_dir}")
+        except Exception as e:
+            logger.error(f"创建缓存目录失败: {str(e)}")
+
+    def _get_cache_path(self, song_id: str) -> str:
+        """获取歌曲缓存文件路径"""
+        return os.path.join(self.cache_dir, f"{song_id}.mp3")
+
+    def _is_song_cached(self, song_id: str) -> bool:
+        """检查歌曲是否已缓存"""
+        cache_path = self._get_cache_path(song_id)
+        return os.path.exists(cache_path)

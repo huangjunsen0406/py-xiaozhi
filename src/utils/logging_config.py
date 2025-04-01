@@ -1,6 +1,7 @@
 import logging
 import os
 from logging.handlers import TimedRotatingFileHandler
+from colorlog import ColoredFormatter
 def setup_logging():
     """配置日志系统"""
     # 创建logs目录（如果不存在）
@@ -34,8 +35,24 @@ def setup_logging():
     file_handler.suffix = "%Y-%m-%d.log"  # 日志文件后缀格式
     
     # 创建格式化器
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    console_handler.setFormatter(formatter)
+    formatter = logging.Formatter('%(asctime)s[%(name)s] - %(levelname)s - %(message)s - %(threadName)s')
+    
+    # 控制台颜色格式化器
+    color_formatter = ColoredFormatter(
+        '%(green)s%(asctime)s%(reset)s[%(blue)s%(name)s%(reset)s] - %(log_color)s%(levelname)s%(reset)s - %(green)s%(message)s%(reset)s - %(cyan)s%(threadName)s%(reset)s',
+        log_colors={
+            'DEBUG': 'cyan',
+            'INFO': 'white',
+            'WARNING': 'yellow',
+            'ERROR': 'red',
+            'CRITICAL': 'red,bg_white',
+        },
+        secondary_log_colors={
+            'asctime': {'green': 'green'},
+            'name': {'blue': 'blue'}
+        }
+    )
+    console_handler.setFormatter(color_formatter)
     file_handler.setFormatter(formatter)
     
     # 添加处理器到根日志记录器

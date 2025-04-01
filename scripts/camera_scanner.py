@@ -1,0 +1,232 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+# 文件名: camera_scanner.py
+
+import cv2
+import json
+import os
+import time
+from pathlib import Path
+
+def get_camera_capabilities(cam):
+    """获取摄像头的参数和能力"""
+    capabilities = {}
+    
+    # 获取可用的分辨率
+    standard_resolutions = [
+        (640, 480),    # VGA
+        (800, 600),    # SVGA
+        (1024, 768),   # XGA
+        (1280, 720),   # HD
+        (1280, 960),   # 4:3 HD
+        (1920, 1080),  # Full HD
+        (2560, 1440),  # QHD
+        (3840, 2160)   # 4K UHD
+    ]
+    
+    supported_resolutions = []
+    original_width = int(cam.get(cv2.CAP_PROP_FRAME_WIDTH))
+    original_height = int(cam.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    
+    # 记录原始分辨率
+    capabilities["default_resolution"] = (original_width, original_height)
+    
+    # 测试标准分辨率
+    for width, height in standard_resolutions:
+        cam.set(cv2.CAP_PROP_FRAME_WIDTH, width)
+        cam.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
+        actual_width = int(cam.get(cv2.CAP_PROP_FRAME_WIDTH))
+        actual_height = int(cam.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        
+        # 如果设置成功（实际分辨率与请求的相同）
+        if actual_width == width and actual_height == height:
+            supported_resolutions.append((width, height))
+    
+    # 恢复原始分辨率
+    cam.set(cv2.CAP_PROP_FRAME_WIDTH, original_width)
+    cam.set(cv2.CAP_PROP_FRAME_HEIGHT, original_height)
+    
+    capabilities["supported_resolutions"] = supported_resolutions
+    
+    # 获取帧率
+    fps = int(cam.get(cv2.CAP_PROP_FPS))
+    capabilities["fps"] = fps if fps > 0 else 30  # 默认为30fps
+    
+    # 获取后端名称
+    backend_name = cam.getBackendName()
+    capabilities["backend"] = backend_name
+    
+    return capabilities
+
+def detect_cameras():
+    """检测并列出所有可用摄像头"""
+    print("\n===== 摄像头设备检测 =====\n")
+    
+    # 存储找到的设备
+    camera_devices = []
+    
+    # 尝试打开多个摄像头索引
+    max_cameras_to_check = 10  # 最多检查10个摄像头索引
+    
+    for i in range(max_cameras_to_check):
+        try:
+            # 尝试打开摄像头
+            cap = cv2.VideoCapture(i)
+            
+            if cap.isOpened():
+                # 获取摄像头信息
+                device_name = f"Camera {i}"
+                try:
+                    # 在某些系统上可能可以获取设备名称
+                    device_name = cap.getBackendName() + f" Camera {i}"
+                except:
+                    pass
+                
+                # 读取一帧以确保摄像头正常工作
+                ret, frame = cap.read()
+                if not ret:
+                    print(f"设备 {i}: 打开成功但无法读取画面，跳过")
+                    cap.release()
+                    continue
+                
+                # 获取摄像头能力
+                capabilities = get_camera_capabilities(cap)
+                
+                # 打印设备信息
+                print(f"设备 {i}: {device_name}")
+                print(f"  - 默认分辨率: {capabilities['default_resolution'][0]}x{capabilities['default_resolution'][1]}")
+                print(f"  - 支持分辨率: {', '.join([f'{w}x{h}' for w, h in capabilities['supported_resolutions']])}")
+                print(f"  - 帧率: {capabilities['fps']}")
+                print(f"  - 后端: {capabilities['backend']}")
+                print("")
+                
+                # 添加到设备列表
+                camera_devices.append({
+                    "index": i,
+                    "name": device_name,
+                    "capabilities": capabilities
+                })
+                
+                # 显示预览画面
+                print(f"正在显示设备 {i} 的预览画面，按 'q' 键继续...")
+                preview_start = time.time()
+                
+                while time.time() - preview_start < 3:  # 预览3秒
+                    ret, frame = cap.read()
+                    if ret:
+                        cv2.imshow(f'Camera {i} Preview', frame)
+                        if cv2.waitKey(1) & 0xFF == ord('q'):
+                            break
+                
+                cv2.destroyAllWindows()
+                cap.release()
+                
+            else:
+                # 如果连续两个索引无法打开摄像头，则认为没有更多摄像头了
+                consecutive_failures = 0
+                for j in range(i, i + 2):
+                    temp_cap = cv2.VideoCapture(j)
+                    if not temp_cap.isOpened():
+                        consecutive_failures += 1
+                    temp_cap.release()
+                
+                if consecutive_failures >= 2 and i > 0:
+                    break
+                    
+        except Exception as e:
+            print(f"检测设备 {i} 时出错: {e}")
+    
+    # 总结找到的设备
+    print("\n===== 设备总结 =====\n")
+    
+    if not camera_devices:
+        print("未找到可用的摄像头设备！")
+        return None
+    
+    print(f"找到 {len(camera_devices)} 个摄像头设备:")
+    for device in camera_devices:
+        print(f"  - 设备 {device['index']}: {device['name']}")
+        print(f"    分辨率: {device['capabilities']['default_resolution'][0]}x{device['capabilities']['default_resolution'][1]}")
+    
+    # 推荐最佳设备
+    print("\n===== 推荐设备 =====\n")
+    
+    # 首选高清摄像头，其次是分辨率最高的
+    recommended_camera = None
+    highest_resolution = 0
+    
+    for device in camera_devices:
+        width, height = device['capabilities']['default_resolution']
+        resolution = width * height
+        
+        # 如果是HD或以上分辨率
+        if width >= 1280 and height >= 720:
+            if resolution > highest_resolution:
+                highest_resolution = resolution
+                recommended_camera = device
+        elif recommended_camera is None or resolution > highest_resolution:
+            highest_resolution = resolution
+            recommended_camera = device
+    
+    # 打印推荐设备
+    if recommended_camera:
+        print(f"推荐摄像头: 设备 {recommended_camera['index']} ({recommended_camera['name']})")
+        print(f"  - 分辨率: {recommended_camera['capabilities']['default_resolution'][0]}x{recommended_camera['capabilities']['default_resolution'][1]}")
+        print(f"  - 帧率: {recommended_camera['capabilities']['fps']}")
+    
+    # 生成配置文件示例
+    print("\n===== 配置文件示例 =====\n")
+    
+    config_example = {
+        "camera_index": recommended_camera['index'],
+        "frame_width": recommended_camera['capabilities']['default_resolution'][0],
+        "frame_height": recommended_camera['capabilities']['default_resolution'][1],
+        "fps": recommended_camera['capabilities']['fps'],
+        "Loacl_VL_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",  # 默认值
+        "VLapi_key": "XXXXXXXX",  # 需要用户填写
+        "auto_detect": True  # 启用自动检测
+    }
+    
+    print(json.dumps(config_example, indent=2, ensure_ascii=False))
+    
+    # 询问是否更新配置文件
+    print("\n是否要更新 camera_VL_config.json 文件？(y/n)")
+    choice = input().strip().lower()
+    
+    if choice == 'y':
+        # 获取配置文件路径
+        config_dir = Path(__file__).parent.parent / "config"
+        config_file = config_dir / "camera_VL_config.json"
+        
+        # 确保目录存在
+        config_dir.mkdir(parents=True, exist_ok=True)
+        
+        # 读取现有配置（如果存在）
+        existing_config = {}
+        if config_file.exists():
+            try:
+                with open(config_file, 'r', encoding='utf-8') as f:
+                    existing_config = json.load(f)
+            except:
+                pass
+        
+        # 合并配置（保留API密钥等敏感信息）
+        merged_config = {**config_example, **{k: v for k, v in existing_config.items() if k in ["Loacl_VL_url", "VLapi_key"]}}
+        
+        # 保存配置
+        with open(config_file, 'w', encoding='utf-8') as f:
+            json.dump(merged_config, indent=2, ensure_ascii=False, fp=f)
+        
+        print(f"\n配置已保存到: {config_file}")
+    
+    return camera_devices
+
+if __name__ == "__main__":
+    try:
+        cameras = detect_cameras()
+        if cameras:
+            print(f"\n检测到 {len(cameras)} 个摄像头设备！")
+        else:
+            print("\n未检测到可用的摄像头设备！")
+    except Exception as e:
+        print(f"检测过程中出错: {e}")

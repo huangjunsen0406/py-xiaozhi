@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import threading
 import time
@@ -15,22 +16,23 @@ class CliDisplay(BaseDisplay):
         """初始化CLI显示"""
         self.logger = logging.getLogger("CliDisplay")
         self.running = True
-        
+
         # 状态相关
         self.current_status = "未连接"
         self.current_text = "待命"
         self.current_emotion = "😊"
-        
+        self.current_volume = 0  # 添加当前音量属性
+
         # 回调函数
         self.auto_callback = None
         self.status_callback = None
         self.text_callback = None
         self.emotion_callback = None
         self.abort_callback = None
-
+        self.send_text_callback = None
         # 按键状态
         self.is_r_pressed = False
-        
+
         # 状态缓存
         self.last_status = None
         self.last_text = None
@@ -39,6 +41,9 @@ class CliDisplay(BaseDisplay):
 
         # 键盘监听器
         self.keyboard_listener = None
+        
+        # 为异步操作添加事件循环
+        self.loop = asyncio.new_event_loop()
 
     def set_callbacks(self,
                       press_callback: Optional[Callable] = None,
@@ -48,13 +53,15 @@ class CliDisplay(BaseDisplay):
                       emotion_callback: Optional[Callable] = None,
                       mode_callback: Optional[Callable] = None,
                       auto_callback: Optional[Callable] = None,
-                      abort_callback: Optional[Callable] = None):
+                      abort_callback: Optional[Callable] = None,
+                      send_text_callback: Optional[Callable] = None):
         """设置回调函数"""
         self.status_callback = status_callback
         self.text_callback = text_callback
         self.emotion_callback = emotion_callback
         self.auto_callback = auto_callback
         self.abort_callback = abort_callback
+        self.send_text_callback = send_text_callback
 
     def update_button_status(self, text: str):
         """更新按钮状态"""
@@ -116,7 +123,7 @@ class CliDisplay(BaseDisplay):
     def start(self):
         """启动CLI显示"""
         self._print_help()
-        
+
         # 启动状态更新线程
         self.start_update_threads()
 
@@ -182,7 +189,17 @@ class CliDisplay(BaseDisplay):
                     except (IndexError, ValueError):
                         print("无效的音量值，格式：v <0-100>")
                 else:
-                    print("未知命令，输入 'h' 查看帮助")
+                    if self.send_text_callback:
+                        # 获取应用程序的事件循环并在其中运行协程
+                        from src.application import Application
+                        app = Application.get_instance()
+                        if app and app.loop:
+                            asyncio.run_coroutine_threadsafe(
+                                self.send_text_callback(cmd),
+                                app.loop
+                            )
+                        else:
+                            print("应用程序实例或事件循环不可用")
         except Exception as e:
             logger.error(f"键盘监听错误: {e}")
 
@@ -225,7 +242,7 @@ class CliDisplay(BaseDisplay):
             self.current_emotion != self.last_emotion or
             self.current_volume != self.last_volume
         )
-        
+
         if status_changed:
             print("\n=== 当前状态 ===")
             print(f"状态: {self.current_status}")
@@ -233,7 +250,7 @@ class CliDisplay(BaseDisplay):
             print(f"表情: {self.current_emotion}")
             print(f"音量: {self.current_volume}%")
             print("===============\n")
-            
+
             # 更新缓存
             self.last_status = self.current_status
             self.last_text = self.current_text

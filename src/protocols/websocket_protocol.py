@@ -17,7 +17,6 @@ class WebsocketProtocol(Protocol):
         # 获取配置管理器实例
         self.config = ConfigManager.get_instance()
         self.websocket = None
-        self.server_sample_rate = AudioConfig.SAMPLE_RATE
         self.connected = False
         self.hello_received = None  # 初始化时先设为 None
         self.WEBSOCKET_URL = self.config.get_config("NETWORK.WEBSOCKET_URL")
@@ -63,7 +62,7 @@ class WebsocketProtocol(Protocol):
                 "transport": "websocket",
                 "audio_params": {
                     "format": "opus",
-                    "sample_rate": AudioConfig.SAMPLE_RATE,
+                    "sample_rate": AudioConfig.INPUT_SAMPLE_RATE,
                     "channels": AudioConfig.CHANNELS,
                     "frame_duration": AudioConfig.FRAME_DURATION,
                 }
@@ -131,9 +130,8 @@ class WebsocketProtocol(Protocol):
         try:
             await self.websocket.send(data)
         except Exception as e:
-            logger.error(f"发送音频数据失败: {e}")
             if self.on_network_error:
-                self.on_network_error(f"发送音频失败: {str(e)}")
+                self.on_network_error()
 
     async def send_text(self, message: str):
         """发送文本消息"""
@@ -170,25 +168,6 @@ class WebsocketProtocol(Protocol):
                 return
             print("服务链接返回初始化配置", data)
 
-            # 获取音频参数
-            audio_params = data.get("audio_params")
-            if audio_params:
-                # 更新全局音频配置
-                updated = AudioConfig.update_from_server(audio_params)
-                if updated:
-                    logger.info(f"根据服务器配置更新音频参数: 采样率={AudioConfig.SAMPLE_RATE}, " 
-                               f"声道={AudioConfig.CHANNELS}, 帧时长={AudioConfig.FRAME_DURATION}ms, "
-                               f"帧大小={AudioConfig.FRAME_SIZE}")
-                    
-                    # 重新初始化音频编解码器
-                    if self.on_audio_config_changed:
-                        await self.on_audio_config_changed(AudioConfig)
-                
-                # 获取服务器的采样率
-                sample_rate = audio_params.get("sample_rate")
-                if sample_rate:
-                    self.server_sample_rate = sample_rate
-                    
             # 设置 hello 接收事件
             self.hello_received.set()
 

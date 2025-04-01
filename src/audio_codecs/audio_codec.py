@@ -35,38 +35,43 @@ class AudioCodec:
             self.audio = pyaudio.PyAudio()
 
             # 自动选择默认输入/输出设备
-            input_device_index = self._get_default_or_first_available_device(is_input=True)
-            output_device_index = self._get_default_or_first_available_device(is_input=False)
+            input_device_index = self._get_default_or_first_available_device(
+                is_input=True
+            )
+            output_device_index = self._get_default_or_first_available_device(
+                is_input=False
+            )
 
-            # 初始化音频输入流 - 使用最新的AudioConfig参数
+            # 初始化音频输入流 - 使用16kHz采样率
             self.input_stream = self.audio.open(
                 format=pyaudio.paInt16,
                 channels=AudioConfig.CHANNELS,
-                rate=AudioConfig.SAMPLE_RATE,
+                rate=AudioConfig.INPUT_SAMPLE_RATE,  # 使用16kHz
                 input=True,
                 input_device_index=input_device_index,
-                frames_per_buffer=AudioConfig.FRAME_SIZE
+                frames_per_buffer=AudioConfig.INPUT_FRAME_SIZE
             )
 
+            # 初始化音频输出流 - 使用24kHz采样率
             self.output_stream = self.audio.open(
                 format=pyaudio.paInt16,
                 channels=AudioConfig.CHANNELS,
-                rate=AudioConfig.SAMPLE_RATE,
+                rate=AudioConfig.OUTPUT_SAMPLE_RATE,  # 使用24kHz
                 output=True,
-                output_device_index=output_device_index,  # 选择的扬声器
-                frames_per_buffer=AudioConfig.FRAME_SIZE
+                output_device_index=output_device_index,
+                frames_per_buffer=AudioConfig.OUTPUT_FRAME_SIZE
             )
 
-            # 初始化Opus编码器
+            # 初始化Opus编码器 - 使用16kHz（与输入匹配）
             self.opus_encoder = opuslib.Encoder(
-                fs=AudioConfig.SAMPLE_RATE,
+                fs=AudioConfig.INPUT_SAMPLE_RATE,
                 channels=AudioConfig.CHANNELS,
-                application=opuslib.APPLICATION_AUDIO
+                application=AudioConfig.OPUS_APPLICATION
             )
 
-            # 初始化Opus解码器
+            # 初始化Opus解码器 - 使用24kHz（与输出匹配）
             self.opus_decoder = opuslib.Decoder(
-                fs=AudioConfig.SAMPLE_RATE,
+                fs=AudioConfig.OUTPUT_SAMPLE_RATE,
                 channels=AudioConfig.CHANNELS
             )
 
@@ -82,7 +87,11 @@ class AudioCodec:
                 default_device = self.audio.get_default_input_device_info()
             else:
                 default_device = self.audio.get_default_output_device_info()
-            logger.info(f"使用默认设备: {default_device['name']} (Index: {default_device['index']})")
+            device_info = (
+                f"使用默认设备: {default_device['name']} "
+                f"(Index: {default_device['index']})"
+            )
+            logger.info(device_info)
             return int(default_device["index"])
         except Exception:
             logger.warning("未找到默认设备，正在查找第一个可用的设备...")
@@ -124,11 +133,9 @@ class AudioCodec:
         
         try:
             with self._stream_lock:
-                # 检查并确保输入流可用
                 if not self.input_stream or not self.input_stream.is_active():
                     try:
                         if self.input_stream:
-                            # 尝试重新启动流
                             try:
                                 self.input_stream.start_stream()
                                 logger.info("重新启动了音频输入流")
@@ -140,25 +147,58 @@ class AudioCodec:
                     except Exception as e:
                         logger.error(f"无法初始化音频输入流: {e}")
                         return None
-                    
-                # 在读取前清空缓冲区中的残留数据
-                while self.input_stream.get_read_available() > AudioConfig.FRAME_SIZE:
-                    self.input_stream.read(AudioConfig.FRAME_SIZE, exception_on_overflow=False)
+
+                # 检查是否有数据可读
+                available = self.input_stream.get_read_available()
+                if available <= 0:
+                    return None
+
+                # 如果缓冲区累积了太多数据，清空一部分以避免延迟
+                # 降低阈值，以避免在大帧长度下清除太多数据
+                if available > AudioConfig.INPUT_FRAME_SIZE * 2:
+                    # 降低清除量，保留更多最近的数据
+                    to_skip = available - (AudioConfig.INPUT_FRAME_SIZE * 1.5)
+                    if to_skip > 0:
+                        self.input_stream.read(
+                            int(to_skip),
+                            exception_on_overflow=False
+                        )
                 
                 # 读取音频数据
-                data = self.input_stream.read(AudioConfig.FRAME_SIZE, exception_on_overflow=False)
+                try:
+                    data = self.input_stream.read(
+                        AudioConfig.INPUT_FRAME_SIZE,
+                        exception_on_overflow=False
+                    )
+                except OSError as e:
+                    if "Input overflowed" in str(e):
+                        logger.warning("输入缓冲区溢出，尝试恢复")
+                        self._reinitialize_input_stream()
+                    else:
+                        logger.error(f"读取音频数据时出错: {e}")
+                    return None
                 
-            if not data:
-                return None
+                if not data:
+                    return None
+
+                # 检查音频数据是否有效
+                if len(data) != AudioConfig.INPUT_FRAME_SIZE * 2:  # 16位采样，每个采样2字节
+                    logger.warning(
+                        f"音频数据大小异常: {len(data)} bytes, "
+                        f"预期: {AudioConfig.INPUT_FRAME_SIZE * 2} bytes"
+                    )
+                    return None
+                
+                # 编码音频数据
+                try:
+                    return self.opus_encoder.encode(
+                        data,
+                        AudioConfig.INPUT_FRAME_SIZE
+                    )
+                except Exception as e:
+                    logger.error(f"编码音频数据时出错: {e}")
+                    return None
             
-            return self.opus_encoder.encode(data, AudioConfig.FRAME_SIZE)
-        except OSError as e:
-            if "Stream not open" in str(e) or "Stream closed" in str(e) or "Stream is stopped" in str(e):
-                logger.warning(f"音频输入流问题: {e}，尝试重新初始化")
-                self._reinitialize_input_stream()
-            else:
-                logger.error(f"读取音频输入时出错: {e}")
-            return None
         except Exception as e:
             logger.error(f"读取音频输入时出错: {e}")
             return None
@@ -170,22 +210,26 @@ class AudioCodec:
     def play_audio(self):
         """处理并播放队列中的音频数据"""
         try:
-            # 批量处理多个音频包以减少处理延迟
-            batch_size = min(10, self.audio_decode_queue.qsize())
-            if batch_size == 0:
+            if self.audio_decode_queue.empty():
                 return None
 
-            # 创建缓冲区存储解码后的数据
+            # 批量处理多个音频包以减少处理延迟
+            batch_size = min(10, self.audio_decode_queue.qsize())
             buffer = bytearray()
-
+            
+            # 从队列中获取数据并解码
             for _ in range(batch_size):
-                if self.audio_decode_queue.empty():
-                    break
-
-                opus_data = self.audio_decode_queue.get_nowait()
                 try:
-                    pcm_data = self.opus_decoder.decode(opus_data, AudioConfig.FRAME_SIZE, decode_fec=False)
+                    opus_data = self.audio_decode_queue.get_nowait()
+                    # 解码为24kHz的PCM数据
+                    pcm_data = self.opus_decoder.decode(
+                        opus_data, 
+                        AudioConfig.OUTPUT_FRAME_SIZE,
+                        decode_fec=False
+                    )
                     buffer.extend(pcm_data)
+                except queue.Empty:
+                    break
                 except Exception as e:
                     logger.error(f"解码音频数据时出错: {e}")
 
@@ -193,26 +237,30 @@ class AudioCodec:
             if len(buffer) > 0:
                 # 转换为numpy数组
                 pcm_array = np.frombuffer(buffer, dtype=np.int16)
-
-                # 播放音频
-                try:
+                
+                # 使用锁保护输出流操作
+                with self._stream_lock:
                     if self.output_stream and self.output_stream.is_active():
-                        self.output_stream.write(pcm_array.tobytes())
+                        try:
+                            self.output_stream.write(pcm_array.tobytes())
+                        except OSError as e:
+                            error_msg = str(e)
+                            if ("Stream closed" in error_msg or 
+                                "Internal PortAudio error" in error_msg):
+                                logger.error("播放音频时出错: 流已关闭")
+                                self._reinitialize_output_stream()
+                            else:
+                                logger.error("播放音频时出错")
                     else:
-                        # MAC 特定：如果流不活跃，尝试重新初始化
                         self._reinitialize_output_stream()
                         if self.output_stream and self.output_stream.is_active():
-                            self.output_stream.write(pcm_array.tobytes())
-                except OSError as e:
-                    if "Stream closed" in str(e) or "Internal PortAudio error" in str(e):
-                        logger.error(f"播放音频时出错: {e}")
-                        self._reinitialize_output_stream()
-                    else:
-                        logger.error(f"播放音频时出错: {e}")
-        except queue.Empty:
-            pass
-        except Exception as e:
-            logger.error(f"播放音频时出错: {e}")
+                            try:
+                                self.output_stream.write(pcm_array.tobytes())
+                            except Exception:
+                                logger.error("重新初始化后播放音频时出错")
+                                
+        except Exception:
+            logger.error("播放音频时出错")
             self._reinitialize_output_stream()
 
     def has_pending_audio(self):
@@ -267,20 +315,23 @@ class AudioCodec:
                     if self.output_stream.is_active():
                         self.output_stream.stop_stream()
                     self.output_stream.close()
-                except Exception as e:
-                    # logger.warning(f"关闭旧输出流时出错: {e}")
+                except Exception:  # 忽略关闭时的错误
                     pass
 
-            # 在 MAC 上添加短暂延迟
+            # 在特定平台上添加延迟
             if sys.platform in ('darwin', 'linux'):
                 time.sleep(0.1)
 
+            input_device = self._get_default_or_first_available_device(
+                is_input=True
+            )
             self.output_stream = self.audio.open(
                 format=pyaudio.paInt16,
                 channels=AudioConfig.CHANNELS,
-                rate=AudioConfig.SAMPLE_RATE,
+                rate=AudioConfig.OUTPUT_SAMPLE_RATE,
                 output=True,
-                frames_per_buffer=AudioConfig.FRAME_SIZE
+                output_device_index=input_device,
+                frames_per_buffer=AudioConfig.OUTPUT_FRAME_SIZE
             )
             logger.info("音频输出流重新初始化成功")
         except Exception as e:
@@ -298,13 +349,16 @@ class AudioCodec:
                     if self.input_stream.is_active():
                         # 在关闭前清空缓冲区
                         while self.input_stream.get_read_available() > 0:
-                            self.input_stream.read(AudioConfig.FRAME_SIZE, exception_on_overflow=False)
+                            self.input_stream.read(
+                                AudioConfig.INPUT_FRAME_SIZE,
+                                exception_on_overflow=False
+                            )
                         self.input_stream.stop_stream()
                     self.input_stream.close()
-                except Exception as e:
-                    logger.warning(f"关闭旧输入流时出错: {e}")
+                except Exception:  # 忽略关闭时的错误
+                    pass
 
-            # 在 MAC 上添加短暂延迟
+            # 在特定平台上添加短暂延迟
             if sys.platform in ('darwin', 'linux'):
                 time.sleep(0.1)
 
@@ -312,10 +366,10 @@ class AudioCodec:
             self.input_stream = self.audio.open(
                 format=pyaudio.paInt16,
                 channels=AudioConfig.CHANNELS,
-                rate=AudioConfig.SAMPLE_RATE,
+                rate=AudioConfig.INPUT_SAMPLE_RATE,
                 input=True,
                 input_device_index=input_device_index,
-                frames_per_buffer=AudioConfig.FRAME_SIZE
+                frames_per_buffer=AudioConfig.INPUT_FRAME_SIZE
             )
             logger.info("音频输入流重新初始化成功")
         except Exception as e:
@@ -343,7 +397,14 @@ class AudioCodec:
 
         try:
             # 等待并清理剩余音频数据
-            self.wait_for_audio_complete()
+            timeout = 2.0  # 设置超时，避免无限等待
+            try:
+                self.wait_for_audio_complete(timeout=timeout)
+            except Exception as e:
+                logger.warning(f"等待音频完成时出错: {e}")
+            
+            # 强制清空音频队列
+            self.clear_audio_queue()
 
             with self._stream_lock:  # 使用锁确保线程安全
                 # 关闭输入流
@@ -355,7 +416,8 @@ class AudioCodec:
                         self.input_stream.close()
                     except Exception as e:
                         logger.error(f"关闭输入流时出错: {e}")
-                    self.input_stream = None
+                    finally:
+                        self.input_stream = None
 
                 # 关闭输出流
                 if self.output_stream:
@@ -366,7 +428,8 @@ class AudioCodec:
                         self.output_stream.close()
                     except Exception as e:
                         logger.error(f"关闭输出流时出错: {e}")
-                    self.output_stream = None
+                    finally:
+                        self.output_stream = None
 
                 # 关闭 PyAudio 实例
                 if self.audio:
@@ -375,7 +438,8 @@ class AudioCodec:
                         self.audio.terminate()
                     except Exception as e:
                         logger.error(f"终止 PyAudio 时出错: {e}")
-                    self.audio = None
+                    finally:
+                        self.audio = None
 
             # 清理编解码器
             self.opus_encoder = None
