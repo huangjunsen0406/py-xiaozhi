@@ -70,6 +70,8 @@ py-xiaozhi 是一个使用 Python 实现的小智语音客户端，旨在通过�
 
 [xiaozhi-esp32-server（第三方服务端）](https://github.com/xinnan-tech/xiaozhi-esp32-server)
 
+[XiaoZhiAI_server32_Unity(Unity开发)](https://gitee.com/vw112266/XiaoZhiAI_server32_Unity)
+
 ## 相关分支
 - main 主分支
 - feature/v1 第一个版本
@@ -125,7 +127,8 @@ py-xiaozhi 是一个使用 Python 实现的小智语音客户端，旨在通过�
 │   │   │   ├── lamp.py              # 智能灯具控制实现
 │   │   │   ├── music_player.py      # 音乐播放器实现
 │   │   │   ├── query_bridge_rag.py  # RAG查询桥接实现
-│   │   │   └── speaker.py           # 智能音箱控制实现
+│   │   │   ├── speaker.py           # 音量控制器
+│   │   │   └── temperature_sensor.py # 温度传感器实现
 │   │   ├── thing.py                 # IoT设备基类定义
 │   │   └── thing_manager.py         # IoT设备管理器（统一管理各类设备）
 │   ├── protocols                    # 通信协议模块
@@ -184,7 +187,7 @@ py-xiaozhi 是一个使用 Python 实现的小智语音客户端，旨在通过�
 </div>
 
 ## 项目统计
-[![Star History Chart](https://api.star-history.com/svg?repos=huangjunsen0406/py-xiaozhi&type=Date)](https://www.star-history.com/#JunsenHuang/py-xiaozhi&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=huangjunsen0406/py-xiaozhi&type=Date)](https://www.star-history.com/#huangjunsen0406/py-xiaozhi&Date)
 
 ## 许可证
 [MIT License](LICENSE)

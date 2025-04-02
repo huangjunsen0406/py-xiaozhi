@@ -70,6 +70,8 @@ py-xiaozhi is a Python-based Xiaozhi voice client, designed to learn coding and 
 
 [xiaozhi-esp32-server (Third-party Server)](https://github.com/xinnan-tech/xiaozhi-esp32-server)
 
+[XiaoZhiAI_server32_Unity(Unity Development)](https://gitee.com/vw112266/XiaoZhiAI_server32_Unity)
+
 ## Related Branches
 - main: Main branch
 - feature/v1: First version
@@ -125,7 +127,8 @@ py-xiaozhi is a Python-based Xiaozhi voice client, designed to learn coding and 
 │   │   │   ├── lamp.py              # Smart light control implementation
 │   │   │   ├── music_player.py      # Music player implementation
 │   │   │   ├── query_bridge_rag.py  # RAG query bridge implementation
-│   │   │   └── speaker.py           # Smart speaker control implementation
+│   │   │   ├── speaker.py           # volume controller
+│   │   │   └── temperature_sensor.py # Temperature sensor implementation
 │   │   ├── thing.py                 # IoT device base class definition
 │   │   └── thing_manager.py         # IoT device manager (unified management)
 │   ├── protocols                    # Communication protocol module
@@ -185,7 +188,7 @@ We welcome issue reports and code contributions. Please ensure you follow these 
 </div>
 
 ## Project Statistics
-[![Star History Chart](https://api.star-history.com/svg?repos=huangjunsen0406/py-xiaozhi&type=Date)](https://www.star-history.com/#JunsenHuang/py-xiaozhi&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=huangjunsen0406/py-xiaozhi&type=Date)](https://www.star-history.com/#huangjunsen0406/py-xiaozhi&Date)
 
 ## License
 [MIT License](LICENSE) 
