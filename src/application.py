@@ -463,6 +463,8 @@ class Application:
             self.protocol.send_iot_descriptors(thing_manager.get_descriptors_json()),
             self.loop
         )
+        self.schedule(lambda: self._update_iot_states())
+
 
     def _start_audio_streams(self):
         """启动音频流"""
