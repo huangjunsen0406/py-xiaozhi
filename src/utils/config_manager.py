@@ -43,7 +43,15 @@ class ConfigManager:
             "小智",
             "你好小明"
         ],
-        "WAKE_WORD_MODEL_PATH": "models/vosk-model-small-cn-0.22"
+        "WAKE_WORD_MODEL_PATH": "models/vosk-model-small-cn-0.22",
+        "TEMPERATURE_SENSOR_MQTT_INFO": {
+            "endpoint": "你的Mqtt连接地址",
+            "port": 1883,
+            "username": "admin",
+            "password": "123456",
+            "publish_topic": "sensors/temperature/command",
+            "subscribe_topic": "sensors/temperature/device_001/state"
+        }
     }
 
     def __new__(cls):

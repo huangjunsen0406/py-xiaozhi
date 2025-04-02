@@ -463,7 +463,7 @@ class Application:
             self.protocol.send_iot_descriptors(thing_manager.get_descriptors_json()),
             self.loop
         )
-        self.schedule(lambda: self._update_iot_states())
+        self._update_iot_states()
 
 
     def _start_audio_streams(self):
@@ -1155,6 +1155,7 @@ class Application:
         from src.iot.things.music_player import MusicPlayer
         from src.iot.things.CameraVL.Camera import Camera
         from src.iot.things.query_bridge_rag import QueryBridgeRAG
+        from src.iot.things.temperature_sensor import TemperatureSensor
         # 获取物联网设备管理器实例
         thing_manager = ThingManager.get_instance()
 
@@ -1164,6 +1165,7 @@ class Application:
         thing_manager.add_thing(MusicPlayer())
         thing_manager.add_thing(Camera())
         thing_manager.add_thing(QueryBridgeRAG())
+        thing_manager.add_thing(TemperatureSensor())
         logger.info("物联网设备初始化完成")
 
     def _handle_iot_message(self, data):
