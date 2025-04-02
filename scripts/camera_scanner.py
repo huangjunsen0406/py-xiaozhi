@@ -4,9 +4,25 @@
 
 import cv2
 import json
-import os
+import logging
+import sys
 import time
 from pathlib import Path
+
+# 添加项目根目录到系统路径，以便导入src中的模块
+project_root = Path(__file__).parent.parent
+sys.path.append(str(project_root))
+
+# 导入ConfigManager类
+from src.utils.config_manager import ConfigManager
+
+# 设置日志记录
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger("CameraScanner")
+
 
 def get_camera_capabilities(cam):
     """获取摄像头的参数和能力"""
@@ -58,9 +74,17 @@ def get_camera_capabilities(cam):
     
     return capabilities
 
+
 def detect_cameras():
     """检测并列出所有可用摄像头"""
     print("\n===== 摄像头设备检测 =====\n")
+    
+    # 获取ConfigManager实例
+    config_manager = ConfigManager.get_instance()
+    
+    # 获取当前相机配置
+    current_camera_config = config_manager.get_config("CAMERA", {})
+    logger.info(f"当前相机配置: {current_camera_config}")
     
     # 存储找到的设备
     camera_devices = []
@@ -79,7 +103,8 @@ def detect_cameras():
                 try:
                     # 在某些系统上可能可以获取设备名称
                     device_name = cap.getBackendName() + f" Camera {i}"
-                except:
+                except Exception as e:
+                    logger.warning(f"获取设备{i}名称失败: {e}")
                     pass
                 
                 # 读取一帧以确保摄像头正常工作
@@ -93,9 +118,14 @@ def detect_cameras():
                 capabilities = get_camera_capabilities(cap)
                 
                 # 打印设备信息
+                width, height = capabilities['default_resolution']
+                resolutions_str = ", ".join(
+                    [f"{w}x{h}" for w, h in capabilities['supported_resolutions']]
+                )
+                
                 print(f"设备 {i}: {device_name}")
-                print(f"  - 默认分辨率: {capabilities['default_resolution'][0]}x{capabilities['default_resolution'][1]}")
-                print(f"  - 支持分辨率: {', '.join([f'{w}x{h}' for w, h in capabilities['supported_resolutions']])}")
+                print(f"  - 默认分辨率: {width}x{height}")
+                print(f"  - 支持分辨率: {resolutions_str}")
                 print(f"  - 帧率: {capabilities['fps']}")
                 print(f"  - 后端: {capabilities['backend']}")
                 print("")
@@ -145,8 +175,9 @@ def detect_cameras():
     
     print(f"找到 {len(camera_devices)} 个摄像头设备:")
     for device in camera_devices:
+        width, height = device['capabilities']['default_resolution']
         print(f"  - 设备 {device['index']}: {device['name']}")
-        print(f"    分辨率: {device['capabilities']['default_resolution'][0]}x{device['capabilities']['default_resolution'][1]}")
+        print(f"    分辨率: {width}x{height}")
     
     # 推荐最佳设备
     print("\n===== 推荐设备 =====\n")
@@ -170,56 +201,55 @@ def detect_cameras():
     
     # 打印推荐设备
     if recommended_camera:
-        print(f"推荐摄像头: 设备 {recommended_camera['index']} ({recommended_camera['name']})")
-        print(f"  - 分辨率: {recommended_camera['capabilities']['default_resolution'][0]}x{recommended_camera['capabilities']['default_resolution'][1]}")
+        r_width, r_height = recommended_camera['capabilities']['default_resolution']
+        print(f"推荐摄像头: 设备 {recommended_camera['index']} "
+              f"({recommended_camera['name']})")
+        print(f"  - 分辨率: {r_width}x{r_height}")
         print(f"  - 帧率: {recommended_camera['capabilities']['fps']}")
+    
+    # 从现有配置中获取VL API信息
+    vl_url = current_camera_config.get(
+        "Loacl_VL_url", 
+        "https://open.bigmodel.cn/api/paas/v4/"
+    )
+    vl_api_key = current_camera_config.get("VLapi_key", "你自己的key")
+    model = current_camera_config.get("models", "glm-4v-plus")
     
     # 生成配置文件示例
     print("\n===== 配置文件示例 =====\n")
     
-    config_example = {
+    new_camera_config = {
         "camera_index": recommended_camera['index'],
-        "frame_width": recommended_camera['capabilities']['default_resolution'][0],
-        "frame_height": recommended_camera['capabilities']['default_resolution'][1],
+        "frame_width": r_width,
+        "frame_height": r_height,
         "fps": recommended_camera['capabilities']['fps'],
-        "Loacl_VL_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",  # 默认值
-        "VLapi_key": "XXXXXXXX",  # 需要用户填写
-        "auto_detect": True  # 启用自动检测
+        "Loacl_VL_url": vl_url,  # 保留原有值
+        "VLapi_key": vl_api_key,  # 保留原有值
+        "models": model  # 保留原有值
     }
     
-    print(json.dumps(config_example, indent=2, ensure_ascii=False))
+    print(json.dumps(new_camera_config, indent=2, ensure_ascii=False))
     
     # 询问是否更新配置文件
-    print("\n是否要更新 camera_VL_config.json 文件？(y/n)")
+    print("\n是否要更新配置文件中的摄像头配置？(y/n)")
     choice = input().strip().lower()
     
     if choice == 'y':
-        # 获取配置文件路径
-        config_dir = Path(__file__).parent.parent / "config"
-        config_file = config_dir / "camera_VL_config.json"
-        
-        # 确保目录存在
-        config_dir.mkdir(parents=True, exist_ok=True)
-        
-        # 读取现有配置（如果存在）
-        existing_config = {}
-        if config_file.exists():
-            try:
-                with open(config_file, 'r', encoding='utf-8') as f:
-                    existing_config = json.load(f)
-            except:
-                pass
-        
-        # 合并配置（保留API密钥等敏感信息）
-        merged_config = {**config_example, **{k: v for k, v in existing_config.items() if k in ["Loacl_VL_url", "VLapi_key"]}}
-        
-        # 保存配置
-        with open(config_file, 'w', encoding='utf-8') as f:
-            json.dump(merged_config, indent=2, ensure_ascii=False, fp=f)
-        
-        print(f"\n配置已保存到: {config_file}")
+        try:
+            # 使用ConfigManager更新配置
+            success = config_manager.update_config("CAMERA", new_camera_config)
+            
+            if success:
+                print("\n摄像头配置已成功更新到config.json!")
+            else:
+                print("\n更新摄像头配置失败!")
+                
+        except Exception as e:
+            logger.error(f"更新配置时出错: {e}")
+            print(f"\n更新配置时出错: {e}")
     
     return camera_devices
+
 
 if __name__ == "__main__":
     try:
@@ -229,4 +259,5 @@ if __name__ == "__main__":
         else:
             print("\n未检测到可用的摄像头设备！")
     except Exception as e:
+        logger.error(f"检测过程中出错: {e}")
         print(f"检测过程中出错: {e}")
