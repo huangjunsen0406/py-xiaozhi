@@ -12,19 +12,6 @@ logger = logging.getLogger("Camera")
 
 
 class Camera(Thing):
-    # 配置文件路径
-    CONFIG_DIR = Path(__file__).parent.parent.parent.parent.parent / "config"
-    CONFIG_FILE = CONFIG_DIR / "camera_VL_config.json"
-    # 默认配置
-    DEFAULT_CONFIG = {
-        "camera_index": 0,  # 默认摄像头索引
-        "frame_width": 640,  # 帧宽度
-        "frame_height": 480,  # 帧高度
-        "fps": 30,  # 帧率
-        "Loacl_VL_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",  # 修改为你对应的llm地址
-        "VLapi_key": 'XXXXXX',  # 修改为你的api key
-        "Loacl_VL_Modle":"qwen-omni-turbo"
-    }
     def __init__(self):
         super().__init__("Camera", "摄像头管理")
         """初始化摄像头管理器"""
@@ -32,13 +19,14 @@ class Camera(Thing):
             return
         self._initialized = True
         # 加载配置
-        self._config = self._load_config()
         self.cap = None
         self.is_running = False
         self.camera_thread = None
         self.result=""
+        from src.utils.config_manager import ConfigManager
+        self.config = ConfigManager.get_instance()
         # 摄像头控制器
-        VL.ImageAnalyzer.get_instance().init(self._config['VLapi_key'], self._config['Loacl_VL_url'],self._config['Loacl_VL_Modle'])
+        VL.ImageAnalyzer.get_instance().init(self.config.get_config('CAMERA.VLapi_key'), self.config.get_config('CAMERA.Loacl_VL_url'),self.config.get_config('CAMERA.models'))
         self.VL= VL.ImageAnalyzer.get_instance()
         print(f"[虚拟设备] 摄像头设备初始化完成")
 
@@ -59,76 +47,9 @@ class Camera(Thing):
                         lambda params: self.capture_frame_to_base64())
 
 
-    def _load_config(self) -> Dict[str, Any]:
-        """加载配置文件，如果不存在则创建"""
-        try:
-            if self.CONFIG_FILE.exists():
-                config = json.loads(self.CONFIG_FILE.read_text(encoding='utf-8'))
-                return self._merge_configs(self.DEFAULT_CONFIG, config)
-            else:
-                # 创建默认配置
-                self.CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-                self._save_config(self.DEFAULT_CONFIG)
-                return self.DEFAULT_CONFIG.copy()
-        except Exception as e:
-            logger.error(f"Error loading config: {e}")
-            return self.DEFAULT_CONFIG.copy()
-
-    def _save_config(self, config: dict) -> bool:
-        """保存配置到文件"""
-        try:
-            self.CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-            self.CONFIG_FILE.write_text(
-                json.dumps(config, indent=2, ensure_ascii=False),
-                encoding='utf-8'
-            )
-            return True
-        except Exception as e:
-            logger.error(f"Error saving config: {e}")
-            return False
-
-    def _merge_configs(self, default: dict, custom: dict) -> dict:
-        """递归合并配置字典"""
-        result = default.copy()
-        for key, value in custom.items():
-            if key in result and isinstance(result[key], dict) and isinstance(value, dict):
-                result[key] = self._merge_configs(result[key], value)
-            else:
-                result[key] = value
-        return result
-
-    def get_config(self, path: str, default: Any = None) -> Any:
-        """
-        通过路径获取配置值
-        path: 点分隔的配置路径，如 "camera_index"
-        """
-        try:
-            value = self._load_config()
-            for key in path.split('.'):
-                value = value[key]
-            return value
-        except (KeyError, TypeError):
-            return default
-
-    def update_config(self, path: str, value: Any) -> bool:
-        """
-        更新特定配置项
-        path: 点分隔的配置路径，如 "camera_index"
-        """
-        try:
-            current = self._config
-            *parts, last = path.split('.')
-            for part in parts:
-                current = current.setdefault(part, {})
-            current[last] = value
-            return self._save_config(self._config)
-        except Exception as e:
-            logger.error(f"Error updating config {path}: {e}")
-            return False
-
     def _camera_loop(self):
         """摄像头线程的主循环"""
-        camera_index = self.get_config("camera_index")
+        camera_index = self.config.get_config('CAMERA.camera_index')
         self.cap = cv2.VideoCapture(camera_index)
 
         if not self.cap.isOpened():
@@ -136,9 +57,9 @@ class Camera(Thing):
             return
 
         # 设置摄像头参数
-        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.get_config("frame_width"))
-        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.get_config("frame_height"))
-        self.cap.set(cv2.CAP_PROP_FPS, self.get_config("fps"))
+        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.config.get_config('CAMERA.frame_width'))
+        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.config.get_config('CAMERA.frame_height'))
+        self.cap.set(cv2.CAP_PROP_FPS, self.config.get_config('CAMERA.fps'))
 
         self.is_running = True
         while self.is_running:

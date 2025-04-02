@@ -51,6 +51,15 @@ class ConfigManager:
             "password": "123456",
             "publish_topic": "sensors/temperature/command",
             "subscribe_topic": "sensors/temperature/device_001/state"
+        },
+        "CAMERA": {
+            "camera_index": 0,
+            "frame_width": 640,
+            "frame_height": 480,
+            "fps": 30,
+            "Loacl_VL_url": "https://open.bigmodel.cn/api/paas/v4/",
+            "VLapi_key": "你自己的key",
+            "models": "glm-4v-plus"
         }
     }
 

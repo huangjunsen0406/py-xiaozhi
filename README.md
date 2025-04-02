@@ -87,7 +87,6 @@ py-xiaozhi 是一个使用 Python 实现的小智语音客户端，旨在通过�
 │       ├── documentation_improvement.md  # 文档改进建议模板
 │       └── feature_request.md       # 功能请求模板
 ├── config                           # 配置文件目录
-│   ├── camera_VL_config.json        # 摄像头与视觉识别配置
 │   └── config.json                  # 应用程序配置文件
 ├── docs                             # 文档目录
 │   ├── images                       # 文档图片资源

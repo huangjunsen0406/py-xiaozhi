@@ -87,7 +87,6 @@ py-xiaozhi is a Python-based Xiaozhi voice client, designed to learn coding and 
 │       ├── documentation_improvement.md  # Documentation improvement template
 │       └── feature_request.md       # Feature request template
 ├── config                           # Configuration directory
-│   ├── camera_VL_config.json        # Camera and visual recognition configuration
 │   └── config.json                  # Application configuration file
 ├── docs                             # Documentation directory
 │   ├── images                       # Documentation image resources

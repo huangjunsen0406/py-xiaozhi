@@ -6,17 +6,21 @@ class ImageAnalyzer:
     _instance = None
     _lock = threading.Lock()
     client=None
+
+    def __init__(self):
+        self.model = None
+
     def __new__(cls):
         """确保单例模式"""
         if cls._instance is None:
             cls._instance = super().__new__(cls)
         return cls._instance
-    def init(self, api_,base_url="https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",modles="qwen-omni-turbo"):
+    def init(self, api_key,base_url="https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",models="qwen-omni-turbo"):
         self.client = OpenAI(
-            api_key=api_ or os.getenv("111111"),
+            api_key=api_key,
             base_url=base_url,
         )
-        self.models=modles
+        self.models=models
 
     @classmethod
     def get_instance(cls):
@@ -52,9 +56,7 @@ class ImageAnalyzer:
         mesag=""
         for chunk in completion:
             if chunk.choices:
-                print(chunk.choices[0].delta,end="")
                 mesag+=chunk.choices[0].delta.content
             else:
-                #print(chunk.usage)
                 pass
         return  mesag
