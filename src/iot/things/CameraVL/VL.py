@@ -11,11 +11,12 @@ class ImageAnalyzer:
         if cls._instance is None:
             cls._instance = super().__new__(cls)
         return cls._instance
-    def init(self, api_,base_url="https://dashscope.aliyuncs.com/compatible-mode/v1"):
+    def init(self, api_,base_url="https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",modles="qwen-omni-turbo"):
         self.client = OpenAI(
             api_key=api_ or os.getenv("111111"),
             base_url=base_url,
         )
+        self.models=modles
 
     @classmethod
     def get_instance(cls):
@@ -27,7 +28,7 @@ class ImageAnalyzer:
     def analyze_image(self, base64_image, prompt="图中描绘的是什么景象,请详细描述，因为用户可能是盲人")->str:
         """分析图片并返回结果"""
         completion = self.client.chat.completions.create(
-            model="glm-4v-flash",
+            model=self.models,
             messages=[
                 {
                     "role": "system",
@@ -51,7 +52,7 @@ class ImageAnalyzer:
         mesag=""
         for chunk in completion:
             if chunk.choices:
-                print(chunk.choices[0].delta.content,end="")
+                print(chunk.choices[0].delta,end="")
                 mesag+=chunk.choices[0].delta.content
             else:
                 #print(chunk.usage)
