@@ -9,7 +9,6 @@ from pathlib import Path
 
 # 在导入 opuslib 之前处理 opus 动态库
 from src.utils.system_info import setup_opus
-from src.utils.tts_utility import TtsUtility
 from src.constants.constants import (
     DeviceState, EventType, AudioConfig, 
     AbortReason, ListeningMode
@@ -22,6 +21,7 @@ setup_opus()
 # 现在导入 opuslib
 try:
     import opuslib  # noqa: F401
+    from src.utils.tts_utility import TtsUtility
 except Exception as e:
     print(f"导入 opuslib 失败: {e}")
     print("请确保 opus 动态库已正确安装或位于正确的位置")
@@ -1168,9 +1168,10 @@ class Application:
         thing_manager.add_thing(Lamp())
         thing_manager.add_thing(Speaker())
         thing_manager.add_thing(MusicPlayer())
-        thing_manager.add_thing(Camera())
-        thing_manager.add_thing(QueryBridgeRAG())
-        thing_manager.add_thing(TemperatureSensor())
+        # 默认不启用以下示例
+        # thing_manager.add_thing(Camera())
+        # thing_manager.add_thing(QueryBridgeRAG())
+        # thing_manager.add_thing(TemperatureSensor())
         logger.info("物联网设备初始化完成")
 
     def _handle_iot_message(self, data):

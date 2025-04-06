@@ -28,6 +28,17 @@ class EventType:
     AUDIO_OUTPUT_READY_EVENT = "audio_output_ready_event"
 
 
+def is_official_server(ws_addr: str) -> bool:
+    """判断是否为小智官方的服务器地址
+
+    Args:
+        ws_addr (str): WebSocket 地址
+
+    Returns:
+        bool: 是否为小智官方的服务器地址
+    """
+    return "api.tenclass.net" in ws_addr
+
 def get_frame_duration() -> int:
     """
     获取设备的帧长度
@@ -38,7 +49,7 @@ def get_frame_duration() -> int:
     import pyaudio
     try:
 
-        if config.get_config("NETWORK.WEBSOCKET_URL").startswith("ws:"):
+        if not is_official_server(config.get_config("SYSTEM_OPTIONS.NETWORK.WEBSOCKET_URL")):
             return 60
         p = pyaudio.PyAudio()
         # 获取默认输入设备信息
@@ -60,7 +71,7 @@ class AudioConfig:
     """音频配置类"""
     # 固定配置
     INPUT_SAMPLE_RATE = 16000  # 输入采样率16kHz
-    OUTPUT_SAMPLE_RATE = 16000 if config.get_config("SYSTEM_OPTIONS.NETWORK.WEBSOCKET_URL").startswith("ws:") else 24000  # 输出采样率24kHz
+    OUTPUT_SAMPLE_RATE = 24000 if is_official_server(config.get_config("SYSTEM_OPTIONS.NETWORK.WEBSOCKET_URL")) else 16000  # 输出采样率
     CHANNELS = 1
 
     # 动态获取帧长度

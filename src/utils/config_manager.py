@@ -1,15 +1,12 @@
 import json
 import logging
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 import threading
 import requests
 import socket
 import uuid
 import sys
-import platform
-import subprocess
-import re
 
 logger = logging.getLogger("ConfigManager")
 
