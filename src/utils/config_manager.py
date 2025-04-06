@@ -30,20 +30,24 @@ class ConfigManager:
 
     # 默认配置
     DEFAULT_CONFIG = {
-        "CLIENT_ID": None,  # 将在首次运行时生成
-        "DEVICE_ID": None,
-        "NETWORK": {
-            "OTA_VERSION_URL": "https://api.tenclass.net/xiaozhi/ota/",
-            "WEBSOCKET_URL": "wss://api.tenclass.net/xiaozhi/v1/",
-            "WEBSOCKET_ACCESS_TOKEN": "test-token",
+        "SYSTEM_OPTIONS": {
+            "CLIENT_ID": None,
+            "DEVICE_ID": None,
+            "NETWORK": {
+                "OTA_VERSION_URL": "https://api.tenclass.net/xiaozhi/ota/",
+                "WEBSOCKET_URL": "wss://api.tenclass.net/xiaozhi/v1/",
+                "WEBSOCKET_ACCESS_TOKEN": "test-token",
+                "MQTT_INFO": None
+            }
         },
-        "MQTT_INFO": None,
-        "USE_WAKE_WORD": False,
-        "WAKE_WORDS": [
-            "小智",
-            "你好小明"
-        ],
-        "WAKE_WORD_MODEL_PATH": "models/vosk-model-small-cn-0.22",
+        "WAKE_WORD_OPTIONS": {
+            "USE_WAKE_WORD": False,
+            "MODEL_PATH": "models/vosk-model-small-cn-0.22",
+            "WAKE_WORDS": [
+                "小智",
+                "小美"
+            ]
+        },
         "TEMPERATURE_SENSOR_MQTT_INFO": {
             "endpoint": "你的Mqtt连接地址",
             "port": 1883,
@@ -140,18 +144,6 @@ class ConfigManager:
                 result[key] = value
         return result
 
-    def get_client_id(self) -> str:
-        """获取客户端ID"""
-        return self._config["CLIENT_ID"]
-
-    def get_device_id(self) -> Optional[str]:
-        """获取设备ID"""
-        return self._config.get("DEVICE_ID")
-
-    def get_network_config(self) -> dict:
-        """获取网络配置"""
-        return self._config["NETWORK"]
-
     def get_config(self, path: str, default: Any = None) -> Any:
         """
         通过路径获取配置值
@@ -190,60 +182,9 @@ class ConfigManager:
         return cls._instance
 
     def get_mac_address(self):
-        """获取本机MAC地址
-        
-        Returns:
-            str: MAC地址，格式如 "00:11:22:33:44:55"
-        """
-        try:
-            # 尝试使用系统命令获取真实MAC地址
-            system = platform.system()
-            
-            if system == "Darwin":  # macOS
-                cmd = "ifconfig -a | grep ether"
-                try:
-                    process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE)
-                    output = process.stdout.read().decode('utf-8')
-                    mac_addresses = re.findall(r'ether\s+([0-9a-fA-F:]{17})', output)
-                    if mac_addresses:
-                        # 过滤掉本地回环地址
-                        for mac in mac_addresses:
-                            if not mac.startswith(('00:00:00', '02:00:00')):
-                                return mac
-                except Exception as e:
-                    self.logger.warning(f"通过ifconfig获取MAC地址失败: {e}")
-                    
-            elif system == "Windows":
-                cmd = "getmac /v /fo csv"
-                try:
-                    process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE)
-                    output = process.stdout.read().decode('utf-8')
-                    mac_addresses = re.findall(r'([0-9A-F]{2}(-[0-9A-F]{2}){5})', output)
-                    if mac_addresses:
-                        # 将Windows格式转换为标准格式
-                        return mac_addresses[0][0].replace('-', ':').lower()
-                except Exception as e:
-                    self.logger.warning(f"通过getmac获取MAC地址失败: {e}")
-                    
-            elif system == "Linux":
-                cmd = "ip link show | grep -E 'link/ether ([0-9a-f]{2}:){5}[0-9a-f]{2}'"
-                try:
-                    process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE)
-                    output = process.stdout.read().decode('utf-8')
-                    mac_addresses = re.findall(r'link/ether\s+([0-9a-f:]{17})', output)
-                    if mac_addresses:
-                        return mac_addresses[0]
-                except Exception as e:
-                    self.logger.warning(f"通过ip命令获取MAC地址失败: {e}")
-                    
-            # 如果系统命令获取失败
-            self.logger.info("尝试使用备用方法获取MAC地址")
-            mac = uuid.UUID(int=uuid.getnode()).hex[-12:]
-            return ":".join([mac[i:i + 2] for i in range(0, 12, 2)])
-            
-        except Exception as e:
-            self.logger.error(f"获取MAC地址失败: {e}")
-            return "00:00:00:00:00:00"  # 返回默认MAC地址
+        mac = uuid.UUID(int=uuid.getnode()).hex[-12:]
+
+        return ":".join([mac[i:i + 2] for i in range(0, 12, 2)])
 
     def generate_uuid(self) -> str:
         """
@@ -265,9 +206,9 @@ class ConfigManager:
 
     def _initialize_client_id(self):
         """确保存在客户端ID"""
-        if not self._config["CLIENT_ID"]:
+        if not self.get_config("SYSTEM_OPTIONS.CLIENT_ID"):
             client_id = self.generate_uuid()
-            success = self.update_config("CLIENT_ID", client_id)
+            success = self.update_config("SYSTEM_OPTIONS.CLIENT_ID", client_id)
             if success:
                 logger.info(f"Generated new CLIENT_ID: {client_id}")
             else:
@@ -275,10 +216,10 @@ class ConfigManager:
 
     def _initialize_device_id(self):
         """确保存在设备ID"""
-        if not self._config["DEVICE_ID"]:
+        if not self.get_config("SYSTEM_OPTIONS.DEVICE_ID"):
             try:
                 device_hash = self.get_mac_address()
-                success = self.update_config("DEVICE_ID", device_hash)
+                success = self.update_config("SYSTEM_OPTIONS.DEVICE_ID", device_hash)
                 if success:
                     logger.info(f"Generated new DEVICE_ID: {device_hash}")
                 else:
@@ -299,12 +240,12 @@ class ConfigManager:
             mqtt_info = self._get_ota_version()
             if mqtt_info:
                 # 更新配置
-                self.update_config("MQTT_INFO", mqtt_info)
+                self.update_config("SYSTEM_OPTIONS.NETWORK.MQTT_INFO", mqtt_info)
                 self.logger.info("MQTT信息已成功更新")
                 return mqtt_info
             else:
                 self.logger.warning("获取MQTT信息失败，使用已保存的配置")
-                return self.get_config("MQTT_INFO")
+                return self.get_config("SYSTEM_OPTIONS.NETWORK.MQTT_INFO")
                 
         except Exception as e:
             self.logger.error(f"初始化MQTT信息失败: {e}")
@@ -313,8 +254,8 @@ class ConfigManager:
 
     def _get_ota_version(self):
         """获取OTA服务器的MQTT信息"""
-        MAC_ADDR = self.get_device_id()
-        OTA_VERSION_URL = self.get_config("NETWORK.OTA_VERSION_URL")
+        MAC_ADDR = self.get_config("SYSTEM_OPTIONS.DEVICE_ID")
+        OTA_VERSION_URL = self.get_config("SYSTEM_OPTIONS.NETWORK.OTA_VERSION_URL")
         
         headers = {
             "Device-Id": MAC_ADDR,
@@ -323,9 +264,12 @@ class ConfigManager:
         
         # 构建设备信息payload
         payload = {
+            "version": 2,
             "flash_size": 16777216,  # 闪存大小 (16MB)
+            "psram_size": 0,
             "minimum_free_heap_size": 8318916,  # 最小可用堆内存
             "mac_address": MAC_ADDR,  # 设备MAC地址
+            "uuid": self.get_config("SYSTEM_OPTIONS.CLIENT_ID"),
             "chip_model_name": "esp32s3",  # 芯片型号
             "chip_info": {
                 "model": 9,
@@ -373,7 +317,7 @@ class ConfigManager:
                 f"OTA服务器返回数据: "
                 f"{json.dumps(response_data, indent=4, ensure_ascii=False)}"
             )
-            
+
             # 确保"mqtt"信息存在
             if "mqtt" in response_data:
                 self.logger.info("MQTT服务器信息已更新")

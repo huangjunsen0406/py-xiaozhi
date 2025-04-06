@@ -19,10 +19,13 @@ class WebsocketProtocol(Protocol):
         self.websocket = None
         self.connected = False
         self.hello_received = None  # 初始化时先设为 None
-        self.WEBSOCKET_URL = self.config.get_config("NETWORK.WEBSOCKET_URL")
-        self.WEBSOCKET_ACCESS_TOKEN = self.config.get_config("NETWORK.WEBSOCKET_ACCESS_TOKEN")
-        self.CLIENT_ID = self.config.get_client_id()
-        self.DEVICE_ID = self.config.get_device_id()
+        self.WEBSOCKET_URL = self.config.get_config("SYSTEM_OPTIONS.NETWORK.WEBSOCKET_URL")
+        self.HEADERS = {
+            "Authorization": f"Bearer {self.config.get_config('SYSTEM_OPTIONS.NETWORK.WEBSOCKET_ACCESS_TOKEN')}",
+            "Protocol-Version": "1",
+            "Device-Id": self.config.get_config("SYSTEM_OPTIONS.DEVICE_ID"),  # 获取设备MAC地址
+            "Client-Id": self.config.get_config("SYSTEM_OPTIONS.CLIENT_ID")
+        }
 
     async def connect(self) -> bool:
         """连接到WebSocket服务器"""
@@ -30,26 +33,18 @@ class WebsocketProtocol(Protocol):
             # 在连接时创建 Event，确保在正确的事件循环中
             self.hello_received = asyncio.Event()
 
-            # 配置连接
-            headers = {
-                "Authorization": f"Bearer {self.WEBSOCKET_ACCESS_TOKEN}",
-                "Protocol-Version": "1",
-                "Device-Id": self.DEVICE_ID,  # 获取设备MAC地址
-                "Client-Id": self.CLIENT_ID
-            }
-
             # 建立WebSocket连接 (兼容不同Python版本的写法)
             try:
                 # 新的写法 (在Python 3.11+版本中)
                 self.websocket = await websockets.connect(
                     uri=self.WEBSOCKET_URL, 
-                    additional_headers=headers
+                    additional_headers=self.HEADERS
                 )
             except TypeError:
                 # 旧的写法 (在较早的Python版本中)
                 self.websocket = await websockets.connect(
                     self.WEBSOCKET_URL, 
-                    extra_headers=headers
+                    extra_headers=self.HEADERS
                 )
 
             # 启动消息处理循环

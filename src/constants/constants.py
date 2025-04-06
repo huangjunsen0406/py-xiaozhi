@@ -60,7 +60,7 @@ class AudioConfig:
     """音频配置类"""
     # 固定配置
     INPUT_SAMPLE_RATE = 16000  # 输入采样率16kHz
-    OUTPUT_SAMPLE_RATE = 16000 if config.get_config("NETWORK.WEBSOCKET_URL").startswith("ws:") else 24000  # 输出采样率24kHz
+    OUTPUT_SAMPLE_RATE = 16000 if config.get_config("SYSTEM_OPTIONS.NETWORK.WEBSOCKET_URL").startswith("ws:") else 24000  # 输出采样率24kHz
     CHANNELS = 1
 
     # 动态获取帧长度

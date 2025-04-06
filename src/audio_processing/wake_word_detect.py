@@ -5,33 +5,26 @@ import time
 import pyaudio
 import os
 import sys
-import vosk
-import platform
-
-from src.constants.constants import AudioConfig
-
-from src.utils.config_manager import ConfigManager
 from vosk import Model, KaldiRecognizer, SetLogLevel
 from pypinyin import lazy_pinyin
+
+from src.constants.constants import AudioConfig
+from src.utils.config_manager import ConfigManager
+
 # 配置日志
 logger = logging.getLogger("WakeWordDetector")
+
 
 class WakeWordDetector:
     """唤醒词检测类"""
 
     def __init__(self,
-                 wake_words=None,
-                 model_path=None,
-                 sensitivity=0.5,
                  sample_rate=AudioConfig.INPUT_SAMPLE_RATE,
                  buffer_size=AudioConfig.INPUT_FRAME_SIZE):
         """
         初始化唤醒词检测器
 
         参数:
-            wake_words: 唤醒词列表，默认包含常用唤醒词
-            model_path: Vosk模型路径，默认使用项目根目录下的中文小模型
-            sensitivity: 检测灵敏度 (0.0-1.0)
             sample_rate: 音频采样率
             buffer_size: 音频缓冲区大小
         """
@@ -40,54 +33,43 @@ class WakeWordDetector:
         self.running = False
         self.detection_thread = None
         self.audio_stream = None
-
-        # 初始化状态变量（始终创建，不管是否启用）
         self.paused = False
         self.audio = None
         self.stream = None
         self.external_stream = False
-        self.stream_lock = threading.Lock()  # 添加流操作锁
-        self.on_error = None  # 添加错误处理回调
+        self.stream_lock = threading.Lock()
+        self.on_error = None
 
-        # 检查是否启用唤醒词功能
+        # 获取配置
         config = ConfigManager.get_instance()
-        if not config.get_config('USE_WAKE_WORD', False):
+        if not config.get_config('WAKE_WORD_OPTIONS.USE_WAKE_WORD', False):
             logger.info("唤醒词功能已禁用")
             self.enabled = False
             return
 
+        # 基本初始化
         self.enabled = True
         self.sample_rate = sample_rate
         self.buffer_size = buffer_size
-        self.sensitivity = sensitivity
+        self.sensitivity = config.get_config(
+            "WAKE_WORD_OPTIONS.SENSITIVITY", 0.5
+        )
 
-        # 设置默认唤醒词
-        self.wake_words = wake_words or config.get_config('WAKE_WORDS', [
-            "你好小明", "你好小智", "你好小天", "你好小美", "贾维斯", "傻妞",
-            "嗨乐鑫", "小爱同学", "你好小智", "小美同学", "嗨小星",
-            "喵喵同学", "嗨Joy", "嗨丽丽", "嗨琳琳", "嗨Telly",
-            "嗨泰力", "嗨喵喵", "嗨小冰", "小冰"
+        # 设置唤醒词
+        self.wake_words = config.get_config('WAKE_WORD_OPTIONS.WAKE_WORDS', [
+            "你好小明", "你好小智", "你好小天", "小爱同学", "贾维斯"
         ])
-
+        
         # 预先计算唤醒词的拼音
-        self.wake_words_pinyin = [''.join(lazy_pinyin(word)) for word in self.wake_words]
+        self.wake_words_pinyin = []
+        for word in self.wake_words:
+            self.wake_words_pinyin.append(''.join(lazy_pinyin(word)))
 
         # 初始化模型
         try:
-            if model_path is None:
-                model_path_config = config.get_config('WAKE_WORD_MODEL_PATH', 'models/vosk-model-small-cn-0.22')
-
-                # 对于打包环境
-                if getattr(sys, 'frozen', False):
-                    base_path = os.path.dirname(sys.executable) if not hasattr(sys, '_MEIPASS') else sys._MEIPASS
-                    model_path = os.path.join(base_path, model_path_config)
-                    logger.info(f"打包环境下使用模型路径: {model_path}")
-                else:
-                    # 开发环境
-                    base_path = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-                    model_path = os.path.join(base_path, model_path_config)
-                    logger.info(f"开发环境下使用模型路径: {model_path}")
-
+            # 获取模型路径
+            model_path = self._get_model_path(config)
+            
             # 检查模型路径
             if not os.path.exists(model_path):
                 error_msg = f"模型路径不存在: {model_path}"
@@ -95,13 +77,9 @@ class WakeWordDetector:
                 self.enabled = False
                 raise FileNotFoundError(error_msg)
 
-            # 回调函数
-            self.on_error = None  # 添加错误处理回调
-
             # 初始化模型
             logger.info(f"正在加载语音识别模型: {model_path}")
-            # 设置 Vosk 日志级别为 -1 (SILENT)
-            SetLogLevel(-1)
+            SetLogLevel(-1)  # 设置 Vosk 日志级别为静默
             self.model = Model(model_path=model_path)
             self.recognizer = KaldiRecognizer(self.model, self.sample_rate)
             self.recognizer.SetWords(True)
@@ -110,17 +88,40 @@ class WakeWordDetector:
             # 调试信息
             logger.info(f"已配置 {len(self.wake_words)} 个唤醒词")
             for i, word in enumerate(self.wake_words):
-                logger.debug(f"唤醒词 {i + 1}: {word} (拼音: {self.wake_words_pinyin[i]})")
-
-            # 共享的音频流和是否为外部流标志
-            self.external_stream = False
-            self.stream_lock = threading.Lock()  # 添加流操作锁
-
+                pinyin = self.wake_words_pinyin[i]
+                logger.debug(f"唤醒词 {i + 1}: {word} (拼音: {pinyin})")
+                
         except Exception as e:
             logger.error(f"初始化唤醒词检测器失败: {e}")
             import traceback
             logger.error(traceback.format_exc())
             self.enabled = False
+    
+    def _get_model_path(self, config):
+        """获取模型路径，处理不同运行环境"""
+        model_path = config.get_config(
+            'WAKE_WORD_OPTIONS.MODEL_PATH', 
+            'models/vosk-model-small-cn-0.22'
+        )
+        
+        # 转换为绝对路径
+        if not os.path.isabs(model_path):
+            if getattr(sys, 'frozen', False):
+                # 打包环境
+                if hasattr(sys, '_MEIPASS'):
+                    base_path = sys._MEIPASS
+                else:
+                    base_path = os.path.dirname(sys.executable)
+            else:
+                # 开发环境
+                base_dir = os.path.dirname
+                current_file = os.path.abspath(__file__)
+                base_path = base_dir(base_dir(base_dir(current_file)))
+            
+            model_path = os.path.join(base_path, model_path)
+            logger.info(f"使用模型路径: {model_path}")
+        
+        return model_path
 
     def start(self, audio_stream=None):
         """启动唤醒词检测"""
@@ -294,59 +295,21 @@ class WakeWordDetector:
 
                 # 读取音频数据
                 try:
-                    with self.stream_lock:
-                        if not self.stream:
-                            if stream_error_time is None:
-                                stream_error_time = time.time()
-                                logger.error("音频流不可用，等待恢复")
-                            elif time.time() - stream_error_time > 5.0:  # 5秒后尝试获取新流
-                                if self.on_error:
-                                    self.on_error("音频流长时间不可用，需要重新获取")
-                                stream_error_time = None
-                            time.sleep(0.5)
-                            continue
-
-                        # 尝试检查流状态
-                        try:
-                            if not self.stream.is_active() and not self.external_stream:
-                                self.stream.start_stream()
-                        except Exception:
-                            pass
-
-                        data = self.stream.read(self.buffer_size // 2, exception_on_overflow=False)
-
+                    # 读取并处理音频数据
+                    data = self._read_audio_data(
+                        error_count, 
+                        max_errors,
+                        stream_error_time
+                    )
+                    if data is None:
+                        continue
                     # 重置流错误时间
                     stream_error_time = None
-
-                except OSError as e:
-                    error_str = str(e)
-                    if "Stream not open" in error_str or "Stream closed" in error_str or "Stream is stopped" in error_str:
-                        error_count += 1
-                        logger.warning(f"音频流问题 ({error_count}/{max_errors}): {e}")
-                        time.sleep(0.5)
-                        if error_count >= max_errors:
-                            if self.on_error:
-                                self.on_error(f"音频流多次出错: {e}")
-                            error_count = 0  # 重置计数，允许继续尝试
-                            time.sleep(1.0)  # 等待时间长一些
-                        continue
-                    else:
-                        error_count += 1
-                        logger.error(f"读取音频失败 ({error_count}/{max_errors}): {e}")
-                        if error_count >= max_errors:
-                            if self.on_error:
-                                self.on_error(f"连续读取音频失败 {max_errors} 次: {e}")
-                            error_count = 0  # 重置计数，允许继续尝试
-                        time.sleep(0.5)
-                        continue
-                except Exception as e:
-                    error_count += 1
-                    logger.error(f"读取音频异常 ({error_count}/{max_errors}): {e}")
-                    if error_count >= max_errors:
-                        if self.on_error:
-                            self.on_error(f"连续读取音频失败 {max_errors} 次: {e}")
-                        error_count = 0  # 重置计数，允许继续尝试
-                    time.sleep(0.5)
+                except (OSError, Exception) as e:
+                    error_result = self._handle_read_error(
+                        e, error_count, max_errors, stream_error_time
+                    )
+                    error_count, stream_error_time = error_result
                     continue
 
                 if len(data) == 0:
@@ -355,48 +318,120 @@ class WakeWordDetector:
                 error_count = 0  # 重置错误计数
 
                 # 处理音频数据
-                is_final = self.recognizer.AcceptWaveform(data)
-
-                # 处理部分结果，实现实时唤醒词检测
-                partial_result = json.loads(self.recognizer.PartialResult())
-                partial_text = partial_result.get('partial', '')
-                if partial_text.strip():
-                    detected, wake_word = self._check_wake_word(partial_text)
-                    if detected:
-                        logger.info(f"实时检测到唤醒词: '{wake_word}' (部分文本: {partial_text})")
-                        # 触发回调
-                        for callback in self.on_detected_callbacks:
-                            try:
-                                callback(wake_word, partial_text)
-                            except Exception as e:
-                                logger.error(f"执行唤醒词检测回调时出错: {e}")
-                        # 重置识别器，准备下一轮检测
-                        self.recognizer.Reset()
-                        continue  # 跳过后续处理
-
-                # 处理最终结果
-                if is_final:
-                    result = json.loads(self.recognizer.Result())
-                    if "text" in result and result["text"].strip():
-                        text = result["text"]
-                        logger.debug(f"识别文本: {text}")
-
-                        # 检查是否包含唤醒词
-                        detected, wake_word = self._check_wake_word(text)
-                        if detected:
-                            logger.info(f"检测到唤醒词: '{wake_word}' (完整文本: {text})")
-
-                            # 触发回调
-                            for callback in self.on_detected_callbacks:
-                                try:
-                                    callback(wake_word, text)
-                                except Exception as e:
-                                    logger.error(f"执行唤醒词检测回调时出错: {e}")
-                            # 重置识别器，准备下一轮检测
-                            self.recognizer.Reset()
+                self._process_audio_data(data)
 
             except Exception as e:
                 logger.error(f"唤醒词检测循环出错: {e}")
                 if self.on_error:
                     self.on_error(str(e))
                 time.sleep(0.5)  # 增加等待时间，减少CPU使用
+
+    def _read_audio_data(self, error_count, max_errors, stream_error_time):
+        """读取音频数据"""
+        with self.stream_lock:
+            if not self.stream:
+                if stream_error_time is None:
+                    stream_error_time = time.time()
+                    logger.error("音频流不可用，等待恢复")
+                elif time.time() - stream_error_time > 5.0:
+                    # 5秒后尝试获取新流
+                    if self.on_error:
+                        msg = "音频流长时间不可用，需要重新获取"
+                        self.on_error(msg)
+                    stream_error_time = None
+                time.sleep(0.5)
+                return None
+
+            # 尝试检查流状态
+            try:
+                if not self.stream.is_active() and not self.external_stream:
+                    self.stream.start_stream()
+            except Exception:
+                pass
+
+            # 读取数据
+            data = self.stream.read(
+                self.buffer_size // 2, 
+                exception_on_overflow=False
+            )
+            return data
+
+    def _handle_read_error(self, error, error_count, max_errors, stream_error_time):
+        """处理读取错误"""
+        error_count += 1
+        
+        # 特殊处理流状态错误
+        if isinstance(error, OSError):
+            error_str = str(error)
+            # 检查是否是流状态错误
+            stream_errors = [
+                "Stream not open", 
+                "Stream closed", 
+                "Stream is stopped"
+            ]
+            # 检查是否包含任意流错误信息
+            is_stream_error = False
+            for msg in stream_errors:
+                if msg in error_str:
+                    is_stream_error = True
+                    break
+            
+            if is_stream_error:
+                logger.warning(f"音频流问题 ({error_count}/{max_errors}): {error}")
+            else:
+                logger.error(f"读取音频失败 ({error_count}/{max_errors}): {error}")
+        else:
+            logger.error(f"读取音频异常 ({error_count}/{max_errors}): {error}")
+            
+        # 处理错误超过阈值
+        if error_count >= max_errors:
+            if self.on_error:
+                err_msg = f"连续读取音频失败 {max_errors} 次: {error}"
+                self.on_error(err_msg)
+            error_count = 0  # 重置计数，允许继续尝试
+            time.sleep(1.0)  # 等待时间长一些
+        else:
+            time.sleep(0.5)
+            
+        return error_count, stream_error_time
+
+    def _process_audio_data(self, data):
+        """处理音频数据"""
+        # 处理音频数据
+        is_final = self.recognizer.AcceptWaveform(data)
+
+        # 处理部分结果，实现实时唤醒词检测
+        partial_result = json.loads(self.recognizer.PartialResult())
+        partial_text = partial_result.get('partial', '')
+        if partial_text.strip():
+            self._check_and_handle_wake_word(partial_text, is_partial=True)
+
+        # 处理最终结果
+        if is_final:
+            result = json.loads(self.recognizer.Result())
+            if "text" in result and result["text"].strip():
+                text = result["text"]
+                logger.debug(f"识别文本: {text}")
+                self._check_and_handle_wake_word(text, is_partial=False)
+
+    def _check_and_handle_wake_word(self, text, is_partial=False):
+        """检查并处理唤醒词"""
+        detected, wake_word = self._check_wake_word(text)
+        if detected:
+            # 日志记录
+            text_type = "部分文本" if is_partial else "完整文本"
+            log_msg = f"检测到唤醒词: '{wake_word}' ({text_type}: {text})"
+            logger.info(log_msg)
+            
+            # 触发回调
+            self._trigger_callbacks(wake_word, text)
+
+    def _trigger_callbacks(self, wake_word, text):
+        """触发唤醒词回调"""
+        for callback in self.on_detected_callbacks:
+            try:
+                callback(wake_word, text)
+            except Exception as e:
+                logger.error(f"执行唤醒词检测回调时出错: {e}")
+        # 重置识别器，准备下一轮检测
+        self.recognizer.Reset()

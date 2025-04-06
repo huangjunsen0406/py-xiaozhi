@@ -396,9 +396,9 @@ class Application:
         if self.device_state == DeviceState.IDLE or self.device_state == DeviceState.LISTENING:
             self.set_device_state(DeviceState.SPEAKING)
 
-            # 注释掉恢复VAD检测器的代码
-            # if hasattr(self, 'vad_detector') and self.vad_detector:
-            #     self.vad_detector.resume()
+        # 注释掉恢复VAD检测器的代码
+        # if hasattr(self, 'vad_detector') and self.vad_detector:
+        #     self.vad_detector.resume()
 
     def _handle_tts_stop(self):
         """处理TTS停止事件"""
@@ -606,13 +606,14 @@ class Application:
                     self.audio_codec.resume_input()
         elif state == DeviceState.SPEAKING:
             self.display.update_status("说话中...")
+            self.wake_word_detector.resume()
             # 暂停唤醒词检测（添加安全检查）
-            if self.wake_word_detector and hasattr(self.wake_word_detector, 'is_running') and self.wake_word_detector.is_running():
-                self.wake_word_detector.pause()
-                logger.info("唤醒词检测已暂停")
+            # if self.wake_word_detector and hasattr(self.wake_word_detector, 'is_running') and self.wake_word_detector.is_running():
+                # self.wake_word_detector.pause()
+                # logger.info("唤醒词检测已暂停")
             # 暂停音频输入流以避免自我监听
-            if self.audio_codec and not self.audio_codec.is_input_paused():
-                self.audio_codec.pause_input()
+            # if self.audio_codec and not self.audio_codec.is_input_paused():
+            #     self.audio_codec.pause_input()
 
         # 通知状态变化
         for callback in self.on_state_changed_callbacks:
@@ -979,82 +980,64 @@ class Application:
     def _initialize_wake_word_detector(self):
         """初始化唤醒词检测器"""
         # 首先检查配置中是否启用了唤醒词功能
-        if not self.config.get_config('USE_WAKE_WORD', False):
+        if not self.config.get_config('WAKE_WORD_OPTIONS.USE_WAKE_WORD', False):
             logger.info("唤醒词功能已在配置中禁用，跳过初始化")
             self.wake_word_detector = None
             return
 
         try:
             from src.audio_processing.wake_word_detect import WakeWordDetector
-            import sys
 
             # 获取模型路径配置
-            model_path_config = (
-                self.config.get_config(
-                    "WAKE_WORD_MODEL_PATH",
-                    "models/vosk-model-small-cn-0.22"
-                )
+            model_path_config = self.config.get_config(
+                "WAKE_WORD_OPTIONS.MODEL_PATH",
+                "models/vosk-model-small-cn-0.22"
             )
 
-            # 对于打包环境
+            # 确定基础路径和模型路径
             if getattr(sys, 'frozen', False):
+                # 打包环境
                 if hasattr(sys, '_MEIPASS'):
                     base_path = Path(sys._MEIPASS)
                 else:
                     base_path = Path(sys.executable).parent
-                model_path = base_path / model_path_config
-                logger.info(f"打包环境下使用模型路径: {model_path}")
             else:
                 # 开发环境
                 base_path = Path(__file__).parent.parent
-                model_path = base_path / model_path_config
-                logger.info(f"开发环境下使用模型路径: {model_path}")
+            
+            model_path = base_path / model_path_config  # 使用Path操作符
+            logger.info(f"使用模型路径: {model_path}")
 
             # 检查模型路径
             if not model_path.exists():
                 logger.error(f"模型路径不存在: {model_path}")
                 # 自动禁用唤醒词功能
-                self.config.update_config("USE_WAKE_WORD", False)
+                self.config.update_config("WAKE_WORD_OPTIONS.USE_WAKE_WORD", False)
                 self.wake_word_detector = None
                 return
 
-            self.wake_word_detector = WakeWordDetector(
-                wake_words=self.config.get_config("WAKE_WORDS"),
-                model_path=str(model_path)  # 转为字符串，因为Vosk API可能需要字符串路径
-            )
+            # 创建检测器实例
+            self.wake_word_detector = WakeWordDetector()
 
             # 如果唤醒词检测器被禁用（内部故障），则更新配置
             if not getattr(self.wake_word_detector, 'enabled', True):
                 logger.warning("唤醒词检测器被禁用（内部故障）")
-                self.config.update_config("USE_WAKE_WORD", False)
+                self.config.update_config("WAKE_WORD_OPTIONS.USE_WAKE_WORD", False)
                 self.wake_word_detector = None
                 return
 
-            # 注册唤醒词检测回调
+            # 注册唤醒词检测回调和错误处理
             self.wake_word_detector.on_detected(self._on_wake_word_detected)
+            
+            # 使用lambda捕获self，而不是单独定义函数
+            self.wake_word_detector.on_error = lambda error: (
+                self._handle_wake_word_error(error)
+            )
+            
             logger.info("唤醒词检测器初始化成功")
 
-            # 添加错误处理回调
-            def on_error(error):
-                logger.error(f"唤醒词检测错误: {error}")
-                # 尝试重新启动检测器
-                if self.device_state == DeviceState.IDLE:
-                    self.schedule(lambda: self._restart_wake_word_detector())
-
-            self.wake_word_detector.on_error = on_error
-
-            # 确保音频编解码器已初始化
-            if hasattr(self, 'audio_codec') and self.audio_codec:
-                shared_stream = self.audio_codec.get_shared_input_stream()
-                if shared_stream:
-                    logger.info("使用共享的音频输入流启动唤醒词检测器")
-                    self.wake_word_detector.start(shared_stream)
-                else:
-                    logger.warning("无法获取共享输入流，唤醒词检测器将使用独立音频流")
-                    self.wake_word_detector.start()
-            else:
-                logger.warning("音频编解码器尚未初始化，唤醒词检测器将使用独立音频流")
-                self.wake_word_detector.start()
+            # 启动唤醒词检测器
+            self._start_wake_word_detector()
 
         except Exception as e:
             logger.error(f"初始化唤醒词检测器失败: {e}")
@@ -1062,9 +1045,34 @@ class Application:
             logger.error(traceback.format_exc())
 
             # 禁用唤醒词功能，但不影响程序其他功能
-            self.config.update_config("USE_WAKE_WORD", False)
+            self.config.update_config("WAKE_WORD_OPTIONS.USE_WAKE_WORD", False)
             logger.info("由于初始化失败，唤醒词功能已禁用，但程序将继续运行")
             self.wake_word_detector = None
+
+    def _handle_wake_word_error(self, error):
+        """处理唤醒词检测器错误"""
+        logger.error(f"唤醒词检测错误: {error}")
+        # 尝试重新启动检测器
+        if self.device_state == DeviceState.IDLE:
+            self.schedule(lambda: self._restart_wake_word_detector())
+
+    def _start_wake_word_detector(self):
+        """启动唤醒词检测器"""
+        if not self.wake_word_detector:
+            return
+        
+        # 确保音频编解码器已初始化
+        if hasattr(self, 'audio_codec') and self.audio_codec:
+            shared_stream = self.audio_codec.get_shared_input_stream()
+            if shared_stream:
+                logger.info("使用共享的音频输入流启动唤醒词检测器")
+                self.wake_word_detector.start(shared_stream)
+            else:
+                logger.warning("无法获取共享输入流，唤醒词检测器将使用独立音频流")
+                self.wake_word_detector.start()
+        else:
+            logger.warning("音频编解码器尚未初始化，唤醒词检测器将使用独立音频流")
+            self.wake_word_detector.start()
 
     def _on_wake_word_detected(self, wake_word, full_text):
         """唤醒词检测回调"""
@@ -1087,10 +1095,7 @@ class Application:
                 self.loop
             )
         elif self.device_state == DeviceState.SPEAKING:
-            asyncio.run_coroutine_threadsafe(
-                self.protocol.send_wake_word_detected(AbortReason.WAKE_WORD_DETECTED),
-                self.loop
-            )
+            self.abort_speaking(AbortReason.WAKE_WORD_DETECTED)
 
     async def _connect_and_start_listening(self, wake_word):
         """连接服务器并开始监听"""
@@ -1174,7 +1179,6 @@ class Application:
         thing_manager = ThingManager.get_instance()
 
         commands = data.get("commands", [])
-        print(commands)
         for command in commands:
             try:
                 result = thing_manager.invoke(command)
