@@ -606,7 +606,8 @@ class Application:
                     self.audio_codec.resume_input()
         elif state == DeviceState.SPEAKING:
             self.display.update_status("说话中...")
-            self.wake_word_detector.resume()
+            if self.wake_word_detector and hasattr(self.wake_word_detector, 'paused') and self.wake_word_detector.paused:
+                self.wake_word_detector.resume()
             # 暂停唤醒词检测（添加安全检查）
             # if self.wake_word_detector and hasattr(self.wake_word_detector, 'is_running') and self.wake_word_detector.is_running():
                 # self.wake_word_detector.pause()
