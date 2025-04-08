@@ -109,7 +109,7 @@ def restore_opuslib(backup_path):
             
             shutil.copy2(backup_path, decoder_path)
             backup_path.unlink()  # 删除备份
-            print(f"已恢复 opuslib 原始文件并删除备份")
+            print("已恢复 opuslib 原始文件并删除备份")
         except Exception as e:
             print(f"恢复 opuslib 时出错: {e}")
 
@@ -122,8 +122,10 @@ def create_new_spec_file(config, platform_info):
     temp_spec_path = project_root / "xiaozhi_temp.spec"
     
     # 获取唤醒词配置
-    use_wake_word = config.get("USE_WAKE_WORD", True)
-    model_path = config.get("WAKE_WORD_MODEL_PATH", "models/vosk-model-small-cn-0.22")
+    wake_word_options = config.get("WAKE_WORD_OPTIONS", {})
+    use_wake_word = wake_word_options.get("USE_WAKE_WORD", False)
+    default_model = "models/vosk-model-small-cn-0.22"
+    model_path = wake_word_options.get("MODEL_PATH", default_model)
     
     print(f"打包配置: USE_WAKE_WORD={use_wake_word}, MODEL_PATH={model_path}")
     print(f"平台信息: {platform_info['platform']}-{platform_info['arch']}")
@@ -280,7 +282,7 @@ def cleanup_spec_files(temp_spec_path, original_spec_path):
         if backup_path.exists():
             shutil.copy2(backup_path, original_spec_path)
             backup_path.unlink()
-            print(f"已恢复原始 spec 文件并删除备份")
+            print("已恢复原始 spec 文件并删除备份")
     except Exception as e:
         print(f"清理 spec 文件时出错: {e}")
 
@@ -368,8 +370,17 @@ def create_template_config():
         
         # 修改关键字段，保留其他所有配置
         modified_config = current_config.copy()
-        modified_config["CLIENT_ID"] = None
-        modified_config["DEVICE_ID"] = None
+        
+        # 修改系统选项中的身份信息
+        if "SYSTEM_OPTIONS" in modified_config:
+            modified_config["SYSTEM_OPTIONS"]["CLIENT_ID"] = None
+            modified_config["SYSTEM_OPTIONS"]["DEVICE_ID"] = None
+            
+            # 如果存在MQTT_INFO，清除敏感信息
+            system_network = modified_config["SYSTEM_OPTIONS"].get("NETWORK", {})
+            if "MQTT_INFO" in system_network:
+                # 设置为None，让配置管理器在初始化时自动获取
+                system_network["MQTT_INFO"] = None
         
         # 写入修改后的配置
         with open(config_path, 'w', encoding='utf-8') as f:
@@ -388,7 +399,7 @@ def restore_config(backup_path):
             config_path = get_project_root() / "config" / "config.json"
             shutil.copy2(backup_path, config_path)
             backup_path.unlink()  # 删除备份
-            print(f"已恢复原始配置文件并删除备份")
+            print("已恢复原始配置文件并删除备份")
         except Exception as e:
             print(f"恢复配置文件时出错: {e}")
 
