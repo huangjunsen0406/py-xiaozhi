@@ -62,6 +62,8 @@ class VolumeController:
         # 按优先级检查工具
         if cmd_exists("pactl"):
             self.linux_tool = "pactl"
+        elif cmd_exists("wpctl"):
+            self.linux_tool = "wpctl"
         elif cmd_exists("amixer"):
             self.linux_tool = "amixer"
         elif cmd_exists("alsamixer") and cmd_exists("expect"):
@@ -137,6 +139,8 @@ class VolumeController:
         """获取Linux音量"""
         if self.linux_tool == "pactl":
             return self._get_pactl_volume()
+        elif self.linux_tool == "wpctl":
+            return self._get_wpctl_volume()
         elif self.linux_tool == "amixer":
             return self._get_amixer_volume()
         return 70
@@ -145,6 +149,8 @@ class VolumeController:
         """设置Linux音量"""
         if self.linux_tool == "pactl":
             self._set_pactl_volume(volume)
+        elif self.linux_tool == "wpctl":
+            self._set_wpctl_volume(volume)
         elif self.linux_tool == "amixer":
             self._set_amixer_volume(volume)
         elif self.linux_tool == "alsamixer":
@@ -178,6 +184,32 @@ class VolumeController:
             )
         except Exception as e:
             self.logger.warning(f"通过pactl设置音量失败: {e}")
+
+    def _get_wpctl_volume(self):
+        """使用wpctl获取音量"""
+        try:
+            result = subprocess.run(
+                ["wpctl", "get-volume", "@DEFAULT_AUDIO_SINK@"],
+                capture_output=True,
+                text=True,
+                check=True
+            )
+            return int(float(result.stdout.split(' ')[1]) * 100)
+        except Exception as e:
+            self.logger.debug(f"通过wpctl获取音量失败: {e}")
+        return 70
+
+    def _set_wpctl_volume(self, volume):
+        """使用wpctl设置音量"""
+        try:
+            subprocess.run(
+                ["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", f"{volume}%"],
+                capture_output=True,
+                text=True,
+                check=True
+            )
+        except Exception as e:
+            self.logger.warning(f"通过wpctl设置音量失败: {e}")
     
     def _get_amixer_volume(self):
         """使用amixer获取音量"""
@@ -250,14 +282,14 @@ class VolumeController:
         
         elif system == "Linux":
             import shutil
-            tools = ["pactl", "amixer", "alsamixer"]
+            tools = ["pactl", "wpctl", "amixer", "alsamixer"]
             found = False
             for tool in tools:
                 if shutil.which(tool):
                     found = True
                     break
             if not found:
-                missing.append("pulseaudio-utils 或 alsa-utils")
+                missing.append("pulseaudio-utils、wireplumber 或 alsa-utils")
         
         if missing:
             print(f"警告: 音量控制需要以下依赖，但未找到: {', '.join(missing)}")
