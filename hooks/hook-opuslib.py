@@ -8,9 +8,10 @@ import logging
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 from pathlib import Path
 
+from src.utils.logging_config import get_logger
 
 # 配置日志
-logger = logging.getLogger('hook-opuslib')
+logger = get_logger(__name__)
 
 
 # 收集 opuslib 的所有子模块
