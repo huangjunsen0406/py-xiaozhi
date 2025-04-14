@@ -322,15 +322,15 @@ class AudioCodec:
             if sys.platform in ('darwin', 'linux'):
                 time.sleep(0.1)
 
-            input_device = self._get_default_or_first_available_device(
-                is_input=True
+            output_device = self._get_default_or_first_available_device(
+                is_input=False
             )
             self.output_stream = self.audio.open(
                 format=pyaudio.paInt16,
                 channels=AudioConfig.CHANNELS,
                 rate=AudioConfig.OUTPUT_SAMPLE_RATE,
                 output=True,
-                output_device_index=input_device,
+                output_device_index=output_device,
                 frames_per_buffer=AudioConfig.OUTPUT_FRAME_SIZE
             )
             logger.info("音频输出流重新初始化成功")
