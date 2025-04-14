@@ -2,10 +2,17 @@ import logging
 import os
 from logging.handlers import TimedRotatingFileHandler
 from colorlog import ColoredFormatter
+
+
 def setup_logging():
     """配置日志系统"""
     # 创建logs目录（如果不存在）
-    log_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'logs')
+    log_dir = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), 
+        '..', 
+        '..', 
+        'logs'
+    )
     os.makedirs(log_dir, exist_ok=True)
     
     # 日志文件路径
@@ -35,11 +42,15 @@ def setup_logging():
     file_handler.suffix = "%Y-%m-%d.log"  # 日志文件后缀格式
     
     # 创建格式化器
-    formatter = logging.Formatter('%(asctime)s[%(name)s] - %(levelname)s - %(message)s - %(threadName)s')
+    formatter = logging.Formatter(
+        '%(asctime)s[%(name)s] - %(levelname)s - %(message)s - %(threadName)s'
+    )
     
     # 控制台颜色格式化器
     color_formatter = ColoredFormatter(
-        '%(green)s%(asctime)s%(reset)s[%(blue)s%(name)s%(reset)s] - %(log_color)s%(levelname)s%(reset)s - %(green)s%(message)s%(reset)s - %(cyan)s%(threadName)s%(reset)s',
+        '%(green)s%(asctime)s%(reset)s[%(blue)s%(name)s%(reset)s] - '
+        '%(log_color)s%(levelname)s%(reset)s - %(green)s%(message)s%(reset)s - '
+        '%(cyan)s%(threadName)s%(reset)s',
         log_colors={
             'DEBUG': 'cyan',
             'INFO': 'white',
@@ -58,12 +69,37 @@ def setup_logging():
     # 添加处理器到根日志记录器
     root_logger.addHandler(console_handler)
     root_logger.addHandler(file_handler)
-    
-    # 设置特定模块的日志级别
-    logging.getLogger('Application').setLevel(logging.INFO)
-    logging.getLogger('WebsocketProtocol').setLevel(logging.INFO)
-    
+
     # 输出日志配置信息
-    logging.info(f"日志系统已初始化，日志文件: {log_file}")
+    logging.info("日志系统已初始化，日志文件: %s", log_file)
     
     return log_file
+
+
+def get_logger(name):
+    """
+    获取统一配置的日志记录器
+    
+    Args:
+        name: 日志记录器名称，通常是模块名
+        
+    Returns:
+        logging.Logger: 配置好的日志记录器
+    
+    示例:
+        logger = get_logger(__name__)
+        logger.info("这是一条信息")
+        logger.error("出错了: %s", error_msg)
+    """
+    logger = logging.getLogger(name)
+    
+    # 添加一些辅助方法
+    def log_error_with_exc(msg, *args, **kwargs):
+        """记录错误并自动包含异常堆栈"""
+        kwargs['exc_info'] = True
+        logger.error(msg, *args, **kwargs)
+    
+    # 添加到日志记录器
+    logger.error_exc = log_error_with_exc
+    
+    return logger

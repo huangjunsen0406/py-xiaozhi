@@ -6,9 +6,9 @@ import websockets
 from src.constants.constants import AudioConfig
 from src.protocols.protocol import Protocol
 from src.utils.config_manager import ConfigManager
+from src.utils.logging_config import get_logger
 
-
-logger = logging.getLogger("WebsocketProtocol")
+logger = get_logger(__name__)
 
 
 class WebsocketProtocol(Protocol):

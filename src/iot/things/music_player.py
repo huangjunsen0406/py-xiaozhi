@@ -10,9 +10,9 @@ import threading
 import time
 import io
 from typing import Dict, Any, Tuple
-import logging
+from src.utils.logging_config import get_logger
 
-logger = logging.getLogger("MusicPlayer")
+logger = get_logger(__name__)
 
 class MusicPlayer(Thing):
     """
@@ -26,7 +26,7 @@ class MusicPlayer(Thing):
         """初始化音乐播放器"""
         super().__init__(
             "MusicPlayer", 
-            "在线音乐播放器，支持本地缓存"
+            "在线音乐播放器，支持本地缓存，播放音乐时优先使用iot的音乐播放器"
         )
         
         # 播放状态相关属性
@@ -86,7 +86,7 @@ class MusicPlayer(Thing):
         self.add_method(
             "Play", 
             "播放指定歌曲",
-            [Parameter("song_name", "歌曲名称", ValueType.STRING, True)],
+            [Parameter("song_name", "输入歌曲名称就能播放任意音乐", ValueType.STRING, True)],
             lambda params: self._play(params["song_name"].get_value())
         )
         

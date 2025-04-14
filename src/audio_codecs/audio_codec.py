@@ -8,7 +8,9 @@ import time
 import sys
 import threading
 
-logger = logging.getLogger("AudioCodec")
+from src.utils.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
 class AudioCodec:
@@ -130,75 +132,13 @@ class AudioCodec:
         """读取音频输入数据并编码"""
         if self.is_input_paused():
             return None
-        
+
+        """读取音频输入数据并编码"""
         try:
-            with self._stream_lock:
-                if not self.input_stream or not self.input_stream.is_active():
-                    try:
-                        if self.input_stream:
-                            try:
-                                self.input_stream.start_stream()
-                                logger.info("重新启动了音频输入流")
-                            except Exception as e:
-                                logger.warning(f"无法重新启动音频输入流: {e}")
-                                self._reinitialize_input_stream()
-                        else:
-                            self._reinitialize_input_stream()
-                    except Exception as e:
-                        logger.error(f"无法初始化音频输入流: {e}")
-                        return None
-
-                # 检查是否有数据可读
-                available = self.input_stream.get_read_available()
-                if available <= 0:
-                    return None
-
-                # 如果缓冲区累积了太多数据，清空一部分以避免延迟
-                # 降低阈值，以避免在大帧长度下清除太多数据
-                if available > AudioConfig.INPUT_FRAME_SIZE * 2:
-                    # 降低清除量，保留更多最近的数据
-                    to_skip = available - (AudioConfig.INPUT_FRAME_SIZE * 1.5)
-                    if to_skip > 0:
-                        self.input_stream.read(
-                            int(to_skip),
-                            exception_on_overflow=False
-                        )
-                
-                # 读取音频数据
-                try:
-                    data = self.input_stream.read(
-                        AudioConfig.INPUT_FRAME_SIZE,
-                        exception_on_overflow=False
-                    )
-                except OSError as e:
-                    if "Input overflowed" in str(e):
-                        logger.warning("输入缓冲区溢出，尝试恢复")
-                        self._reinitialize_input_stream()
-                    else:
-                        logger.error(f"读取音频数据时出错: {e}")
-                    return None
-                
-                if not data:
-                    return None
-
-                # 检查音频数据是否有效
-                if len(data) != AudioConfig.INPUT_FRAME_SIZE * 2:  # 16位采样，每个采样2字节
-                    logger.warning(
-                        f"音频数据大小异常: {len(data)} bytes, "
-                        f"预期: {AudioConfig.INPUT_FRAME_SIZE * 2} bytes"
-                    )
-                    return None
-                
-                # 编码音频数据
-                try:
-                    return self.opus_encoder.encode(
-                        data,
-                        AudioConfig.INPUT_FRAME_SIZE
-                    )
-                except Exception as e:
-                    logger.error(f"编码音频数据时出错: {e}")
-                    return None
-            
+            data = self.input_stream.read(AudioConfig.INPUT_FRAME_SIZE, exception_on_overflow=False)
+            if not data:
+                return None
+            return self.opus_encoder.encode(data, AudioConfig.INPUT_FRAME_SIZE)
         except Exception as e:
             logger.error(f"读取音频输入时出错: {e}")
             return None
@@ -221,7 +161,7 @@ class AudioCodec:
             for _ in range(batch_size):
                 try:
                     opus_data = self.audio_decode_queue.get_nowait()
-                    # 解码为24kHz的PCM数据
+                    # 解码为设定采样率的PCM数据
                     pcm_data = self.opus_decoder.decode(
                         opus_data, 
                         AudioConfig.OUTPUT_FRAME_SIZE,
@@ -237,7 +177,7 @@ class AudioCodec:
             if len(buffer) > 0:
                 # 转换为numpy数组
                 pcm_array = np.frombuffer(buffer, dtype=np.int16)
-                
+
                 # 使用锁保护输出流操作
                 with self._stream_lock:
                     if self.output_stream and self.output_stream.is_active():
@@ -259,8 +199,8 @@ class AudioCodec:
                             except Exception:
                                 logger.error("重新初始化后播放音频时出错")
                                 
-        except Exception:
-            logger.error("播放音频时出错")
+        except Exception as e:
+            logger.error(f"播放音频时出错: {e}")
             self._reinitialize_output_stream()
 
     def has_pending_audio(self):
