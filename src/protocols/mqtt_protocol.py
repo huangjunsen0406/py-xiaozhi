@@ -56,13 +56,15 @@ class MqttProtocol(Protocol):
             # 尝试从OTA服务器获取MQTT配置
             mqtt_config = self.config.get_config("SYSTEM_OPTIONS.NETWORK.MQTT_INFO")
 
+            print(mqtt_config)
+
             # 更新MQTT配置
-            self.endpoint = mqtt_config.get("ENDPOINT")
-            self.client_id = mqtt_config.get("CLIENT_ID")
-            self.username = mqtt_config.get("USERNAME")
-            self.password = mqtt_config.get("PASSWORD")
-            self.publish_topic = mqtt_config.get("PUBLISH_TOPIC")
-            self.subscribe_topic = mqtt_config.get("SUBSCRIBE_TOPIC")
+            self.endpoint = mqtt_config.get("endpoint")
+            self.client_id = mqtt_config.get("client_id")
+            self.username = mqtt_config.get("username")
+            self.password = mqtt_config.get("password")
+            self.publish_topic = mqtt_config.get("publish_topic")
+            self.subscribe_topic = mqtt_config.get("subscribe_topic")
 
             logger.info(f"已从OTA服务器获取MQTT配置: {self.endpoint}")
         except Exception as e:

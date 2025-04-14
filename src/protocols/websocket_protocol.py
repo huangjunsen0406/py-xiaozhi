@@ -126,7 +126,7 @@ class WebsocketProtocol(Protocol):
             await self.websocket.send(data)
         except Exception as e:
             if self.on_network_error:
-                self.on_network_error()
+                self.on_network_error(f"发送音频数据失败: {str(e)}")
 
     async def send_text(self, message: str):
         """发送文本消息"""

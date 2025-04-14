@@ -53,7 +53,11 @@ class ThingManager:
                 changed = True
                 self.last_states[thing.name] = state_json
             
-            states.append(json.loads(state_json))  # 假设get_state_json返回JSON字符串
+            # 检查state_json是否已经是字典对象
+            if isinstance(state_json, dict):
+                states.append(state_json)
+            else:
+                states.append(json.loads(state_json))  # 转换JSON字符串为字典
         
         return json.dumps(states), changed
 

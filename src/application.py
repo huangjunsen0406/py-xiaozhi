@@ -346,8 +346,11 @@ class Application:
         self.is_tts_playing = True
         self.audio_codec.play_audio()
 
-    def _on_network_error(self):
+    def _on_network_error(self, error_message=None):
         """网络错误回调"""
+        if error_message:
+            logger.error(f"网络错误: {error_message}")
+            
         self.keep_listening = False
         self.set_device_state(DeviceState.IDLE)
         # 恢复唤醒词检测

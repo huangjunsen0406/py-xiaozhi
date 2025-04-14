@@ -133,12 +133,96 @@ class AudioCodec:
         if self.is_input_paused():
             return None
 
-        """读取音频输入数据并编码"""
         try:
-            data = self.input_stream.read(AudioConfig.INPUT_FRAME_SIZE, exception_on_overflow=False)
-            if not data:
-                return None
-            return self.opus_encoder.encode(data, AudioConfig.INPUT_FRAME_SIZE)
+            with self._stream_lock:
+                if not self.input_stream or not self.input_stream.is_active():
+                    try:
+                        if self.input_stream:
+                            try:
+                                self.input_stream.start_stream()
+                                logger.info("重新启动了音频输入流")
+                            except Exception as e:
+                                logger.warning(f"无法重新启动音频输入流: {e}")
+                                self._reinitialize_input_stream()
+                        else:
+                            self._reinitialize_input_stream()
+                    except Exception as e:
+                        logger.error(f"无法初始化音频输入流: {e}")
+                        return None
+
+                # 检查是否有数据可读
+                available = self.input_stream.get_read_available()
+                if available <= 0:
+                    return None
+
+                # 如果缓冲区累积了太多数据，清空一部分以避免延迟
+                # 降低阈值，以避免在大帧长度下清除太多数据
+                if available > AudioConfig.INPUT_FRAME_SIZE * 2:
+                    # 降低清除量，保留更多最近的数据
+                    to_skip = available - (AudioConfig.INPUT_FRAME_SIZE * 1.5)
+                    if to_skip > 0:
+                        self.input_stream.read(
+                            int(to_skip),
+                            exception_on_overflow=False
+                        )
+
+                # 读取音频数据 - 确保只读取一个完整帧
+                try:
+                    data = self.input_stream.read(
+                        AudioConfig.INPUT_FRAME_SIZE,
+                        exception_on_overflow=False
+                    )
+                except OSError as e:
+                    if "Input overflowed" in str(e):
+                        logger.warning("输入缓冲区溢出，尝试恢复")
+                        # 溢出时，完全重置输入流以确保干净的状态
+                        self._reinitialize_input_stream()
+                    else:
+                        logger.error(f"读取音频数据时出错: {e}")
+                    return None
+
+                if not data:
+                    return None
+
+                # 检查音频数据是否有效
+                expected_size = AudioConfig.INPUT_FRAME_SIZE * 2  # 16位采样，每个采样2字节
+                if len(data) != expected_size:
+                    logger.warning(
+                        f"音频数据大小异常: {len(data)} bytes, "
+                        f"预期: {expected_size} bytes"
+                    )
+                    # 发现异常大小时，尝试重置输入流
+                    self._reinitialize_input_stream()
+                    return None
+
+                # 帧速率稳定性检查 - 确保音频帧大小一致
+                # 这有助于防止在多次对话后的音频速度异常
+                try:
+                    # 计算帧持续时间 (毫秒)
+                    frame_duration_ms = 1000 * len(data) / (2 * AudioConfig.INPUT_SAMPLE_RATE)
+                    # 检查帧持续时间是否接近预期值
+                    if abs(frame_duration_ms - AudioConfig.FRAME_DURATION) > 5:  # 允许5ms误差
+                        logger.warning(
+                            f"帧持续时间异常: {frame_duration_ms:.2f}ms, "
+                            f"预期: {AudioConfig.FRAME_DURATION}ms"
+                        )
+                        # 如果发现持续时间异常，可能需要重新初始化
+                        if abs(frame_duration_ms - AudioConfig.FRAME_DURATION) > 10:  # 严重偏差
+                            self._reinitialize_input_stream()
+                            return None
+                except Exception as e:
+                    logger.error(f"帧稳定性检查出错: {e}")
+
+                # 编码音频数据
+                try:
+                    return self.opus_encoder.encode(
+                        data,
+                        AudioConfig.INPUT_FRAME_SIZE
+                    )
+                except Exception as e:
+                    logger.error(f"编码音频数据时出错: {e}")
+                    return None
+
         except Exception as e:
             logger.error(f"读取音频输入时出错: {e}")
             return None
