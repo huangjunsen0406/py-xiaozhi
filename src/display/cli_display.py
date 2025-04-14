@@ -1,5 +1,4 @@
 import asyncio
-import logging
 import threading
 import time
 from typing import Optional, Callable
@@ -8,13 +7,13 @@ from src.display.base_display import BaseDisplay
 # 替换keyboard导入为pynput
 from pynput import keyboard as pynput_keyboard
 
-logger = logging.getLogger("CliDisplay")
+from src.utils.logging_config import get_logger
 
 class CliDisplay(BaseDisplay):
     def __init__(self):
         super().__init__()  # 调用父类初始化
         """初始化CLI显示"""
-        self.logger = logging.getLogger("CliDisplay")
+        self.logger = get_logger(__name__)
         self.running = True
 
         # 状态相关
@@ -201,7 +200,7 @@ class CliDisplay(BaseDisplay):
                         else:
                             print("应用程序实例或事件循环不可用")
         except Exception as e:
-            logger.error(f"键盘监听错误: {e}")
+            self.logger.error(f"键盘监听错误: {e}")
 
     def start_update_threads(self):
         """启动更新线程"""
@@ -227,7 +226,7 @@ class CliDisplay(BaseDisplay):
                             self.update_emotion(emotion)
 
                 except Exception as e:
-                    logger.error(f"状态更新错误: {e}")
+                    self.logger.error(f"状态更新错误: {e}")
                 time.sleep(0.1)
 
         # 启动更新线程

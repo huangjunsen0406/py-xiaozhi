@@ -3,8 +3,9 @@ import logging
 import sys
 import signal
 from src.application import Application
-from src.utils.logging_config import setup_logging
-logger = logging.getLogger("Main")
+from src.utils.logging_config import setup_logging, get_logger
+
+logger = get_logger(__name__)
 # 配置日志
 
 def parse_args():

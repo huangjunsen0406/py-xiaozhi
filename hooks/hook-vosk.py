@@ -14,7 +14,9 @@ from PyInstaller.utils.hooks import (
     collect_submodules
 )
 
-logger = logging.getLogger('hook-vosk')
+from src.utils.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 # 常量定义
 DEFAULT_MODEL_PATH = "models/vosk-model-small-cn-0.22"

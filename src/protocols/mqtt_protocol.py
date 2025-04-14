@@ -11,10 +11,10 @@ import paho.mqtt.client as mqtt
 from src.utils.config_manager import ConfigManager
 from src.protocols.protocol import Protocol
 from src.constants.constants import AudioConfig
-
+from src.utils.logging_config import get_logger
 
 # 配置日志
-logger = logging.getLogger("MqttProtocol")
+logger = get_logger(__name__)
 
 
 class MqttProtocol(Protocol):
@@ -55,6 +55,8 @@ class MqttProtocol(Protocol):
         try:
             # 尝试从OTA服务器获取MQTT配置
             mqtt_config = self.config.get_config("SYSTEM_OPTIONS.NETWORK.MQTT_INFO")
+
+            print(mqtt_config)
 
             # 更新MQTT配置
             self.endpoint = mqtt_config.get("endpoint")

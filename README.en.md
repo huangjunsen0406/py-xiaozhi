@@ -1,4 +1,12 @@
 # py-xiaozhi
+<p align="center">
+
+[![Release](https://img.shields.io/github/v/release/huangjunsen0406/py-xiaozhi?style=flat-square&logo=github&color=blue)](https://github.com/huangjunsen0406/py-xiaozhi/releases/latest)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg?style=flat-square)](https://opensource.org/licenses/MIT)
+[![Stars](https://img.shields.io/github/stars/huangjunsen0406/py-xiaozhi?style=flat-square&logo=github)](https://github.com/huangjunsen0406/py-xiaozhi/stargazers)
+[![Download](https://img.shields.io/github/downloads/huangjunsen0406/py-xiaozhi/total?style=flat-square&logo=github&color=52c41a1&maxAge=86400)](https://github.com/huangjunsen0406/py-xiaozhi/releases/latest)
+
+</p>
 
 English | [简体中文](README.md)
 

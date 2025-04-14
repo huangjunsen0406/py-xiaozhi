@@ -4,6 +4,7 @@ import subprocess
 import re
 import shutil
 
+
 class VolumeController:
     """跨平台音量控制器"""
     

@@ -7,6 +7,7 @@ import sys
 import traceback
 from pathlib import Path
 
+from src.utils.logging_config import get_logger
 # 在导入 opuslib 之前处理 opus 动态库
 from src.utils.system_info import setup_opus
 from src.constants.constants import (
@@ -18,20 +19,20 @@ from src.utils.config_manager import ConfigManager
 
 setup_opus()
 
+# 配置日志
+logger = get_logger(__name__)
+
 # 现在导入 opuslib
 try:
     import opuslib  # noqa: F401
     from src.utils.tts_utility import TtsUtility
 except Exception as e:
-    print(f"导入 opuslib 失败: {e}")
-    print("请确保 opus 动态库已正确安装或位于正确的位置")
+    logger.critical("导入 opuslib 失败: %s", e, exc_info=True)
+    logger.critical("请确保 opus 动态库已正确安装或位于正确的位置")
     sys.exit(1)
 
 from src.protocols.mqtt_protocol import MqttProtocol
 from src.protocols.websocket_protocol import WebsocketProtocol
-
-# 配置日志
-logger = logging.getLogger("Application")
 
 
 class Application:
@@ -41,6 +42,7 @@ class Application:
     def get_instance(cls):
         """获取单例实例"""
         if cls._instance is None:
+            logger.debug("创建Application单例实例")
             cls._instance = Application()
         return cls._instance
 
@@ -48,9 +50,11 @@ class Application:
         """初始化应用程序"""
         # 确保单例模式
         if Application._instance is not None:
+            logger.error("尝试创建Application的多个实例")
             raise Exception("Application是单例类，请使用get_instance()获取实例")
         Application._instance = self
 
+        logger.debug("初始化Application实例")
         # 获取配置管理器实例
         self.config = ConfigManager.get_instance()
 
@@ -64,7 +68,7 @@ class Application:
 
         # 音频处理相关
         self.audio_codec = None  # 将在 _initialize_audio 中初始化
-        self.is_tts_playing = False # 因为Display的播放状态只是GUI使用，不方便Music_player使用，所以加了这个标志位表示是TTS在说话
+        self.is_tts_playing = False  # 因为Display的播放状态只是GUI使用，不方便Music_player使用，所以加了这个标志位表示是TTS在说话
 
         # 事件循环和线程
         self.loop = asyncio.new_event_loop()
@@ -95,14 +99,16 @@ class Application:
 
         # 添加唤醒词检测器
         self.wake_word_detector = None
+        logger.debug("Application实例初始化完成")
 
     def run(self, **kwargs):
         """启动应用程序"""
-        print(kwargs)
+        logger.info("启动应用程序，参数: %s", kwargs)
         mode = kwargs.get('mode', 'gui')
         protocol = kwargs.get('protocol', 'websocket')
 
         # 启动主循环线程
+        logger.debug("启动主循环线程")
         main_loop_thread = threading.Thread(target=self._main_loop)
         main_loop_thread.daemon = True
         main_loop_thread.start()
@@ -111,9 +117,11 @@ class Application:
         self._initialize_wake_word_detector()
 
         # 初始化通信协议
+        logger.debug("设置协议类型: %s", protocol)
         self.set_protocol_type(protocol)
 
         # 创建并启动事件循环线程
+        logger.debug("启动事件循环线程")
         self.loop_thread = threading.Thread(target=self._run_event_loop)
         self.loop_thread.daemon = True
         self.loop_thread.start()
@@ -122,42 +130,53 @@ class Application:
         time.sleep(0.1)
 
         # 初始化应用程序（移除自动连接）
-        asyncio.run_coroutine_threadsafe(self._initialize_without_connect(), self.loop)
+        logger.debug("初始化应用程序组件")
+        asyncio.run_coroutine_threadsafe(
+            self._initialize_without_connect(), 
+            self.loop
+        )
 
         # 初始化物联网设备
         self._initialize_iot_devices()
 
+        logger.debug("设置显示类型: %s", mode)
         self.set_display_type(mode)
         # 启动GUI
+        logger.debug("启动显示界面")
         self.display.start()
 
     def _run_event_loop(self):
         """运行事件循环的线程函数"""
+        logger.debug("设置并启动事件循环")
         asyncio.set_event_loop(self.loop)
         self.loop.run_forever()
 
     async def _initialize_without_connect(self):
         """初始化应用程序组件（不建立连接）"""
-        logger.info("正在初始化应用程序...")
+        logger.info("正在初始化应用程序组件...")
 
         # 设置设备状态为待命
+        logger.debug("设置初始设备状态为IDLE")
         self.set_device_state(DeviceState.IDLE)
 
         # 初始化音频编解码器
+        logger.debug("初始化音频编解码器")
         self._initialize_audio()
         
         # 设置联网协议回调（MQTT AND WEBSOCKET）
+        logger.debug("设置协议回调函数")
         self.protocol.on_network_error = self._on_network_error
         self.protocol.on_incoming_audio = self._on_incoming_audio
         self.protocol.on_incoming_json = self._on_incoming_json
         self.protocol.on_audio_channel_opened = self._on_audio_channel_opened
         self.protocol.on_audio_channel_closed = self._on_audio_channel_closed
 
-        logger.info("应用程序初始化完成")
+        logger.info("应用程序组件初始化完成")
 
     def _initialize_audio(self):
         """初始化音频设备和编解码器"""
         try:
+            logger.debug("开始初始化音频编解码器")
             from src.audio_codecs.audio_codec import AudioCodec
             self.audio_codec = AudioCodec()
             logger.info("音频编解码器初始化成功")
@@ -173,21 +192,26 @@ class Application:
                 logger.info("系统音量控制未启用，将使用模拟音量控制")
 
         except Exception as e:
-            logger.error(f"初始化音频设备失败: {e}")
+            logger.error("初始化音频设备失败: %s", e, exc_info=True)
             self.alert("错误", f"初始化音频设备失败: {e}")
 
     def set_protocol_type(self, protocol_type: str):
         """设置协议类型"""
+        logger.debug("设置协议类型: %s", protocol_type)
         if protocol_type == 'mqtt':
             self.protocol = MqttProtocol(self.loop)
+            logger.debug("已创建MQTT协议实例")
         else:  # websocket
             self.protocol = WebsocketProtocol()
+            logger.debug("已创建WebSocket协议实例")
 
     def set_display_type(self, mode: str):
         """初始化显示界面"""
+        logger.debug("设置显示界面类型: %s", mode)
         # 通过适配器的概念管理不同的显示模式
         if mode == 'gui':
             self.display = gui_display.GuiDisplay()
+            logger.debug("已创建GUI显示界面")
             self.display.set_callbacks(
                 press_callback=self.start_listening,
                 release_callback=self.stop_listening,
@@ -202,6 +226,7 @@ class Application:
             )
         else:
             self.display = cli_display.CliDisplay()
+            logger.debug("已创建CLI显示界面")
             self.display.set_callbacks(
                 auto_callback=self.toggle_chat_state,
                 abort_callback=lambda: self.abort_speaking(
@@ -212,6 +237,7 @@ class Application:
                 emotion_callback=self._get_current_emotion,
                 send_text_callback=self._send_text_tts
             )
+        logger.debug("显示界面回调函数设置完成")
 
     def _main_loop(self):
         """应用程序主循环"""
@@ -223,6 +249,7 @@ class Application:
             for event_type, event in self.events.items():
                 if event.is_set():
                     event.clear()
+                    logger.debug("处理事件: %s", event_type)
 
                     if event_type == EventType.AUDIO_INPUT_READY_EVENT:
                         self._handle_input_audio()
@@ -240,11 +267,12 @@ class Application:
             tasks = self.main_tasks.copy()
             self.main_tasks.clear()
 
+        logger.debug("处理%d个调度任务", len(tasks))
         for task in tasks:
             try:
                 task()
             except Exception as e:
-                logger.error(f"执行调度任务时出错: {e}")
+                logger.error("执行调度任务时出错: %s", e, exc_info=True)
 
     def schedule(self, callback):
         """调度任务到主循环"""
@@ -273,23 +301,23 @@ class Application:
 
             # 生成 Opus 音频数据包
             opus_frames = await tts_utility.text_to_opus_audio(text)
-            
+
             # 尝试打开音频通道
-            if (not self.protocol.is_audio_channel_opened() and 
+            if (not self.protocol.is_audio_channel_opened() and
                     DeviceState.IDLE == self.device_state):
                 # 打开音频通道
                 success = await self.protocol.open_audio_channel()
                 if not success:
                     logger.error("打开音频通道失败")
                     return
-            
-            # 确认opus帧生成成功
+
+            # 确认 opus 帧生成成功
             if opus_frames:
                 logger.info(f"生成了 {len(opus_frames)} 个 Opus 音频帧")
-                
+
                 # 设置状态为说话中
                 self.set_device_state(DeviceState.SPEAKING)
-                
+
                 # 发送音频数据
                 for i, frame in enumerate(opus_frames):
                     await self.protocol.send_audio(frame)
@@ -300,12 +328,12 @@ class Application:
                 await self.protocol.send_text(
                     json.dumps({"session_id": "", "type": "listen", "state": "stop"}))
                 await self.protocol.send_text(b'')
-                
+
                 return True
             else:
                 logger.error("生成音频失败")
                 return False
-                
+
         except Exception as e:
             logger.error(f"发送文本到TTS时出错: {e}")
             logger.error(traceback.format_exc())
@@ -318,8 +346,11 @@ class Application:
         self.is_tts_playing = True
         self.audio_codec.play_audio()
 
-    def _on_network_error(self):
+    def _on_network_error(self, error_message=None):
         """网络错误回调"""
+        if error_message:
+            logger.error(f"网络错误: {error_message}")
+            
         self.keep_listening = False
         self.set_device_state(DeviceState.IDLE)
         # 恢复唤醒词检测

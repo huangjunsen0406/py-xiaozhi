@@ -15,6 +15,8 @@ import logging
 from pathlib import Path
 import platform
 
+from src.utils.logging_config import get_logger
+
 # 常量定义
 LOG_LEVEL = logging.INFO
 LOG_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
@@ -23,17 +25,8 @@ DEFAULT_VOSK_MODEL_PATH = 'models/vosk-model-small-cn-0.22'
 # 获取系统信息
 SYSTEM = platform.system().lower()
 ARCHITECTURE = platform.machine().lower()
+logger = get_logger(__name__)
 
-
-def setup_logging():
-    """设置基本日志配置"""
-    logging.basicConfig(
-        level=LOG_LEVEL,
-        format=LOG_FORMAT
-    )
-    logger = logging.getLogger("RuntimeHook")
-    logger.info("运行时钩子已加载")
-    return logger
 
 
 def get_base_path():
@@ -192,7 +185,6 @@ def setup_executable_path():
 
 def main():
     """主函数：按顺序执行所有初始化步骤"""
-    logger = setup_logging()
     logger.info(f"开始初始化运行环境 (系统: {SYSTEM}, 架构: {ARCHITECTURE})")
     
     # 记录环境信息

@@ -18,9 +18,12 @@ class Speaker(Thing):
         self.add_property("volume", "当前音量值", lambda: self.volume)
 
         # 定义方法
-        self.add_method("SetVolume", "设置音量",
-                        [Parameter("volume", "0到100之间的整数", ValueType.NUMBER, True)],
-                        lambda params: self._set_volume(params["volume"].get_value()))
+        self.add_method(
+            "SetVolume", 
+            "设置音量",
+            [Parameter("volume", "0到100之间的整数", ValueType.NUMBER, True)],
+            lambda params: self._set_volume(params["volume"].get_value())
+        )
 
     def _set_volume(self, volume):
         if 0 <= volume <= 100:

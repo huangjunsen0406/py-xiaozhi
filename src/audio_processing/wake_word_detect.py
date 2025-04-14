@@ -10,9 +10,10 @@ from pypinyin import lazy_pinyin
 
 from src.constants.constants import AudioConfig
 from src.utils.config_manager import ConfigManager
+from src.utils.logging_config import get_logger
 
 # 配置日志
-logger = logging.getLogger("WakeWordDetector")
+logger = get_logger(__name__)
 
 
 class WakeWordDetector:

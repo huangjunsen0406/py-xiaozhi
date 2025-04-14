@@ -8,7 +8,9 @@ import socket
 import uuid
 import sys
 
-logger = logging.getLogger("ConfigManager")
+from src.utils.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
 class ConfigManager:

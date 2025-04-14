@@ -8,6 +8,7 @@ from typing import Optional, Callable
 from pynput import keyboard as pynput_keyboard
 
 from src.display.base_display import BaseDisplay
+from src.utils.logging_config import get_logger
 
 
 class GuiDisplay(BaseDisplay):
@@ -15,7 +16,7 @@ class GuiDisplay(BaseDisplay):
         super().__init__()  # 调用父类初始化
         """创建 GUI 界面"""
         # 初始化日志
-        self.logger = logging.getLogger("Display")
+        self.logger = get_logger(__name__)
 
         # 创建主窗口
         self.root = tk.Tk()
