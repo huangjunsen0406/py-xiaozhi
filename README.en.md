@@ -22,7 +22,7 @@ py-xiaozhi is a Python-based Xiaozhi voice client, designed to learn coding and 
 - **AI Voice Interaction**: Supports voice input and recognition, enabling smart human-computer interaction with natural conversation flow.
 - **Visual Multimodal**: Supports image recognition and processing, providing multimodal interaction capabilities and image content understanding.
 - **IoT Device Integration**: Supports smart home device control, enabling more IoT functions and building a smart home ecosystem.
-- **Online Music Playback**: Supports online music search and playback, providing access to vast music resources.
+- **Online Music Playback**: Advanced Music Player: A high-performance music player built on Pygame, supporting play/pause/stop, progress control, lyric display, and local caching, delivering a more stable and smooth listening experience.
 - **Voice Wake-up**: Supports wake word activation, eliminating manual operation (disabled by default, manual activation required).
 - **Auto Dialogue Mode**: Implements continuous dialogue experience, enhancing user interaction fluidity.
 - **Graphical Interface**: Provides intuitive GUI with Xiaozhi expressions and text display, enhancing visual experience.
@@ -79,6 +79,8 @@ py-xiaozhi is a Python-based Xiaozhi voice client, designed to learn coding and 
 [xiaozhi-esp32-server (Third-party Server)](https://github.com/xinnan-tech/xiaozhi-esp32-server)
 
 [XiaoZhiAI_server32_Unity(Unity Development)](https://gitee.com/vw112266/XiaoZhiAI_server32_Unity)
+
+[IntelliConnect(Aiot Middleware)](https://github.com/ruanrongman/IntelliConnect)
 
 ## Related Branches
 - main: Main branch

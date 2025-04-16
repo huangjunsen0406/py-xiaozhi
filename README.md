@@ -23,7 +23,7 @@ py-xiaozhi 是一个使用 Python 实现的小智语音客户端，旨在通过�
 - **AI语音交互**：支持语音输入与识别，实现智能人机交互，提供自然流畅的对话体验。
 - **视觉多模态**：支持图像识别和处理，提供多模态交互能力，理解图像内容。
 - **IoT 设备集成**：支持智能家居设备控制，实现更多物联网功能，打造智能家居生态。
-- **联网音乐播放**：支持在线音乐搜索和播放，享受海量音乐资源。
+- **联网音乐播放**：基于pygame实现的高性能音乐播放器，支持歌词显示和本地缓存，支持播放／暂停／停止、进度控制、歌词显示和本地缓存，提供更稳定的音乐播放体验。
 - **语音唤醒**：支持唤醒词激活交互，免去手动操作的烦恼（默认关闭需要手动开启）。
 - **自动对话模式**：实现连续对话体验，提升用户交互流畅度。
 - **图形化界面**：提供直观易用的 GUI，支持小智表情与文本显示，增强视觉体验。
@@ -79,6 +79,8 @@ py-xiaozhi 是一个使用 Python 实现的小智语音客户端，旨在通过�
 [xiaozhi-esp32-server（第三方服务端）](https://github.com/xinnan-tech/xiaozhi-esp32-server)
 
 [XiaoZhiAI_server32_Unity(Unity开发)](https://gitee.com/vw112266/XiaoZhiAI_server32_Unity)
+
+[IntelliConnect(Aiot中间件)](https://github.com/ruanrongman/IntelliConnect)
 
 ## 相关分支
 - main 主分支

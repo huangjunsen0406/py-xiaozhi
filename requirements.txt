@@ -41,3 +41,5 @@ colorlog==6.9.0
 edge-tts==6.1.17
 soundfile>=0.12.1
 pydub>=0.25.1
+pyttsx3==2.98
+pygame==2.6.1

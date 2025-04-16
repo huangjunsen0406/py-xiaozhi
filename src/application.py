@@ -627,6 +627,7 @@ class Application:
         elif state == DeviceState.LISTENING:
             self.display.update_status("聆听中...")
             self.display.update_emotion("🙂")
+            self._update_iot_states(True)
             # 暂停唤醒词检测（添加安全检查）
             if self.wake_word_detector and hasattr(self.wake_word_detector, 'is_running') and self.wake_word_detector.is_running():
                 self.wake_word_detector.pause()
@@ -1184,6 +1185,7 @@ class Application:
         from src.iot.things.lamp import Lamp
         from src.iot.things.speaker import Speaker
         from src.iot.things.music_player import MusicPlayer
+        # from src.iot.things.new_music_player import NewMusicPlayer
         from src.iot.things.CameraVL.Camera import Camera
         from src.iot.things.query_bridge_rag import QueryBridgeRAG
         from src.iot.things.temperature_sensor import TemperatureSensor
@@ -1194,6 +1196,7 @@ class Application:
         thing_manager.add_thing(Lamp())
         thing_manager.add_thing(Speaker())
         thing_manager.add_thing(MusicPlayer())
+        # thing_manager.add_thing(NewMusicPlayer())
         # 默认不启用以下示例
         # thing_manager.add_thing(Camera())
         # thing_manager.add_thing(QueryBridgeRAG())
@@ -1206,6 +1209,7 @@ class Application:
         thing_manager = ThingManager.get_instance()
 
         commands = data.get("commands", [])
+        print(commands)
         for command in commands:
             try:
                 result = thing_manager.invoke(command)
