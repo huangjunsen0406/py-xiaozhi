@@ -113,9 +113,6 @@ class Application:
         main_loop_thread.daemon = True
         main_loop_thread.start()
 
-        # 初始化并启动唤醒词检测
-        self._initialize_wake_word_detector()
-
         # 初始化通信协议
         logger.debug("设置协议类型: %s", protocol)
         self.set_protocol_type(protocol)
@@ -162,6 +159,9 @@ class Application:
         # 初始化音频编解码器
         logger.debug("初始化音频编解码器")
         self._initialize_audio()
+
+        # 初始化并启动唤醒词检测
+        self._initialize_wake_word_detector()
         
         # 设置联网协议回调（MQTT AND WEBSOCKET）
         logger.debug("设置协议回调函数")
@@ -494,7 +494,7 @@ class Application:
             self.protocol.send_iot_descriptors(thing_manager.get_descriptors_json()),
             self.loop
         )
-        self._update_iot_states()
+        self._update_iot_states(False)
 
 
     def _start_audio_streams(self):
@@ -1099,12 +1099,6 @@ class Application:
             if shared_stream:
                 logger.info("使用共享的音频输入流启动唤醒词检测器")
                 self.wake_word_detector.start(shared_stream)
-            else:
-                logger.warning("无法获取共享输入流，唤醒词检测器将使用独立音频流")
-                self.wake_word_detector.start()
-        else:
-            logger.warning("音频编解码器尚未初始化，唤醒词检测器将使用独立音频流")
-            self.wake_word_detector.start()
 
     def _on_wake_word_detected(self, wake_word, full_text):
         """唤醒词检测回调"""
@@ -1216,26 +1210,50 @@ class Application:
             try:
                 result = thing_manager.invoke(command)
                 logger.info(f"执行物联网命令结果: {result}")
-
-                # 命令执行后更新设备状态
-                self.schedule(lambda: self._update_iot_states())
             except Exception as e:
                 logger.error(f"执行物联网命令失败: {e}")
 
-    def _update_iot_states(self):
-        """更新物联网设备状态"""
+    def _update_iot_states(self, delta=None):
+        """
+        更新物联网设备状态
+
+        Args:
+            delta: 是否只发送变化的部分
+                   - None: 使用原始行为，总是发送所有状态
+                   - True: 只发送变化的部分
+                   - False: 发送所有状态并重置缓存
+        """
         from src.iot.thing_manager import ThingManager
         thing_manager = ThingManager.get_instance()
 
-        # 获取当前设备状态
-        states_json = thing_manager.get_states_json()
+        # 处理向下兼容
+        if delta is None:
+            # 保持原有行为：获取所有状态并发送
+            states_json = thing_manager.get_states_json_str()  # 调用旧方法
 
-        # 发送状态更新
-        asyncio.run_coroutine_threadsafe(
-            self.protocol.send_iot_states(states_json),
-            self.loop
-        )
-        logger.info("物联网设备状态已更新")
+            # 发送状态更新
+            asyncio.run_coroutine_threadsafe(
+                self.protocol.send_iot_states(states_json),
+                self.loop
+            )
+            logger.info("物联网设备状态已更新")
+            return
+
+        # 使用新方法获取状态
+        changed, states_json = thing_manager.get_states_json(delta=delta)
+
+        # delta=False总是发送，delta=True只在有变化时发送
+        if not delta or changed:
+            asyncio.run_coroutine_threadsafe(
+                self.protocol.send_iot_states(states_json),
+                self.loop
+            )
+            if delta:
+                logger.info("物联网设备状态已更新(增量)")
+            else:
+                logger.info("物联网设备状态已更新(完整)")
+        else:
+            logger.debug("物联网设备状态无变化，跳过更新")
 
     def _update_wake_word_detector_stream(self):
         """更新唤醒词检测器的音频流"""
