@@ -25,7 +25,7 @@ class ThingManager:
         descriptors = [thing.get_descriptor_json() for thing in self.things]
         return json.dumps(descriptors)
 
-    def get_states_json(self, delta=False) -> Tuple[bool, str]:
+    def get_states_json(self, delta=False) -> Tuple[str, bool]:
         """
         获取所有设备的状态JSON
         
@@ -59,13 +59,13 @@ class ThingManager:
             else:
                 states.append(json.loads(state_json))  # 转换JSON字符串为字典
         
-        return changed, json.dumps(states)
+        return json.dumps(states), changed
 
     def get_states_json_str(self) -> str:
         """
         为了兼容旧代码，保留原来的方法名和返回值类型
         """
-        _, json_str  = self.get_states_json(delta=False)
+        json_str, _ = self.get_states_json(delta=False)
         return json_str
 
     def invoke(self, command: Dict) -> Optional[Any]:

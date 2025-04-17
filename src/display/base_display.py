@@ -7,7 +7,7 @@ class BaseDisplay(ABC):
 
     def __init__(self):
         self.logger = logging.getLogger(self.__class__.__name__)
-        self.current_volume = 70  # 默认音量值
+        self.current_volume = 20  # 默认音量值
         self.volume_controller = None
         
         # 检查音量控制依赖
@@ -15,9 +15,13 @@ class BaseDisplay(ABC):
             from src.utils.volume_controller import VolumeController
             if VolumeController.check_dependencies():
                 self.volume_controller = VolumeController()
-                # 获取当前系统音量
-                self.current_volume = self.volume_controller.get_volume()
-                self.logger.info(f"音量控制器初始化成功，当前音量: {self.current_volume}%")
+                self.logger.info("音量控制器初始化成功")
+                # 读取系统当前音量
+                try:
+                    self.current_volume = self.volume_controller.get_volume()
+                    self.logger.info(f"读取到系统音量: {self.current_volume}%")
+                except Exception as e:
+                    self.logger.warning(f"获取初始系统音量失败: {e}，将使用默认值 {self.current_volume}%")
             else:
                 self.logger.warning("音量控制依赖不满足，将使用默认音量控制")
         except Exception as e:
@@ -63,8 +67,13 @@ class BaseDisplay(ABC):
             try:
                 # 从系统获取最新音量
                 self.current_volume = self.volume_controller.get_volume()
+                # 获取成功，标记音量控制器正常工作
+                if hasattr(self, 'volume_controller_failed'):
+                    self.volume_controller_failed = False
             except Exception as e:
                 self.logger.debug(f"获取系统音量失败: {e}")
+                # 标记音量控制器工作异常
+                self.volume_controller_failed = True
         return self.current_volume
 
     def update_volume(self, volume: int):

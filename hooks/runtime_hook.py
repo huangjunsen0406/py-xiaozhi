@@ -20,7 +20,7 @@ from src.utils.logging_config import get_logger
 # 常量定义
 LOG_LEVEL = logging.INFO
 LOG_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-DEFAULT_VOSK_MODEL_PATH = 'models/vosk-model-small-cn-0.22'
+DEFAULT_VOSK_MODEL_PATH = 'models/vosk-model'
 
 # 获取系统信息
 SYSTEM = platform.system().lower()

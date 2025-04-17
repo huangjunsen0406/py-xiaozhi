@@ -12,14 +12,6 @@ def parse_args():
     """解析命令行参数"""
     parser = argparse.ArgumentParser(description='小智ai客户端')
     
-    # 添加界面模式参数
-    parser.add_argument(
-        '--mode', 
-        choices=['gui', 'cli'],
-        default='gui',
-        help='运行模式：gui(图形界面) 或 cli(命令行)'
-    )
-    
     # 添加协议选择参数
     parser.add_argument(
         '--protocol', 
@@ -52,11 +44,19 @@ def main():
 
         logger.info("应用程序已启动，按Ctrl+C退出")
 
-        # 启动应用，传入参数
+        # 启动应用，移除 mode 参数
         app.run(
-            mode=args.mode,
             protocol=args.protocol
         )
+        
+        # 始终启动Qt事件循环
+        # 获取QApplication实例并运行事件循环
+        from PyQt5.QtWidgets import QApplication
+        qt_app = QApplication.instance()
+        if qt_app:
+            logger.info("开始Qt事件循环")
+            qt_app.exec_()
+            logger.info("Qt事件循环结束")
 
     except Exception as e:
         logger.error(f"程序发生错误: {e}", exc_info=True)

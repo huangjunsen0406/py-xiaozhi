@@ -14,7 +14,8 @@ from src.constants.constants import (
     DeviceState, EventType, AudioConfig, 
     AbortReason, ListeningMode
 )
-from src.display import gui_display, cli_display
+# 只导入 GuiDisplay
+from src.display import gui_display
 from src.utils.config_manager import ConfigManager
 
 setup_opus()
@@ -104,7 +105,6 @@ class Application:
     def run(self, **kwargs):
         """启动应用程序"""
         logger.info("启动应用程序，参数: %s", kwargs)
-        mode = kwargs.get('mode', 'gui')
         protocol = kwargs.get('protocol', 'websocket')
 
         # 启动主循环线程
@@ -112,6 +112,9 @@ class Application:
         main_loop_thread = threading.Thread(target=self._main_loop)
         main_loop_thread.daemon = True
         main_loop_thread.start()
+
+        # 初始化并启动唤醒词检测
+        self._initialize_wake_word_detector()
 
         # 初始化通信协议
         logger.debug("设置协议类型: %s", protocol)
@@ -136,8 +139,8 @@ class Application:
         # 初始化物联网设备
         self._initialize_iot_devices()
 
-        logger.debug("设置显示类型: %s", mode)
-        self.set_display_type(mode)
+        logger.debug("设置显示类型")
+        self.set_display_type()
         # 启动GUI
         logger.debug("启动显示界面")
         self.display.start()
@@ -159,9 +162,6 @@ class Application:
         # 初始化音频编解码器
         logger.debug("初始化音频编解码器")
         self._initialize_audio()
-
-        # 初始化并启动唤醒词检测
-        self._initialize_wake_word_detector()
         
         # 设置联网协议回调（MQTT AND WEBSOCKET）
         logger.debug("设置协议回调函数")
@@ -205,38 +205,23 @@ class Application:
             self.protocol = WebsocketProtocol()
             logger.debug("已创建WebSocket协议实例")
 
-    def set_display_type(self, mode: str):
+    def set_display_type(self):
         """初始化显示界面"""
-        logger.debug("设置显示界面类型: %s", mode)
-        # 通过适配器的概念管理不同的显示模式
-        if mode == 'gui':
-            self.display = gui_display.GuiDisplay()
-            logger.debug("已创建GUI显示界面")
-            self.display.set_callbacks(
-                press_callback=self.start_listening,
-                release_callback=self.stop_listening,
-                status_callback=self._get_status_text,
-                text_callback=self._get_current_text,
-                emotion_callback=self._get_current_emotion,
-                mode_callback=self._on_mode_changed,
-                auto_callback=self.toggle_chat_state,
-                abort_callback=lambda: self.abort_speaking(
-                    AbortReason.WAKE_WORD_DETECTED
-                )
+        logger.debug("设置显示界面类型为 GUI")
+        # 直接创建 GuiDisplay
+        self.display = gui_display.GuiDisplay()
+        logger.debug("已创建GUI显示界面")
+        self.display.set_callbacks(
+            press_callback=self.start_listening,
+            release_callback=self.stop_listening,
+            status_callback=self._get_status_text,
+            text_callback=self._get_current_text,
+            emotion_callback=self._get_current_emotion,
+            auto_callback=self.toggle_chat_state,
+            abort_callback=lambda: self.abort_speaking(
+                AbortReason.WAKE_WORD_DETECTED
             )
-        else:
-            self.display = cli_display.CliDisplay()
-            logger.debug("已创建CLI显示界面")
-            self.display.set_callbacks(
-                auto_callback=self.toggle_chat_state,
-                abort_callback=lambda: self.abort_speaking(
-                    AbortReason.WAKE_WORD_DETECTED
-                ),
-                status_callback=self._get_status_text,
-                text_callback=self._get_current_text,
-                emotion_callback=self._get_current_emotion,
-                send_text_callback=self._send_text_tts
-            )
+        )
         logger.debug("显示界面回调函数设置完成")
 
     def _main_loop(self):
@@ -494,7 +479,7 @@ class Application:
             self.protocol.send_iot_descriptors(thing_manager.get_descriptors_json()),
             self.loop
         )
-        self._update_iot_states(False)
+        self._update_iot_states()
 
 
     def _start_audio_streams(self):
@@ -627,7 +612,6 @@ class Application:
         elif state == DeviceState.LISTENING:
             self.display.update_status("聆听中...")
             self.display.update_emotion("🙂")
-            self._update_iot_states(True)
             # 暂停唤醒词检测（添加安全检查）
             if self.wake_word_detector and hasattr(self.wake_word_detector, 'is_running') and self.wake_word_detector.is_running():
                 self.wake_word_detector.pause()
@@ -658,7 +642,7 @@ class Application:
     def _get_status_text(self):
         """获取当前状态文本"""
         states = {
-            DeviceState.IDLE: "待命",
+            DeviceState.IDLE: "等待指令",
             DeviceState.CONNECTING: "连接中...",
             DeviceState.LISTENING: "聆听中...",
             DeviceState.SPEAKING: "说话中..."
@@ -999,17 +983,6 @@ class Application:
         except Exception as e:
             logger.error(f"处理验证码时出错: {e}")
 
-    def _on_mode_changed(self, auto_mode):
-        """处理对话模式变更"""
-        # 只有在IDLE状态下才允许切换模式
-        if self.device_state != DeviceState.IDLE:
-            self.alert("提示", "只有在待命状态下才能切换对话模式")
-            return False
-
-        self.keep_listening = auto_mode
-        logger.info(f"对话模式已切换为: {'自动' if auto_mode else '手动'}")
-        return True
-
     def _initialize_wake_word_detector(self):
         """初始化唤醒词检测器"""
         # 首先检查配置中是否启用了唤醒词功能
@@ -1024,7 +997,7 @@ class Application:
             # 获取模型路径配置
             model_path_config = self.config.get_config(
                 "WAKE_WORD_OPTIONS.MODEL_PATH",
-                "models/vosk-model-small-cn-0.22"
+                "models/vosk-model"
             )
 
             # 确定基础路径和模型路径
@@ -1100,6 +1073,12 @@ class Application:
             if shared_stream:
                 logger.info("使用共享的音频输入流启动唤醒词检测器")
                 self.wake_word_detector.start(shared_stream)
+            else:
+                logger.warning("无法获取共享输入流，唤醒词检测器将使用独立音频流")
+                self.wake_word_detector.start()
+        else:
+            logger.warning("音频编解码器尚未初始化，唤醒词检测器将使用独立音频流")
+            self.wake_word_detector.start()
 
     def _on_wake_word_detected(self, wake_word, full_text):
         """唤醒词检测回调"""
@@ -1185,7 +1164,6 @@ class Application:
         from src.iot.things.lamp import Lamp
         from src.iot.things.speaker import Speaker
         from src.iot.things.music_player import MusicPlayer
-        # from src.iot.things.new_music_player import NewMusicPlayer
         from src.iot.things.CameraVL.Camera import Camera
         from src.iot.things.query_bridge_rag import QueryBridgeRAG
         from src.iot.things.temperature_sensor import TemperatureSensor
@@ -1195,12 +1173,36 @@ class Application:
         # 添加设备
         thing_manager.add_thing(Lamp())
         thing_manager.add_thing(Speaker())
-        thing_manager.add_thing(MusicPlayer())
-        # thing_manager.add_thing(NewMusicPlayer())
+        # thing_manager.add_thing(MusicPlayer())
         # 默认不启用以下示例
         # thing_manager.add_thing(Camera())
         # thing_manager.add_thing(QueryBridgeRAG())
         # thing_manager.add_thing(TemperatureSensor())
+        
+        # 添加屏幕控制器设备
+        # thing_manager.add_thing(ScreenController())
+        # logger.info("已添加中控屏幕控制器设备")
+
+        # 从配置中获取ESP32设备信息
+        # 注释掉ESP32设备相关代码
+        # esp32_mqtt = self.config.get_config("ESP32_DEVICES.MQTT", {})
+        # esp32_devices = self.config.get_config("ESP32_DEVICES.DEVICES", [])
+        
+        # for device in esp32_devices:
+        #     # 创建每个ESP32设备的实例
+        #     esp32 = ESP32Device(
+        #         device_id=device.get("device_id"),
+        #         friendly_name=device.get("friendly_name"),
+        #         mqtt_config={
+        #             **esp32_mqtt,
+        #             "topics": device.get("topics", {})
+        #         }
+        #     )
+            
+        #     # 注册到ThingManager
+        #     thing_manager.add_thing(esp32)
+        #     logger.info(f"已添加ESP32设备: {device.get('friendly_name')}")
+
         logger.info("物联网设备初始化完成")
 
     def _handle_iot_message(self, data):
@@ -1209,55 +1211,30 @@ class Application:
         thing_manager = ThingManager.get_instance()
 
         commands = data.get("commands", [])
-        print(commands)
         for command in commands:
             try:
                 result = thing_manager.invoke(command)
                 logger.info(f"执行物联网命令结果: {result}")
+
+                # 命令执行后更新设备状态
+                self.schedule(lambda: self._update_iot_states())
             except Exception as e:
                 logger.error(f"执行物联网命令失败: {e}")
 
-    def _update_iot_states(self, delta=None):
-        """
-        更新物联网设备状态
-
-        Args:
-            delta: 是否只发送变化的部分
-                   - None: 使用原始行为，总是发送所有状态
-                   - True: 只发送变化的部分
-                   - False: 发送所有状态并重置缓存
-        """
+    def _update_iot_states(self):
+        """更新物联网设备状态"""
         from src.iot.thing_manager import ThingManager
         thing_manager = ThingManager.get_instance()
 
-        # 处理向下兼容
-        if delta is None:
-            # 保持原有行为：获取所有状态并发送
-            states_json = thing_manager.get_states_json_str()  # 调用旧方法
+        # 获取当前设备状态
+        states_json = thing_manager.get_states_json()
 
-            # 发送状态更新
-            asyncio.run_coroutine_threadsafe(
-                self.protocol.send_iot_states(states_json),
-                self.loop
-            )
-            logger.info("物联网设备状态已更新")
-            return
-
-        # 使用新方法获取状态
-        changed, states_json = thing_manager.get_states_json(delta=delta)
-
-        # delta=False总是发送，delta=True只在有变化时发送
-        if not delta or changed:
-            asyncio.run_coroutine_threadsafe(
-                self.protocol.send_iot_states(states_json),
-                self.loop
-            )
-            if delta:
-                logger.info("物联网设备状态已更新(增量)")
-            else:
-                logger.info("物联网设备状态已更新(完整)")
-        else:
-            logger.debug("物联网设备状态无变化，跳过更新")
+        # 发送状态更新
+        asyncio.run_coroutine_threadsafe(
+            self.protocol.send_iot_states(states_json),
+            self.loop
+        )
+        logger.info("物联网设备状态已更新")
 
     def _update_wake_word_detector_stream(self):
         """更新唤醒词检测器的音频流"""

@@ -53,8 +53,24 @@ class TtsUtility:
             logger.error("生成TTS音频失败: %s", e, exc_info=True)
             return None
 
+    def generate_silence(self, duration_ms: int, sample_rate: int, channels: int) -> AudioSegment:
+        """生成指定时长的静音"""
+        logger.debug(f"生成 {duration_ms}ms 的静音预缓冲")
+        try:
+            # 创建指定时长的静音
+            silence = AudioSegment.silent(
+                duration=duration_ms,  # 时长（毫秒）
+                frame_rate=sample_rate  # 采样率
+            )
+            # 设置通道数
+            silence = silence.set_channels(channels)
+            return silence
+        except Exception as e:
+            logger.error(f"生成静音失败: {e}", exc_info=True)
+            return None
+
     async def text_to_opus_audio(self, text: str):
-        """将文本转换为 Opus 音频"""
+        """将文本转换为 Opus 音频，添加静音预缓冲"""
         logger.debug("开始将文本转换为Opus音频")
         try:
             audio_data = self.generate_tts(text)
@@ -74,6 +90,18 @@ class TtsUtility:
                         self.audio_config.CHANNELS)
             audio = audio.set_frame_rate(self.audio_config.INPUT_SAMPLE_RATE)
             audio = audio.set_channels(self.audio_config.CHANNELS)
+            
+            # 创建150ms的静音前导
+            silence = self.generate_silence(
+                150,  # 150毫秒的静音
+                self.audio_config.INPUT_SAMPLE_RATE,
+                self.audio_config.CHANNELS
+            )
+            
+            # 合并静音和TTS音频
+            if silence:
+                logger.debug("添加静音预缓冲到TTS音频开头")
+                audio = silence + audio
 
             wav_data = io.BytesIO()
             audio.export(wav_data, format='wav')
@@ -94,39 +122,32 @@ class TtsUtility:
             raw_data = data.tobytes()
             logger.debug("原始音频字节大小: %d", len(raw_data))
 
-        except Exception as e:
-            logger.error("音频转换失败: %s", e, exc_info=True)
-            return None
-
-        try:
             # 初始化 Opus 编码器
-            logger.debug("初始化Opus编码器")
-            encoder = opuslib.Encoder(
+            opus_encoder = opuslib.Encoder(
                 self.audio_config.INPUT_SAMPLE_RATE,
                 self.audio_config.CHANNELS,
-                opuslib.APPLICATION_VOIP
+                opuslib.APPLICATION_AUDIO
             )
 
-            # 分帧编码
-            frame_size = self.audio_config.INPUT_FRAME_SIZE
+            # 分帧并编码
             opus_frames = []
-
-            # 16bit = 2bytes/sample
-            total_frames = (len(raw_data) + frame_size * 2 - 1) // (frame_size * 2)
-            logger.debug("开始编码音频，总帧数：%d", total_frames)
+            frame_size_bytes = 2 * self.audio_config.CHANNELS * self.audio_config.FRAME_SIZE
             
-            for i in range(0, len(raw_data), frame_size * 2):
-                chunk = raw_data[i:i + frame_size * 2]
-                if len(chunk) < frame_size * 2:
-                    # 填充最后一帧
-                    padding_size = frame_size * 2 - len(chunk)
-                    logger.debug("填充最后一帧，添加%d字节", padding_size)
-                    chunk += b'\x00' * padding_size
-                opus_frame = encoder.encode(chunk, frame_size)
+            for i in range(0, len(raw_data), frame_size_bytes):
+                frame = raw_data[i:i + frame_size_bytes]
+                
+                # 确保帧大小正确
+                if len(frame) < frame_size_bytes:
+                    # 如果最后一帧不足，则用静音补充
+                    frame = frame + b'\x00' * (frame_size_bytes - len(frame))
+                
+                # 编码为 Opus 格式
+                opus_frame = opus_encoder.encode(frame, self.audio_config.FRAME_SIZE)
                 opus_frames.append(opus_frame)
 
-            logger.info("Opus编码完成，生成%d个音频帧", len(opus_frames))
+            logger.debug("编码为 %d 个 Opus 帧", len(opus_frames))
             return opus_frames
+
         except Exception as e:
-            logger.error("Opus编码失败: %s", e, exc_info=True)
+            logger.error("音频转换失败: %s", e, exc_info=True)
             return None

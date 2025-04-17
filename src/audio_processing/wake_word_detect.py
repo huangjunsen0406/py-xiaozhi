@@ -1,4 +1,5 @@
 import json
+import logging
 import threading
 import time
 import pyaudio
@@ -57,7 +58,7 @@ class WakeWordDetector:
 
         # 设置唤醒词
         self.wake_words = config.get_config('WAKE_WORD_OPTIONS.WAKE_WORDS', [
-            "你好小明", "你好小智", "你好小天", "小爱同学", "贾维斯"
+            "你好大成", "你好大橙","小爱同学"
         ])
         
         # 预先计算唤醒词的拼音
@@ -101,7 +102,7 @@ class WakeWordDetector:
         """获取模型路径，处理不同运行环境"""
         model_path = config.get_config(
             'WAKE_WORD_OPTIONS.MODEL_PATH', 
-            'models/vosk-model-small-cn-0.22'
+            'models/vosk-model'
         )
         
         # 转换为绝对路径

@@ -124,7 +124,7 @@ def create_new_spec_file(config, platform_info):
     # 获取唤醒词配置
     wake_word_options = config.get("WAKE_WORD_OPTIONS", {})
     use_wake_word = wake_word_options.get("USE_WAKE_WORD", False)
-    default_model = "models/vosk-model-small-cn-0.22"
+    default_model = "models/vosk-model"
     model_path = wake_word_options.get("MODEL_PATH", default_model)
     
     print(f"打包配置: USE_WAKE_WORD={use_wake_word}, MODEL_PATH={model_path}")
