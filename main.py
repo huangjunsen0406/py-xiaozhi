@@ -57,6 +57,21 @@ def main():
             mode=args.mode,
             protocol=args.protocol
         )
+        
+        # 如果是GUI模式且使用了PyQt界面，启动Qt事件循环
+        if args.mode == 'gui':
+            # 获取QApplication实例并运行事件循环
+            try:
+                from PyQt5.QtWidgets import QApplication
+                qt_app = QApplication.instance()
+                if qt_app:
+                    logger.info("开始Qt事件循环")
+                    qt_app.exec_()
+                    logger.info("Qt事件循环结束")
+            except ImportError:
+                logger.warning("PyQt5未安装，无法启动Qt事件循环")
+            except Exception as e:
+                logger.error(f"Qt事件循环出错: {e}", exc_info=True)
 
     except Exception as e:
         logger.error(f"程序发生错误: {e}", exc_info=True)
