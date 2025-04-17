@@ -76,11 +76,13 @@ py-xiaozhi is a Python-based Xiaozhi voice client, designed to learn coding and 
 ## Related Third-party Open Source Projects
 [Xiaozhi Mobile Client](https://github.com/TOM88812/xiaozhi-android-client)
 
-[xiaozhi-esp32-server (Third-party Server)](https://github.com/xinnan-tech/xiaozhi-esp32-server)
+[xiaozhi-esp32-server (Open source server)](https://github.com/xinnan-tech/xiaozhi-esp32-server)
 
 [XiaoZhiAI_server32_Unity(Unity Development)](https://gitee.com/vw112266/XiaoZhiAI_server32_Unity)
 
 [IntelliConnect(Aiot Middleware)](https://github.com/ruanrongman/IntelliConnect)
+
+[open-xiaoai(Xiaoai Audio Access Xiaozhi)](https://github.com/idootop/open-xiaoai.git)
 
 ## Related Branches
 - main: Main branch

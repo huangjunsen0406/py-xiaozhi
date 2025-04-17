@@ -76,11 +76,13 @@ py-xiaozhi 是一个使用 Python 实现的小智语音客户端，旨在通过�
 ## 相关第三方开源项目
 [小智手机端](https://github.com/TOM88812/xiaozhi-android-client)
 
-[xiaozhi-esp32-server（第三方服务端）](https://github.com/xinnan-tech/xiaozhi-esp32-server)
+[xiaozhi-esp32-server（开源服务端）](https://github.com/xinnan-tech/xiaozhi-esp32-server)
 
 [XiaoZhiAI_server32_Unity(Unity开发)](https://gitee.com/vw112266/XiaoZhiAI_server32_Unity)
 
 [IntelliConnect(Aiot中间件)](https://github.com/ruanrongman/IntelliConnect)
+
+[open-xiaoai(小爱音响接入小智)](https://github.com/idootop/open-xiaoai.git)
 
 ## 相关分支
 - main 主分支
