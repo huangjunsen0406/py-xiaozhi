@@ -23,18 +23,18 @@ jobs:
       - name: Setup Node.js environment
         uses: actions/setup-node@v1
         with:
-          node-version: "18.19.0"
-      # 安装pnpm
-      - name: Install pnpm
-        run: npm i pnpm@6.32.20 -g
+          node-version: "18.20.3"
+      # 安装yarn
+      - name: Install yarn
+        run: npm i yarn -g
 
       # 如果缓存没有命中，安装依赖
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: cd documents && yarn install
 
       # 生成静态文件
       - name: Build
-        run: pnpm docs:build
+        run: cd documents && yarn docs:build
 
       # 部署到 GitHub Pages
       - name: Deploy
