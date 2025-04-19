@@ -1,6 +1,7 @@
 import asyncio
 import json
 import time
+import threading
 from typing import Dict
 from datetime import datetime
 
@@ -19,6 +20,7 @@ class TemperatureSensor(Thing):
         self.last_update_time = 0  # 最后一次更新时间
         self.is_running = False
         self.mqtt_client = None
+        self.app = None  # 初始化app属性为None
 
         print("[IoT设备] 温度传感器接收端初始化完成")
 
@@ -106,16 +108,69 @@ class TemperatureSensor(Thing):
 
                     print(f"[温度传感器] 更新数据: 温度={self.temperature}°C, "
                           f"湿度={self.humidity}%, 时间={update_time}")
-                    self.app = Application.get_instance()
-
-                    self.app.set_device_state(DeviceState.LISTENING)
-                    asyncio.create_task(self.app.protocol.send_wake_word_detected(
-                        "播报获取到的温度传感器数据"))
+                    # 设置设备状态并发送消息
+                    self.handle_temperature_update()
             except json.JSONDecodeError:
                 print(f"[温度传感器] 无法解析JSON消息: {payload}")
                 
         except Exception as e:
             print(f"[温度传感器] 处理MQTT消息时出错: {e}")
+
+    def handle_temperature_update(self):
+        """处理温度更新后的操作"""
+        try:
+            if self.app is None:
+                self.app = Application.get_instance()
+            
+            # 设置设备状态为IDLE并更新物联网状态
+            self.app.set_device_state(DeviceState.IDLE)
+            
+            # 使用线程处理异步操作，避免阻塞MQTT线程
+            threading.Thread(
+                target=self._delayed_send_wake_word, 
+                daemon=True
+            ).start()
+            
+        except Exception as e:
+            print(f"[温度传感器] 处理温度更新时出错: {e}")
+            
+    def _delayed_send_wake_word(self):
+        """延迟发送唤醒词消息，确保连接稳定"""
+        try:
+            # 检查音频通道是否已打开
+            channel_opened = False
+            if not self.app.protocol.is_audio_channel_opened():
+                # 先打开音频通道
+                future = asyncio.run_coroutine_threadsafe(
+                    self.app.protocol.open_audio_channel(),
+                    self.app.loop
+                )
+                # 等待操作完成并获取结果
+                try:
+                    channel_opened = future.result(timeout=5.0)
+                except Exception as e:
+                    print(f"[温度传感器] 打开音频通道失败: {e}")
+                    return
+                
+                if channel_opened:
+                    # 等待3秒确保连接稳定
+                    print("[温度传感器] 音频通道已打开，等待3秒后发送唤醒词...")
+                    time.sleep(3)
+                else:
+                    print("[温度传感器] 打开音频通道失败")
+                    return
+            # 更新物联网设备状态
+            self.app._update_iot_states(delta=True)
+            
+            # 音频通道已打开，发送唤醒词消息
+            asyncio.run_coroutine_threadsafe(
+                self.app.protocol.send_wake_word_detected("播报温湿度传感器数据"),
+                self.app.loop
+            )
+            print("[温度传感器] 已发送唤醒词消息")
+            
+        except Exception as e:
+            print(f"[温度传感器] 延迟发送唤醒词时出错: {e}")
 
     def _request_sensor_data(self):
         """请求所有传感器报告当前状态"""
