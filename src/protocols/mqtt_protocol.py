@@ -123,7 +123,7 @@ class MqttProtocol(Protocol):
             except Exception as e:
                 logger.error(f"处理MQTT消息时出错: {e}")
 
-        def on_disconnect_callback(client, userdata, rc, properties):
+        def on_disconnect_callback(client, userdata, rc):
             """MQTT断开连接回调
 
             Args:

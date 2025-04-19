@@ -106,6 +106,9 @@ class GuiDisplay(BaseDisplay):
         self.wsProtocolComboBox = None
         self.wsAddressLineEdit = None
         self.wsTokenLineEdit = None
+        # 新增OTA地址控件引用
+        self.otaProtocolComboBox = None
+        self.otaAddressLineEdit = None
 
         self.is_muted = False
         self.pre_mute_volume = self.current_volume
@@ -532,12 +535,20 @@ class GuiDisplay(BaseDisplay):
             self.wsProtocolComboBox = self.root.findChild(FluentComboBox, "wsProtocolComboBox")
             self.wsAddressLineEdit = self.root.findChild(FluentLineEdit, "wsAddressLineEdit")
             self.wsTokenLineEdit = self.root.findChild(FluentLineEdit, "wsTokenLineEdit")
+            # 获取OTA相关控件
+            self.otaProtocolComboBox = self.root.findChild(FluentComboBox, "otaProtocolComboBox")
+            self.otaAddressLineEdit = self.root.findChild(FluentLineEdit, "otaAddressLineEdit")
 
             # 显式添加 ComboBox 选项，以防 UI 文件加载问题
             if self.wsProtocolComboBox:
                 # 先清空，避免重复添加 (如果 .ui 文件也成功加载了选项)
                 self.wsProtocolComboBox.clear()
                 self.wsProtocolComboBox.addItems(["wss://", "ws://"])
+                
+            # 显式添加OTA ComboBox选项
+            if self.otaProtocolComboBox:
+                self.otaProtocolComboBox.clear()
+                self.otaProtocolComboBox.addItems(["http://", "https://"])
 
             # 获取导航控件
             self.stackedWidget = self.root.findChild(QWidget, "stackedWidget")
@@ -772,6 +783,7 @@ class GuiDisplay(BaseDisplay):
             network_options = system_options.get("NETWORK", {})
             websocket_url = network_options.get("WEBSOCKET_URL", "")
             websocket_token = network_options.get("WEBSOCKET_ACCESS_TOKEN", "")
+            ota_url = network_options.get("OTA_VERSION_URL", "")
 
             if self.deviceIdLineEdit:
                 self.deviceIdLineEdit.setText(device_id)
@@ -804,6 +816,30 @@ class GuiDisplay(BaseDisplay):
 
             if self.wsTokenLineEdit:
                 self.wsTokenLineEdit.setText(websocket_token)
+
+            # 解析OTA URL并设置协议和地址
+            if ota_url and self.otaProtocolComboBox and self.otaAddressLineEdit:
+                try:
+                    parsed_url = urlparse(ota_url)
+                    protocol = parsed_url.scheme
+                    address = parsed_url.netloc + parsed_url.path
+                    # 移除末尾的'/'(如果存在)
+                    if address.endswith('/'):
+                        address = address[:-1]
+                        
+                    if protocol == "https":
+                        self.otaProtocolComboBox.setCurrentIndex(1)
+                    elif protocol == "http":
+                        self.otaProtocolComboBox.setCurrentIndex(0)
+                    else:
+                        self.logger.warning(f"未知的OTA协议: {protocol}")
+                        self.otaProtocolComboBox.setCurrentIndex(1)  # 默认为https
+                        
+                    self.otaAddressLineEdit.setText(address)
+                except Exception as e:
+                    self.logger.error(f"解析OTA URL时出错: {ota_url} - {e}")
+                    self.otaProtocolComboBox.setCurrentIndex(1)
+                    self.otaAddressLineEdit.clear()
 
         except json.JSONDecodeError:
             self.logger.error(f"配置文件 {CONFIG_PATH} 格式错误。", exc_info=True)
@@ -844,6 +880,11 @@ class GuiDisplay(BaseDisplay):
             new_ws_address = self.wsAddressLineEdit.text() if self.wsAddressLineEdit else ""
             new_ws_token = self.wsTokenLineEdit.text() if self.wsTokenLineEdit else ""
 
+            # 获取OTA地址配置
+            selected_ota_protocol_text = self.otaProtocolComboBox.currentText() if self.otaProtocolComboBox else "https://"
+            selected_ota_protocol = selected_ota_protocol_text.replace("://", "")
+            new_ota_address = self.otaAddressLineEdit.text() if self.otaAddressLineEdit else ""
+
             # 确保地址不以 / 开头 (urlunparse 会添加)
             if new_ws_address.startswith('/'):
                 new_ws_address = new_ws_address[1:]
@@ -857,6 +898,10 @@ class GuiDisplay(BaseDisplay):
             url_parts = urlparse(f"http://{new_ws_address}") # 借用 http 解析 netloc 和 path
             new_websocket_url = urlunparse((selected_protocol, url_parts.netloc, url_parts.path, '', '', ''))
 
+            # 构造新的OTA URL
+            ota_url_parts = urlparse(f"http://{new_ota_address}")  # 借用http解析netloc和path
+            new_ota_url = urlunparse((selected_ota_protocol, ota_url_parts.netloc, ota_url_parts.path, '', '', ''))
+
             # 更新系统选项
             if "SYSTEM_OPTIONS" not in config_data:
                 config_data["SYSTEM_OPTIONS"] = {}
@@ -865,6 +910,7 @@ class GuiDisplay(BaseDisplay):
                 config_data["SYSTEM_OPTIONS"]["NETWORK"] = {}
             config_data["SYSTEM_OPTIONS"]["NETWORK"]["WEBSOCKET_URL"] = new_websocket_url
             config_data["SYSTEM_OPTIONS"]["NETWORK"]["WEBSOCKET_ACCESS_TOKEN"] = new_ws_token
+            config_data["SYSTEM_OPTIONS"]["NETWORK"]["OTA_VERSION_URL"] = new_ota_url
 
             # 写回配置文件
             with open(CONFIG_PATH, 'w', encoding='utf-8') as f:

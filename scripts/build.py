@@ -508,51 +508,6 @@ print(f"工作目录: {os.getcwd()}")
         print(f"修改钩子脚本时出错: {e}")
         return False
 
-
-def create_launcher_scripts(platform_info):
-    """创建启动脚本"""
-    print_step("创建启动脚本")
-    
-    project_root = get_project_root()
-    dist_dir = project_root / "dist"
-    if not dist_dir.exists():
-        print("输出目录不存在，跳过创建启动脚本")
-        return False
-    
-    if platform_info['is_windows']:
-        # 创建Windows批处理文件
-        launcher_path = dist_dir / "启动小智.bat"
-        with open(launcher_path, 'w', encoding='utf-8') as f:
-            f.write('@echo off\r\n')
-            f.write('echo 正在启动小智助手...\r\n')
-            f.write('cd /d "%~dp0"\r\n')  # 切换到批处理文件所在目录
-            f.write('start "" "小智.exe"\r\n')
-            f.write('exit\r\n')
-    elif platform_info['is_macos']:
-        # 创建macOS shell脚本
-        launcher_path = dist_dir / "启动小智.command"
-        with open(launcher_path, 'w', encoding='utf-8') as f:
-            f.write('#!/bin/bash\n')
-            f.write('echo "正在启动小智助手..."\n')
-            f.write('cd "$(dirname "$0")"\n')  # 切换到脚本所在目录
-            f.write('./小智_mac\n')
-        # 设置可执行权限
-        os.chmod(launcher_path, 0o755)
-    else:
-        # 创建Linux shell脚本
-        launcher_path = dist_dir / "启动小智.sh"
-        with open(launcher_path, 'w', encoding='utf-8') as f:
-            f.write('#!/bin/bash\n')
-            f.write('echo "正在启动小智助手..."\n')
-            f.write('cd "$(dirname "$0")"\n')  # 切换到脚本所在目录
-            f.write('./小智_linux\n')
-        # 设置可执行权限
-        os.chmod(launcher_path, 0o755)
-    
-    print(f"创建启动脚本: {launcher_path}")
-    return True
-
-
 def main():
     """主函数"""
     print_step("开始构建小智应用")
@@ -579,8 +534,6 @@ def main():
             output_path = get_output_file_path(platform_info)
             if output_path.exists():
                 print(f"\n构建完成! 可执行文件位于: {output_path}")
-                # 创建启动脚本
-                create_launcher_scripts(platform_info)
             else:
                 print("\n构建似乎成功，但未找到输出文件")
     finally:
