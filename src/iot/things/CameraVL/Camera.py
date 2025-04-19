@@ -1,7 +1,12 @@
+import asyncio
+
 import cv2
 import base64
 import logging
 import threading
+
+from src.application import Application
+from src.constants.constants import DeviceState
 from src.iot.thing import Thing
 from src.iot.things.CameraVL import VL
 
@@ -11,6 +16,7 @@ logger = logging.getLogger("Camera")
 class Camera(Thing):
     def __init__(self):
         super().__init__("Camera", "摄像头管理")
+        self.app = None
         """初始化摄像头管理器"""
         if hasattr(self, '_initialized'):
             return
@@ -106,8 +112,12 @@ class Camera(Thing):
         frame_base64 = base64.b64encode(buffer).decode('utf-8')
         self.result=str(self.VL.analyze_image(frame_base64))
         print(self.result)
+        # 获取应用程序实例
+        self.app = Application.get_instance()
         logger.info("画面已经识别到啦")
         print(f"[虚拟设备] 画面已经识别完成")
+        self.app.set_device_state(DeviceState.LISTENING)
+        asyncio.create_task(self.app.protocol.send_wake_word_detected("播报识别结果"))
         return {"status": 'success', "message": "识别成功","result":self.result}
     def stop_camera(self):
         """停止摄像头线程"""

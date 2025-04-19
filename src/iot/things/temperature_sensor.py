@@ -1,8 +1,11 @@
+import asyncio
 import json
 import time
 from typing import Dict
 from datetime import datetime
 
+from src.application import Application
+from src.constants.constants import DeviceState
 from src.iot.thing import Thing, Parameter, ValueType
 from src.network.mqtt_client import MqttClient
 
@@ -99,9 +102,15 @@ class TemperatureSensor(Thing):
                         '%Y-%m-%d %H:%M:%S', 
                         time.localtime(self.last_update_time)
                     )
+
+
                     print(f"[温度传感器] 更新数据: 温度={self.temperature}°C, "
                           f"湿度={self.humidity}%, 时间={update_time}")
-                    
+                    self.app = Application.get_instance()
+
+                    self.app.set_device_state(DeviceState.LISTENING)
+                    asyncio.create_task(self.app.protocol.send_wake_word_detected(
+                        "播报获取到的温度传感器数据"))
             except json.JSONDecodeError:
                 print(f"[温度传感器] 无法解析JSON消息: {payload}")
                 

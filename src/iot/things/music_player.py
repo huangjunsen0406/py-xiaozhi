@@ -24,7 +24,7 @@ class MusicPlayer(Thing):
         """初始化音乐播放器组件"""
         super().__init__(
             "MusicPlayer",
-            "在线音乐播放器，支持音乐搜索、播放控制和歌词显示"
+            "在线音乐播放器，支持音乐搜索、本地缓存、播放控制和歌词显示，播放音乐时优先使用iot的音乐播放器"
         )
 
         # 初始化pygame mixer
