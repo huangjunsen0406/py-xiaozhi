@@ -26,11 +26,14 @@ from PyQt5.QtWidgets import (
     QFrame,
     QStackedWidget,
     QCheckBox,
-    QTabBar
+    QTabBar,
+    QStyle, 
+    QStyleOptionSlider
 )
-from PyQt5.QtCore import Qt, QTimer, QPoint, QPropertyAnimation, QRect
+from PyQt5.QtCore import Qt, QTimer, QPoint, QPropertyAnimation, QRect, QEvent, QObject
 from PyQt5.QtGui import QMouseEvent, QPainter, QColor, QPen, QBrush, QFont, QIcon
 from pynput import keyboard as pynput_keyboard
+from abc import ABCMeta # 导入 ABCMeta
 from src.display.base_display import BaseDisplay
 from pathlib import Path
 
@@ -53,9 +56,15 @@ def restart_program():
         # 如果重启失败，可以选择退出或通知用户
         sys.exit(1) # 或者弹出一个错误消息框
 
-class GuiDisplay(BaseDisplay):
+# 创建兼容的元类
+class CombinedMeta(type(QObject), ABCMeta):
+    pass
+
+class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
     def __init__(self):
-        super().__init__()  # 调用父类初始化
+        # 重要：调用 super() 处理多重继承
+        super().__init__()
+        QObject.__init__(self) # 调用 QObject 初始化
 
         # 初始化日志
         self.logger = logging.getLogger("Display")
@@ -141,12 +150,52 @@ class GuiDisplay(BaseDisplay):
         # 尝试获取一次系统音量，检测音量控制是否正常工作
         self.get_current_volume()
 
+    def eventFilter(self, source, event):
+        if source == self.volume_scale and event.type() == QEvent.MouseButtonPress:
+            if event.button() == Qt.LeftButton:
+                slider = self.volume_scale
+                opt = QStyleOptionSlider()
+                slider.initStyleOption(opt)
+                
+                # 获取滑块手柄和轨道的矩形区域
+                handle_rect = slider.style().subControlRect(QStyle.CC_Slider, opt, QStyle.SC_SliderHandle, slider)
+                groove_rect = slider.style().subControlRect(QStyle.CC_Slider, opt, QStyle.SC_SliderGroove, slider)
+
+                # 如果点击在手柄上，则让默认处理器处理拖动
+                if handle_rect.contains(event.pos()):
+                     return False 
+
+                # 计算点击位置相对于轨道的位置
+                if slider.orientation() == Qt.Horizontal:
+                    # 确保点击在有效的轨道范围内
+                    if event.pos().x() < groove_rect.left() or event.pos().x() > groove_rect.right():
+                        return False # 点击在轨道外部
+                    pos = event.pos().x() - groove_rect.left()
+                    max_pos = groove_rect.width()
+                else:
+                    if event.pos().y() < groove_rect.top() or event.pos().y() > groove_rect.bottom():
+                         return False # 点击在轨道外部
+                    pos = groove_rect.bottom() - event.pos().y()
+                    max_pos = groove_rect.height()
+
+                if max_pos > 0: # 避免除以零
+                    value_range = slider.maximum() - slider.minimum()
+                    # 根据点击位置计算新的值
+                    new_value = slider.minimum() + round((value_range * pos) / max_pos)
+                    
+                    # 直接设置滑块的值
+                    slider.setValue(int(new_value))
+                    
+                    return True # 表示事件已处理
+        
+        return super().eventFilter(source, event)
+
     def _setup_navigation(self):
         """设置导航标签栏 (QTabBar)"""
         # 使用 addTab 添加标签
         self.nav_tab_bar.addTab("聊天")  # index 0
-        self.nav_tab_bar.addTab("设备")  # index 1
-        self.nav_tab_bar.addTab("设置")  # index 2
+        self.nav_tab_bar.addTab("设备管理")  # index 1
+        self.nav_tab_bar.addTab("参数配置")  # index 2
 
         # 将 QTabBar 的 currentChanged 信号连接到处理函数
         self.nav_tab_bar.currentChanged.connect(self._on_navigation_index_changed)
@@ -487,6 +536,7 @@ class GuiDisplay(BaseDisplay):
                     self.volume_scale.setRange(0, 100)
                     self.volume_scale.setValue(self.current_volume)
                     self.volume_scale.valueChanged.connect(self._on_volume_change)
+                    self.volume_scale.installEventFilter(self) # 安装事件过滤器
                 # 更新音量百分比显示
                 if self.volume_label:
                     self.volume_label.setText(f"{self.current_volume}%")
