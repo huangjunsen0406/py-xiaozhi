@@ -24,23 +24,16 @@ from PyQt5.QtWidgets import (
     QLineEdit,
     QComboBox,
     QFrame,
-    QStackedWidget
+    QStackedWidget,
+    QCheckBox,
+    QTabBar,
+    QStyle, 
+    QStyleOptionSlider
 )
-from PyQt5.QtCore import Qt, QTimer, QPoint, QPropertyAnimation, QRect
-from PyQt5.QtGui import QMouseEvent, QPainter, QColor, QPen, QBrush
-from qfluentwidgets import (
-    FluentIcon,
-    Theme,
-    setTheme,
-    setThemeColor,
-    SegmentedWidget,
-    SegmentedItem,
-    CardWidget,
-    SwitchButton,
-    LineEdit as FluentLineEdit,
-    ComboBox as FluentComboBox
-)
+from PyQt5.QtCore import Qt, QTimer, QPoint, QPropertyAnimation, QRect, QEvent, QObject
+from PyQt5.QtGui import QMouseEvent, QPainter, QColor, QPen, QBrush, QFont, QIcon
 from pynput import keyboard as pynput_keyboard
+from abc import ABCMeta # 导入 ABCMeta
 from src.display.base_display import BaseDisplay
 from pathlib import Path
 
@@ -63,14 +56,19 @@ def restart_program():
         # 如果重启失败，可以选择退出或通知用户
         sys.exit(1) # 或者弹出一个错误消息框
 
-class GuiDisplay(BaseDisplay):
+# 创建兼容的元类
+class CombinedMeta(type(QObject), ABCMeta):
+    pass
+
+class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
     def __init__(self):
-        super().__init__()  # 调用父类初始化
+        # 重要：调用 super() 处理多重继承
+        super().__init__()
+        QObject.__init__(self) # 调用 QObject 初始化
 
         # 初始化日志
         self.logger = logging.getLogger("Display")
         
-        # 这里不要创建QApplication，放到start方法中统一管理
         self.app = None
         self.root = None
         
@@ -85,7 +83,7 @@ class GuiDisplay(BaseDisplay):
         self.mode_btn = None
         self.mute = None
         self.stackedWidget = None
-        self.nav_segment = None
+        self.nav_tab_bar = None
         
         # 音量控制相关
         self.volume_label = None  # 音量百分比标签
@@ -147,7 +145,7 @@ class GuiDisplay(BaseDisplay):
         self.current_animation = None
         self.animation = None
         self.fade_widget = None
-        self.animated_widget = None # 新增，用于保存正在执行动画的控件引用
+        self.animated_widget = None
         
         # 检查系统音量控制是否可用
         self.volume_control_available = hasattr(self, 'volume_controller') and self.volume_controller is not None
@@ -155,88 +153,112 @@ class GuiDisplay(BaseDisplay):
         # 尝试获取一次系统音量，检测音量控制是否正常工作
         self.get_current_volume()
 
+    def eventFilter(self, source, event):
+        if source == self.volume_scale and event.type() == QEvent.MouseButtonPress:
+            if event.button() == Qt.LeftButton:
+                slider = self.volume_scale
+                opt = QStyleOptionSlider()
+                slider.initStyleOption(opt)
+                
+                # 获取滑块手柄和轨道的矩形区域
+                handle_rect = slider.style().subControlRect(QStyle.CC_Slider, opt, QStyle.SC_SliderHandle, slider)
+                groove_rect = slider.style().subControlRect(QStyle.CC_Slider, opt, QStyle.SC_SliderGroove, slider)
+
+                # 如果点击在手柄上，则让默认处理器处理拖动
+                if handle_rect.contains(event.pos()):
+                     return False 
+
+                # 计算点击位置相对于轨道的位置
+                if slider.orientation() == Qt.Horizontal:
+                    # 确保点击在有效的轨道范围内
+                    if event.pos().x() < groove_rect.left() or event.pos().x() > groove_rect.right():
+                        return False # 点击在轨道外部
+                    pos = event.pos().x() - groove_rect.left()
+                    max_pos = groove_rect.width()
+                else:
+                    if event.pos().y() < groove_rect.top() or event.pos().y() > groove_rect.bottom():
+                         return False # 点击在轨道外部
+                    pos = groove_rect.bottom() - event.pos().y()
+                    max_pos = groove_rect.height()
+
+                if max_pos > 0: # 避免除以零
+                    value_range = slider.maximum() - slider.minimum()
+                    # 根据点击位置计算新的值
+                    new_value = slider.minimum() + round((value_range * pos) / max_pos)
+                    
+                    # 直接设置滑块的值
+                    slider.setValue(int(new_value))
+                    
+                    return True # 表示事件已处理
+        
+        return super().eventFilter(source, event)
+
     def _setup_navigation(self):
-        """设置导航分段控件"""
-        # 添加主界面、设备界面和设置界面
-        self.nav_segment.addItem(
-            routeKey="mainInterface", text="聊天", icon=FluentIcon.ROBOT
-        )
-        self.nav_segment.addItem(
-            routeKey="iotInterface", text="设备", icon=FluentIcon.IOT
-        )
-        self.nav_segment.addItem(
-            routeKey="settingInterface", text="设置", icon=FluentIcon.SETTING # 新增设置项
-        )
+        """设置导航标签栏 (QTabBar)"""
+        # 使用 addTab 添加标签
+        self.nav_tab_bar.addTab("聊天")  # index 0
+        self.nav_tab_bar.addTab("设备管理")  # index 1
+        self.nav_tab_bar.addTab("参数配置")  # index 2
 
-        # 连接信号
-        self.nav_segment.currentItemChanged.connect(self._on_navigation_changed)
+        # 将 QTabBar 的 currentChanged 信号连接到处理函数
+        self.nav_tab_bar.currentChanged.connect(self._on_navigation_index_changed)
 
-        # 设置默认选中项
-        self.nav_segment.setCurrentItem("mainInterface")
+        # 设置默认选中项 (通过索引)
+        self.nav_tab_bar.setCurrentIndex(0) # 默认选中第一个标签
 
-    def _on_navigation_changed(self, routeKey):
-        """处理导航变化"""
-        index_map = {"mainInterface": 0, "iotInterface": 1, "settingInterface": 2} # 更新 index_map
-        if routeKey in index_map:
-            target_index = index_map[routeKey]
-            if target_index == self.stackedWidget.currentIndex():
-                return
+    def _on_navigation_index_changed(self, index: int):
+        """处理导航标签变化 (通过索引)"""
+        # 映射回 routeKey 以便复用动画和加载逻辑
+        index_to_routeKey = {0: "mainInterface", 1: "iotInterface", 2: "settingInterface"}
+        routeKey = index_to_routeKey.get(index)
 
-            # 获取当前和目标页面
-            current_widget = self.stackedWidget.currentWidget()
-            self.stackedWidget.setCurrentIndex(target_index)
-            new_widget = self.stackedWidget.currentWidget()
+        if routeKey is None:
+            self.logger.warning(f"未知的导航索引: {index}")
+            return
 
-            # 保存动画对象为类成员，防止被过早回收
-            self.animated_widget = new_widget # 保存对目标 widget 的引用
-            self.current_effect = QGraphicsOpacityEffect(self.animated_widget) # 创建效果
-            self.current_animation = QPropertyAnimation(self.current_effect, b"opacity")
+        target_index = index # 直接使用索引
+        if target_index == self.stackedWidget.currentIndex():
+            return
 
-            # 设置新页面的效果
-            self.animated_widget.setGraphicsEffect(self.current_effect) # 应用效果
+        current_widget = self.stackedWidget.currentWidget()
+        self.stackedWidget.setCurrentIndex(target_index)
+        new_widget = self.stackedWidget.currentWidget()
 
-            # 配置动画
-            self.current_animation.setDuration(300)
-            self.current_animation.setStartValue(0.0)
-            self.current_animation.setEndValue(1.0)
+        self.animated_widget = new_widget
+        self.current_effect = QGraphicsOpacityEffect(self.animated_widget)
+        self.current_animation = QPropertyAnimation(self.current_effect, b"opacity")
+        self.animated_widget.setGraphicsEffect(self.current_effect)
+        self.current_animation.setDuration(300)
+        self.current_animation.setStartValue(0.0)
+        self.current_animation.setEndValue(1.0)
 
-            # 动画完成后的清理
-            def cleanup():
-                try:
-                    # 获取可能存在的 effect 和 widget
-                    effect_to_clean = getattr(self, "current_effect", None)
-                    widget_to_clean = getattr(self, "animated_widget", None)
+        def cleanup():
+            try:
+                effect_to_clean = getattr(self, "current_effect", None)
+                widget_to_clean = getattr(self, "animated_widget", None)
+                if widget_to_clean and widget_to_clean.isWidgetType():
+                     if widget_to_clean.graphicsEffect() == effect_to_clean:
+                         widget_to_clean.setGraphicsEffect(None)
+                self.current_effect = None
+                self.current_animation = None
+                self.animated_widget = None
+            except RuntimeError as e:
+                self.logger.warning(f"清理动画时捕获 RuntimeError: {e}")
+                self.current_effect = None
+                self.current_animation = None
+                self.animated_widget = None
+            except Exception as e:
+                self.logger.error(f"清理动画时发生意外错误: {e}", exc_info=True)
+                self.current_effect = None
+                self.current_animation = None
+                self.animated_widget = None
 
-                    # 首先检查 widget 是否有效
-                    if widget_to_clean and widget_to_clean.isWidgetType():
-                         # 检查 widget 当前的效果是否是我们要清理的 effect
-                         if widget_to_clean.graphicsEffect() == effect_to_clean:
-                             widget_to_clean.setGraphicsEffect(None) # 解除效果
+        self.current_animation.finished.connect(cleanup)
+        self.current_animation.start()
 
-                    # 清空引用
-                    self.current_effect = None
-                    self.current_animation = None
-                    self.animated_widget = None # 清理 widget 引用
-
-                except RuntimeError as e:
-                    # 如果对象在检查后但在使用前被删除，可能触发此异常
-                    self.logger.warning(f"清理动画时捕获 RuntimeError: {e}")
-                    self.current_effect = None
-                    self.current_animation = None
-                    self.animated_widget = None # 确保清理
-                except Exception as e: # 捕获其他潜在错误
-                    self.logger.error(f"清理动画时发生意外错误: {e}", exc_info=True)
-                    # 确保即使出错也清空引用
-                    self.current_effect = None
-                    self.current_animation = None
-                    self.animated_widget = None # 确保清理
-
-            self.current_animation.finished.connect(cleanup)
-            self.current_animation.start()
-
-            # 如果切换到设置页面，加载设置
-            if routeKey == "settingInterface":
-                self._load_settings()
+        # 如果切换到设置页面，加载设置
+        if routeKey == "settingInterface":
+            self._load_settings()
 
     def set_callbacks(
         self,
@@ -360,8 +382,9 @@ class GuiDisplay(BaseDisplay):
             self.manual_btn.show()
 
     def update_status(self, status: str):
-        """更新状态文本"""
-        self.update_queue.put(lambda: self._safe_update_label(self.status_label, f"状态: {status}"))
+        """更新状态文本 (只更新主状态)"""
+        full_status_text = f"状态: {status}"
+        self.update_queue.put(lambda: self._safe_update_label(self.status_label, full_status_text))
         
         # 根据状态更新麦克风可视化
         if "聆听中" in status:
@@ -435,13 +458,8 @@ class GuiDisplay(BaseDisplay):
                 self.app = QApplication(sys.argv)
                 
             # 设置UI默认字体
-            from PyQt5.QtGui import QFont
             default_font = QFont("ASLantTermuxFont Mono", 12)
             self.app.setFont(default_font)
-                
-            # 设置主题
-            setTheme(Theme.LIGHT)
-            setThemeColor("#0078d4")
                 
             # 加载UI文件
             from PyQt5 import uic
@@ -472,8 +490,7 @@ class GuiDisplay(BaseDisplay):
             self.mute = self.root.findChild(QPushButton, "mute")
             
             if self.mute:
-                self.mute.setIcon(FluentIcon.VOLUME)
-                self.mute.setLayoutDirection(Qt.RightToLeft)
+                self.mute.setCheckable(True)
                 self.mute.clicked.connect(self._on_mute_click)
             
             # 获取或创建音量百分比标签
@@ -488,8 +505,8 @@ class GuiDisplay(BaseDisplay):
                     self.volume_label.setAlignment(Qt.AlignCenter)
                     volume_layout.addWidget(self.volume_label)
             
-            # 初始化麦克风可视化组件 - 使用UI中定义的CardWidget
-            self.mic_visualizer_card = self.root.findChild(QWidget, "mic_visualizer_card")
+            # 初始化麦克风可视化组件 - 使用UI中定义的QFrame
+            self.mic_visualizer_card = self.root.findChild(QFrame, "mic_visualizer_card")
             self.mic_visualizer_widget = self.root.findChild(QWidget, "mic_visualizer_widget")
             
             if self.mic_visualizer_widget:
@@ -522,22 +539,25 @@ class GuiDisplay(BaseDisplay):
                     self.volume_scale.setRange(0, 100)
                     self.volume_scale.setValue(self.current_volume)
                     self.volume_scale.valueChanged.connect(self._on_volume_change)
+                    self.volume_scale.installEventFilter(self) # 安装事件过滤器
                 # 更新音量百分比显示
                 if self.volume_label:
                     self.volume_label.setText(f"{self.current_volume}%")
             
             # 获取设置页面控件
-            self.wakeWordEnableSwitch = self.root.findChild(SwitchButton, "wakeWordEnableSwitch")
-            self.wakeWordsLineEdit = self.root.findChild(FluentLineEdit, "wakeWordsLineEdit")
+            self.wakeWordEnableSwitch = self.root.findChild(QCheckBox, "wakeWordEnableSwitch")
+            self.wakeWordsLineEdit = self.root.findChild(QLineEdit, "wakeWordsLineEdit")
             self.saveSettingsButton = self.root.findChild(QPushButton, "saveSettingsButton")
             # 获取新增的控件
-            self.deviceIdLineEdit = self.root.findChild(FluentLineEdit, "deviceIdLineEdit")
-            self.wsProtocolComboBox = self.root.findChild(FluentComboBox, "wsProtocolComboBox")
-            self.wsAddressLineEdit = self.root.findChild(FluentLineEdit, "wsAddressLineEdit")
-            self.wsTokenLineEdit = self.root.findChild(FluentLineEdit, "wsTokenLineEdit")
-            # 获取OTA相关控件
-            self.otaProtocolComboBox = self.root.findChild(FluentComboBox, "otaProtocolComboBox")
-            self.otaAddressLineEdit = self.root.findChild(FluentLineEdit, "otaAddressLineEdit")
+            # 使用 PyQt 标准控件替换
+            self.deviceIdLineEdit = self.root.findChild(QLineEdit, "deviceIdLineEdit")
+            self.wsProtocolComboBox = self.root.findChild(QComboBox, "wsProtocolComboBox")
+            self.wsAddressLineEdit = self.root.findChild(QLineEdit, "wsAddressLineEdit")
+            self.wsTokenLineEdit = self.root.findChild(QLineEdit, "wsTokenLineEdit")
+
+            # 获取 OTA 相关控件
+            self.otaProtocolComboBox = self.root.findChild(QComboBox, "otaProtocolComboBox")
+            self.otaAddressLineEdit = self.root.findChild(QLineEdit, "otaAddressLineEdit")
 
             # 显式添加 ComboBox 选项，以防 UI 文件加载问题
             if self.wsProtocolComboBox:
@@ -551,10 +571,10 @@ class GuiDisplay(BaseDisplay):
                 self.otaProtocolComboBox.addItems(["http://", "https://"])
 
             # 获取导航控件
-            self.stackedWidget = self.root.findChild(QWidget, "stackedWidget")
-            self.nav_segment = self.root.findChild(SegmentedWidget, "nav_segment")
+            self.stackedWidget = self.root.findChild(QStackedWidget, "stackedWidget")
+            self.nav_tab_bar = self.root.findChild(QTabBar, "nav_tab_bar")
 
-            # 初始化分段控件 - 移除设置页面相关功能
+            # 初始化导航标签栏
             self._setup_navigation()
 
             # 连接按钮事件
@@ -667,7 +687,9 @@ class GuiDisplay(BaseDisplay):
                     if key == pynput_keyboard.Key.f2 and not self.auto_mode:
                         if self.button_press_callback:
                             self.button_press_callback()
-                            self.update_button_status("松开以停止")
+                            if self.manual_btn:
+                                self.update_queue.put(lambda: self._safe_update_button(self.manual_btn, "松开以停止"))
+
                     # F3 按键处理 - 打断
                     elif key == pynput_keyboard.Key.f3:
                         if self.abort_callback:
@@ -681,7 +703,8 @@ class GuiDisplay(BaseDisplay):
                     if key == pynput_keyboard.Key.f2 and not self.auto_mode:
                         if self.button_release_callback:
                             self.button_release_callback()
-                            self.update_button_status("按住后说话")
+                            if self.manual_btn:
+                                self.update_queue.put(lambda: self._safe_update_button(self.manual_btn, "按住后说话"))
                 except Exception as e:
                     self.logger.error(f"键盘事件处理错误: {e}")
 
@@ -710,54 +733,49 @@ class GuiDisplay(BaseDisplay):
             self.last_mouse_pos = event.pos()
 
     def mouseReleaseEvent(self, event: QMouseEvent):
-        """鼠标释放事件处理"""
+        """鼠标释放事件处理 (修改为使用 QTabBar 索引)"""
         if event.button() == Qt.LeftButton and self.last_mouse_pos is not None:
-            # 计算水平方向的移动距离
             delta = event.pos().x() - self.last_mouse_pos.x()
-
-            # 重置鼠标位置
             self.last_mouse_pos = None
 
-            # 根据移动距离判断滑动方向并切换界面
-            if abs(delta) > 100:  # 设置一个阈值，避免误触
-                current_index = self.stackedWidget.currentIndex()
-                route_keys = ["mainInterface", "iotInterface", "settingInterface"] # 更新 route_keys
-                # 根据滑动方向切换页面
-                if delta > 0 and current_index > 0:  # 向右滑动，切换到上一个界面
-                    self.nav_segment.setCurrentItem(route_keys[current_index - 1])
-                elif (
-                    delta < 0 and current_index < len(route_keys) - 1
-                ):  # 向左滑动，切换到下一个界面
-                    self.nav_segment.setCurrentItem(route_keys[current_index + 1])
+            if abs(delta) > 100:  # 滑动阈值
+                current_index = self.nav_tab_bar.currentIndex() if self.nav_tab_bar else 0
+                tab_count = self.nav_tab_bar.count() if self.nav_tab_bar else 0
+
+                if delta > 0 and current_index > 0:  # 右滑
+                    new_index = current_index - 1
+                    if self.nav_tab_bar: self.nav_tab_bar.setCurrentIndex(new_index)
+                elif delta < 0 and current_index < tab_count - 1:  # 左滑
+                    new_index = current_index + 1
+                    if self.nav_tab_bar: self.nav_tab_bar.setCurrentIndex(new_index)
 
     def _on_mute_click(self):
-        """静音按钮点击事件处理"""
+        """静音按钮点击事件处理 (使用 isChecked 状态)"""
         try:
-            # 检查音量控制是否可用
-            if not self.volume_control_available or self.volume_controller_failed:
+            if not self.volume_control_available or self.volume_controller_failed or not self.mute:
                 return
-                
-            if not self.is_muted:
+
+            self.is_muted = self.mute.isChecked() # 获取按钮的选中状态
+
+            if self.is_muted:
                 # 保存当前音量并设置为0
                 self.pre_mute_volume = self.current_volume
                 self.update_volume(0)
-                self.mute.setIcon(FluentIcon.MUTE)
+                self.mute.setText("取消静音") # 更新文本
                 if self.volume_label:
-                    self.volume_label.setText("0%")
-                self.is_muted = True
+                    self.volume_label.setText("静音") # 或者 "0%"
             else:
                 # 恢复之前的音量
                 self.update_volume(self.pre_mute_volume)
-                self.mute.setIcon(FluentIcon.VOLUME)
+                self.mute.setText("点击静音") # 恢复文本
                 if self.volume_label:
                     self.volume_label.setText(f"{self.pre_mute_volume}%")
-                self.is_muted = False
+
         except Exception as e:
             self.logger.error(f"静音按钮点击事件处理失败: {e}")
 
-    # --- 设置页面逻辑 开始 ---
     def _load_settings(self):
-        """加载配置文件并更新设置页面UI"""
+        """加载配置文件并更新设置页面UI (使用标准控件方法)"""
         try:
             if not CONFIG_PATH.exists():
                 self.logger.warning(f"配置文件 {CONFIG_PATH} 不存在，无法加载设置。")
@@ -777,7 +795,7 @@ class GuiDisplay(BaseDisplay):
             if self.wakeWordsLineEdit:
                 self.wakeWordsLineEdit.setText(", ".join(wake_words))
 
-            # 加载系统选项
+            # 加载系统选项 (逻辑不变)
             system_options = config_data.get("SYSTEM_OPTIONS", {})
             device_id = system_options.get("DEVICE_ID", "")
             network_options = system_options.get("NETWORK", {})
@@ -788,29 +806,25 @@ class GuiDisplay(BaseDisplay):
             if self.deviceIdLineEdit:
                 self.deviceIdLineEdit.setText(device_id)
 
-            # 解析 WebSocket URL 并设置协议和地址
+            # 解析 WebSocket URL 并设置协议和地址 
             if websocket_url and self.wsProtocolComboBox and self.wsAddressLineEdit:
                 try:
                     parsed_url = urlparse(websocket_url)
                     protocol = parsed_url.scheme
                     address = parsed_url.netloc + parsed_url.path
-                    # 移除末尾的 '/' (如果存在)
                     if address.endswith('/'):
                        address = address[:-1]
 
-                    if protocol == "wss":
-                        self.wsProtocolComboBox.setCurrentIndex(0)
-                    elif protocol == "ws":
-                        self.wsProtocolComboBox.setCurrentIndex(1)
+                    index = self.wsProtocolComboBox.findText(f"{protocol}://", Qt.MatchFixedString)
+                    if index >= 0:
+                        self.wsProtocolComboBox.setCurrentIndex(index)
                     else:
                          self.logger.warning(f"未知的 WebSocket 协议: {protocol}")
-                         # 可以设置一个默认值或留空
                          self.wsProtocolComboBox.setCurrentIndex(0) # 默认为 wss
 
                     self.wsAddressLineEdit.setText(address)
                 except Exception as e:
                     self.logger.error(f"解析 WebSocket URL 时出错: {websocket_url} - {e}")
-                    # 出错时设置默认值或清空
                     self.wsProtocolComboBox.setCurrentIndex(0)
                     self.wsAddressLineEdit.clear()
 
@@ -849,33 +863,28 @@ class GuiDisplay(BaseDisplay):
             QMessageBox.critical(self.root, "错误", f"加载设置失败: {e}")
 
     def _save_settings(self):
-        """保存设置页面的更改到配置文件"""
+        """保存设置页面的更改到配置文件 (使用标准控件方法)"""
         try:
             if not CONFIG_PATH.exists():
                 self.logger.error(f"配置文件 {CONFIG_PATH} 不存在，无法保存设置。")
                 QMessageBox.critical(self.root, "错误", f"配置文件 {CONFIG_PATH} 不存在。")
                 return
 
-            # 读取当前配置
             with open(CONFIG_PATH, 'r', encoding='utf-8') as f:
                 config_data = json.load(f)
 
-            # 获取UI上的新值
             use_wake_word = self.wakeWordEnableSwitch.isChecked() if self.wakeWordEnableSwitch else False
             wake_words_text = self.wakeWordsLineEdit.text() if self.wakeWordsLineEdit else ""
-            # 分割并清理唤醒词
             wake_words = [word.strip() for word in wake_words_text.split(',') if word.strip()]
 
             # 更新配置字典
-            if "WAKE_WORD_OPTIONS" not in config_data:
-                config_data["WAKE_WORD_OPTIONS"] = {}
+            if "WAKE_WORD_OPTIONS" not in config_data: config_data["WAKE_WORD_OPTIONS"] = {}
             config_data["WAKE_WORD_OPTIONS"]["USE_WAKE_WORD"] = use_wake_word
             config_data["WAKE_WORD_OPTIONS"]["WAKE_WORDS"] = wake_words
 
-            # 获取并更新系统选项
+            # 获取并更新系统选项 (使用 QLineEdit, QComboBox)
             new_device_id = self.deviceIdLineEdit.text() if self.deviceIdLineEdit else ""
             selected_protocol_text = self.wsProtocolComboBox.currentText() if self.wsProtocolComboBox else "wss://"
-            # 提取协议部分
             selected_protocol = selected_protocol_text.replace("://","")
             new_ws_address = self.wsAddressLineEdit.text() if self.wsAddressLineEdit else ""
             new_ws_token = self.wsTokenLineEdit.text() if self.wsTokenLineEdit else ""
@@ -896,6 +905,7 @@ class GuiDisplay(BaseDisplay):
             # 注意：urlunparse 的第一个参数是 scheme, 第二个是 netloc, 第三个是 path
             # 我们将地址部分视为 netloc + path
             url_parts = urlparse(f"http://{new_ws_address}") # 借用 http 解析 netloc 和 path
+            
             new_websocket_url = urlunparse((selected_protocol, url_parts.netloc, url_parts.path, '', '', ''))
 
             # 构造新的OTA URL
@@ -903,30 +913,25 @@ class GuiDisplay(BaseDisplay):
             new_ota_url = urlunparse((selected_ota_protocol, ota_url_parts.netloc, ota_url_parts.path, '', '', ''))
 
             # 更新系统选项
-            if "SYSTEM_OPTIONS" not in config_data:
-                config_data["SYSTEM_OPTIONS"] = {}
+            if "SYSTEM_OPTIONS" not in config_data: config_data["SYSTEM_OPTIONS"] = {}
             config_data["SYSTEM_OPTIONS"]["DEVICE_ID"] = new_device_id
-            if "NETWORK" not in config_data["SYSTEM_OPTIONS"]:
-                config_data["SYSTEM_OPTIONS"]["NETWORK"] = {}
+            if "NETWORK" not in config_data["SYSTEM_OPTIONS"]: config_data["SYSTEM_OPTIONS"]["NETWORK"] = {}
             config_data["SYSTEM_OPTIONS"]["NETWORK"]["WEBSOCKET_URL"] = new_websocket_url
             config_data["SYSTEM_OPTIONS"]["NETWORK"]["WEBSOCKET_ACCESS_TOKEN"] = new_ws_token
             config_data["SYSTEM_OPTIONS"]["NETWORK"]["OTA_VERSION_URL"] = new_ota_url
 
             # 写回配置文件
             with open(CONFIG_PATH, 'w', encoding='utf-8') as f:
-                json.dump(config_data, f, ensure_ascii=False, indent=2) # 使用 indent=2 格式化输出
+                json.dump(config_data, f, ensure_ascii=False, indent=2)
 
             self.logger.info("设置已成功保存到 config.json")
-            # 显示成功提示和重启要求
-            # QMessageBox.information(self.root, "保存成功", "设置已保存。请注意：部分设置（如唤醒词、网络连接）需要重启应用程序才能生效。")
-            # 询问用户是否重启
             reply = QMessageBox.question(self.root, "保存成功",
                                        "设置已保存。\n部分设置需要重启应用程序才能生效。\n\n是否立即重启？",
                                        QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
 
             if reply == QMessageBox.Yes:
                 self.logger.info("用户选择重启应用程序。")
-                restart_program() # 调用重启函数
+                restart_program()
 
         except json.JSONDecodeError:
             self.logger.error(f"读取配置文件 {CONFIG_PATH} 时格式错误。", exc_info=True)
@@ -937,7 +942,6 @@ class GuiDisplay(BaseDisplay):
         except Exception as e:
             self.logger.error(f"保存设置时发生未知错误: {e}", exc_info=True)
             QMessageBox.critical(self.root, "错误", f"保存设置失败: {e}")
-    # --- 设置页面逻辑 结束 ---
 
     def _update_mic_visualizer(self):
         """更新麦克风可视化"""
@@ -998,9 +1002,11 @@ class GuiDisplay(BaseDisplay):
             
         # 如果无法获取实际音量，返回上次的音量或默认值
         if hasattr(self, '_last_volume'):
+            # 缓慢衰减上次的音量
+            self._last_volume *= 0.9
             return self._last_volume
         else:
-            self._last_volume = 0.1
+            self._last_volume = 0.0 # 初始化为 0
             return self._last_volume
 
     def _start_mic_visualization(self):
@@ -1022,7 +1028,13 @@ class GuiDisplay(BaseDisplay):
         # 停止定时器
         if self.mic_timer and self.mic_timer.isActive():
             self.mic_timer.stop()
-            
+            # 重置可视化音量
+            if self.mic_visualizer:
+                 self.mic_visualizer.set_volume(0.0)
+                 # 确保动画平滑过渡到0
+                 if hasattr(self, '_last_volume'):
+                     self._last_volume = 0.0
+
         # 切换回音量控制页面
         if self.audio_control_stack:
             self.audio_control_stack.setCurrentWidget(self.volume_page)
@@ -1059,23 +1071,29 @@ class MicrophoneVisualizer(QFrame):
         
     def set_volume(self, volume):
         """设置当前音量，范围0.0-1.0"""
-        self.target_volume = volume
-        self.update()  # 触发重绘
-        
+        self.target_volume = max(0.0, min(1.0, volume)) # 限制范围
+        # self.update() # 动画会触发更新
+
     def _update_animation(self):
         """更新动画效果"""
         # 平滑过渡到目标音量
-        self.current_volume += (self.target_volume - self.current_volume) * 0.2
-        
+        diff = self.target_volume - self.current_volume
+        # 使用不同的平滑因子，使得音量下降更快
+        smooth_factor = 0.2 if diff > 0 else 0.3
+        self.current_volume += diff * smooth_factor
+
+        # 避免非常小的负值或大于1的值
+        self.current_volume = max(0.0, min(1.0, self.current_volume))
+
         # 计算字体大小
         self.current_font_size = self.min_font_size + (self.max_font_size - self.min_font_size) * self.current_volume
-        
+
         # 计算颜色过渡
         r = int(self.min_color.red() + (self.max_color.red() - self.min_color.red()) * self.current_volume)
         g = int(self.min_color.green() + (self.max_color.green() - self.min_color.green()) * self.current_volume)
         b = int(self.min_color.blue() + (self.max_color.blue() - self.min_color.blue()) * self.current_volume)
         self.current_color = QColor(r, g, b).name()
-        
+
         self.update()
         
     def paintEvent(self, event):
@@ -1093,18 +1111,18 @@ class MicrophoneVisualizer(QFrame):
         
         # 设置字体
         font = painter.font()
+        # 使用 setPointSizeF 可能更平滑
         font.setPointSizeF(self.current_font_size)
         font.setBold(True)  # 设置为粗体
         painter.setFont(font)
         
         # 设置颜色和阴影
-        # 添加文字阴影效果
         shadow_color = QColor(0, 0, 0, 40)
         painter.setPen(shadow_color)
         shadow_offset = 1
         
-        # 计算主数字和状态文本的矩形区域 - 更多的垂直间距
-        main_height = rect.height() - 30  # 增加间距
+        # 计算主数字和状态文本的矩形区域
+        main_height = rect.height() - 30
         main_rect = QRect(rect.left(), rect.top(), rect.width(), main_height)
         status_rect = QRect(rect.left(), rect.top() + main_height + 5, rect.width(), 20)
         
@@ -1115,21 +1133,20 @@ class MicrophoneVisualizer(QFrame):
         
         # 绘制主要文本
         painter.setPen(QColor(self.current_color))
-        
-        # 音量文本
         volume_text = f"{volume_percent}%"
-        
-        # 绘制文本（居中）
         painter.drawText(main_rect, Qt.AlignCenter, volume_text)
         
         # 添加描述文本
         small_font = painter.font()
         small_font.setPointSize(10)
+        small_font.setBold(False) # 描述文本不需要粗体
         painter.setFont(small_font)
         painter.setPen(QColor(100, 100, 100))
         
         # 根据音量级别显示相应提示
-        if volume_percent < 20:
+        if self.current_volume < 0.01: # 增加一个阈值判断是否安静
+             status_text = "声音: --"
+        elif volume_percent < 20:
             status_text = "声音: 安静"
         elif volume_percent < 40:
             status_text = "声音: 正常"
@@ -1140,4 +1157,4 @@ class MicrophoneVisualizer(QFrame):
             
         # 在下方显示状态文本
         painter.drawText(status_rect, Qt.AlignCenter, status_text)
-        painter.end()
+        # painter.end() # 不需要显式调用 end

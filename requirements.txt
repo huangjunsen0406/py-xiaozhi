@@ -43,5 +43,3 @@ soundfile>=0.12.1
 pydub>=0.25.1
 pyttsx3==2.98
 pygame==2.6.1
-PyQt-Fluent-Widgets==1.7.4
-PyQt5-Frameless-Window==0.4.5

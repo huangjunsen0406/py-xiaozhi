@@ -11,24 +11,48 @@
    </rect>
   </property>
   <property name="windowTitle">
-   <string>小智Ai客户端</string>
+    <string>小智Ai客户端</string>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
    <item>
     <layout class="QHBoxLayout" name="navigation_layout">
      <property name="leftMargin">
-      <number>10</number>
+      <number>0</number>
      </property>
      <property name="rightMargin">
-      <number>10</number>
+      <number>0</number>
      </property>
      <item>
-      <widget class="SegmentedWidget" name="nav_segment">
-       <property name="minimumSize">
-        <size>
-         <width>180</width>
-         <height>31</height>
-        </size>
+      <widget class="QTabBar" name="nav_tab_bar" native="true">
+       <property name="styleSheet">
+        <string>
+QTabBar::tab {
+    background-color: #f0f0f0; /* Light gray background */
+    color: #333; /* Dark text */
+    padding: 8px 20px; /* Padding around text */
+    border-top-left-radius: 8px; /* Rounded top corners */
+    border-top-right-radius: 8px;
+    border: 1px solid #ddd; /* Light border */
+    margin-right: 2px; /* Space between tabs */
+    min-width: 100px; /* Ensure tabs aren't too small */
+}
+
+QTabBar::tab:selected {
+    background-color: #ffffff; /* White background for selected tab */
+    color: #007bff; /* Blue text for selected tab */
+    border: 1px solid #ccc;
+    border-bottom: 2px solid #007bff; /* Blue underline for selected tab */
+}
+
+QTabBar::tab:hover {
+    background-color: #e9e9e9; /* Slightly darker on hover */
+}
+
+QTabBar {
+    /* Optional: Remove the default frame if needed */
+    /* border: none; */
+}
+        </string>
        </property>
       </widget>
      </item>
@@ -40,14 +64,32 @@
       <number>0</number>
      </property>
      <widget class="QWidget" name="mainPage">
+      <property name="styleSheet">
+       <string>QWidget#mainPage {
+    background-color: rgba(255, 255, 255, 140); 
+    border-radius: 8px;
+}</string>
+      </property>
       <layout class="QVBoxLayout" name="mainPageLayout">
+       <property name="leftMargin">
+        <number>0</number>
+       </property>
+       <property name="rightMargin">
+        <number>0</number>
+       </property>
        <item>
-        <widget class="CardWidget" name="status_card">
+        <widget class="QFrame" name="status_card">
          <property name="sizePolicy">
           <sizepolicy hsizetype="Preferred" vsizetype="Expanding">
            <horstretch>0</horstretch>
            <verstretch>0</verstretch>
           </sizepolicy>
+         </property>
+         <property name="frameShape">
+          <enum>QFrame::StyledPanel</enum>
+         </property>
+         <property name="frameShadow">
+          <enum>QFrame::Raised</enum>
          </property>
          <layout class="QVBoxLayout" name="card_layout">
           <item>
@@ -117,7 +159,7 @@
         </widget>
        </item>
        <item>
-        <widget class="CardWidget" name="mic_visualizer_card">
+        <widget class="QFrame" name="mic_visualizer_card">
          <property name="minimumSize">
           <size>
            <width>0</width>
@@ -130,18 +172,24 @@
            <height>72</height>
           </size>
          </property>
+         <property name="frameShape">
+          <enum>QFrame::StyledPanel</enum>
+         </property>
+         <property name="frameShadow">
+          <enum>QFrame::Raised</enum>
+         </property>
          <layout class="QVBoxLayout" name="mic_visualizer_layout">
           <property name="spacing">
            <number>0</number>
           </property>
           <property name="leftMargin">
-           <number>18</number>
+           <number>10</number>
           </property>
           <property name="topMargin">
            <number>5</number>
           </property>
           <property name="rightMargin">
-           <number>18</number>
+           <number>10</number>
           </property>
           <property name="bottomMargin">
            <number>5</number>
@@ -169,7 +217,7 @@
                <number>0</number>
               </property>
               <item>
-               <widget class="PushButton" name="mute">
+               <widget class="QPushButton" name="mute">
                 <property name="minimumSize">
                  <size>
                   <width>72</width>
@@ -177,12 +225,15 @@
                  </size>
                 </property>
                 <property name="text">
-                 <string>音量</string>
+                 <string>点击静音</string>
+                </property>
+                <property name="checkable">
+                 <bool>true</bool>
                 </property>
                </widget>
               </item>
               <item>
-               <widget class="Slider" name="volume_scale">
+               <widget class="QSlider" name="volume_scale">
                 <property name="orientation">
                  <enum>Qt::Horizontal</enum>
                 </property>
@@ -229,8 +280,23 @@
        </item>
        <item>
         <layout class="QHBoxLayout" name="button_layout">
+         <property name="spacing">
+          <number>8</number>
+         </property>
+         <property name="leftMargin">
+          <number>10</number>
+         </property>
+         <property name="topMargin">
+          <number>0</number>
+         </property>
+         <property name="rightMargin">
+          <number>10</number>
+         </property>
+         <property name="bottomMargin">
+          <number>6</number>
+         </property>
          <item>
-          <widget class="PushButton" name="manual_btn">
+          <widget class="QPushButton" name="manual_btn">
            <property name="minimumSize">
             <size>
              <width>0</width>
@@ -243,7 +309,7 @@
           </widget>
          </item>
          <item>
-          <widget class="PushButton" name="abort_btn">
+          <widget class="QPushButton" name="abort_btn">
            <property name="minimumSize">
             <size>
              <width>0</width>
@@ -256,7 +322,7 @@
           </widget>
          </item>
          <item>
-          <widget class="PushButton" name="auto_btn">
+          <widget class="QPushButton" name="auto_btn">
            <property name="minimumSize">
             <size>
              <width>0</width>
@@ -269,7 +335,7 @@
           </widget>
          </item>
          <item>
-          <widget class="PushButton" name="mode_btn">
+          <widget class="QPushButton" name="mode_btn">
            <property name="minimumSize">
             <size>
              <width>0</width>
@@ -288,7 +354,13 @@
      <widget class="QWidget" name="iotPage">
       <layout class="QVBoxLayout" name="historyPageLayout">
        <item>
-        <widget class="CardWidget" name="history_card">
+        <widget class="QFrame" name="history_card">
+         <property name="frameShape">
+          <enum>QFrame::StyledPanel</enum>
+         </property>
+         <property name="frameShadow">
+          <enum>QFrame::Raised</enum>
+         </property>
          <layout class="QVBoxLayout" name="history_layout">
           <item>
            <widget class="QLabel" name="history_title">
@@ -300,7 +372,9 @@
              </font>
             </property>
             <property name="text">
-             <string>暂无IOT设备</string>
+             <string>暂无IOT设备
+                暂未实现
+             </string>
             </property>
             <property name="alignment">
              <set>Qt::AlignCenter</set>
@@ -315,7 +389,13 @@
      <widget class="QWidget" name="settingPage">
       <layout class="QVBoxLayout" name="settingPageLayout">
        <item>
-        <widget class="CardWidget" name="setting_card">
+        <widget class="QFrame" name="setting_card">
+         <property name="frameShape">
+          <enum>QFrame::StyledPanel</enum>
+         </property>
+         <property name="frameShadow">
+          <enum>QFrame::Raised</enum>
+         </property>
          <layout class="QVBoxLayout" name="setting_layout">
           <property name="spacing">
            <number>5</number>
@@ -355,7 +435,7 @@
              </font>
             </property>
             <property name="text">
-             <string>参数配置</string>
+             <string>config.json文件配置</string>
             </property>
             <property name="alignment">
              <set>Qt::AlignCenter</set>
@@ -369,6 +449,9 @@
            <spacer name="verticalSpacer">
             <property name="orientation">
              <enum>Qt::Vertical</enum>
+            </property>
+            <property name="sizeType">
+             <enum>QSizePolicy::Expanding</enum>
             </property>
             <property name="sizeHint" stdset="0">
              <size>
@@ -388,12 +471,15 @@
              </widget>
             </item>
             <item>
-             <widget class="SwitchButton" name="wakeWordEnableSwitch" native="true">
-              <property name="onText" stdset="0">
-               <string>开</string>
+             <widget class="QCheckBox" name="wakeWordEnableSwitch">
+              <property name="minimumSize">
+               <size>
+                <width>20</width>
+                <height>20</height>
+               </size>
               </property>
-              <property name="offText" stdset="0">
-               <string>关</string>
+              <property name="text">
+               <string/>
               </property>
              </widget>
             </item>
@@ -415,7 +501,7 @@
           <item>
            <layout class="QVBoxLayout" name="wakeWordsEditLayout">
             <property name="spacing">
-             <number>5</number>
+             <number>10</number>
             </property>
             <property name="topMargin">
              <number>10</number>
@@ -428,7 +514,7 @@
              </widget>
             </item>
             <item>
-             <widget class="LineEdit" name="wakeWordsLineEdit"/>
+             <widget class="QLineEdit" name="wakeWordsLineEdit"/>
             </item>
            </layout>
           </item>
@@ -450,6 +536,12 @@
           </item>
           <item>
            <layout class="QFormLayout" name="formLayout">
+            <property name="horizontalSpacing">
+             <number>6</number>
+            </property>
+            <property name="verticalSpacing">
+             <number>12</number>
+            </property>
             <item row="0" column="0">
              <widget class="QLabel" name="deviceIdLabel">
               <property name="text">
@@ -458,7 +550,7 @@
              </widget>
             </item>
             <item row="0" column="1">
-             <widget class="LineEdit" name="deviceIdLineEdit"/>
+             <widget class="QLineEdit" name="deviceIdLineEdit"/>
             </item>
             <item row="1" column="0">
              <widget class="QLabel" name="otaUrlLabel">
@@ -528,17 +620,27 @@
                 <number>0</number>
                </property>
                <item>
-                <widget class="ComboBox" name="wsProtocolComboBox">
+                <widget class="QComboBox" name="wsProtocolComboBox">
                  <property name="sizePolicy">
                   <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
                    <horstretch>0</horstretch>
                    <verstretch>0</verstretch>
                   </sizepolicy>
                  </property>
+                 <item>
+                  <property name="text">
+                   <string>wss://</string>
+                  </property>
+                 </item>
+                 <item>
+                  <property name="text">
+                   <string>ws://</string>
+                  </property>
+                 </item>
                 </widget>
                </item>
                <item>
-                <widget class="LineEdit" name="wsAddressLineEdit">
+                <widget class="QLineEdit" name="wsAddressLineEdit">
                  <property name="sizePolicy">
                   <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
                    <horstretch>1</horstretch>
@@ -557,8 +659,8 @@
               </property>
              </widget>
             </item>
-            <item row="3" column="1">
-             <widget class="LineEdit" name="wsTokenLineEdit"/>
+            <item row="2" column="1">
+             <widget class="QLineEdit" name="wsTokenLineEdit"/>
             </item>
            </layout>
           </item>
@@ -573,13 +675,13 @@
             <property name="sizeHint" stdset="0">
              <size>
               <width>20</width>
-              <height>20</height>
+              <height>46</height>
              </size>
             </property>
            </spacer>
           </item>
           <item>
-           <widget class="PushButton" name="saveSettingsButton">
+           <widget class="QPushButton" name="saveSettingsButton">
             <property name="text">
              <string>保存设置</string>
             </property>
@@ -596,7 +698,7 @@
             <property name="sizeHint" stdset="0">
              <size>
               <width>20</width>
-              <height>8</height>
+              <height>10</height>
              </size>
             </property>
            </spacer>
@@ -612,45 +714,9 @@
  </widget>
  <customwidgets>
   <customwidget>
-   <class>ComboBox</class>
-   <extends>QPushButton</extends>
-   <header>qfluentwidgets</header>
-  </customwidget>
-  <customwidget>
-   <class>PushButton</class>
-   <extends>QPushButton</extends>
-   <header>qfluentwidgets</header>
-  </customwidget>
-  <customwidget>
-   <class>SwitchButton</class>
+   <class>QTabBar</class>
    <extends>QWidget</extends>
-   <header>qfluentwidgets</header>
-  </customwidget>
-  <customwidget>
-   <class>Slider</class>
-   <extends>QSlider</extends>
-   <header>qfluentwidgets</header>
-  </customwidget>
-  <customwidget>
-   <class>CardWidget</class>
-   <extends>QFrame</extends>
-   <header>qfluentwidgets</header>
-   <container>1</container>
-  </customwidget>
-  <customwidget>
-   <class>Pivot</class>
-   <extends>QWidget</extends>
-   <header>qfluentwidgets</header>
-  </customwidget>
-  <customwidget>
-   <class>SegmentedWidget</class>
-   <extends>Pivot</extends>
-   <header>qfluentwidgets</header>
-  </customwidget>
-  <customwidget>
-   <class>LineEdit</class>
-   <extends>QLineEdit</extends>
-   <header>qfluentwidgets</header>
+   <header>qtabbar.h</header>
   </customwidget>
  </customwidgets>
  <resources/>
