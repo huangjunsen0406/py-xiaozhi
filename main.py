@@ -10,7 +10,7 @@ logger = get_logger(__name__)
 
 def parse_args():
     """解析命令行参数"""
-    parser = argparse.ArgumentParser(description='小智ai客户端')
+    parser = argparse.ArgumentParser(description='小智Ai客户端')
     
     # 添加界面模式参数
     parser.add_argument(
@@ -57,7 +57,7 @@ def main():
             mode=args.mode,
             protocol=args.protocol
         )
-        
+
         # 如果是GUI模式且使用了PyQt界面，启动Qt事件循环
         if args.mode == 'gui':
             # 获取QApplication实例并运行事件循环

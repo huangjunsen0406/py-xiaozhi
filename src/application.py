@@ -614,7 +614,8 @@ class Application:
         # 根据状态执行相应操作
         if state == DeviceState.IDLE:
             self.display.update_status("待命")
-            self.display.update_emotion("😶")
+            # self.display.update_emotion("😶")
+            self.set_emotion("neutral")
             # 恢复唤醒词检测（添加安全检查）
             if self.wake_word_detector and hasattr(self.wake_word_detector, 'paused') and self.wake_word_detector.paused:
                 self.wake_word_detector.resume()
@@ -626,7 +627,7 @@ class Application:
             self.display.update_status("连接中...")
         elif state == DeviceState.LISTENING:
             self.display.update_status("聆听中...")
-            self.display.update_emotion("🙂")
+            self.set_emotion("neutral")
             self._update_iot_states(True)
             # 暂停唤醒词检测（添加安全检查）
             if self.wake_word_detector and hasattr(self.wake_word_detector, 'is_running') and self.wake_word_detector.is_running():
@@ -706,6 +707,7 @@ class Application:
     def set_emotion(self, emotion):
         """设置表情"""
         self.current_emotion = emotion
+        print(emotion)
         # 更新显示
         if self.display:
             self.display.update_emotion(self._get_current_emotion())
@@ -1096,10 +1098,12 @@ class Application:
         
         # 确保音频编解码器已初始化
         if hasattr(self, 'audio_codec') and self.audio_codec:
-            shared_stream = self.audio_codec.get_shared_input_stream()
-            if shared_stream:
-                logger.info("使用共享的音频输入流启动唤醒词检测器")
-                self.wake_word_detector.start(shared_stream)
+            logger.info("使用音频编解码器启动唤醒词检测器")
+            self.wake_word_detector.start(self.audio_codec)
+        else:
+            # 如果没有音频编解码器，使用独立模式
+            logger.info("使用独立模式启动唤醒词检测器")
+            self.wake_word_detector.start()
 
     def _on_wake_word_detected(self, wake_word, full_text):
         """唤醒词检测回调"""
@@ -1161,19 +1165,14 @@ class Application:
                 self.wake_word_detector.stop()
                 time.sleep(0.5)  # 给予一些时间让资源释放
 
-            # 确保使用最新的共享音频输入流
+            # 直接使用音频编解码器
             if hasattr(self, 'audio_codec') and self.audio_codec:
-                shared_stream = self.audio_codec.get_shared_input_stream()
-                if shared_stream:
-                    self.wake_word_detector.start(shared_stream)
-                    logger.info("使用共享的音频流重新启动唤醒词检测器")
-                else:
-                    # 如果无法获取共享流，尝试让检测器创建自己的流
-                    self.wake_word_detector.start()
-                    logger.info("使用独立的音频流重新启动唤醒词检测器")
+                self.wake_word_detector.start(self.audio_codec)
+                logger.info("使用音频编解码器重新启动唤醒词检测器")
             else:
+                # 如果没有音频编解码器，使用独立模式
                 self.wake_word_detector.start()
-                logger.info("使用独立的音频流重新启动唤醒词检测器")
+                logger.info("使用独立模式重新启动唤醒词检测器")
 
             logger.info("唤醒词检测器重新启动成功")
         except Exception as e:
@@ -1198,7 +1197,7 @@ class Application:
         thing_manager.add_thing(MusicPlayer())
         # thing_manager.add_thing(NewMusicPlayer())
         # 默认不启用以下示例
-        # thing_manager.add_thing(Camera())
+        thing_manager.add_thing(Camera())
         # thing_manager.add_thing(QueryBridgeRAG())
         # thing_manager.add_thing(TemperatureSensor())
         logger.info("物联网设备初始化完成")
@@ -1214,6 +1213,7 @@ class Application:
             try:
                 result = thing_manager.invoke(command)
                 logger.info(f"执行物联网命令结果: {result}")
+                self.schedule(lambda: self._update_iot_states())
             except Exception as e:
                 logger.error(f"执行物联网命令失败: {e}")
 
@@ -1245,7 +1245,7 @@ class Application:
 
         # 使用新方法获取状态
         changed, states_json = thing_manager.get_states_json(delta=delta)
-
+        print(changed, states_json)
         # delta=False总是发送，delta=True只在有变化时发送
         if not delta or changed:
             asyncio.run_coroutine_threadsafe(
@@ -1261,8 +1261,9 @@ class Application:
 
     def _update_wake_word_detector_stream(self):
         """更新唤醒词检测器的音频流"""
-        if self.wake_word_detector and self.audio_codec:
-            shared_stream = self.audio_codec.get_shared_input_stream()
-            if shared_stream and self.wake_word_detector.is_running():
-                self.wake_word_detector.update_stream(shared_stream)
-                logger.info("已更新唤醒词检测器的音频流")
+        if self.wake_word_detector and self.audio_codec and self.wake_word_detector.is_running():
+            # 直接引用AudioCodec实例中的输入流
+            if self.audio_codec.input_stream and self.audio_codec.input_stream.is_active():
+                self.wake_word_detector.stream = self.audio_codec.input_stream
+                self.wake_word_detector.external_stream = True
+                logger.info("已更新唤醒词检测器的音频流引用")
