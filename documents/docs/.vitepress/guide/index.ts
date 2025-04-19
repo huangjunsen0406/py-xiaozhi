@@ -9,5 +9,7 @@ export function getGuideSideBarItems(): (DefaultTheme.SidebarItem)[] {
       text: item,
       link: `/guide/${item}`
     }
+  }).filter(item => {
+    return !item.text.includes('使用文档')
   })
 }

@@ -1,15 +1,15 @@
 <script setup>
 import { ref, onMounted } from 'vue'
+import sponsorsData from './data.js'
 
 const sponsors = ref([])
 const isLoading = ref(true)
 const error = ref(null)
 
-onMounted(async () => {
+onMounted(() => {
   try {
-    const response = await fetch('/py-xiaozhi/sponsors/data.json')
-    const data = await response.json()
-    sponsors.value = data.sponsors
+    // 直接使用导入的数据而不是通过fetch请求
+    sponsors.value = sponsorsData.sponsors
     isLoading.value = false
   } catch (err) {
     console.error('加载赞助者数据失败:', err)
