@@ -92,72 +92,24 @@ py-xiaozhi 是一个使用 Python 实现的小智语音客户端，旨在通过�
 ## 项目结构
 
 ```
-├── .github                          # GitHub 相关配置
-│   └── ISSUE_TEMPLATE               # Issue 模板目录
-│       ├── bug_report.md            # Bug 报告模板
-│       ├── code_improvement.md      # 代码改进建议模板
-│       ├── documentation_improvement.md  # 文档改进建议模板
-│       └── feature_request.md       # 功能请求模板
-├── config                           # 配置文件目录
-│   └── config.json                  # 应用程序配置文件
-├── docs                             # 文档目录
-│   ├── images                       # 文档图片资源
-│   │   ├── 唤醒词.png               # 唤醒词设置示例图
-│   │   └── 群聊.jpg                 # 社区交流群图片
-│   ├── 使用文档.md                  # 用户使用指南
-│   └── 异常汇总.md                  # 常见错误及解决方案
-├── hooks                            # PyInstaller钩子目录
-│   ├── hook-opuslib.py              # opuslib钩子
-│   ├── hook-vosk.py                 # vosk钩子
-│   └── runtime_hook.py              # 运行时钩子
-├── libs                             # 依赖库目录
-│   └── windows                      # Windows 平台特定库
-│       └── opus.dll                 # Opus 音频编解码库
-├── resources                        # 资源文件目录
-├── scripts                          # 实用脚本目录
-│   ├── build.py                     # 打包构建脚本
-│   ├── dir_tree.py                  # 生成目录树结构脚本
-│   └── py_audio_scanner.py          # 音频设备扫描工具
-├── src                              # 源代码目录
-│   ├── audio_codecs                 # 音频编解码模块
-│   │   └── audio_codec.py           # 音频编解码器实现
-│   ├── audio_processing             # 音频处理模块
-│   │   ├── vad_detector.py          # 语音活动检测实现（用于实时打断）
-│   │   └── wake_word_detect.py      # 语音唤醒词检测实现
-│   ├── constants                    # 常量定义
-│   │   └── constants.py             # 应用程序常量（状态、事件类型等）
-│   ├── display                      # 显示界面模块
-│   │   ├── base_display.py          # 显示界面基类
-│   │   ├── cli_display.py           # 命令行界面实现
-│   │   └── gui_display.py           # 图形用户界面实现
-│   ├── iot                          # IoT设备相关模块
-│   │   ├── things                   # 具体设备实现目录
-│   │   │   ├── CameraVL             # 摄像头与视觉识别模块
-│   │   │   │   ├── Camera.py        # 摄像头控制实现
-│   │   │   │   └── VL.py            # 视觉识别实现
-│   │   │   ├── lamp.py              # 智能灯具控制实现
-│   │   │   ├── music_player.py      # 音乐播放器实现
-│   │   │   ├── query_bridge_rag.py  # RAG查询桥接实现
-│   │   │   ├── speaker.py           # 音量控制器
-│   │   │   └── temperature_sensor.py # 温度传感器实现
-│   │   ├── thing.py                 # IoT设备基类定义
-│   │   └── thing_manager.py         # IoT设备管理器（统一管理各类设备）
-│   ├── protocols                    # 通信协议模块
-│   │   ├── mqtt_protocol.py         # MQTT 协议实现（用于设备通信）
-│   │   ├── protocol.py              # 协议基类
-│   │   └── websocket_protocol.py    # WebSocket 协议实现
-│   ├── utils                        # 工具类模块
-│   │   ├── config_manager.py        # 配置管理器（单例模式）
-│   │   ├── logging_config.py        # 日志配置
-│   │   ├── system_info.py           # 系统信息工具（处理 opus.dll 加载等）
-│   │   └── volume_controller.py     # 音量控制工具（跨平台音量调节）
-│   └── application.py               # 应用程序主类（核心业务逻辑）
-├── .gitignore                       # Git 忽略文件配置
-├── LICENSE                          # 项目许可证
-├── README.md                        # 项目说明文档
-├── main.py                          # 程序入口点
-├── requirements.txt                 # Python 依赖包列表（通用）
-├── requirements_mac.txt             # macOS 特定依赖包列表
+├── .github                 # GitHub 相关配置
+├── assets                  # 资源文件（表情动画等）
+├── cache                   # 缓存目录（音乐等临时文件）
+├── config                  # 配置文件目录
+├── documents               # 文档目录
+├── hooks                   # PyInstaller钩子目录
+├── libs                    # 依赖库目录
+├── scripts                 # 实用脚本目录
+├── src                     # 源代码目录
+│   ├── audio_codecs        # 音频编解码模块
+│   ├── audio_processing    # 音频处理模块
+│   ├── constants           # 常量定义
+│   ├── display             # 显示界面模块
+│   ├── iot                 # IoT设备相关模块
+│   │   └── things          # 具体设备实现目录
+│   ├── network             # 网络通信模块
+│   ├── protocols           # 通信协议模块
+│   └── utils               # 工具类模块
 ```
 
 ## 贡献指南

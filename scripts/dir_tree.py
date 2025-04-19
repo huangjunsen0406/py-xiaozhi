@@ -1,7 +1,7 @@
 import os
 
 # 需要排除的目录 & 文件（你可以自定义）
-EXCLUDED_DIRS = {".git", ".idea", ".venv", "build", "dist", "__pycache__", "desktop", "logs", "models"}
+EXCLUDED_DIRS = {".git", ".idea", ".venv", "build", "dist", "__pycache__", "desktop", "logs", "models", "documents"}
 EXCLUDED_FILES = {".DS_Store", "Thumbs.db"}
 
 def print_directory_tree(start_path=".", indent=""):

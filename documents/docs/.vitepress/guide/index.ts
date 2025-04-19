@@ -7,7 +7,7 @@ export function getGuideSideBarItems(): (DefaultTheme.SidebarItem)[] {
   .map(item => {
     return {
       text: item,
-      link: `/${item}`
+      link: `/guide/${item}`
     }
   })
 }

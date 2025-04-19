@@ -92,73 +92,24 @@ py-xiaozhi is a Python-based Xiaozhi voice client, designed to learn coding and 
 ## Project Structure
 
 ```
-├── .github                          # GitHub related configurations
-│   └── ISSUE_TEMPLATE               # Issue template directory
-│       ├── bug_report.md            # Bug report template
-│       ├── code_improvement.md      # Code improvement suggestion template
-│       ├── documentation_improvement.md  # Documentation improvement template
-│       └── feature_request.md       # Feature request template
-├── config                           # Configuration directory
-│   └── config.json                  # Application configuration file
-├── docs                             # Documentation directory
-│   ├── images                       # Documentation image resources
-│   │   ├── 唤醒词.png               # Wake word setting example image
-│   │   └── 群聊.jpg                 # Community chat group image
-│   ├── 使用文档.md                  # User guide
-│   └── 异常汇总.md                  # Common errors and solutions
-├── hooks                            # PyInstaller hooks directory
-│   ├── hook-opuslib.py              # opuslib hook
-│   ├── hook-vosk.py                 # vosk hook
-│   └── runtime_hook.py              # Runtime hook
-├── libs                             # Dependencies directory
-│   └── windows                      # Windows platform-specific libraries
-│       └── opus.dll                 # Opus audio codec library
-├── resources                        # Resource files directory
-├── scripts                          # Utility scripts directory
-│   ├── build.py                     # Packaging build script
-│   ├── dir_tree.py                  # Generate directory tree structure script
-│   └── py_audio_scanner.py          # Audio device scanning tool
-├── src                              # Source code directory
-│   ├── audio_codecs                 # Audio encoding/decoding module
-│   │   └── audio_codec.py           # Audio codec implementation
-│   ├── audio_processing             # Audio processing module
-│   │   ├── vad_detector.py          # Voice activity detection (for real-time interruption)
-│   │   └── wake_word_detect.py      # Wake word detection implementation
-│   ├── constants                    # Constants definition
-│   │   └── constants.py             # Application constants (states, event types, etc.)
-│   ├── display                      # Display interface module
-│   │   ├── base_display.py          # Display interface base class
-│   │   ├── cli_display.py           # Command line interface implementation
-│   │   └── gui_display.py           # Graphical user interface implementation
-│   ├── iot                          # IoT device related module
-│   │   ├── things                   # Specific device implementation directory
-│   │   │   ├── CameraVL             # Camera and visual recognition module
-│   │   │   │   ├── Camera.py        # Camera control implementation
-│   │   │   │   └── VL.py            # Visual recognition implementation
-│   │   │   ├── lamp.py              # Smart light control implementation
-│   │   │   ├── music_player.py      # Music player implementation
-│   │   │   ├── query_bridge_rag.py  # RAG query bridge implementation
-│   │   │   ├── speaker.py           # volume controller
-│   │   │   └── temperature_sensor.py # Temperature sensor implementation
-│   │   ├── thing.py                 # IoT device base class definition
-│   │   └── thing_manager.py         # IoT device manager (unified management)
-│   ├── protocols                    # Communication protocol module
-│   │   ├── mqtt_protocol.py         # MQTT protocol implementation (for device communication)
-│   │   ├── protocol.py              # Protocol base class
-│   │   └── websocket_protocol.py    # WebSocket protocol implementation
-│   ├── utils                        # Utility classes module
-│   │   ├── config_manager.py        # Configuration manager (singleton pattern)
-│   │   ├── logging_config.py        # Logging configuration
-│   │   ├── system_info.py           # System information tool (handling opus.dll loading, etc.)
-│   │   └── volume_controller.py     # Volume control tool (cross-platform volume adjustment)
-│   └── application.py               # Application main class (core business logic)
-├── .gitignore                       # Git ignore file configuration
-├── LICENSE                          # Project license
-├── README.md                        # Project documentation (Chinese)
-├── README.en.md                     # Project documentation (English)
-├── main.py                          # Program entry point
-├── requirements.txt                 # Python dependency package list (general)
-├── requirements_mac.txt             # macOS specific dependency package list
+├── .github                 # GitHub related configurations
+├── assets                  # Resource files (emotion animations, etc.)
+├── cache                   # Cache directory (music and temporary files)
+├── config                  # Configuration directory
+├── documents               # Documentation directory
+├── hooks                   # PyInstaller hooks directory
+├── libs                    # Dependencies directory
+├── scripts                 # Utility scripts directory
+├── src                     # Source code directory
+│   ├── audio_codecs        # Audio encoding/decoding module
+│   ├── audio_processing    # Audio processing module
+│   ├── constants           # Constants definition
+│   ├── display             # Display interface module
+│   ├── iot                 # IoT device related module
+│   │   └── things          # Specific device implementation directory
+│   ├── network             # Network communication module
+│   ├── protocols           # Communication protocol module
+│   └── utils               # Utility classes module
 ```
 
 ## Contribution Guidelines
