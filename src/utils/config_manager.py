@@ -255,7 +255,6 @@ class ConfigManager:
         """获取OTA服务器的MQTT信息"""
         MAC_ADDR = self.get_config("SYSTEM_OPTIONS.DEVICE_ID")
         OTA_VERSION_URL = self.get_config("SYSTEM_OPTIONS.NETWORK.OTA_VERSION_URL")
-        
         headers = {
             "Device-Id": MAC_ADDR,
             "Content-Type": "application/json"

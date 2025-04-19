@@ -1,43 +1,34 @@
-import threading
-import queue
-import logging
-import time
 import sys
-import json
 import os
-import math
+import logging
+import threading
+from pathlib import Path
+from urllib.parse import urlparse
+
+from PyQt5.QtCore import (
+    Qt, QTimer, QPropertyAnimation, QRect, 
+    QEvent, QObject
+)
+from PyQt5.QtWidgets import (
+    QApplication, QWidget, QVBoxLayout, 
+    QHBoxLayout, QLabel, QPushButton, QSlider, QLineEdit,
+    QComboBox, QCheckBox, QMessageBox, QFrame,
+    QStackedWidget, QTabBar, QStyleOptionSlider, QStyle,
+    QGraphicsOpacityEffect
+)
+from PyQt5.QtGui import (
+    QPainter, QColor, QFont, QMouseEvent
+)
+
+from src.utils.config_manager import ConfigManager
+import queue
+import time
 import numpy as np
 from typing import Optional, Callable
-from urllib.parse import urlparse, urlunparse
-from PyQt5.QtWidgets import (
-    QApplication,
-    QWidget,
-    QVBoxLayout,
-    QHBoxLayout,
-    QLabel,
-    QPushButton,
-    QSlider,
-    QGraphicsOpacityEffect,
-    QDesktopWidget,
-    QSizePolicy,
-    QMessageBox,
-    QLineEdit,
-    QComboBox,
-    QFrame,
-    QStackedWidget,
-    QCheckBox,
-    QTabBar,
-    QStyle, 
-    QStyleOptionSlider
-)
-from PyQt5.QtCore import Qt, QTimer, QPoint, QPropertyAnimation, QRect, QEvent, QObject
-from PyQt5.QtGui import QMouseEvent, QPainter, QColor, QPen, QBrush, QFont, QIcon
 from pynput import keyboard as pynput_keyboard
-from abc import ABCMeta # 导入 ABCMeta
+from abc import ABCMeta
 from src.display.base_display import BaseDisplay
-from pathlib import Path
 
-CONFIG_PATH = Path(__file__).parent.parent.parent / "config" / "config.json"
 
 def restart_program():
     """使用 os.execv 重启当前 Python 程序。"""
@@ -54,17 +45,19 @@ def restart_program():
         print(f"重启程序失败: {e}")
         logging.getLogger("Display").error(f"重启程序失败: {e}", exc_info=True)
         # 如果重启失败，可以选择退出或通知用户
-        sys.exit(1) # 或者弹出一个错误消息框
+        sys.exit(1)  # 或者弹出一个错误消息框
+
 
 # 创建兼容的元类
 class CombinedMeta(type(QObject), ABCMeta):
     pass
 
+
 class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
     def __init__(self):
         # 重要：调用 super() 处理多重继承
         super().__init__()
-        QObject.__init__(self) # 调用 QObject 初始化
+        QObject.__init__(self)  # 调用 QObject 初始化
 
         # 初始化日志
         self.logger = logging.getLogger("Display")
@@ -148,7 +141,8 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         self.animated_widget = None
         
         # 检查系统音量控制是否可用
-        self.volume_control_available = hasattr(self, 'volume_controller') and self.volume_controller is not None
+        self.volume_control_available = (hasattr(self, 'volume_controller') and
+                                         self.volume_controller is not None)
         
         # 尝试获取一次系统音量，检测音量控制是否正常工作
         self.get_current_volume()
@@ -161,35 +155,40 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
                 slider.initStyleOption(opt)
                 
                 # 获取滑块手柄和轨道的矩形区域
-                handle_rect = slider.style().subControlRect(QStyle.CC_Slider, opt, QStyle.SC_SliderHandle, slider)
-                groove_rect = slider.style().subControlRect(QStyle.CC_Slider, opt, QStyle.SC_SliderGroove, slider)
+                handle_rect = slider.style().subControlRect(
+                    QStyle.CC_Slider, opt, QStyle.SC_SliderHandle, slider)
+                groove_rect = slider.style().subControlRect(
+                    QStyle.CC_Slider, opt, QStyle.SC_SliderGroove, slider)
 
                 # 如果点击在手柄上，则让默认处理器处理拖动
                 if handle_rect.contains(event.pos()):
-                     return False 
+                    return False 
 
                 # 计算点击位置相对于轨道的位置
                 if slider.orientation() == Qt.Horizontal:
                     # 确保点击在有效的轨道范围内
-                    if event.pos().x() < groove_rect.left() or event.pos().x() > groove_rect.right():
-                        return False # 点击在轨道外部
+                    if (event.pos().x() < groove_rect.left() or
+                            event.pos().x() > groove_rect.right()):
+                        return False  # 点击在轨道外部
                     pos = event.pos().x() - groove_rect.left()
                     max_pos = groove_rect.width()
                 else:
-                    if event.pos().y() < groove_rect.top() or event.pos().y() > groove_rect.bottom():
-                         return False # 点击在轨道外部
+                    if (event.pos().y() < groove_rect.top() or
+                            event.pos().y() > groove_rect.bottom()):
+                        return False  # 点击在轨道外部
                     pos = groove_rect.bottom() - event.pos().y()
                     max_pos = groove_rect.height()
 
-                if max_pos > 0: # 避免除以零
+                if max_pos > 0:  # 避免除以零
                     value_range = slider.maximum() - slider.minimum()
                     # 根据点击位置计算新的值
-                    new_value = slider.minimum() + round((value_range * pos) / max_pos)
+                    new_value = slider.minimum() + round(
+                        (value_range * pos) / max_pos)
                     
                     # 直接设置滑块的值
                     slider.setValue(int(new_value))
                     
-                    return True # 表示事件已处理
+                    return True  # 表示事件已处理
         
         return super().eventFilter(source, event)
 
@@ -568,7 +567,7 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             # 显式添加OTA ComboBox选项
             if self.otaProtocolComboBox:
                 self.otaProtocolComboBox.clear()
-                self.otaProtocolComboBox.addItems(["http://", "https://"])
+                self.otaProtocolComboBox.addItems(["https://", "http://"])
 
             # 获取导航控件
             self.stackedWidget = self.root.findChild(QStackedWidget, "stackedWidget")
@@ -775,33 +774,26 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             self.logger.error(f"静音按钮点击事件处理失败: {e}")
 
     def _load_settings(self):
-        """加载配置文件并更新设置页面UI (使用标准控件方法)"""
+        """加载配置文件并更新设置页面UI (使用ConfigManager)"""
         try:
-            if not CONFIG_PATH.exists():
-                self.logger.warning(f"配置文件 {CONFIG_PATH} 不存在，无法加载设置。")
-                QMessageBox.warning(self.root, "错误", f"配置文件 {CONFIG_PATH} 不存在。")
-                return
-
-            with open(CONFIG_PATH, 'r', encoding='utf-8') as f:
-                config_data = json.load(f)
-
-            wake_word_options = config_data.get("WAKE_WORD_OPTIONS", {})
-            use_wake_word = wake_word_options.get("USE_WAKE_WORD", False)
-            wake_words = wake_word_options.get("WAKE_WORDS", [])
-
+            # 使用ConfigManager获取配置
+            config_manager = ConfigManager.get_instance()
+            
+            # 获取唤醒词配置
+            use_wake_word = config_manager.get_config("WAKE_WORD_OPTIONS.USE_WAKE_WORD", False)
+            wake_words = config_manager.get_config("WAKE_WORD_OPTIONS.WAKE_WORDS", [])
+            
             if self.wakeWordEnableSwitch:
                 self.wakeWordEnableSwitch.setChecked(use_wake_word)
 
             if self.wakeWordsLineEdit:
                 self.wakeWordsLineEdit.setText(", ".join(wake_words))
 
-            # 加载系统选项 (逻辑不变)
-            system_options = config_data.get("SYSTEM_OPTIONS", {})
-            device_id = system_options.get("DEVICE_ID", "")
-            network_options = system_options.get("NETWORK", {})
-            websocket_url = network_options.get("WEBSOCKET_URL", "")
-            websocket_token = network_options.get("WEBSOCKET_ACCESS_TOKEN", "")
-            ota_url = network_options.get("OTA_VERSION_URL", "")
+            # 获取系统选项
+            device_id = config_manager.get_config("SYSTEM_OPTIONS.DEVICE_ID", "")
+            websocket_url = config_manager.get_config("SYSTEM_OPTIONS.NETWORK.WEBSOCKET_URL", "")
+            websocket_token = config_manager.get_config("SYSTEM_OPTIONS.NETWORK.WEBSOCKET_ACCESS_TOKEN", "")
+            ota_url = config_manager.get_config("SYSTEM_OPTIONS.NETWORK.OTA_VERSION_URL", "")
 
             if self.deviceIdLineEdit:
                 self.deviceIdLineEdit.setText(device_id)
@@ -811,16 +803,20 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
                 try:
                     parsed_url = urlparse(websocket_url)
                     protocol = parsed_url.scheme
+                    
+                    # 保留URL末尾的斜杠
                     address = parsed_url.netloc + parsed_url.path
-                    if address.endswith('/'):
-                       address = address[:-1]
+                    
+                    # 确保地址不以协议开头
+                    if address.startswith(f"{protocol}://"):
+                        address = address[len(f"{protocol}://"):]
 
                     index = self.wsProtocolComboBox.findText(f"{protocol}://", Qt.MatchFixedString)
                     if index >= 0:
                         self.wsProtocolComboBox.setCurrentIndex(index)
                     else:
-                         self.logger.warning(f"未知的 WebSocket 协议: {protocol}")
-                         self.wsProtocolComboBox.setCurrentIndex(0) # 默认为 wss
+                        self.logger.warning(f"未知的 WebSocket 协议: {protocol}")
+                        self.wsProtocolComboBox.setCurrentIndex(0)  # 默认为 wss
 
                     self.wsAddressLineEdit.setText(address)
                 except Exception as e:
@@ -836,94 +832,83 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
                 try:
                     parsed_url = urlparse(ota_url)
                     protocol = parsed_url.scheme
+                    
+                    # 保留URL末尾的斜杠
                     address = parsed_url.netloc + parsed_url.path
-                    # 移除末尾的'/'(如果存在)
-                    if address.endswith('/'):
-                        address = address[:-1]
+                    
+                    # 确保地址不以协议开头
+                    if address.startswith(f"{protocol}://"):
+                        address = address[len(f"{protocol}://"):]
                         
                     if protocol == "https":
-                        self.otaProtocolComboBox.setCurrentIndex(1)
-                    elif protocol == "http":
                         self.otaProtocolComboBox.setCurrentIndex(0)
+                    elif protocol == "http":
+                        self.otaProtocolComboBox.setCurrentIndex(1)
                     else:
                         self.logger.warning(f"未知的OTA协议: {protocol}")
-                        self.otaProtocolComboBox.setCurrentIndex(1)  # 默认为https
+                        self.otaProtocolComboBox.setCurrentIndex(0)  # 默认为https
                         
                     self.otaAddressLineEdit.setText(address)
                 except Exception as e:
                     self.logger.error(f"解析OTA URL时出错: {ota_url} - {e}")
-                    self.otaProtocolComboBox.setCurrentIndex(1)
+                    self.otaProtocolComboBox.setCurrentIndex(0)
                     self.otaAddressLineEdit.clear()
 
-        except json.JSONDecodeError:
-            self.logger.error(f"配置文件 {CONFIG_PATH} 格式错误。", exc_info=True)
-            QMessageBox.critical(self.root, "错误", f"配置文件 {CONFIG_PATH} 格式错误。")
         except Exception as e:
             self.logger.error(f"加载配置文件时出错: {e}", exc_info=True)
             QMessageBox.critical(self.root, "错误", f"加载设置失败: {e}")
 
     def _save_settings(self):
-        """保存设置页面的更改到配置文件 (使用标准控件方法)"""
+        """保存设置页面的更改到配置文件 (使用ConfigManager)"""
         try:
-            if not CONFIG_PATH.exists():
-                self.logger.error(f"配置文件 {CONFIG_PATH} 不存在，无法保存设置。")
-                QMessageBox.critical(self.root, "错误", f"配置文件 {CONFIG_PATH} 不存在。")
-                return
-
-            with open(CONFIG_PATH, 'r', encoding='utf-8') as f:
-                config_data = json.load(f)
-
+            # 使用ConfigManager获取和更新配置
+            config_manager = ConfigManager.get_instance()
+            
+            # 获取并更新唤醒词配置
             use_wake_word = self.wakeWordEnableSwitch.isChecked() if self.wakeWordEnableSwitch else False
             wake_words_text = self.wakeWordsLineEdit.text() if self.wakeWordsLineEdit else ""
             wake_words = [word.strip() for word in wake_words_text.split(',') if word.strip()]
-
-            # 更新配置字典
-            if "WAKE_WORD_OPTIONS" not in config_data: config_data["WAKE_WORD_OPTIONS"] = {}
-            config_data["WAKE_WORD_OPTIONS"]["USE_WAKE_WORD"] = use_wake_word
-            config_data["WAKE_WORD_OPTIONS"]["WAKE_WORDS"] = wake_words
-
-            # 获取并更新系统选项 (使用 QLineEdit, QComboBox)
+            
+            # 更新唤醒词配置
+            config_manager.update_config("WAKE_WORD_OPTIONS.USE_WAKE_WORD", use_wake_word)
+            config_manager.update_config("WAKE_WORD_OPTIONS.WAKE_WORDS", wake_words)
+            
+            # 获取并更新系统选项
             new_device_id = self.deviceIdLineEdit.text() if self.deviceIdLineEdit else ""
             selected_protocol_text = self.wsProtocolComboBox.currentText() if self.wsProtocolComboBox else "wss://"
-            selected_protocol = selected_protocol_text.replace("://","")
+            selected_protocol = selected_protocol_text.replace("://", "")
             new_ws_address = self.wsAddressLineEdit.text() if self.wsAddressLineEdit else ""
             new_ws_token = self.wsTokenLineEdit.text() if self.wsTokenLineEdit else ""
-
+            
             # 获取OTA地址配置
             selected_ota_protocol_text = self.otaProtocolComboBox.currentText() if self.otaProtocolComboBox else "https://"
             selected_ota_protocol = selected_ota_protocol_text.replace("://", "")
             new_ota_address = self.otaAddressLineEdit.text() if self.otaAddressLineEdit else ""
-
+            
             # 确保地址不以 / 开头 (urlunparse 会添加)
             if new_ws_address.startswith('/'):
                 new_ws_address = new_ws_address[1:]
-            # 确保地址以 / 结尾 (符合原始格式)
-            if not new_ws_address.endswith('/') and new_ws_address:
-                 new_ws_address += '/'
-
+                
             # 构造新的 WebSocket URL
-            # 注意：urlunparse 的第一个参数是 scheme, 第二个是 netloc, 第三个是 path
-            # 我们将地址部分视为 netloc + path
-            url_parts = urlparse(f"http://{new_ws_address}") # 借用 http 解析 netloc 和 path
+            # 直接使用字符串拼接保留末尾斜杠
+            new_websocket_url = f"{selected_protocol}://{new_ws_address}"
+            # 确保末尾有斜杠
+            if new_websocket_url and not new_websocket_url.endswith('/'):
+                new_websocket_url += '/'
             
-            new_websocket_url = urlunparse((selected_protocol, url_parts.netloc, url_parts.path, '', '', ''))
-
             # 构造新的OTA URL
-            ota_url_parts = urlparse(f"http://{new_ota_address}")  # 借用http解析netloc和path
-            new_ota_url = urlunparse((selected_ota_protocol, ota_url_parts.netloc, ota_url_parts.path, '', '', ''))
-
-            # 更新系统选项
-            if "SYSTEM_OPTIONS" not in config_data: config_data["SYSTEM_OPTIONS"] = {}
-            config_data["SYSTEM_OPTIONS"]["DEVICE_ID"] = new_device_id
-            if "NETWORK" not in config_data["SYSTEM_OPTIONS"]: config_data["SYSTEM_OPTIONS"]["NETWORK"] = {}
-            config_data["SYSTEM_OPTIONS"]["NETWORK"]["WEBSOCKET_URL"] = new_websocket_url
-            config_data["SYSTEM_OPTIONS"]["NETWORK"]["WEBSOCKET_ACCESS_TOKEN"] = new_ws_token
-            config_data["SYSTEM_OPTIONS"]["NETWORK"]["OTA_VERSION_URL"] = new_ota_url
-
-            # 写回配置文件
-            with open(CONFIG_PATH, 'w', encoding='utf-8') as f:
-                json.dump(config_data, f, ensure_ascii=False, indent=2)
-
+            # 直接使用字符串拼接保留末尾斜杠
+            new_ota_url = f"{selected_ota_protocol}://{new_ota_address}"
+            # 确保末尾有斜杠
+            if new_ota_url and not new_ota_url.endswith('/'):
+                new_ota_url += '/'
+            
+            # 更新系统配置
+            config_manager.update_config("SYSTEM_OPTIONS.DEVICE_ID", new_device_id)
+            config_manager.update_config("SYSTEM_OPTIONS.NETWORK.WEBSOCKET_URL", new_websocket_url)
+            config_manager.update_config("SYSTEM_OPTIONS.NETWORK.WEBSOCKET_ACCESS_TOKEN", new_ws_token)
+            config_manager.update_config("SYSTEM_OPTIONS.NETWORK.OTA_VERSION_URL", new_ota_url)
+            
             self.logger.info("设置已成功保存到 config.json")
             reply = QMessageBox.question(self.root, "保存成功",
                                        "设置已保存。\n部分设置需要重启应用程序才能生效。\n\n是否立即重启？",
@@ -932,13 +917,7 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             if reply == QMessageBox.Yes:
                 self.logger.info("用户选择重启应用程序。")
                 restart_program()
-
-        except json.JSONDecodeError:
-            self.logger.error(f"读取配置文件 {CONFIG_PATH} 时格式错误。", exc_info=True)
-            QMessageBox.critical(self.root, "错误", f"读取配置文件 {CONFIG_PATH} 格式错误，无法保存。")
-        except IOError as e:
-            self.logger.error(f"写入配置文件 {CONFIG_PATH} 时出错: {e}", exc_info=True)
-            QMessageBox.critical(self.root, "错误", f"保存设置失败，无法写入文件: {e}")
+                
         except Exception as e:
             self.logger.error(f"保存设置时发生未知错误: {e}", exc_info=True)
             QMessageBox.critical(self.root, "错误", f"保存设置失败: {e}")
