@@ -1,11 +1,20 @@
 # py-xiaozhi
 <p align="center">
-
-[![Release](https://img.shields.io/github/v/release/huangjunsen0406/py-xiaozhi?style=flat-square&logo=github&color=blue)](https://github.com/huangjunsen0406/py-xiaozhi/releases/latest)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg?style=flat-square)](https://opensource.org/licenses/MIT)
-[![Stars](https://img.shields.io/github/stars/huangjunsen0406/py-xiaozhi?style=flat-square&logo=github)](https://github.com/huangjunsen0406/py-xiaozhi/stargazers)
-[![Download](https://img.shields.io/github/downloads/huangjunsen0406/py-xiaozhi/total?style=flat-square&logo=github&color=52c41a1&maxAge=86400)](https://github.com/huangjunsen0406/py-xiaozhi/releases/latest)
-
+  <a href="https://github.com/huangjunsen0406/py-xiaozhi/releases/latest">
+    <img src="https://img.shields.io/github/v/release/huangjunsen0406/py-xiaozhi?style=flat-square&logo=github&color=blue" alt="Release"/>
+  </a>
+  <a href="https://opensource.org/licenses/MIT">
+    <img src="https://img.shields.io/badge/License-MIT-green.svg?style=flat-square" alt="License: MIT"/>
+  </a>
+  <a href="https://github.com/huangjunsen0406/py-xiaozhi/stargazers">
+    <img src="https://img.shields.io/github/stars/huangjunsen0406/py-xiaozhi?style=flat-square&logo=github" alt="Stars"/>
+  </a>
+  <a href="https://github.com/huangjunsen0406/py-xiaozhi/releases/latest">
+    <img src="https://img.shields.io/github/downloads/huangjunsen0406/py-xiaozhi/total?style=flat-square&logo=github&color=52c41a1&maxAge=86400" alt="Download"/>
+  </a>
+  <a href="https://gitee.com/huang-jun-sen/py-xiaozhi">
+    <img src="https://img.shields.io/badge/Gitee-FF5722?style=flat-square&logo=gitee" alt="Gitee"/>
+  </a>
 </p>
 
 English | [简体中文](README.md)
@@ -42,7 +51,7 @@ py-xiaozhi is a Python-based Xiaozhi voice client, designed to learn coding and 
 - Microphone and speaker devices
 
 ## Read This First!
-- Carefully read /docs/使用文档.md for startup tutorials and file descriptions
+- Carefully read [项目文档](https://huangjunsen0406.github.io/py-xiaozhi/) for startup tutorials and file descriptions
 - The main branch has the latest code; manually reinstall pip dependencies after each update to ensure you have new dependencies
 
 [Zero to Xiaozhi Client (Video Tutorial)](https://www.bilibili.com/video/BV1dWQhYEEmq/?vd_source=2065ec11f7577e7107a55bbdc3d12fce)
@@ -88,7 +97,7 @@ py-xiaozhi is a Python-based Xiaozhi voice client, designed to learn coding and 
 - main: Main branch
 - feature/v1: First version
 - feature/visual: Visual branch
-
+- feature/raspberry_pi embedded device branch
 ## Project Structure
 
 ```

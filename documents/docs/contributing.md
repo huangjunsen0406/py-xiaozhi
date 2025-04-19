@@ -21,7 +21,7 @@ outline: deep
 
 ### 基本要求
 
-- Python 3.8 或更高版本
+- Python 3.9 或更高版本
 - Git 版本控制系统
 - 基本的 Python 开发工具（推荐使用 Visual Studio Code）
 

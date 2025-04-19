@@ -1,11 +1,22 @@
 # py-xiaozhi
 <p align="center">
-
-[![Release](https://img.shields.io/github/v/release/huangjunsen0406/py-xiaozhi?style=flat-square&logo=github&color=blue)](https://github.com/huangjunsen0406/py-xiaozhi/releases/latest)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg?style=flat-square)](https://opensource.org/licenses/MIT)
-[![Stars](https://img.shields.io/github/stars/huangjunsen0406/py-xiaozhi?style=flat-square&logo=github)](https://github.com/huangjunsen0406/py-xiaozhi/stargazers)
-[![Download](https://img.shields.io/github/downloads/huangjunsen0406/py-xiaozhi/total?style=flat-square&logo=github&color=52c41a1&maxAge=86400)](https://github.com/huangjunsen0406/py-xiaozhi/releases/latest)
+  <a href="https://github.com/huangjunsen0406/py-xiaozhi/releases/latest">
+    <img src="https://img.shields.io/github/v/release/huangjunsen0406/py-xiaozhi?style=flat-square&logo=github&color=blue" alt="Release"/>
+  </a>
+  <a href="https://opensource.org/licenses/MIT">
+    <img src="https://img.shields.io/badge/License-MIT-green.svg?style=flat-square" alt="License: MIT"/>
+  </a>
+  <a href="https://github.com/huangjunsen0406/py-xiaozhi/stargazers">
+    <img src="https://img.shields.io/github/stars/huangjunsen0406/py-xiaozhi?style=flat-square&logo=github" alt="Stars"/>
+  </a>
+  <a href="https://github.com/huangjunsen0406/py-xiaozhi/releases/latest">
+    <img src="https://img.shields.io/github/downloads/huangjunsen0406/py-xiaozhi/total?style=flat-square&logo=github&color=52c41a1&maxAge=86400" alt="Download"/>
+  </a>
+  <a href="https://gitee.com/huang-jun-sen/py-xiaozhi">
+    <img src="https://img.shields.io/badge/Gitee-FF5722?style=flat-square&logo=gitee" alt="Gitee"/>
+  </a>
 </p>
+
 
 
 简体中文 | [English](README.en.md)
@@ -43,7 +54,7 @@ py-xiaozhi 是一个使用 Python 实现的小智语音客户端，旨在通过�
 - 麦克风和扬声器设备
 
 ## 请先看这里！
-- 仔细阅读/docs/使用文档.md 启动教程和文件说明都在里面了
+- 仔细阅读 [项目文档](https://huangjunsen0406.github.io/py-xiaozhi/) 启动教程和文件说明都在里面了
 - main是最新代码，每次更新都需要手动重新安装一次pip依赖防止我新增依赖后你们本地没有
 
 [从零开始使用小智客户端（视频教程）](https://www.bilibili.com/video/BV1dWQhYEEmq/?vd_source=2065ec11f7577e7107a55bbdc3d12fce)
@@ -88,7 +99,7 @@ py-xiaozhi 是一个使用 Python 实现的小智语音客户端，旨在通过�
 - main 主分支
 - feature/v1 第一个版本
 - feature/visual 视觉分支
-
+- feature/raspberry_pi 嵌入式设备分支
 ## 项目结构
 
 ```
