@@ -11,7 +11,7 @@
    </rect>
   </property>
   <property name="windowTitle">
-   <string>xiaozhi-PyQt-Fluent</string>
+   <string>小智Ai客户端</string>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
    <item>
@@ -388,11 +388,11 @@
              </widget>
             </item>
             <item>
-             <widget class="SwitchButton" name="wakeWordEnableSwitch">
-              <property name="onText">
+             <widget class="SwitchButton" name="wakeWordEnableSwitch" native="true">
+              <property name="onText" stdset="0">
                <string>开</string>
               </property>
-              <property name="offText">
+              <property name="offText" stdset="0">
                <string>关</string>
               </property>
              </widget>
@@ -610,4 +610,4 @@
  </customwidgets>
  <resources/>
  <connections/>
-</ui> 
+</ui>

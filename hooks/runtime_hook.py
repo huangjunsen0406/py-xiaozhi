@@ -8,24 +8,38 @@
 4. 配置模型路径
 """
 
-import sys
+# 添加相对路径处理
 import os
+import sys
+
+# 获取可执行文件或脚本的目录
+if getattr(sys, 'frozen', False):
+    # 打包后运行
+    app_path = os.path.dirname(sys.executable)
+else:
+    # 开发环境运行
+    app_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+# 将app_path作为工作目录，确保所有相对路径都基于此
+os.chdir(app_path)
+sys.path.insert(0, app_path)
+
+print(f"应用路径: {app_path}")
+print(f"工作目录: {os.getcwd()}")
+
+# 其他导入
 import ctypes
-import logging
 from pathlib import Path
 import platform
 
 from src.utils.logging_config import get_logger
-
-# 常量定义
-LOG_LEVEL = logging.INFO
-LOG_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+logger = get_logger(__name__)
+logger.info("运行时钩子开始执行")
 DEFAULT_VOSK_MODEL_PATH = 'models/vosk-model-small-cn-0.22'
 
 # 获取系统信息
 SYSTEM = platform.system().lower()
 ARCHITECTURE = platform.machine().lower()
-logger = get_logger(__name__)
 
 
 
@@ -36,12 +50,11 @@ def get_base_path():
         return Path(sys._MEIPASS)
     else:
         # 开发环境
-        return Path.cwd()
+        return Path(app_path)  # 使用前面定义的app_path而不是cwd
 
 
 def setup_opus_early():
     """尽早加载 opus 库"""
-    logger = logging.getLogger("RuntimeHook")
     logger.info("正在预加载 opus 库...")
     
     base_path = get_base_path()
@@ -101,7 +114,6 @@ def setup_opus_early():
 
 def setup_library_path(lib_path):
     """设置库搜索路径环境变量"""
-    logger = logging.getLogger("RuntimeHook")
     lib_dir = str(lib_path.parent)
     
     if SYSTEM == 'windows':
@@ -133,7 +145,6 @@ def setup_library_path(lib_path):
 
 def setup_vosk_model_path():
     """设置Vosk模型路径环境变量"""
-    logger = logging.getLogger("RuntimeHook")
     
     # 从ConfigManager获取配置的模型路径
     try:
@@ -168,7 +179,6 @@ def setup_vosk_model_path():
 
 def setup_executable_path():
     """记录可执行文件路径信息"""
-    logger = logging.getLogger("RuntimeHook")
     try:
         logger.info(f"可执行文件路径: {sys.executable}")
         logger.info(f"当前工作目录: {os.getcwd()}")
