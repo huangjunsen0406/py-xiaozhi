@@ -14,10 +14,10 @@ from PyQt5.QtWidgets import (
     QHBoxLayout, QLabel, QPushButton, QSlider, QLineEdit,
     QComboBox, QCheckBox, QMessageBox, QFrame,
     QStackedWidget, QTabBar, QStyleOptionSlider, QStyle,
-    QGraphicsOpacityEffect
+    QGraphicsOpacityEffect, QSizePolicy
 )
 from PyQt5.QtGui import (
-    QPainter, QColor, QFont, QMouseEvent
+    QPainter, QColor, QFont, QMouseEvent, QMovie
 )
 
 from src.utils.config_manager import ConfigManager
@@ -77,6 +77,9 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         self.mute = None
         self.stackedWidget = None
         self.nav_tab_bar = None
+        
+        # 添加表情动画对象
+        self.emotion_movie = None
         
         # 音量控制相关
         self.volume_label = None  # 音量百分比标签
@@ -395,10 +398,75 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         """更新TTS文本"""
         self.update_queue.put(lambda: self._safe_update_label(self.tts_text_label, text))
 
-    def update_emotion(self, emotion: str):
-        """更新表情"""
-        self.update_queue.put(lambda: self._safe_update_label(self.emotion_label, emotion))
+    def update_emotion(self, emotion_path: str):
+        """更新表情，使用GIF动画显示"""
+        # 确保使用绝对路径
+        abs_path = os.path.abspath(emotion_path)
+        self.logger.info(f"设置表情GIF: {abs_path}")
+        self.update_queue.put(lambda: self._set_emotion_gif(self.emotion_label, abs_path))
         
+    def _set_emotion_gif(self, label, gif_path):
+        """设置GIF动画到标签"""
+        if label and not self.root.isHidden():
+            try:
+                # 检查文件是否存在
+                if not os.path.exists(gif_path):
+                    self.logger.error(f"GIF文件不存在: {gif_path}")
+                    label.setText("😊")
+                    return
+                
+                # 如果当前已经设置了相同路径的动画，且正在播放，则不重复设置
+                if (self.emotion_movie and 
+                    getattr(self.emotion_movie, '_gif_path', None) == gif_path and
+                    self.emotion_movie.state() == QMovie.Running):
+                    return
+                    
+                self.logger.info(f"加载GIF文件: {gif_path}")
+                
+                # 创建动画对象
+                movie = QMovie(gif_path)
+                if not movie.isValid():
+                    self.logger.error(f"无效的GIF文件: {gif_path}")
+                    label.setText("😊")
+                    return
+                
+                # 配置动画
+                movie.setCacheMode(QMovie.CacheAll)
+                
+                # 保存GIF路径到movie对象，用于比较
+                movie._gif_path = gif_path
+                
+                # 连接信号
+                movie.error.connect(lambda: self.logger.error(f"GIF播放错误: {movie.lastError()}"))
+                
+                # 停止之前的动画
+                if self.emotion_movie:
+                    self.emotion_movie.stop()
+                
+                # 保存新的动画对象
+                self.emotion_movie = movie
+                
+                # 设置标签大小策略
+                label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+                label.setAlignment(Qt.AlignCenter)
+                
+                # 设置动画到标签
+                label.setMovie(movie)
+                
+                # 设置QMovie的速度为128，使动画更流畅(默认是100)
+                movie.setSpeed(110)
+                
+                # 开始播放动画
+                movie.start()
+                
+            except Exception as e:
+                self.logger.error(f"更新表情GIF动画失败: {e}")
+                # 如果GIF加载失败，尝试显示默认表情
+                try:
+                    label.setText("😊")
+                except Exception:
+                    pass
+
     def _safe_update_label(self, label, text):
         """安全地更新标签文本"""
         if label and not self.root.isHidden():
@@ -409,6 +477,8 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
 
     def start_update_threads(self):
         """启动更新线程"""
+        # 添加表情缓存，避免重复设置相同的表情
+        self.last_emotion_path = None
 
         def update_loop():
             while self._running:
@@ -425,10 +495,11 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
                         if text:
                             self.update_text(text)
 
-                    # 更新表情
+                    # 更新表情 - 只在表情变化时更新
                     if self.emotion_update_callback:
                         emotion = self.emotion_update_callback()
-                        if emotion:
+                        if emotion and emotion != self.last_emotion_path:
+                            self.last_emotion_path = emotion
                             self.update_emotion(emotion)
 
                 except Exception as e:

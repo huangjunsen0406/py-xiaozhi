@@ -1,6 +1,7 @@
 import asyncio
 import threading
 import time
+import os
 from typing import Optional, Callable
 
 from src.display.base_display import BaseDisplay
@@ -78,10 +79,20 @@ class CliDisplay(BaseDisplay):
             self.current_text = text
             self._print_current_status()
 
-    def update_emotion(self, emotion: str):
-        """更新表情"""
-        if emotion != self.current_emotion:
-            self.current_emotion = emotion
+    def update_emotion(self, emotion_path: str):
+        """更新表情
+        emotion_path: GIF文件路径或表情字符串
+        """
+        if emotion_path != self.current_emotion:
+            # 如果是gif文件路径，提取文件名作为表情名
+            if emotion_path.endswith(".gif"):
+                # 从路径中提取文件名，去掉.gif后缀
+                emotion_name = os.path.basename(emotion_path).replace(".gif", "")
+                self.current_emotion = f"[{emotion_name}]"
+            else:
+                # 如果不是gif路径，则直接使用
+                self.current_emotion = emotion_path
+            
             self._print_current_status()
 
     def start_keyboard_listener(self):

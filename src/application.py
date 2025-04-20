@@ -672,30 +672,38 @@ class Application:
 
     def _get_current_emotion(self):
         """获取当前表情"""
+        # 如果表情没有变化，直接返回缓存的路径
+        if hasattr(self, '_last_emotion') and self._last_emotion == self.current_emotion:
+            return self._last_emotion_path
+            
         emotions = {
-            "neutral": "😶",
-            "happy": "🙂",
-            "laughing": "😆",
-            "funny": "😂",
-            "sad": "😔",
-            "angry": "😠",
-            "crying": "😭",
-            "loving": "😍",
-            "embarrassed": "😳",
-            "surprised": "😲",
-            "shocked": "😱",
-            "thinking": "🤔",
-            "winking": "😉",
-            "cool": "😎",
-            "relaxed": "😌",
-            "delicious": "🤤",
-            "kissy": "😘",
-            "confident": "😏",
-            "sleepy": "😴",
-            "silly": "😜",
-            "confused": "🙄"
+            "neutral": "assets/emojis/neutral.gif",
+            "happy": "assets/emojis/happy.gif",
+            "laughing": "assets/emojis/laughing.gif",
+            "funny": "assets/emojis/funny.gif",
+            "sad": "assets/emojis/sad.gif",
+            "angry": "assets/emojis/angry.gif",
+            "crying": "assets/emojis/crying.gif",
+            "loving": "assets/emojis/loving.gif",
+            "embarrassed": "assets/emojis/embarrassed.gif",
+            "surprised": "assets/emojis/surprised.gif",
+            "shocked": "assets/emojis/shocked.gif",
+            "thinking": "assets/emojis/thinking.gif",
+            "winking": "assets/emojis/winking.gif",
+            "cool": "assets/emojis/cool.gif",
+            "relaxed": "assets/emojis/relaxed.gif",
+            "delicious": "assets/emojis/delicious.gif",
+            "kissy": "assets/emojis/kissy.gif",
+            "confident": "assets/emojis/confident.gif",
+            "sleepy": "assets/emojis/sleepy.gif",
+            "silly": "assets/emojis/silly.gif",
+            "confused": "assets/emojis/confused.gif"
         }
-        return emotions.get(self.current_emotion, "😶")
+        
+        # 保存当前表情和对应的路径
+        self._last_emotion = self.current_emotion
+        self._last_emotion_path = emotions.get(self.current_emotion, "assets/emojis/neutral.gif")
+        return self._last_emotion_path
 
     def set_chat_message(self, role, message):
         """设置聊天消息"""
