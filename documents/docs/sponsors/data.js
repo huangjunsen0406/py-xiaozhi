@@ -55,6 +55,11 @@ export default {
       "name": "折木",
       "url": "",
       "image": "https://tuchuang.junsen.online/i/2025/04/17/3qrbs4.jpg"
+    },
+    {
+      "name": "arron",
+      "url": "https://github.com/kernelj",
+      "image": "https://tuchuang.junsen.online/i/2025/04/20/ppbiy2.jpg"
     }
   ]
 } 

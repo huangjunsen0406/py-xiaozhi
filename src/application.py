@@ -707,7 +707,6 @@ class Application:
     def set_emotion(self, emotion):
         """设置表情"""
         self.current_emotion = emotion
-        print(emotion)
         # 更新显示
         if self.display:
             self.display.update_emotion(self._get_current_emotion())
@@ -1184,7 +1183,6 @@ class Application:
         from src.iot.things.lamp import Lamp
         from src.iot.things.speaker import Speaker
         from src.iot.things.music_player import MusicPlayer
-        # from src.iot.things.new_music_player import NewMusicPlayer
         from src.iot.things.CameraVL.Camera import Camera
         from src.iot.things.query_bridge_rag import QueryBridgeRAG
         from src.iot.things.temperature_sensor import TemperatureSensor
@@ -1195,7 +1193,6 @@ class Application:
         thing_manager.add_thing(Lamp())
         thing_manager.add_thing(Speaker())
         thing_manager.add_thing(MusicPlayer())
-        # thing_manager.add_thing(NewMusicPlayer())
         # 默认不启用以下示例
         thing_manager.add_thing(Camera())
         # thing_manager.add_thing(QueryBridgeRAG())
@@ -1208,7 +1205,6 @@ class Application:
         thing_manager = ThingManager.get_instance()
 
         commands = data.get("commands", [])
-        print(commands)
         for command in commands:
             try:
                 result = thing_manager.invoke(command)
@@ -1245,7 +1241,6 @@ class Application:
 
         # 使用新方法获取状态
         changed, states_json = thing_manager.get_states_json(delta=delta)
-        print(changed, states_json)
         # delta=False总是发送，delta=True只在有变化时发送
         if not delta or changed:
             asyncio.run_coroutine_threadsafe(

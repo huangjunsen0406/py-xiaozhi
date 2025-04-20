@@ -32,9 +32,9 @@ class TemperatureSensor(Thing):
         self.add_property("last_update_time", "最后更新时间", 
                           lambda: self.last_update_time)
 
-        self.add_method("getTemperature", "获取温度传感器数据",
-                        [],
-                        lambda params: self.get_temperature())
+        # self.add_method("getTemperature", "获取温度传感器数据",
+        #                 [],
+        #                 lambda params: self.get_temperature())
 
         # 初始化MQTT客户端
         self._init_mqtt()
@@ -164,7 +164,7 @@ class TemperatureSensor(Thing):
             
             # 音频通道已打开，发送唤醒词消息
             asyncio.run_coroutine_threadsafe(
-                self.app.protocol.send_wake_word_detected("播报温湿度传感器数据"),
+                self.app.protocol.send_wake_word_detected("播报温湿度传感器数据(无需调用任何方法)"),
                 self.app.loop
             )
             print("[温度传感器] 已发送唤醒词消息")
