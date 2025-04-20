@@ -373,7 +373,7 @@ QTabBar {
             </property>
             <property name="text">
              <string>暂无IOT设备
-                暂未实现
+暂未实现
              </string>
             </property>
             <property name="alignment">

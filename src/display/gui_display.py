@@ -80,6 +80,11 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         
         # 添加表情动画对象
         self.emotion_movie = None
+        # 新增表情动画特效相关变量
+        self.emotion_effect = None  # 表情透明度特效
+        self.emotion_animation = None  # 表情动画对象
+        self.next_emotion_path = None  # 下一个待显示的表情
+        self.is_emotion_animating = False  # 是否正在进行表情切换动画
         
         # 音量控制相关
         self.volume_label = None  # 音量百分比标签
@@ -225,38 +230,6 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         current_widget = self.stackedWidget.currentWidget()
         self.stackedWidget.setCurrentIndex(target_index)
         new_widget = self.stackedWidget.currentWidget()
-
-        self.animated_widget = new_widget
-        self.current_effect = QGraphicsOpacityEffect(self.animated_widget)
-        self.current_animation = QPropertyAnimation(self.current_effect, b"opacity")
-        self.animated_widget.setGraphicsEffect(self.current_effect)
-        self.current_animation.setDuration(300)
-        self.current_animation.setStartValue(0.0)
-        self.current_animation.setEndValue(1.0)
-
-        def cleanup():
-            try:
-                effect_to_clean = getattr(self, "current_effect", None)
-                widget_to_clean = getattr(self, "animated_widget", None)
-                if widget_to_clean and widget_to_clean.isWidgetType():
-                     if widget_to_clean.graphicsEffect() == effect_to_clean:
-                         widget_to_clean.setGraphicsEffect(None)
-                self.current_effect = None
-                self.current_animation = None
-                self.animated_widget = None
-            except RuntimeError as e:
-                self.logger.warning(f"清理动画时捕获 RuntimeError: {e}")
-                self.current_effect = None
-                self.current_animation = None
-                self.animated_widget = None
-            except Exception as e:
-                self.logger.error(f"清理动画时发生意外错误: {e}", exc_info=True)
-                self.current_effect = None
-                self.current_animation = None
-                self.animated_widget = None
-
-        self.current_animation.finished.connect(cleanup)
-        self.current_animation.start()
 
         # 如果切换到设置页面，加载设置
         if routeKey == "settingInterface":
@@ -406,66 +379,151 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         self.update_queue.put(lambda: self._set_emotion_gif(self.emotion_label, abs_path))
         
     def _set_emotion_gif(self, label, gif_path):
-        """设置GIF动画到标签"""
-        if label and not self.root.isHidden():
+        """设置GIF动画到标签，带淡入淡出效果"""
+        if not label or self.root.isHidden():
+            return
+            
+        try:
+            # 检查文件是否存在
+            if not os.path.exists(gif_path):
+                self.logger.error(f"GIF文件不存在: {gif_path}")
+                label.setText("😊")
+                return
+            
+            # 如果当前已经设置了相同路径的动画，且正在播放，则不重复设置
+            if (self.emotion_movie and 
+                getattr(self.emotion_movie, '_gif_path', None) == gif_path and
+                self.emotion_movie.state() == QMovie.Running):
+                return
+                
+            # 如果正在进行动画，则只记录下一个待显示的表情，等当前动画完成后再切换
+            if self.is_emotion_animating:
+                self.next_emotion_path = gif_path
+                return
+                
+            self.logger.info(f"加载GIF文件: {gif_path}")
+            
+            # 标记正在进行动画
+            self.is_emotion_animating = True
+            
+            # 如果已有动画在播放，先淡出当前动画
+            if self.emotion_movie and label.movie() == self.emotion_movie:
+                # 创建透明度效果（如果尚未创建）
+                if not self.emotion_effect:
+                    self.emotion_effect = QGraphicsOpacityEffect(label)
+                    label.setGraphicsEffect(self.emotion_effect)
+                    self.emotion_effect.setOpacity(1.0)
+                
+                # 创建淡出动画
+                self.emotion_animation = QPropertyAnimation(self.emotion_effect, b"opacity")
+                self.emotion_animation.setDuration(180)  # 设置动画持续时间（毫秒）
+                self.emotion_animation.setStartValue(1.0)
+                self.emotion_animation.setEndValue(0.25)
+                
+                # 当淡出完成后，设置新的GIF并开始淡入
+                def on_fade_out_finished():
+                    try:
+                        # 停止当前GIF
+                        if self.emotion_movie:
+                            self.emotion_movie.stop()
+                        
+                        # 设置新的GIF并淡入
+                        self._set_new_emotion_gif(label, gif_path)
+                    except Exception as e:
+                        self.logger.error(f"淡出动画完成后设置GIF失败: {e}")
+                        self.is_emotion_animating = False
+                
+                # 连接淡出完成信号
+                self.emotion_animation.finished.connect(on_fade_out_finished)
+                
+                # 开始淡出动画
+                self.emotion_animation.start()
+            else:
+                # 如果没有之前的动画，直接设置新的GIF并淡入
+                self._set_new_emotion_gif(label, gif_path)
+                
+        except Exception as e:
+            self.logger.error(f"更新表情GIF动画失败: {e}")
+            # 如果GIF加载失败，尝试显示默认表情
             try:
-                # 检查文件是否存在
-                if not os.path.exists(gif_path):
-                    self.logger.error(f"GIF文件不存在: {gif_path}")
-                    label.setText("😊")
-                    return
-                
-                # 如果当前已经设置了相同路径的动画，且正在播放，则不重复设置
-                if (self.emotion_movie and 
-                    getattr(self.emotion_movie, '_gif_path', None) == gif_path and
-                    self.emotion_movie.state() == QMovie.Running):
-                    return
-                    
-                self.logger.info(f"加载GIF文件: {gif_path}")
-                
-                # 创建动画对象
-                movie = QMovie(gif_path)
-                if not movie.isValid():
-                    self.logger.error(f"无效的GIF文件: {gif_path}")
-                    label.setText("😊")
-                    return
-                
-                # 配置动画
-                movie.setCacheMode(QMovie.CacheAll)
-                
-                # 保存GIF路径到movie对象，用于比较
-                movie._gif_path = gif_path
-                
-                # 连接信号
-                movie.error.connect(lambda: self.logger.error(f"GIF播放错误: {movie.lastError()}"))
-                
-                # 停止之前的动画
-                if self.emotion_movie:
-                    self.emotion_movie.stop()
-                
-                # 保存新的动画对象
-                self.emotion_movie = movie
-                
-                # 设置标签大小策略
-                label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-                label.setAlignment(Qt.AlignCenter)
-                
-                # 设置动画到标签
-                label.setMovie(movie)
-                
-                # 设置QMovie的速度为128，使动画更流畅(默认是100)
-                movie.setSpeed(110)
-                
-                # 开始播放动画
-                movie.start()
-                
-            except Exception as e:
-                self.logger.error(f"更新表情GIF动画失败: {e}")
-                # 如果GIF加载失败，尝试显示默认表情
-                try:
-                    label.setText("😊")
-                except Exception:
-                    pass
+                label.setText("😊")
+            except Exception:
+                pass
+            self.is_emotion_animating = False
+    
+    def _set_new_emotion_gif(self, label, gif_path):
+        """设置新的GIF动画并执行淡入效果"""
+        try:
+            # 创建动画对象
+            movie = QMovie(gif_path)
+            if not movie.isValid():
+                self.logger.error(f"无效的GIF文件: {gif_path}")
+                label.setText("😊")
+                self.is_emotion_animating = False
+                return
+            
+            # 配置动画
+            movie.setCacheMode(QMovie.CacheAll)
+            
+            # 保存GIF路径到movie对象，用于比较
+            movie._gif_path = gif_path
+            
+            # 连接信号
+            movie.error.connect(lambda: self.logger.error(f"GIF播放错误: {movie.lastError()}"))
+            
+            # 保存新的动画对象
+            self.emotion_movie = movie
+            
+            # 设置标签大小策略
+            label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+            label.setAlignment(Qt.AlignCenter)
+            
+            # 设置动画到标签
+            label.setMovie(movie)
+            
+            # 设置QMovie的速度为110，使动画更流畅(默认是100)
+            movie.setSpeed(105)
+            
+            # 确保不透明度是0（完全透明）
+            if self.emotion_effect:
+                self.emotion_effect.setOpacity(0.0)
+            else:
+                self.emotion_effect = QGraphicsOpacityEffect(label)
+                label.setGraphicsEffect(self.emotion_effect)
+                self.emotion_effect.setOpacity(0.0)
+            
+            # 开始播放动画
+            movie.start()
+            
+            # 创建淡入动画
+            self.emotion_animation = QPropertyAnimation(self.emotion_effect, b"opacity")
+            self.emotion_animation.setDuration(180)  # 淡入时间（毫秒）
+            self.emotion_animation.setStartValue(0.25)
+            self.emotion_animation.setEndValue(1.0)
+            
+            # 淡入完成后检查是否有下一个待显示的表情
+            def on_fade_in_finished():
+                self.is_emotion_animating = False
+                # 如果有下一个待显示的表情，则继续切换
+                if self.next_emotion_path:
+                    next_path = self.next_emotion_path
+                    self.next_emotion_path = None
+                    self._set_emotion_gif(label, next_path)
+            
+            # 连接淡入完成信号
+            self.emotion_animation.finished.connect(on_fade_in_finished)
+            
+            # 开始淡入动画
+            self.emotion_animation.start()
+            
+        except Exception as e:
+            self.logger.error(f"设置新的GIF动画失败: {e}")
+            self.is_emotion_animating = False
+            # 如果设置失败，尝试显示默认表情
+            try:
+                label.setText("😊")
+            except Exception:
+                pass
 
     def _safe_update_label(self, label, text):
         """安全地更新标签文本"""
