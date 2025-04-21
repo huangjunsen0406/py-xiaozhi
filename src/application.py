@@ -222,7 +222,8 @@ class Application:
                 auto_callback=self.toggle_chat_state,
                 abort_callback=lambda: self.abort_speaking(
                     AbortReason.WAKE_WORD_DETECTED
-                )
+                ),
+                send_text_callback=self._send_text_tts
             )
         else:
             self.display = cli_display.CliDisplay()

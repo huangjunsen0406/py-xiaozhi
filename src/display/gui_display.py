@@ -124,6 +124,7 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         self.mode_callback = None
         self.auto_callback = None
         self.abort_callback = None
+        self.send_text_callback = None
 
         # 更新队列
         self.update_queue = queue.Queue()
@@ -245,6 +246,7 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         mode_callback: Optional[Callable] = None,
         auto_callback: Optional[Callable] = None,
         abort_callback: Optional[Callable] = None,
+        send_text_callback: Optional[Callable] = None,
     ):
         """设置回调函数"""
         self.button_press_callback = press_callback
@@ -255,6 +257,7 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         self.mode_callback = mode_callback
         self.auto_callback = auto_callback
         self.abort_callback = abort_callback
+        self.send_text_callback = send_text_callback
 
     def _process_updates(self):
         """处理更新队列"""
@@ -308,12 +311,9 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             self.logger.error(f"自动模式按钮回调执行失败: {e}")
 
     def _on_abort_button_click(self):
-        """打断按钮点击事件处理"""
-        try:
-            if self.abort_callback:
-                self.abort_callback()
-        except Exception as e:
-            self.logger.error(f"打断按钮回调执行失败: {e}")
+        """处理中止按钮点击事件"""
+        if self.abort_callback:
+            self.abort_callback()
 
     def _on_mode_button_click(self):
         """对话模式切换按钮点击事件"""
@@ -717,6 +717,14 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
                 self.auto_btn.hide()
             if self.mode_btn:
                 self.mode_btn.clicked.connect(self._on_mode_button_click)
+                
+            # 初始化文本输入框和发送按钮
+            self.text_input = self.root.findChild(QLineEdit, "text_input")
+            self.send_btn = self.root.findChild(QPushButton, "send_btn")
+            if self.text_input and self.send_btn:
+                self.send_btn.clicked.connect(self._on_send_button_click)
+                # 绑定Enter键发送文本
+                self.text_input.returnPressed.connect(self._on_send_button_click)
 
             # 连接设置保存按钮事件
             if self.saveSettingsButton:
@@ -1146,6 +1154,30 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         # 切换回音量控制页面
         if self.audio_control_stack:
             self.audio_control_stack.setCurrentWidget(self.volume_page)
+
+    def _on_send_button_click(self):
+        """处理发送文本按钮点击事件"""
+        if not self.text_input or not self.send_text_callback:
+            return
+            
+        text = self.text_input.text().strip()
+        if not text:
+            return
+            
+        # 清空输入框
+        self.text_input.clear()
+        
+        # 获取应用程序的事件循环并在其中运行协程
+        from src.application import Application
+        app = Application.get_instance()
+        if app and app.loop:
+            import asyncio
+            asyncio.run_coroutine_threadsafe(
+                self.send_text_callback(text),
+                app.loop
+            )
+        else:
+            self.logger.error("应用程序实例或事件循环不可用")
 
 class MicrophoneVisualizer(QFrame):
     """麦克风音量可视化组件 - 数字显示版"""

@@ -322,6 +322,39 @@ QTabBar {
           </widget>
          </item>
          <item>
+          <layout class="QHBoxLayout" name="text_input_layout">
+           <property name="spacing">
+            <number>4</number>
+           </property>
+           <item>
+            <widget class="QLineEdit" name="text_input">
+             <property name="minimumSize">
+              <size>
+               <width>0</width>
+               <height>36</height>
+              </size>
+             </property>
+             <property name="placeholderText">
+              <string>输入文字...</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="send_btn">
+             <property name="minimumSize">
+              <size>
+               <width>60</width>
+               <height>36</height>
+              </size>
+             </property>
+             <property name="text">
+              <string>发送</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+         <item>
           <widget class="QPushButton" name="auto_btn">
            <property name="minimumSize">
             <size>
