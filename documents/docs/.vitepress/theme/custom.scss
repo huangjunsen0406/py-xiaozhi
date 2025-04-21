@@ -1,0 +1,19 @@
+.architecture-page-class {
+  @media (min-width: 1440px) {
+
+    .VPDoc:not(.has-sidebar) .content {
+
+      max-width: 1284px !important; /* <-- update your values */
+
+    }
+
+    .VPDoc:not(.has-sidebar) .container {
+
+      max-width: 1604px !important;
+
+    }
+    .VPDoc.has-aside .content-container {
+        max-width: 1188px !important;
+    }
+  }
+}

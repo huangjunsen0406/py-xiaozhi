@@ -49,7 +49,6 @@ features:
 ---
 
 <div class="developers-section">
-  <h2>👨‍💻 开发者</h2>
   <p>感谢以下开发者对 py-xiaozhi 作出的贡献</p>
   
   <div class="contributors-wrapper">
@@ -61,11 +60,6 @@ features:
   <div class="developers-actions">
     <a href="/py-xiaozhi/contributors" class="dev-button">查看特别贡献者</a>
     <a href="/py-xiaozhi/contributing" class="dev-button outline">如何参与贡献</a>
-  </div>
-
-  <div class="join-message">
-    <h3>加入贡献者行列</h3>
-    <p>我们欢迎更多的开发者参与到项目中来！查看<a href="/py-xiaozhi/contributing">贡献指南</a>了解如何参与贡献。</p>
   </div>
 
 </div>

@@ -1,6 +1,6 @@
 import { defineConfig } from 'vitepress'
 import { getGuideSideBarItems } from './guide'
-
+import tailwindcss from '@tailwindcss/vite'
 // https://vitepress.dev/reference/site-config
 export default defineConfig({
   title: "PY-XIAOZHI",
@@ -72,6 +72,11 @@ export default defineConfig({
 
     socialLinks: [
       { icon: 'github', link: 'https://github.com/huangjunsen0406/py-xiaozhi' }
+    ]
+  },
+  vite: {
+    plugins: [
+        tailwindcss()
     ]
   }
 })

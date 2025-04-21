@@ -17,10 +17,15 @@
   "devDependencies": {
     "@types/fs-extra": "^11.0.4",
     "fs-extra": "^11.3.0",
+    "sass-embedded": "^1.86.3",
     "typescript": "^5.8.3",
     "vitepress": "^1.6.3"
   },
   "dependencies": {
+    "@heroicons/vue": "^2.2.0",
+    "@tailwindcss/vite": "^4.1.4",
+    "echarts": "^5.6.0",
+    "tailwindcss": "^4.1.4",
     "vue": "^3.5.13"
   }
 }

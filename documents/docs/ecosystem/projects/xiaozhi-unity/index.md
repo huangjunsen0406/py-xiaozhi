@@ -131,7 +131,7 @@ XiaoZhiAI_server32_Unity/
 
 1. 克隆仓库到本地：
    ```bash
-   git clone https://gitee.com/your-username/XiaoZhiAI_server32_Unity.git
+   git clone https://gitee.com/vw112266/XiaoZhiAI_server32_Unity.git
    ```
 
 2. 安装依赖包：
