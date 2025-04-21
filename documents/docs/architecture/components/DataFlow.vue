@@ -19,7 +19,7 @@
           </div>
         </div>
         <div class="p-5 flex-grow">
-          <div class="flow-chart relative py-3 h-full">
+          <div class="relative py-3 h-full" >
             <div v-for="(step, stepIndex) in flow.steps" :key="stepIndex"
                  class="flow-step flex items-center mb-5 last:mb-0">
               <div

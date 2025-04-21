@@ -1,9 +1,8 @@
 <template>
   <div class="bg-white rounded-lg relative mb-10">
-      <h2 class="text-2xl font-bold mb-6 text-center">技术栈</h2>
       <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
         <div v-for="(tech, index) in techStack" :key="index"
-          class="flex flex-col items-center p-4 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors">
+          class="flex flex-col items-center p-4 rounded-lg hover:bg-gray-100 transition-colors">
           <div class="w-16 h-16 rounded-full flex items-center justify-center mb-3"
             :class="techColors[index % techColors.length]">
             <component :is="tech.icon" class="w-8 h-8 text-white" />

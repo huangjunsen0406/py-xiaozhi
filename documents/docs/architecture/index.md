@@ -17,9 +17,7 @@ import ArchitectureFeatures from './components/ArchitectureFeatures.vue'
 
 # Py-Xiaozhi 项目架构
 
-<div class="header-content">
-  <p>基于 Python 实现的小智语音客户端，采用模块化设计，支持多种通信协议和设备集成</p>
-</div>
+<p>基于 Python 实现的小智语音客户端，采用模块化设计，支持多种通信协议和设备集成</p>
 
 ## 核心架构
 <CoreArchitecture/>

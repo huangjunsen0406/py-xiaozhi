@@ -46,10 +46,9 @@ const featureColors = [
 
 <template>
   <div class="bg-white rounded-lg relative mb-10">
-      <h2 class="text-2xl font-bold mb-6 text-center">架构特点</h2>
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         <div v-for="(feature, index) in architectureFeatures" :key="index"
-          class="bg-white rounded-lg shadow-lg p-6 hover:shadow-xl transition-shadow">
+          class="bg-white rounded-lg p-6 hover:shadow-xl transition-shadow">
           <div class="w-12 h-12 rounded-full flex items-center justify-center mb-4"
             :class="featureColors[index % featureColors.length]">
             <component :is="feature.icon" class="w-6 h-6 text-white" />

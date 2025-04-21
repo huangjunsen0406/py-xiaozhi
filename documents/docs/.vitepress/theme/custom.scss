@@ -15,5 +15,12 @@
     .VPDoc.has-aside .content-container {
         max-width: 1188px !important;
     }
+
+    .vp-doc h3 {
+      margin: 0;
+    }
+    .vp-doc ul {
+      padding-left: 0;
+    }
   }
 }
