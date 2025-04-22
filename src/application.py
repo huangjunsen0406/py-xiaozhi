@@ -592,13 +592,9 @@ class Application:
         if self.wake_word_detector:
             if not self.wake_word_detector.is_running():
                 logger.info("在空闲状态下启动唤醒词检测")
-                # 获取最新的共享流
+                # 直接使用AudioCodec实例，而不是尝试获取共享流
                 if hasattr(self, 'audio_codec') and self.audio_codec:
-                    shared_stream = self.audio_codec.get_shared_input_stream()
-                    if shared_stream:
-                        self.wake_word_detector.start(shared_stream)
-                    else:
-                        self.wake_word_detector.start()
+                    self.wake_word_detector.start(self.audio_codec)
                 else:
                     self.wake_word_detector.start()
             elif self.wake_word_detector.paused:
@@ -1030,34 +1026,6 @@ class Application:
 
         try:
             from src.audio_processing.wake_word_detect import WakeWordDetector
-
-            # 获取模型路径配置
-            model_path_config = self.config.get_config(
-                "WAKE_WORD_OPTIONS.MODEL_PATH",
-                "models/vosk-model-small-cn-0.22"
-            )
-
-            # 确定基础路径和模型路径
-            if getattr(sys, 'frozen', False):
-                # 打包环境
-                if hasattr(sys, '_MEIPASS'):
-                    base_path = Path(sys._MEIPASS)
-                else:
-                    base_path = Path(sys.executable).parent
-            else:
-                # 开发环境
-                base_path = Path(__file__).parent.parent
-            
-            model_path = base_path / model_path_config  # 使用Path操作符
-            logger.info(f"使用模型路径: {model_path}")
-
-            # 检查模型路径
-            if not model_path.exists():
-                logger.error(f"模型路径不存在: {model_path}")
-                # 自动禁用唤醒词功能
-                self.config.update_config("WAKE_WORD_OPTIONS.USE_WAKE_WORD", False)
-                self.wake_word_detector = None
-                return
 
             # 创建检测器实例
             self.wake_word_detector = WakeWordDetector()
