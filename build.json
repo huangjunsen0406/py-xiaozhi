@@ -1,0 +1,17 @@
+{
+    "name": "xiaozhi",
+    "version": "1.0.0",
+    "publisher": "Junsen",
+    "entry": "main.py",
+    "icon": "assets/xiaozhi_icon.ico",
+    "hooks": "hooks",
+    "additional_pyinstaller_args": "--add-data assets;assets --add-data libs;libs --add-data src;src --add-data models;models --hidden-import=PyQt5",
+    "build_installer": true,
+    "installer_options": {
+        "languages": ["ChineseSimplified", "English"],
+        "license_file": "LICENSE",
+        "readme_file": "README.md",
+        "create_desktop_icon": true,
+        "allow_run_after_install": true
+    }
+}

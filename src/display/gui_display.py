@@ -375,6 +375,13 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         """更新表情，使用GIF动画显示"""
         # 确保使用绝对路径
         abs_path = os.path.abspath(emotion_path)
+        
+        # 检查是否与上次设置的表情相同，避免重复设置
+        if hasattr(self, 'last_emotion_path') and self.last_emotion_path == abs_path:
+            return  # 如果是相同的表情路径，直接返回不重复设置
+            
+        # 更新缓存的路径
+        self.last_emotion_path = abs_path
         self.logger.info(f"设置表情GIF: {abs_path}")
         self.update_queue.put(lambda: self._set_emotion_gif(self.emotion_label, abs_path))
         
@@ -535,7 +542,7 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
 
     def start_update_threads(self):
         """启动更新线程"""
-        # 添加表情缓存，避免重复设置相同的表情
+        # 初始化表情缓存
         self.last_emotion_path = None
 
         def update_loop():
@@ -556,8 +563,8 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
                     # 更新表情 - 只在表情变化时更新
                     if self.emotion_update_callback:
                         emotion = self.emotion_update_callback()
-                        if emotion and emotion != self.last_emotion_path:
-                            self.last_emotion_path = emotion
+                        if emotion:
+                            # 直接调用update_emotion方法，它会处理重复检查
                             self.update_emotion(emotion)
 
                 except Exception as e:
