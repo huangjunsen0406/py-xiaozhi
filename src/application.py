@@ -676,34 +676,49 @@ class Application:
         # 如果表情没有变化，直接返回缓存的路径
         if hasattr(self, '_last_emotion') and self._last_emotion == self.current_emotion:
             return self._last_emotion_path
+        
+        # 获取基础路径
+        if getattr(sys, 'frozen', False):
+            # 打包环境
+            if hasattr(sys, '_MEIPASS'):
+                base_path = Path(sys._MEIPASS)
+            else:
+                base_path = Path(sys.executable).parent
+        else:
+            # 开发环境
+            base_path = Path(__file__).parent.parent
+            
+        emotion_dir = base_path / "assets" / "emojis"
             
         emotions = {
-            "neutral": "assets/emojis/neutral.gif",
-            "happy": "assets/emojis/happy.gif",
-            "laughing": "assets/emojis/laughing.gif",
-            "funny": "assets/emojis/funny.gif",
-            "sad": "assets/emojis/sad.gif",
-            "angry": "assets/emojis/angry.gif",
-            "crying": "assets/emojis/crying.gif",
-            "loving": "assets/emojis/loving.gif",
-            "embarrassed": "assets/emojis/embarrassed.gif",
-            "surprised": "assets/emojis/surprised.gif",
-            "shocked": "assets/emojis/shocked.gif",
-            "thinking": "assets/emojis/thinking.gif",
-            "winking": "assets/emojis/winking.gif",
-            "cool": "assets/emojis/cool.gif",
-            "relaxed": "assets/emojis/relaxed.gif",
-            "delicious": "assets/emojis/delicious.gif",
-            "kissy": "assets/emojis/kissy.gif",
-            "confident": "assets/emojis/confident.gif",
-            "sleepy": "assets/emojis/sleepy.gif",
-            "silly": "assets/emojis/silly.gif",
-            "confused": "assets/emojis/confused.gif"
+            "neutral": str(emotion_dir / "neutral.gif"),
+            "happy": str(emotion_dir / "happy.gif"),
+            "laughing": str(emotion_dir / "laughing.gif"),
+            "funny": str(emotion_dir / "funny.gif"),
+            "sad": str(emotion_dir / "sad.gif"),
+            "angry": str(emotion_dir / "angry.gif"),
+            "crying": str(emotion_dir / "crying.gif"),
+            "loving": str(emotion_dir / "loving.gif"),
+            "embarrassed": str(emotion_dir / "embarrassed.gif"),
+            "surprised": str(emotion_dir / "surprised.gif"),
+            "shocked": str(emotion_dir / "shocked.gif"),
+            "thinking": str(emotion_dir / "thinking.gif"),
+            "winking": str(emotion_dir / "winking.gif"),
+            "cool": str(emotion_dir / "cool.gif"),
+            "relaxed": str(emotion_dir / "relaxed.gif"),
+            "delicious": str(emotion_dir / "delicious.gif"),
+            "kissy": str(emotion_dir / "kissy.gif"),
+            "confident": str(emotion_dir / "confident.gif"),
+            "sleepy": str(emotion_dir / "sleepy.gif"),
+            "silly": str(emotion_dir / "silly.gif"),
+            "confused": str(emotion_dir / "confused.gif")
         }
         
         # 保存当前表情和对应的路径
         self._last_emotion = self.current_emotion
-        self._last_emotion_path = emotions.get(self.current_emotion, "assets/emojis/neutral.gif")
+        self._last_emotion_path = emotions.get(self.current_emotion, str(emotion_dir / "neutral.gif"))
+        
+        logger.debug(f"表情路径: {self._last_emotion_path}")
         return self._last_emotion_path
 
     def set_chat_message(self, role, message):
