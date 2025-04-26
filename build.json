@@ -5,13 +5,42 @@
     "entry": "main.py",
     "icon": "assets/xiaozhi_icon.ico",
     "hooks": "hooks",
+    "onefile": false,
     "additional_pyinstaller_args": "--add-data assets;assets --add-data libs;libs --add-data src;src --add-data models;models --hidden-import=PyQt5",
-    "build_installer": true,
-    "installer_options": {
-        "languages": ["ChineseSimplified", "English"],
-        "license_file": "LICENSE",
-        "readme_file": "README.md",
-        "create_desktop_icon": true,
-        "allow_run_after_install": true
-    }
+    "inno_setup_path": "E:\\application\\Inno Setup 6\\ISCC.exe",
+    "platform_specific": {
+        "windows": {
+            "format": "exe",
+            "additional_pyinstaller_args": "--add-data assets;assets --add-data libs;libs --add-data src;src --add-data models;models --hidden-import=PyQt5 --noconsole",
+            "desktop_entry": true,
+            "installer_options": {
+                "languages": ["ChineseSimplified", "English"],
+                "license_file": "LICENSE",
+                "readme_file": "README.md",
+                "create_desktop_icon": true,
+                "allow_run_after_install": true
+            }
+        },
+        "linux": {
+            "format": "deb",
+            "desktop_entry": true,
+            "categories": "Utility;Development;",
+            "description": "小智Ai客户端",
+            "requires": "libc6,libgtk-3-0,libx11-6,libopenblas-dev",
+            "additional_pyinstaller_args": "--add-data assets:assets --add-data libs:libs --add-data src:src --add-data models:models --hidden-import=PyQt5"
+        },
+        "macos": {
+            "format": "app",
+            "additional_pyinstaller_args": "--add-data assets:assets --add-data libs:libs --add-data src:src --add-data models:models --hidden-import=PyQt5 --windowed",
+            "app_bundle_name": "XiaoZhi.app",
+            "bundle_identifier": "com.junsen.xiaozhi",
+            "sign_bundle": false,
+            "create_dmg": true,
+            "installer_options": {
+                "license_file": "LICENSE",
+                "readme_file": "README.md"
+            }
+        }
+    },
+    "build_installer": true
 }

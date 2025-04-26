@@ -150,10 +150,10 @@ We welcome issue reports and code contributions. Please ensure you follow these 
   <h3>Thanks to All Sponsors ❤️</h3>
   <p>Whether it's API resources, device compatibility testing, or financial support, every contribution makes the project more complete</p>
   
-  <a href="https://py-xiaozhi.vercel.app/sponsors.html" target="_blank">
+  <a href="https://huangjunsen0406.github.io/py-xiaozhi/sponsors/" target="_blank">
     <img src="https://img.shields.io/badge/View-Sponsors-brightgreen?style=for-the-badge&logo=github" alt="View Sponsors">
   </a>
-  <a href="https://py-xiaozhi.vercel.app/sponsors.html" target="_blank">
+  <a href="https://huangjunsen0406.github.io/py-xiaozhi/sponsors/" target="_blank">
     <img src="https://img.shields.io/badge/Become-Sponsor-orange?style=for-the-badge&logo=heart" alt="Become a Sponsor">
   </a>
 </div>

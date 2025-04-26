@@ -44,3 +44,4 @@ pydub>=0.25.1
 pyttsx3==2.98
 pygame==2.6.1
 PyQt5==5.15.9
+wmi==1.5.1
