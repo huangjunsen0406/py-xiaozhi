@@ -60,6 +60,16 @@ export default {
       "name": "arron",
       "url": "https://github.com/kernelj",
       "image": "https://tuchuang.junsen.online/i/2025/04/20/ppbiy2.jpg"
+    },
+    {
+      "name": "Hpp 💦",
+      "url": "",
+      "image": "https://tuchuang.junsen.online/i/2025/04/27/5a1ood.jpg"
+    },
+    {
+      "name": "985",
+      "url": "",
+      "image": "https://tuchuang.junsen.online/i/2025/04/27/59h2g1.jpg"
     }
   ]
 } 
