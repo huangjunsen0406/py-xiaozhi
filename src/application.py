@@ -771,6 +771,20 @@ class Application:
                     self.alert("错误", f"打开音频通道失败: {str(e)}")
                     self.set_device_state(DeviceState.IDLE)
                     return
+                
+            # --- 强制重新初始化输入流 --- 
+            try:
+                if self.audio_codec:
+                     self.audio_codec._reinitialize_input_stream() # 调用重新初始化
+                else:
+                     logger.warning("Cannot force reinitialization, audio_codec is None.")
+            except Exception as force_reinit_e:
+                logger.error(f"Forced reinitialization failed: {force_reinit_e}", exc_info=True)
+                self.set_device_state(DeviceState.IDLE)
+                if self.wake_word_detector and self.wake_word_detector.paused:
+                     self.wake_word_detector.resume()
+                return
+            # --- 强制重新初始化结束 --- 
 
             asyncio.run_coroutine_threadsafe(
                 self.protocol.send_start_listening(ListeningMode.MANUAL),
