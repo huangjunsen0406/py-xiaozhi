@@ -33,7 +33,10 @@ DIR_STRUCTURE = {
         'arch': {'arm': 'arm64', 'intel': 'x64'},
         'path': 'libs/libopus/mac/{arch}'
     },
-    LINUX: {'arch': 'x64', 'path': 'libs/libopus/linux/x64'},
+    LINUX: {
+        'arch': {'arm': 'arm64', 'intel': 'x64'},
+        'path': 'libs/libopus/linux/{arch}'
+    },
 }
 
 
@@ -58,7 +61,7 @@ def get_system_info():
     elif system == WINDOWS:
         arch_name = DIR_STRUCTURE[WINDOWS]['arch']
     else:  # Linux
-        arch_name = DIR_STRUCTURE[LINUX]['arch']
+        arch_name = DIR_STRUCTURE[LINUX]['arch']['arm' if is_arm else 'intel']
         
     return system, arch_name
 
@@ -120,7 +123,10 @@ def get_search_paths(system, arch_name):
         search_paths.append((base_dir, lib_name))
         
         # 如果是打包环境，也搜索和可执行文件同级的libs子目录
-        is_exe_dir = getattr(sys, 'frozen', False) and base_dir == Path(sys.executable).parent
+        is_exe_dir = (
+            getattr(sys, 'frozen', False) and 
+            base_dir == Path(sys.executable).parent
+        )
         if is_exe_dir:
             # 检查与可执行文件同级的libs目录
             libs_dir = base_dir / 'libs'
@@ -132,7 +138,7 @@ def get_search_paths(system, arch_name):
                     win_lib_path = "libopus/win/x86_64"
                     search_paths.append((libs_dir / win_lib_path, lib_name))
                 elif system == LINUX:
-                    linux_lib_path = "libopus/linux/x64"
+                    linux_lib_path = f"libopus/linux/{arch_name}"
                     search_paths.append((libs_dir / linux_lib_path, lib_name))
             
             # 检查_internal/libs目录 (PyInstaller 6.0.0+)
@@ -140,13 +146,19 @@ def get_search_paths(system, arch_name):
             if internal_libs_dir.exists():
                 if system == MACOS:
                     macos_path = f"libopus/mac/{arch_name}"
-                    search_paths.append((internal_libs_dir / macos_path, lib_name))
+                    search_paths.append(
+                        (internal_libs_dir / macos_path, lib_name)
+                    )
                 elif system == WINDOWS:
                     win_path = "libopus/win/x86_64"
-                    search_paths.append((internal_libs_dir / win_path, lib_name))
+                    search_paths.append(
+                        (internal_libs_dir / win_path, lib_name)
+                    )
                 elif system == LINUX:
-                    linux_path = "libopus/linux/x64"
-                    search_paths.append((internal_libs_dir / linux_path, lib_name))
+                    linux_path = f"libopus/linux/{arch_name}"
+                    search_paths.append(
+                        (internal_libs_dir / linux_path, lib_name)
+                    )
     
     # 打印所有搜索路径，帮助调试
     for dir_path, filename in search_paths:
@@ -240,10 +252,11 @@ def copy_opus_to_project(system_lib_path):
 
 def setup_opus():
     """设置opus动态库"""
+    # 检查是否已经由runtime_hook加载
     if hasattr(sys, '_opus_loaded'):
-        logger.info("opus库已由其他组件加载")
+        logger.info("opus库已由运行时钩子加载")
         return True
-    
+        
     # 获取当前系统信息
     system, arch_name = get_system_info()
     logger.info(f"当前系统: {system}, 架构: {arch_name}")
