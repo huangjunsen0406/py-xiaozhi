@@ -1,8 +1,8 @@
 [
   {
     "name": "Junsen Huang",
-    "title": "py-xiaozhi创始人 & 核心开发者",
-    "company": "前端开发工程师 南方电网人工智能有限公司",
+    "title": "py-xiaozhi发起者 & 核心开发者",
+    "company": "南方电网人工智能有限公司 前端开发工程师",
     "location": "中国",
     "languages": ["中文"],
     "projects": [
@@ -29,19 +29,11 @@
   },
   {
     "name": "ASLant",
-    "title": "核心开发者",
-    "company": "嵌入式软件工程师 山东青橙数字科技有限公司",
+    "title": "核心开发者、PyQt5界面开发、嵌入式兼容",
+    "company": "山东青橙数字科技有限公司 嵌入式软件工程师",
     "location": "中国",
     "languages": ["中文"],
     "projects": [
-      {
-        "label": "嵌入式兼容",
-        "url": "https://github.com/Y-ASLant"
-      },
-      {
-        "label": "PyQt5界面开发",
-        "url": "https://github.com/Y-ASLant"
-      }
     ],
     "socials": {
       "github": "Y-ASLant"
@@ -54,7 +46,7 @@
   {
     "name": "fengzai6",
     "title": "前期核心开发者",
-    "company": "前端开发工程师 中山华定科技有限公司",
+    "company": "中山华定科技有限公司 前端开发工程师",
     "location": "中国",
     "languages": ["中文"],
     "projects": [
@@ -65,19 +57,11 @@
   },
   {
     "name": "Cal And Nong",
-    "title": "前端开发者 & 文档贡献者",
-    "company": "前端开发工程师 腾讯",
+    "title": "文档贡献者",
+    "company": "腾讯 前端开发工程师",
     "location": "中国",
     "languages": ["中文"],
     "projects": [
-      {
-        "label": "小智前端适配",
-        "url": "https://github.com/calandnong"
-      },
-      {
-        "label": "项目文档完善",
-        "url": "https://github.com/calandnong"
-      }
     ],
     "socials": {
       "github": "calandnong"
