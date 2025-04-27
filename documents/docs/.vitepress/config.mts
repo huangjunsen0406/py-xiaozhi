@@ -13,8 +13,8 @@ export default defineConfig({
       { text: '指南', link: '/guide/00_文档目录' },
       { text: '系统架构', link: '/architecture/' },
       { text: '相关生态', link: '/ecosystem/' },
+      { text: '团队', link: '/about/team' },
       { text: '贡献指南', link: '/contributing' },
-      { text: '特殊贡献者', link: '/contributors' },
       { text: '赞助', link: '/sponsors/' }
     ],
 
@@ -50,24 +50,16 @@ export default defineConfig({
             { text: 'open-xiaoai', link: '/ecosystem/projects/open-xiaoai/' }
           ]
         },
-        // {
-        //   text: '资源和支持',
-        //   collapsed: true,
-        //   items: [
-        //     { text: '官方扩展和插件', link: '/ecosystem/resources/official-extensions/' },
-        //     { text: '社区贡献', link: '/ecosystem/resources/community-contributions/' },
-        //     { text: '兼容设备', link: '/ecosystem/resources/compatible-devices/' }
-        //   ]
-        // }
       ],
+      '/about/': [],
       // 赞助页面不显示侧边栏
       '/sponsors/': [],
       // 贡献指南页面不显示侧边栏
       '/contributing': [],
-      // 贡献者名单页面不显示侧边栏
-      '/contributors': [],
       // 系统架构页面不显示侧边栏
-      '/architecture/': []
+      '/architecture/': [],
+      // 团队页面不显示侧边栏
+      '/about/team': []
     },
 
     socialLinks: [

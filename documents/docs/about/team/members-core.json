@@ -1,0 +1,101 @@
+[
+  {
+    "name": "Junsen Huang",
+    "title": "py-xiaozhi创始人 & 核心开发者",
+    "company": "前端开发工程师 南方电网人工智能有限公司",
+    "location": "中国",
+    "languages": ["中文"],
+    "projects": [
+      {
+        "label": "py-xiaozhi",
+        "url": "https://github.com/huangjunsen0406/py-xiaozhi"
+      },
+      {
+        "label": "UnifyPy",
+        "url": "https://github.com/huangjunsen0406/UnifyPy"
+      },
+      {
+        "label": "xiaozhi-esp32-server",
+        "url": "https://github.com/xinnan-tech/xiaozhi-esp32-server"
+      }
+    ],
+    "socials": {
+      "github": "huangjunsen0406"
+    },
+    "website": {
+      "label": "https://junsen.online",
+      "url": "https://junsen.online"
+    }
+  },
+  {
+    "name": "ASLant",
+    "title": "核心开发者",
+    "company": "嵌入式软件工程师 山东青橙数字科技有限公司",
+    "location": "中国",
+    "languages": ["中文"],
+    "projects": [
+      {
+        "label": "嵌入式兼容",
+        "url": "https://github.com/Y-ASLant"
+      },
+      {
+        "label": "PyQt5界面开发",
+        "url": "https://github.com/Y-ASLant"
+      }
+    ],
+    "socials": {
+      "github": "Y-ASLant"
+    },
+    "website": {
+      "label": "aslant.top",
+      "url": "https://aslant.top/"
+    }
+  },
+  {
+    "name": "fengzai6",
+    "title": "前期核心开发者",
+    "company": "前端开发工程师 中山华定科技有限公司",
+    "location": "中国",
+    "languages": ["中文"],
+    "projects": [
+    ],
+    "socials": {
+      "github": "fengzai6"
+    }
+  },
+  {
+    "name": "Cal And Nong",
+    "title": "前端开发者 & 文档贡献者",
+    "company": "前端开发工程师 腾讯",
+    "location": "中国",
+    "languages": ["中文"],
+    "projects": [
+      {
+        "label": "小智前端适配",
+        "url": "https://github.com/calandnong"
+      },
+      {
+        "label": "项目文档完善",
+        "url": "https://github.com/calandnong"
+      }
+    ],
+    "socials": {
+      "github": "calandnong"
+    }
+  },
+  {
+    "name": "vonweller",
+    "title": "视觉功能贡献者",
+    "projects": [
+      {
+        "label": "视觉功能开发",
+        "url": "https://github.com/vonweller"
+      }
+    ],
+    "location": "中国",
+    "languages": ["中文"],
+    "socials": {
+      "github": "vonweller"
+    }
+  }
+]

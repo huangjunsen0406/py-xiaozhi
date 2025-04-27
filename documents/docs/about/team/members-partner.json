@@ -1,0 +1,113 @@
+[
+  {
+    "name": "Xiaoxia",
+    "title": "社区贡献者",
+    "projects": [
+      {
+        "label": "小智Ai创始人",
+        "url": "https://github.com/78/xiaozhi-esp32"
+      }
+    ],
+    "location": "中国",
+    "languages": ["中文"],
+    "socials": {
+      "github": "78"
+    }
+  },
+  {
+    "name": "zhh827",
+    "title": "社区贡献者",
+    "projects": [
+    ],
+    "location": "中国",
+    "languages": ["中文"],
+    "socials": {
+      "github": "zhh827"
+    }
+  },
+  {
+    "name": "四博智联-李洪刚",
+    "title": "社区贡献者",
+    "projects": [
+    ],
+    "location": "中国",
+    "languages": ["中文"],
+    "socials": {
+      "github": "SmartArduino"
+    }
+  },
+  {
+    "name": "HonestQiao",
+    "title": "社区贡献者",
+    "projects": [
+    ],
+    "location": "中国",
+    "languages": ["中文"],
+    "socials": {
+      "github": "HonestQiao"
+    }
+  },
+  {
+    "name": "孙卫公",
+    "title": "社区贡献者",
+    "avatarPic": "https://tuchuang.junsen.online/i/2025/04/27/i7ndx4.png",
+    "projects": [
+    ],
+    "location": "中国",
+    "languages": ["中文"],
+    "socials": {
+    },
+    "website": {
+      "label": "Bilibili 主页",
+      "url": "https://space.bilibili.com/416954647"
+    }
+  },
+  {
+    "name": "isamu2025",
+    "title": "社区贡献者",
+    "projects": [
+    ],
+    "location": "中国",
+    "languages": ["中文"],
+    "socials": {
+      "github": "isamu2025"
+    }
+  },
+  {
+    "name": "Rain120",
+    "title": "社区贡献者",
+    "projects": [
+    ],
+    "location": "中国",
+    "languages": ["中文"],
+    "socials": {
+      "github": "Rain120"
+    }
+  },
+  {
+    "name": "kejily",
+    "title": "社区贡献者",
+    "projects": [
+    ],
+    "location": "中国",
+    "languages": ["中文"],
+    "socials": {
+      "github": "kejily"
+    }
+  },
+  {
+    "name": "电波bilibili君",
+    "title": "社区贡献者",
+    "avatarPic": "https://tuchuang.junsen.online/i/2025/04/27/f4g54b.png",
+    "projects": [
+    ],
+    "location": "中国",
+    "languages": ["中文"],
+    "socials": {
+    },
+    "website": {
+      "label": "Bilibili 主页",
+      "url": "https://space.bilibili.com/119751"
+    }
+  }
+]

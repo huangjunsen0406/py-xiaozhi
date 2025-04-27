@@ -14,8 +14,7 @@ httpx==0.28.1
 idna==3.10
 jiter==0.9.0
 numpy==2.0.2
-openai==1.66.3
-opencv-python==4.11.0.86
+openai
 opuslib==3.0.1
 paho-mqtt==2.1.0
 psutil==7.0.0
@@ -43,5 +42,4 @@ soundfile>=0.12.1
 pydub>=0.25.1
 pyttsx3==2.98
 pygame==2.6.1
-PyQt5==5.15.9
 wmi==1.5.1

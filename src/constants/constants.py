@@ -1,4 +1,5 @@
 from src.utils.config_manager import ConfigManager
+import platform
 config = ConfigManager.get_instance()
 
 
@@ -49,8 +50,10 @@ def get_frame_duration() -> int:
     import pyaudio
     try:
 
-        if not is_official_server(config.get_config("SYSTEM_OPTIONS.NETWORK.WEBSOCKET_URL")):
+        if (platform.system() == "Linux" or
+                not is_official_server(config.get_config("SYSTEM_OPTIONS.NETWORK.WEBSOCKET_URL"))):
             return 60
+
         p = pyaudio.PyAudio()
         # 获取默认输入设备信息
         device_info = p.get_default_input_device_info()

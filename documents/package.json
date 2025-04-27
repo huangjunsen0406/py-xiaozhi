@@ -26,6 +26,10 @@
     "@tailwindcss/vite": "^4.1.4",
     "echarts": "^5.6.0",
     "tailwindcss": "^4.1.4",
+    "@vue/repl": "^4.4.2",
+    "@vue/theme": "^2.3.0",
+    "dynamics.js": "^1.1.5",
+    "gsap": "^3.12.5",
     "vue": "^3.5.13"
   }
 }
