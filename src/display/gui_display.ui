@@ -7,11 +7,11 @@
     <x>0</x>
     <y>0</y>
     <width>800</width>
-    <height>480</height>
+    <height>518</height>
    </rect>
   </property>
   <property name="windowTitle">
-    <string>小智Ai客户端</string>
+   <string>小智Ai客户端</string>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
    <item>
@@ -552,20 +552,24 @@ QTabBar {
            </layout>
           </item>
           <item>
-           <spacer name="verticalSpacer_Group1">
-            <property name="orientation">
-             <enum>Qt::Vertical</enum>
+           <widget class="QLabel" name="label">
+            <property name="font">
+             <font>
+              <pointsize>14</pointsize>
+              <weight>75</weight>
+              <bold>true</bold>
+             </font>
             </property>
-            <property name="sizeType">
-             <enum>QSizePolicy::Fixed</enum>
+            <property name="layoutDirection">
+             <enum>Qt::LeftToRight</enum>
             </property>
-            <property name="sizeHint" stdset="0">
-             <size>
-              <width>20</width>
-              <height>15</height>
-             </size>
+            <property name="text">
+             <string>API 服务配置</string>
             </property>
-           </spacer>
+            <property name="alignment">
+             <set>Qt::AlignCenter</set>
+            </property>
+           </widget>
           </item>
           <item>
            <layout class="QFormLayout" name="formLayout">
@@ -718,10 +722,142 @@ QTabBar {
             <property name="sizeHint" stdset="0">
              <size>
               <width>20</width>
-              <height>46</height>
+              <height>15</height>
              </size>
             </property>
            </spacer>
+          </item>
+          <item>
+           <widget class="QLabel" name="haConfigLabel">
+            <property name="font">
+             <font>
+              <pointsize>14</pointsize>
+              <weight>75</weight>
+              <bold>true</bold>
+             </font>
+            </property>
+            <property name="text">
+             <string>Home Assistant 服务配置</string>
+            </property>
+            <property name="alignment">
+             <set>Qt::AlignCenter</set>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <layout class="QGridLayout" name="gridLayout_2">
+            <item row="0" column="0">
+             <widget class="QLabel" name="haServerLabel">
+              <property name="text">
+               <string>HA-Server:</string>
+              </property>
+              <property name="alignment">
+               <set>Qt::AlignCenter</set>
+              </property>
+             </widget>
+            </item>
+            <item row="0" column="1">
+             <widget class="QWidget" name="haUrlContainerWidget" native="true">
+              <layout class="QHBoxLayout" name="haUrlInnerLayout">
+               <property name="leftMargin">
+                <number>0</number>
+               </property>
+               <property name="topMargin">
+                <number>0</number>
+               </property>
+               <property name="rightMargin">
+                <number>0</number>
+               </property>
+               <property name="bottomMargin">
+                <number>0</number>
+               </property>
+               <item>
+                <widget class="QComboBox" name="haProtocolComboBox">
+                 <property name="sizePolicy">
+                  <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
+                   <horstretch>0</horstretch>
+                   <verstretch>0</verstretch>
+                  </sizepolicy>
+                 </property>
+                 <item>
+                  <property name="text">
+                   <string>https://</string>
+                  </property>
+                 </item>
+                 <item>
+                  <property name="text">
+                   <string>http://</string>
+                  </property>
+                 </item>
+                </widget>
+               </item>
+               <item>
+                <widget class="QLineEdit" name="ha_server">
+                 <property name="sizePolicy">
+                  <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+                   <horstretch>1</horstretch>
+                   <verstretch>0</verstretch>
+                  </sizepolicy>
+                 </property>
+                 <property name="placeholderText">
+                  <string>Home Assistant服务地址，例如：ha.aslant.top</string>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </widget>
+            </item>
+            <item row="1" column="0">
+             <widget class="QLabel" name="haPortLabel">
+              <property name="text">
+               <string>Port:</string>
+              </property>
+              <property name="alignment">
+               <set>Qt::AlignCenter</set>
+              </property>
+             </widget>
+            </item>
+            <item row="1" column="1">
+             <widget class="QLineEdit" name="ha_port">
+              <property name="placeholderText">
+               <string>默认端口：8123</string>
+              </property>
+             </widget>
+            </item>
+            <item row="2" column="0">
+             <widget class="QLabel" name="haKeyLabel">
+              <property name="text">
+               <string>长期访问令牌:</string>
+              </property>
+              <property name="alignment">
+               <set>Qt::AlignCenter</set>
+              </property>
+             </widget>
+            </item>
+            <item row="2" column="1">
+             <widget class="QLineEdit" name="ha_key">
+              <property name="echoMode">
+               <enum>QLineEdit::Password</enum>
+              </property>
+              <property name="placeholderText">
+               <string>获取方法：账户 - 安全 - 创建令牌</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+          <item>
+           <widget class="QPushButton" name="Add_ha_devices">
+            <property name="minimumSize">
+             <size>
+              <width>0</width>
+              <height>30</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>导入Home Assistant设备</string>
+            </property>
+           </widget>
           </item>
           <item>
            <widget class="QPushButton" name="saveSettingsButton">
@@ -729,22 +865,6 @@ QTabBar {
              <string>保存设置</string>
             </property>
            </widget>
-          </item>
-          <item>
-           <spacer name="verticalSpacer_Bottom">
-            <property name="orientation">
-             <enum>Qt::Vertical</enum>
-            </property>
-            <property name="sizeType">
-             <enum>QSizePolicy::Fixed</enum>
-            </property>
-            <property name="sizeHint" stdset="0">
-             <size>
-              <width>20</width>
-              <height>10</height>
-             </size>
-            </property>
-           </spacer>
           </item>
          </layout>
         </widget>

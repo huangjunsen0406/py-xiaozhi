@@ -1192,6 +1192,11 @@ class Application:
         from src.iot.things.CameraVL.Camera import Camera
         from src.iot.things.query_bridge_rag import QueryBridgeRAG
         from src.iot.things.temperature_sensor import TemperatureSensor
+        # 导入Home Assistant设备控制类
+        from src.iot.things.ha_control import HomeAssistantLight, HomeAssistantSwitch, HomeAssistantNumber, HomeAssistantButton
+        # 导入新的倒计时器设备
+        from src.iot.things.countdown_timer import CountdownTimer
+        
         # 获取物联网设备管理器实例
         thing_manager = ThingManager.get_instance()
 
@@ -1203,6 +1208,39 @@ class Application:
         thing_manager.add_thing(Camera())
         # thing_manager.add_thing(QueryBridgeRAG())
         # thing_manager.add_thing(TemperatureSensor())
+
+        # 添加倒计时器设备
+        thing_manager.add_thing(CountdownTimer())
+        logger.info("已添加倒计时器设备,用于计时执行命令用")
+
+        # 添加Home Assistant设备
+        ha_devices = self.config.get_config("HOME_ASSISTANT.DEVICES", [])
+        for device in ha_devices:
+            entity_id = device.get("entity_id")
+            friendly_name = device.get("friendly_name")
+            if entity_id:
+                # 根据实体ID判断设备类型
+                if entity_id.startswith("light."):
+                    # 灯设备
+                    thing_manager.add_thing(HomeAssistantLight(entity_id, friendly_name))
+                    logger.info(f"已添加Home Assistant灯设备: {friendly_name or entity_id}")
+                elif entity_id.startswith("switch."):
+                    # 开关设备
+                    thing_manager.add_thing(HomeAssistantSwitch(entity_id, friendly_name))
+                    logger.info(f"已添加Home Assistant开关设备: {friendly_name or entity_id}")
+                elif entity_id.startswith("number."):
+                    # 数值设备（如音量控制）
+                    thing_manager.add_thing(HomeAssistantNumber(entity_id, friendly_name))
+                    logger.info(f"已添加Home Assistant数值设备: {friendly_name or entity_id}")
+                elif entity_id.startswith("button."):
+                    # 按钮设备
+                    thing_manager.add_thing(HomeAssistantButton(entity_id, friendly_name))
+                    logger.info(f"已添加Home Assistant按钮设备: {friendly_name or entity_id}")
+                else:
+                    # 默认作为灯设备处理
+                    thing_manager.add_thing(HomeAssistantLight(entity_id, friendly_name))
+                    logger.info(f"已添加Home Assistant设备(默认作为灯处理): {friendly_name or entity_id}")
+
         logger.info("物联网设备初始化完成")
 
     def _handle_iot_message(self, data):

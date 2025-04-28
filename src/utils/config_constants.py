@@ -42,5 +42,10 @@ DEFAULT_CONFIG = {
         "Loacl_VL_url": "https://open.bigmodel.cn/api/paas/v4/",
         "VLapi_key": "你自己的key",
         "models": "glm-4v-plus"
+    },
+    "HOME_ASSISTANT": {
+    "URL": "http://localhost:8123",
+    "TOKEN": "",
+    "DEVICES": []
     }
 } 
