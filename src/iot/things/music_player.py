@@ -24,7 +24,7 @@ class MusicPlayer(Thing):
         """初始化音乐播放器组件"""
         super().__init__(
             "MusicPlayer",
-            "在线音乐播放器只需要歌名即可播放，支持本地缓存、暂停、进度跳转，播放音乐时优先使用iot的音乐播放器"
+            "在线音乐播放器,播放音乐时优先使用iot的音乐播放器，支持本地缓存、暂停、进度跳转"
         )
 
         # 初始化pygame mixer
@@ -47,6 +47,7 @@ class MusicPlayer(Thing):
         self.paused_for_tts = False  # 是否因为TTS而暂停
         self.pause_start_time = 0    # 暂停开始时间
         self.total_pause_time = 0    # 总暂停时间
+        self._last_tts_playing = None
 
         # 歌词相关
         self.lyrics = []  # 歌词列表，格式为 [(时间, 文本), ...]
@@ -433,7 +434,7 @@ class MusicPlayer(Thing):
         根据当前播放位置更新歌词显示
         """
         # 如果没有歌词或应用程序正在说话，不更新歌词
-        if not self.lyrics or (self.app and self.app.is_tts_playing):
+        if not self.lyrics or self.app.get_is_tts_playing():
             return
 
         current_time = self.current_position
@@ -811,17 +812,14 @@ class MusicPlayer(Thing):
             logger.warning(f"清理临时缓存失败: {str(e)}")
 
     def _handle_tts_priority(self):
-        """
-        处理TTS优先级逻辑
-        
-        在应用程序说话时暂停音乐播放，说话结束后恢复播放
-        """
+        """处理TTS优先级逻辑"""
         current_time = time.time()
-        
-        # 检查应用程序是否存在
+
         if not self.app:
             return
-        
+
+        tts_playing = self.app.get_is_tts_playing()
+
         # 检查是否有打断请求
         if hasattr(self.app, 'aborted') and self.app.aborted:
             if not self.paused:
@@ -830,32 +828,36 @@ class MusicPlayer(Thing):
                 self.paused = True
                 self.current_position = time.time() - self.start_play_time
             return
-            
-        # 检查应用程序是否正在播放TTS
-        if hasattr(self.app, 'is_tts_playing') and self.app.is_tts_playing:
-            if not self.paused and not self.paused_for_tts:
-                logger.info("TTS正在播放，暂停音乐播放")
-                pygame.mixer.music.pause()
-                self.paused = True
-                self.paused_for_tts = True
-                self.pause_start_time = current_time
-                self.current_position = time.time() - self.start_play_time
-        elif self.paused_for_tts:
-            # 如果之前因为TTS而暂停，现在恢复播放
-            logger.info("TTS播放结束，恢复音乐播放")
-            pygame.mixer.music.unpause()
-            self.paused = False
-            self.paused_for_tts = False
-            
-            # 计算暂停时间
-            self.total_pause_time += (current_time - self.pause_start_time)
-            
-            # 更新开始时间，考虑暂停的时间
-            self.start_play_time = time.time() - self.current_position
-            
-            # 将应用状态设置为SPEAKING，防止自动模式切换到聆听状态
-            if self.app:
-                self.app.set_device_state(DeviceState.SPEAKING)
+
+        # 捕获 TTS状态变化（从True到False）
+        if self._last_tts_playing is None:
+            # 初始化
+            self._last_tts_playing = tts_playing
+
+        if tts_playing != self._last_tts_playing:
+            # 状态变化了！
+            if self._last_tts_playing and not tts_playing:
+                # 从 正在播放 -> 播放结束
+                if self.paused_for_tts:
+                    logger.info("TTS播放结束，恢复音乐播放")
+                    pygame.mixer.music.unpause()
+                    self.paused = False
+                    self.paused_for_tts = False
+                    self.total_pause_time += (current_time - self.pause_start_time)
+                    self.start_play_time = time.time() - self.current_position
+
+            elif not self._last_tts_playing and tts_playing:
+                # 从 不播放 -> 开始播放
+                if not self.paused and not self.paused_for_tts:
+                    logger.info("TTS正在播放，暂停音乐播放")
+                    pygame.mixer.music.pause()
+                    self.paused = True
+                    self.paused_for_tts = True
+                    self.pause_start_time = current_time
+                    self.current_position = time.time() - self.start_play_time
+
+        # 更新上一次的状态
+        self._last_tts_playing = tts_playing
 
     def _play_url(self, url: str) -> bool:
         """
@@ -1205,7 +1207,7 @@ class MusicPlayer(Thing):
 
                 # 根据自动模式设置应用状态
                 if self.app:
-                    self.app.set_device_state(DeviceState.IDLE)
+                    self.app.schedule(lambda: self.app.set_device_state(DeviceState.IDLE))
                 break
 
             # 更新歌词显示（每0.5秒检查一次）

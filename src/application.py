@@ -68,6 +68,7 @@ class Application:
 
         # 音频处理相关
         self.audio_codec = None  # 将在 _initialize_audio 中初始化
+        self._tts_lock = threading.Lock()
         self.is_tts_playing = False  # 因为Display的播放状态只是GUI使用，不方便Music_player使用，所以加了这个标志位表示是TTS在说话
 
         # 事件循环和线程
@@ -148,13 +149,21 @@ class Application:
         asyncio.set_event_loop(self.loop)
         self.loop.run_forever()
 
+    def set_is_tts_playing(self, value: bool):
+        with self._tts_lock:
+            self.is_tts_playing = value
+
+    def get_is_tts_playing(self) -> bool:
+        with self._tts_lock:
+            return self.is_tts_playing
+
     async def _initialize_without_connect(self):
         """初始化应用程序组件（不建立连接）"""
         logger.info("正在初始化应用程序组件...")
 
         # 设置设备状态为待命
         logger.debug("设置初始设备状态为IDLE")
-        self.set_device_state(DeviceState.IDLE)
+        self.schedule(lambda: self.set_device_state(DeviceState.IDLE))
 
         # 初始化音频编解码器
         logger.debug("初始化音频编解码器")
@@ -317,7 +326,7 @@ class Application:
                 logger.info(f"生成了 {len(opus_frames)} 个 Opus 音频帧")
 
                 # 设置状态为说话中
-                self.set_device_state(DeviceState.SPEAKING)
+                self.schedule(lambda: self.set_device_state(DeviceState.SPEAKING))
 
                 # 发送音频数据
                 for i, frame in enumerate(opus_frames):
@@ -344,7 +353,7 @@ class Application:
         """处理音频输出"""
         if self.device_state != DeviceState.SPEAKING:
             return
-        self.is_tts_playing = True
+        self.set_is_tts_playing(True)   # 开始播放
         self.audio_codec.play_audio()
 
     def _on_network_error(self, error_message=None):
@@ -353,14 +362,14 @@ class Application:
             logger.error(f"网络错误: {error_message}")
             
         self.keep_listening = False
-        self.set_device_state(DeviceState.IDLE)
+        self.schedule(lambda: self.set_device_state(DeviceState.IDLE))
         # 恢复唤醒词检测
         if self.wake_word_detector and self.wake_word_detector.paused:
             self.wake_word_detector.resume()
 
         if self.device_state != DeviceState.CONNECTING:
             logger.info("检测到连接断开")
-            self.set_device_state(DeviceState.IDLE)
+            self.schedule(lambda: self.set_device_state(DeviceState.IDLE))
 
             # 关闭现有连接，但不关闭音频流
             if self.protocol:
@@ -421,12 +430,12 @@ class Application:
     def _handle_tts_start(self):
         """处理TTS开始事件"""
         self.aborted = False
-        self.is_tts_playing = True
+        self.set_is_tts_playing(True)   # 开始播放
         # 清空可能存在的旧音频数据
         self.audio_codec.clear_audio_queue()
 
         if self.device_state == DeviceState.IDLE or self.device_state == DeviceState.LISTENING:
-            self.set_device_state(DeviceState.SPEAKING)
+            self.schedule(lambda: self.set_device_state(DeviceState.SPEAKING))
 
         # 注释掉恢复VAD检测器的代码
         # if hasattr(self, 'vad_detector') and self.vad_detector:
@@ -451,11 +460,11 @@ class Application:
 
                 # 确保所有数据都被播放出来
                 # 再额外等待一点时间确保最后的数据被处理
-                if self.is_tts_playing:
+                if self.get_is_tts_playing():
                     time.sleep(0.5)
 
                 # 设置TTS播放状态为False
-                self.is_tts_playing = False
+                self.set_is_tts_playing(False)
 
                 # 状态转换
                 if self.keep_listening:
@@ -463,12 +472,13 @@ class Application:
                         self.protocol.send_start_listening(ListeningMode.AUTO_STOP),
                         self.loop
                     )
-                    self.set_device_state(DeviceState.LISTENING)
+                    self.schedule(lambda: self.set_device_state(DeviceState.LISTENING))
                 else:
-                    self.set_device_state(DeviceState.IDLE)
+                    self.schedule(lambda: self.set_device_state(DeviceState.IDLE))
 
             # 安排延迟执行
-            threading.Thread(target=delayed_state_change, daemon=True).start()
+            # threading.Thread(target=delayed_state_change, daemon=True).start()
+            self.schedule(delayed_state_change)
 
     def _handle_stt_message(self, data):
         """处理STT消息"""
@@ -585,7 +595,7 @@ class Application:
         """音频通道关闭回调"""
         logger.info("音频通道已关闭")
         # 设置为空闲状态但不关闭音频流
-        self.set_device_state(DeviceState.IDLE)
+        self.schedule(lambda: self.set_device_state(DeviceState.IDLE))
         self.keep_listening = False
 
         # 确保唤醒词检测正常工作
@@ -748,8 +758,7 @@ class Application:
             self.wake_word_detector.pause()
 
         if self.device_state == DeviceState.IDLE:
-            self.set_device_state(DeviceState.CONNECTING)  # 设置设备状态为连接中
-
+            self.schedule(lambda: self.set_device_state(DeviceState.CONNECTING))  # 设置设备状态为连接中
             # 尝试打开音频通道
             if not self.protocol.is_audio_channel_opened():
                 try:
@@ -763,13 +772,13 @@ class Application:
 
                     if not success:
                         self.alert("错误", "打开音频通道失败")  # 弹出错误提示
-                        self.set_device_state(DeviceState.IDLE)  # 设置设备状态为空闲
+                        self.schedule(lambda: self.set_device_state(DeviceState.IDLE))
                         return
 
                 except Exception as e:
                     logger.error(f"打开音频通道时发生错误: {e}")
                     self.alert("错误", f"打开音频通道失败: {str(e)}")
-                    self.set_device_state(DeviceState.IDLE)
+                    self.schedule(lambda: self.set_device_state(DeviceState.IDLE))
                     return
                 
             # --- 强制重新初始化输入流 --- 
@@ -780,7 +789,7 @@ class Application:
                      logger.warning("Cannot force reinitialization, audio_codec is None.")
             except Exception as force_reinit_e:
                 logger.error(f"Forced reinitialization failed: {force_reinit_e}", exc_info=True)
-                self.set_device_state(DeviceState.IDLE)
+                self.schedule(lambda: self.set_device_state(DeviceState.IDLE))
                 if self.wake_word_detector and self.wake_word_detector.paused:
                      self.wake_word_detector.resume()
                 return
@@ -790,7 +799,7 @@ class Application:
                 self.protocol.send_start_listening(ListeningMode.MANUAL),
                 self.loop
             )
-            self.set_device_state(DeviceState.LISTENING)  # 设置设备状态为监听中
+            self.schedule(lambda: self.set_device_state(DeviceState.LISTENING))
         elif self.device_state == DeviceState.SPEAKING:
             if not self.aborted:
                 self.abort_speaking(AbortReason.WAKE_WORD_DETECTED)
@@ -798,12 +807,12 @@ class Application:
     async def _open_audio_channel_and_start_manual_listening(self):
         """打开音频通道并开始手动监听"""
         if not await self.protocol.open_audio_channel():
-            self.set_device_state(DeviceState.IDLE)
+            self.schedule(lambda: self.set_device_state(DeviceState.IDLE))
             self.alert("错误", "打开音频通道失败")
             return
 
         await self.protocol.send_start_listening(ListeningMode.MANUAL)
-        self.set_device_state(DeviceState.LISTENING)
+        self.schedule(lambda: self.set_device_state(DeviceState.LISTENING))
 
     def toggle_chat_state(self):
         """切换聊天状态"""
@@ -821,8 +830,7 @@ class Application:
 
         # 如果设备当前处于空闲状态，尝试连接并开始监听
         if self.device_state == DeviceState.IDLE:
-            self.set_device_state(DeviceState.CONNECTING)  # 设置设备状态为连接中
-
+            self.schedule(lambda: self.set_device_state(DeviceState.CONNECTING))  # 设置设备状态为连接中
             # 使用线程来处理连接操作，避免阻塞
             def connect_and_listen():
                 # 尝试打开音频通道
@@ -838,24 +846,24 @@ class Application:
                             success = future.result(timeout=5.0)
                         except asyncio.TimeoutError:
                             logger.error("打开音频通道超时")
-                            self.set_device_state(DeviceState.IDLE)
+                            self.schedule(lambda: self.set_device_state(DeviceState.IDLE))
                             self.alert("错误", "打开音频通道超时")
                             return
                         except Exception as e:
                             logger.error(f"打开音频通道时发生未知错误: {e}")
-                            self.set_device_state(DeviceState.IDLE)
+                            self.schedule(lambda: self.set_device_state(DeviceState.IDLE))
                             self.alert("错误", f"打开音频通道失败: {str(e)}")
                             return
 
                         if not success:
                             self.alert("错误", "打开音频通道失败")  # 弹出错误提示
-                            self.set_device_state(DeviceState.IDLE)  # 设置设备状态为空闲
+                            self.schedule(lambda: self.set_device_state(DeviceState.IDLE))
                             return
 
                     except Exception as e:
                         logger.error(f"打开音频通道时发生错误: {e}")
                         self.alert("错误", f"打开音频通道失败: {str(e)}")
-                        self.set_device_state(DeviceState.IDLE)
+                        self.schedule(lambda: self.set_device_state(DeviceState.IDLE))
                         return
 
                 self.keep_listening = True  # 开始监听
@@ -865,7 +873,7 @@ class Application:
                         self.protocol.send_start_listening(ListeningMode.AUTO_STOP),
                         self.loop
                     )
-                    self.set_device_state(DeviceState.LISTENING)  # 设置设备状态为监听中
+                    self.schedule(lambda: self.set_device_state(DeviceState.LISTENING))
                 except Exception as e:
                     logger.error(f"启动监听时发生错误: {e}")
                     self.set_device_state(DeviceState.IDLE)
@@ -893,7 +901,7 @@ class Application:
             
             threading.Thread(target=close_audio_channel, daemon=True).start()
             # 立即设置为空闲状态，不等待关闭完成
-            self.set_device_state(DeviceState.IDLE)
+            self.schedule(lambda: self.set_device_state(DeviceState.IDLE))
 
     def stop_listening(self):
         """停止监听"""
@@ -919,7 +927,7 @@ class Application:
         self.aborted = True
 
         # 设置TTS播放状态为False
-        self.is_tts_playing = False
+        self.set_is_tts_playing(False)
         
         # 立即清空音频队列
         if self.audio_codec:
@@ -943,8 +951,8 @@ class Application:
                 logger.error(f"发送中止指令时出错: {e}")
             
             # 然后设置状态
-            self.set_device_state(DeviceState.IDLE)
-            
+            # self.set_device_state(DeviceState.IDLE)
+            self.schedule(lambda: self.set_device_state(DeviceState.IDLE))
             # 如果是唤醒词触发的中止，并且启用了自动聆听，则自动进入录音模式
             if (reason == AbortReason.WAKE_WORD_DETECTED and 
                     self.keep_listening and 
@@ -1123,8 +1131,7 @@ class Application:
                 self.wake_word_detector.pause()
 
             # 开始连接并监听
-            self.set_device_state(DeviceState.CONNECTING)
-
+            self.schedule(lambda: self.set_device_state(DeviceState.CONNECTING))
             # 尝试连接并打开音频通道
             asyncio.run_coroutine_threadsafe(
                 self._connect_and_start_listening(wake_word),
@@ -1139,7 +1146,7 @@ class Application:
         if not await self.protocol.connect():
             logger.error("连接服务器失败")
             self.alert("错误", "连接服务器失败")
-            self.set_device_state(DeviceState.IDLE)
+            self.schedule(lambda: self.set_device_state(DeviceState.IDLE))
             # 恢复唤醒词检测
             if self.wake_word_detector:
                 self.wake_word_detector.resume()
@@ -1148,7 +1155,7 @@ class Application:
         # 然后尝试打开音频通道
         if not await self.protocol.open_audio_channel():
             logger.error("打开音频通道失败")
-            self.set_device_state(DeviceState.IDLE)
+            self.schedule(lambda: self.set_device_state(DeviceState.IDLE))
             self.alert("错误", "打开音频通道失败")
             # 恢复唤醒词检测
             if self.wake_word_detector:
@@ -1159,7 +1166,7 @@ class Application:
         # 设置为自动监听模式
         self.keep_listening = True
         await self.protocol.send_start_listening(ListeningMode.AUTO_STOP)
-        self.set_device_state(DeviceState.LISTENING)
+        self.schedule(lambda: self.set_device_state(DeviceState.LISTENING))
 
     def _restart_wake_word_detector(self):
         """重新启动唤醒词检测器"""
@@ -1253,7 +1260,7 @@ class Application:
             try:
                 result = thing_manager.invoke(command)
                 logger.info(f"执行物联网命令结果: {result}")
-                self.schedule(lambda: self._update_iot_states())
+                # self.schedule(lambda: self._update_iot_states())
             except Exception as e:
                 logger.error(f"执行物联网命令失败: {e}")
 
