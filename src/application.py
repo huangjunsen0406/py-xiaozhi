@@ -425,7 +425,9 @@ class Application:
                 self.schedule(lambda: self.set_chat_message("assistant", text))
 
                 # 检查是否包含验证码信息
-                if "请登录到控制面板添加设备，输入验证码" in text:
+                import re
+                match = re.search(r'((?:\d\s*){6,})', text)
+                if match:
                     self.schedule(lambda: handle_verification_code(text))
 
     def _handle_tts_start(self):

@@ -217,24 +217,24 @@ def play_audio_nonblocking(text: str) -> None:
     audio_thread.start()
     logger.info("已启动非阻塞音频播放线程")
 
+
 def extract_verification_code(text: str) -> Optional[str]:
     """
-    从文本中提取验证码
-    
+    从文本中提取6位验证码，支持中间带空格的形式
+
     Args:
         text: 包含验证码的文本
-        
+
     Returns:
         Optional[str]: 提取的验证码，如果未找到则返回None
     """
     try:
         import re
-        # 同时支持带空格和不带空格的验证码格式
-        match = re.search(r'验证码：\s*(\d[\d\s]*\d)', text)
+        # 匹配类似 222944 或 2 2 2 9 4 4 这种形式
+        match = re.search(r'((?:\d\s*){6,})', text)
         if match:
-            # 提取所有数字，忽略空格
             code_with_spaces = match.group(1)
-            code = ''.join(code_with_spaces.split())  # 去除所有空格
+            code = ''.join(code_with_spaces.split())  # 去除空格
             logger.info(f"已从文本中提取验证码: {code}")
             return code
         else:
@@ -243,6 +243,7 @@ def extract_verification_code(text: str) -> Optional[str]:
     except Exception as e:
         logger.error(f"提取验证码时出错: {e}")
         return None
+
 
 def handle_verification_code(text: str) -> None:
     """
