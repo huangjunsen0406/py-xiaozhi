@@ -51,7 +51,7 @@ def get_frame_duration() -> int:
     try:
 
         if (platform.system() == "Linux" or
-                not is_official_server(config.get_config("SYSTEM_OPTIONS.NETWORK.WEBSOCKET_URL"))):
+                not is_official_server(config.get_config("SYSTEM_OPTIONS.NETWORK.OTA_VERSION_URL"))):
             return 60
 
         p = pyaudio.PyAudio()
@@ -74,7 +74,7 @@ class AudioConfig:
     """音频配置类"""
     # 固定配置
     INPUT_SAMPLE_RATE = 16000  # 输入采样率16kHz
-    OUTPUT_SAMPLE_RATE = 24000 if is_official_server(config.get_config("SYSTEM_OPTIONS.NETWORK.WEBSOCKET_URL")) else 16000  # 输出采样率
+    OUTPUT_SAMPLE_RATE = 24000 if is_official_server(config.get_config("SYSTEM_OPTIONS.NETWORK.OTA_VERSION_URL")) else 16000  # 输出采样率
     CHANNELS = 1
 
     # 动态获取帧长度

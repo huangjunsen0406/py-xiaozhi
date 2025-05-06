@@ -9,13 +9,14 @@ from pathlib import Path
 
 from src.utils.logging_config import get_logger
 # 在导入 opuslib 之前处理 opus 动态库
-from src.utils.system_info import setup_opus
+from src.utils.opus_loader import setup_opus
 from src.constants.constants import (
-    DeviceState, EventType, AudioConfig, 
+    DeviceState, EventType, AudioConfig,
     AbortReason, ListeningMode
 )
 from src.display import gui_display, cli_display
 from src.utils.config_manager import ConfigManager
+from src.utils.common_utils import handle_verification_code
 
 setup_opus()
 
@@ -57,7 +58,7 @@ class Application:
         logger.debug("初始化Application实例")
         # 获取配置管理器实例
         self.config = ConfigManager.get_instance()
-
+        self.config._initialize_mqtt_info()
         # 状态变量
         self.device_state = DeviceState.IDLE
         self.voice_detected = False
@@ -425,7 +426,7 @@ class Application:
 
                 # 检查是否包含验证码信息
                 if "请登录到控制面板添加设备，输入验证码" in text:
-                    self.schedule(lambda: self._handle_verification_code(text))
+                    self.schedule(lambda: handle_verification_code(text))
 
     def _handle_tts_start(self):
         """处理TTS开始事件"""
@@ -1009,39 +1010,6 @@ class Application:
 
         logger.info("应用程序已关闭")
 
-    def _handle_verification_code(self, text):
-        """处理验证码信息"""
-        try:
-            # 提取验证码
-            import re
-            verification_code = re.search(r'验证码：(\d+)', text)
-            if verification_code:
-                code = verification_code.group(1)
-
-                # 尝试复制到剪贴板
-                try:
-                    import pyperclip
-                    pyperclip.copy(code)
-                    logger.info(f"验证码 {code} 已复制到剪贴板")
-                except Exception as e:
-                    logger.warning(f"无法复制验证码到剪贴板: {e}")
-
-                # 尝试打开浏览器
-                try:
-                    import webbrowser
-                    if webbrowser.open("https://xiaozhi.me/login"):
-                        logger.info("已打开登录页面")
-                    else:
-                        logger.warning("无法打开浏览器")
-                except Exception as e:
-                    logger.warning(f"打开浏览器时出错: {e}")
-
-                # 无论如何都显示验证码
-                self.alert("验证码", f"您的验证码是: {code}")
-
-        except Exception as e:
-            logger.error(f"处理验证码时出错: {e}")
-
     def _on_mode_changed(self, auto_mode):
         """处理对话模式变更"""
         # 只有在IDLE状态下才允许切换模式
@@ -1197,8 +1165,8 @@ class Application:
         from src.iot.things.speaker import Speaker
         from src.iot.things.music_player import MusicPlayer
         from src.iot.things.CameraVL.Camera import Camera
-        from src.iot.things.query_bridge_rag import QueryBridgeRAG
-        from src.iot.things.temperature_sensor import TemperatureSensor
+        # from src.iot.things.query_bridge_rag import QueryBridgeRAG
+        # from src.iot.things.temperature_sensor import TemperatureSensor
         # 导入Home Assistant设备控制类
         from src.iot.things.ha_control import HomeAssistantLight, HomeAssistantSwitch, HomeAssistantNumber, HomeAssistantButton
         # 导入新的倒计时器设备

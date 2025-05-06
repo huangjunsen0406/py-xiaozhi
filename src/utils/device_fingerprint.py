@@ -7,11 +7,14 @@ import platform
 import logging
 import re
 import json
+import hmac
 from pathlib import Path
 from typing import Dict, Optional, List, Tuple
 
+from src.utils.logging_config import get_logger
+
 # 获取日志记录器
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class DeviceFingerprint:
@@ -22,16 +25,13 @@ class DeviceFingerprint:
         self.system = platform.system()
         self.fingerprint_cache_file = (Path(__file__).parent.parent.parent / 
                                       "config" / ".device_fingerprint")
+        self.efuse_file = (Path(__file__).parent.parent.parent / 
+                           "config" / "efuse.json")
 
     def get_hostname(self) -> str:
         """获取计算机主机名"""
         return platform.node()
 
-    def get_mac_address(self) -> str:
-        """获取MAC地址（小写格式）"""
-        mac = uuid.UUID(int=uuid.getnode()).hex[-12:]
-        return ":".join([mac[i:i + 2] for i in range(0, 12, 2)]).lower()
-        
     def get_all_mac_addresses(self) -> List[Dict[str, str]]:
         """获取所有网络适配器的MAC地址"""
         mac_addresses = []
@@ -53,13 +53,170 @@ class DeviceFingerprint:
                             "net_connection_id": getattr(nic, "NetConnectionID", ""),
                             "physical": nic.PhysicalAdapter if hasattr(nic, "PhysicalAdapter") else False
                         })
-            # 其他系统的实现可以在这里添加
+            elif self.system == "Linux":
+                # Linux系统通过/sys/class/net目录获取网络适配器信息
+                import os
+                import re
+                net_path = "/sys/class/net"
+                if os.path.exists(net_path):
+                    for interface in os.listdir(net_path):
+                        # 排除lo回环接口
+                        if interface == "lo":
+                            continue
+                            
+                        # 读取MAC地址
+                        address_path = os.path.join(net_path, interface, "address")
+                        if os.path.exists(address_path):
+                            try:
+                                with open(address_path, 'r') as f:
+                                    mac = f.read().strip().lower()
+                                    if mac and re.match(r'^([0-9a-f]{2}[:-]){5}([0-9a-f]{2})$', mac):
+                                        # 判断接口类型
+                                        is_wireless = os.path.exists(os.path.join(net_path, interface, "wireless"))
+                                        
+                                        # 尝试获取接口类型信息
+                                        interface_type = "无线网卡" if is_wireless else "有线网卡"
+                                        
+                                        # 检查是否为虚拟接口
+                                        is_virtual = False
+                                        if os.path.exists(os.path.join(net_path, interface, "device")):
+                                            driver_path = os.path.join(net_path, interface, "device", "driver")
+                                            if os.path.exists(driver_path):
+                                                driver = os.path.basename(os.path.realpath(driver_path))
+                                                is_virtual = driver in ["veth", "vboxnet", "docker", "bridge"]
+                                        
+                                        # 判断是否为物理接口
+                                        is_physical = not is_virtual
+                                        
+                                        mac_addresses.append({
+                                            "name": interface,
+                                            "mac": mac,
+                                            "device_id": interface,
+                                            "adapter_type": interface_type,
+                                            "net_connection_id": "",
+                                            "physical": is_physical
+                                        })
+                            except Exception as e:
+                                logger.error(f"读取Linux网卡{interface}的MAC地址失败: {e}")
+                                
+                # 如果上面的方法失败或没有找到MAC地址，尝试使用ip命令
+                if not mac_addresses:
+                    try:
+                        import subprocess
+                        result = subprocess.run(["ip", "link", "show"], capture_output=True, text=True)
+                        if result.returncode == 0:
+                            output = result.stdout
+                            # 解析ip link show输出
+                            current_if = None
+                            for line in output.splitlines():
+                                # 新接口行
+                                if not line.startswith(' '):
+                                    match = re.search(r'^\d+:\s+([^:@]+)[@:]', line)
+                                    if match:
+                                        current_if = match.group(1).strip()
+                                        if current_if == "lo":  # 跳过回环接口
+                                            current_if = None
+                                # MAC地址行
+                                elif current_if and "link/ether" in line:
+                                    match = re.search(r'link/ether\s+([0-9a-f:]{17})', line)
+                                    if match:
+                                        mac = match.group(1).lower()
+                                        mac_addresses.append({
+                                            "name": current_if,
+                                            "mac": mac,
+                                            "device_id": current_if,
+                                            "adapter_type": "网络接口",
+                                            "net_connection_id": "",
+                                            "physical": True  # 假设为物理接口
+                                        })
+                    except Exception as e:
+                        logger.error(f"使用ip命令获取MAC地址失败: {e}")
+            
+            elif self.system == "Darwin":  # macOS
+                # macOS通过networksetup命令获取所有网络接口
+                import subprocess
+                import re
+                
+                try:
+                    # 获取所有网络服务
+                    result = subprocess.run(["networksetup", "-listallhardwareports"], 
+                                           capture_output=True, text=True)
+                    
+                    if result.returncode == 0:
+                        output = result.stdout
+                        current_port = None
+                        current_device = None
+                        current_type = None
+                        
+                        for line in output.splitlines():
+                            # 硬件端口行
+                            if line.startswith("Hardware Port:"):
+                                current_port = line.split(":", 1)[1].strip()
+                                current_type = "无线网卡" if "Wi-Fi" in current_port or "AirPort" in current_port else "有线网卡"
+                            # 设备名行
+                            elif line.startswith("Device:"):
+                                current_device = line.split(":", 1)[1].strip()
+                            # MAC地址行
+                            elif line.startswith("Ethernet Address:") and current_device:
+                                mac = line.split(":", 1)[1].strip().lower()
+                                # 将':' 添加到MAC地址中
+                                if len(mac) == 12:
+                                    mac = ':'.join([mac[i:i+2] for i in range(0, 12, 2)])
+                                    
+                                mac_addresses.append({
+                                    "name": current_port or current_device,
+                                    "mac": mac,
+                                    "device_id": current_device,
+                                    "adapter_type": current_type or "网络接口",
+                                    "net_connection_id": current_port,
+                                    "physical": True  # 假设物理接口
+                                })
+                                
+                                # 重置当前记录的值
+                                current_port = None
+                                current_device = None
+                                current_type = None
+                except Exception as e:
+                    logger.error(f"在macOS上获取MAC地址失败: {e}")
+                    
+                # 如果上面的方法失败，尝试使用ifconfig命令
+                if not mac_addresses:
+                    try:
+                        result = subprocess.run(["ifconfig"], capture_output=True, text=True)
+                        if result.returncode == 0:
+                            output = result.stdout
+                            current_if = None
+                            
+                            for line in output.splitlines():
+                                # 新接口行
+                                if not line.startswith('\t') and not line.startswith(' '):
+                                    match = re.search(r'^([a-zA-Z0-9]+):', line)
+                                    if match:
+                                        current_if = match.group(1)
+                                        if current_if == "lo0":  # 跳过回环接口
+                                            current_if = None
+                                # MAC地址行
+                                elif current_if and ("ether " in line or "lladdr " in line):
+                                    match = re.search(r'(?:ether|lladdr)\s+([0-9a-f:]{17})', line)
+                                    if match:
+                                        mac = match.group(1).lower()
+                                        is_physical = not current_if.startswith(('vnet', 'bridge', 'vbox'))
+                                        mac_addresses.append({
+                                            "name": current_if,
+                                            "mac": mac,
+                                            "device_id": current_if,
+                                            "adapter_type": "网络接口",
+                                            "net_connection_id": "",
+                                            "physical": is_physical
+                                        })
+                    except Exception as e:
+                        logger.error(f"使用ifconfig获取MAC地址失败: {e}")
         except Exception as e:
             logger.error(f"获取所有MAC地址时出错: {e}")
             
         return mac_addresses
         
-    def get_primary_mac_address(self) -> Optional[Tuple[str, str]]:
+    def get_mac_address(self) -> Optional[Tuple[str, str]]:
         """
         智能选择最适合的物理网卡MAC地址
         
@@ -347,15 +504,14 @@ class DeviceFingerprint:
             return cached_fingerprint
         
         # 获取主要网卡MAC地址
-        primary_mac, mac_type = self.get_primary_mac_address() or (self.get_mac_address(), "系统MAC")
+        mac_address, mac_type = self.get_mac_address()
         
         # 收集各种硬件信息
         fingerprint = {
             "system": self.system,
             "hostname": self.get_hostname(),
-            "mac_address": self.get_mac_address(),  # 保留系统获取的MAC地址用于兼容
-            "primary_mac": primary_mac,
-            "primary_mac_type": mac_type,
+            "mac_address": mac_address,  # 保留系统获取的MAC地址用于兼容
+            "mac_type": mac_type,
             "bluetooth_mac": self.get_bluetooth_mac_address(),
             "cpu": self.get_cpu_info(),
             "disks": self.get_disk_info(),
@@ -451,15 +607,15 @@ class DeviceFingerprint:
         short_hostname = "".join(c for c in hostname if c.isalnum())[:8]
         
         # 优先使用主网卡MAC地址生成序列号
-        primary_mac = fingerprint.get("primary_mac")
-        primary_mac_type = fingerprint.get("primary_mac_type", "未知网卡")
-        
-        if primary_mac:
+        mac_address = fingerprint.get("mac_address")
+        mac_type = fingerprint.get("mac_type", "未知网卡")
+
+        if mac_address:
             # 确保MAC地址为小写且没有冒号
-            mac_clean = primary_mac.lower().replace(":", "")
+            mac_clean = mac_address.lower().replace(":", "")
             short_hash = hashlib.md5(mac_clean.encode()).hexdigest()[:8].upper()
             serial_number = f"SN-{short_hash}-{mac_clean}"
-            return serial_number, primary_mac_type
+            return serial_number, mac_type
         
         # 备选方案: 尝试使用蓝牙MAC地址
         bluetooth_mac = fingerprint.get("bluetooth_mac")
@@ -483,6 +639,148 @@ class DeviceFingerprint:
         hardware_hash = self.generate_hardware_hash()[:16].upper()
         serial_number = f"SN-{hardware_hash}"
         return serial_number, "硬件哈希值"
+
+    def _ensure_efuse_file(self):
+        """确保efuse文件存在，如果不存在则创建"""
+
+        serial_number, source = self.generate_serial_number()
+        hmac_key = self.generate_hardware_hash()
+        print(f"生成序列号: {serial_number} (来源: {source}) hmac_key: {hmac_key}")
+        if not self.efuse_file.exists():
+            # 创建默认efuse数据
+            default_data = {
+                "serial_number": serial_number,
+                "hmac_key": hmac_key,
+                "activation_status": False
+            }
+
+            # 确保目录存在
+            self.efuse_file.parent.mkdir(parents=True, exist_ok=True)
+
+            # 写入默认数据
+            with open(self.efuse_file, 'w', encoding='utf-8') as f:
+                json.dump(default_data, f, indent=2, ensure_ascii=False)
+
+            logger.info(f"已创建efuse配置文件: {self.efuse_file}")
+            print(f"新设备：已创建efuse配置文件")
+        else:
+            logger.info(f"efuse配置文件已存在: {self.efuse_file}")
+            # 验证文件内容是否完整
+            try:
+                efuse_data = self._load_efuse_data()
+                # 检查必要字段是否存在
+                required_fields = ["serial_number", "hmac_key", "activation_status"]
+                missing_fields = [
+                    field for field in required_fields if field not in efuse_data
+                ]
+                
+                if missing_fields:
+                    logger.warning(f"efuse配置文件缺少字段: {missing_fields}")
+                    
+                    # 添加缺失字段，但不修改已有字段
+                    for field in missing_fields:
+                        efuse_data[field] = None if field != "activation_status" else False
+                    
+                    # 保存修复后的数据
+                    self._save_efuse_data(efuse_data)
+                    logger.info("已修复efuse配置文件")
+            except Exception as e:
+                logger.error(f"验证efuse配置文件时出错: {e}")
+
+    def _load_efuse_data(self) -> dict:
+        """加载efuse数据"""
+        try:
+            with open(self.efuse_file, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception as e:
+            logger.error(f"加载efuse数据失败: {e}")
+            return {
+                "serial_number": None,
+                "hmac_key": None,
+                "activation_status": False
+            }
+
+    def _save_efuse_data(self, data: dict) -> bool:
+        """保存efuse数据"""
+        try:
+            with open(self.efuse_file, 'w', encoding='utf-8') as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+            return True
+        except Exception as e:
+            logger.error(f"保存efuse数据失败: {e}")
+            return False
+
+    def ensure_device_identity(self) -> Tuple[str, str, bool]:
+        """
+        确保设备身份信息已加载 - 返回序列号、HMAC密钥和激活状态
+        
+        不会创建新的序列号或HMAC密钥，只会读取已有的数据
+        
+        Returns:
+            Tuple[str, str, bool]: (序列号, HMAC密钥, 激活状态)
+        """
+        # 只加载现有的efuse数据，不进行创建
+        efuse_data = self._load_efuse_data()
+        
+        # 获取序列号、HMAC密钥和激活状态
+        serial_number = efuse_data.get("serial_number")
+        hmac_key = efuse_data.get("hmac_key")
+        is_activated = efuse_data.get("activation_status", False)
+        
+        # 记录日志但不创建新数据
+        if not serial_number:
+            logger.warning("efuse.json中没有找到序列号")
+        if not hmac_key:
+            logger.warning("efuse.json中没有找到HMAC密钥")
+            
+        return serial_number, hmac_key, is_activated
+
+    def has_serial_number(self) -> bool:
+        """检查是否有序列号"""
+        efuse_data = self._load_efuse_data()
+        return efuse_data.get("serial_number") is not None
+
+    def get_serial_number(self) -> str:
+        """获取序列号"""
+        efuse_data = self._load_efuse_data()
+        return efuse_data.get("serial_number")
+
+    def get_hmac_key(self) -> str:
+        """获取HMAC密钥"""
+        efuse_data = self._load_efuse_data()
+        return efuse_data.get("hmac_key")
+
+    def set_activation_status(self, status: bool) -> bool:
+        """设置激活状态"""
+        efuse_data = self._load_efuse_data()
+        efuse_data["activation_status"] = status
+        return self._save_efuse_data(efuse_data)
+
+    def is_activated(self) -> bool:
+        """检查设备是否已激活"""
+        efuse_data = self._load_efuse_data()
+        return efuse_data.get("activation_status", False)
+    
+    def generate_hmac(self, challenge: str) -> str:
+        """使用HMAC密钥生成签名"""
+        hmac_key = self.get_hmac_key()
+
+        if not hmac_key:
+            logger.error("未找到HMAC密钥，无法生成签名")
+            return None
+
+        try:
+            # 计算HMAC-SHA256签名
+            signature = hmac.new(
+                hmac_key.encode(),
+                challenge.encode(),
+                hashlib.sha256
+            ).hexdigest()
+
+            return signature
+        except Exception as e:
+            logger.error(f"生成HMAC签名失败: {e}")
+            return None
 
 
 # 单例模式获取设备指纹

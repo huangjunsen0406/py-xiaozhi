@@ -1,12 +1,16 @@
+import asyncio
 import json
 import hashlib
 import hmac
+import threading
 import time
 import requests
 import uuid
 from pathlib import Path
 
+from src.utils.common_utils import handle_verification_code
 from src.utils.logging_config import get_logger
+from src.utils.device_fingerprint import get_device_fingerprint
 
 logger = get_logger(__name__)
 
@@ -18,133 +22,47 @@ class DeviceActivator:
         """初始化设备激活器"""
         self.logger = get_logger(__name__)
         self.config_manager = config_manager
-        self.efuse_file = Path(__file__).parent.parent.parent / "config" / "efuse.json"
-        self._ensure_efuse_file()
-
-    def _ensure_efuse_file(self):
-        """确保efuse文件存在"""
-        if not self.efuse_file.exists():
-            # 创建默认efuse数据
-            default_data = {
-                "serial_number": None,
-                "hmac_key": None,
-                "activation_status": False
-            }
-
-            # 确保目录存在
-            self.efuse_file.parent.mkdir(parents=True, exist_ok=True)
-
-            # 写入默认数据
-            with open(self.efuse_file, 'w', encoding='utf-8') as f:
-                json.dump(default_data, f, indent=2, ensure_ascii=False)
-
-            self.logger.info(f"已创建efuse配置文件: {self.efuse_file}")
-
-    def _load_efuse_data(self) -> dict:
-        """加载efuse数据"""
-        try:
-            with open(self.efuse_file, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        except Exception as e:
-            self.logger.error(f"加载efuse数据失败: {e}")
-            return {
-                "serial_number": None,
-                "hmac_key": None,
-                "activation_status": False
-            }
-
-    def _save_efuse_data(self, data: dict) -> bool:
-        """保存efuse数据"""
-        try:
-            with open(self.efuse_file, 'w', encoding='utf-8') as f:
-                json.dump(data, f, indent=2, ensure_ascii=False)
-            return True
-        except Exception as e:
-            self.logger.error(f"保存efuse数据失败: {e}")
-            return False
+        # 使用device_fingerprint实例来管理设备身份
+        self.device_fingerprint = get_device_fingerprint()
+        # 确保设备身份信息已创建
+        self._ensure_device_identity()
+        
+    def _ensure_device_identity(self):
+        """确保设备身份信息已创建"""
+        serial_number, hmac_key, is_activated = self.device_fingerprint.ensure_device_identity()
+        self.logger.info(f"设备身份信息: 序列号: {serial_number}, 激活状态: {'已激活' if is_activated else '未激活'}")
 
     def has_serial_number(self) -> bool:
         """检查是否有序列号"""
-        efuse_data = self._load_efuse_data()
-        return efuse_data.get("serial_number") is not None
+        return self.device_fingerprint.has_serial_number()
 
     def get_serial_number(self) -> str:
         """获取序列号"""
-        efuse_data = self._load_efuse_data()
-        return efuse_data.get("serial_number")
+        return self.device_fingerprint.get_serial_number()
 
     def burn_serial_number(self, serial_number: str) -> bool:
         """烧录序列号到模拟efuse"""
-        efuse_data = self._load_efuse_data()
-
-        # 检查是否已有序列号
-        if efuse_data.get("serial_number") is not None:
-            self.logger.warning("已存在序列号，无法重新烧录")
-            return False
-
-        # 更新序列号
-        efuse_data["serial_number"] = serial_number
-        result = self._save_efuse_data(efuse_data)
-
-        if result:
-            self.logger.info(f"序列号 {serial_number} 已成功烧录")
-
-        return result
+        return self.device_fingerprint.burn_serial_number(serial_number)
 
     def burn_hmac_key(self, hmac_key: str) -> bool:
         """烧录HMAC密钥到模拟efuse"""
-        efuse_data = self._load_efuse_data()
-
-        # 检查是否已有HMAC密钥
-        if efuse_data.get("hmac_key") is not None:
-            self.logger.warning("已存在HMAC密钥，无法重新烧录")
-            return False
-
-        # 更新HMAC密钥
-        efuse_data["hmac_key"] = hmac_key
-        result = self._save_efuse_data(efuse_data)
-
-        if result:
-            self.logger.info("HMAC密钥已成功烧录")
-
-        return result
+        return self.device_fingerprint.burn_hmac_key(hmac_key)
 
     def get_hmac_key(self) -> str:
         """获取HMAC密钥"""
-        efuse_data = self._load_efuse_data()
-        return efuse_data.get("hmac_key")
+        return self.device_fingerprint.get_hmac_key()
 
     def set_activation_status(self, status: bool) -> bool:
         """设置激活状态"""
-        efuse_data = self._load_efuse_data()
-        efuse_data["activation_status"] = status
-        return self._save_efuse_data(efuse_data)
+        return self.device_fingerprint.set_activation_status(status)
 
     def is_activated(self) -> bool:
         """检查设备是否已激活"""
-        efuse_data = self._load_efuse_data()
-        return efuse_data.get("activation_status", False)
+        return self.device_fingerprint.is_activated()
 
     def generate_hmac(self, challenge: str) -> str:
         """使用HMAC密钥生成签名"""
-        hmac_key = self.get_hmac_key()
-
-        if not hmac_key:
-            self.logger.error("未找到HMAC密钥，无法生成签名")
-            return None
-
-        try:
-            # 计算HMAC-SHA256签名
-            signature = hmac.new(
-                hmac_key.encode(),
-                challenge.encode(),
-                hashlib.sha256
-            ).hexdigest()
-
-            return signature
-        except Exception as e:
-            self.logger.error(f"生成HMAC签名失败: {e}")
-            return None
+        return self.device_fingerprint.generate_hmac(challenge)
 
     def process_activation(self, activation_data: dict) -> bool:
         """
@@ -173,16 +91,12 @@ class DeviceActivator:
         if not self.has_serial_number():
             self.logger.error("设备没有序列号，无法进行激活")
             print("\n错误: 设备没有序列号，无法进行激活。请确保efuse.json文件已正确创建")
-            print("正在重新创建efuse.json文件并重新尝试...")
+            print("正在重新创建设备身份信息并重新尝试...")
 
-            # 尝试创建序列号和HMAC密钥
-            serial_number = f"SN-{uuid.uuid4().hex[:16].upper()}"
-            hmac_key = uuid.uuid4().hex
+            # 使用device_fingerprint生成序列号和HMAC密钥
+            serial_number, hmac_key, _ = self.device_fingerprint.ensure_device_identity()
 
-            success1 = self.burn_serial_number(serial_number)
-            success2 = self.burn_hmac_key(hmac_key)
-
-            if success1 and success2:
+            if serial_number and hmac_key:
                 self.logger.info("已自动创建设备序列号和HMAC密钥")
                 print(f"已自动创建设备序列号: {serial_number}")
             else:
@@ -192,9 +106,22 @@ class DeviceActivator:
         # 显示激活信息给用户
         self.logger.info(f"激活提示: {message}")
         self.logger.info(f"验证码: {code}")
+        
+        # 构建验证码提示文本并打印
+        text = f"请登录到控制面板添加设备，输入验证码：{' '.join(code)}"
         print("\n==================")
-        print(f"请登录到控制面板添加设备，输入验证码：{code}")
+        print(text)
         print("==================\n")
+        handle_verification_code(text)
+        # 使用语音播放验证码
+        try:
+            # 在非阻塞的线程中播放语音
+            from src.utils.common_utils import play_audio_nonblocking
+
+            play_audio_nonblocking(text)
+            self.logger.info("正在播放验证码语音提示")
+        except Exception as e:
+            self.logger.error(f"播放验证码语音失败: {e}")
 
         # 尝试激活设备
         return self.activate(challenge)
@@ -244,22 +171,9 @@ class DeviceActivator:
 
         activate_url = f"{ota_url}activate"
 
-        # 获取激活版本设置
-        activation_version_setting = self.config_manager.get_config(
-            "SYSTEM_OPTIONS.NETWORK.ACTIVATION_VERSION", "v2")
-
-        # 确定使用哪个版本的激活协议
-        if activation_version_setting in ["v1", "1"]:
-            activation_version = "1"
-        else:
-            activation_version = "2"
-
-        self.logger.info(f"OTA请求使用激活版本: {activation_version} "
-                         f"(配置值: {activation_version_setting})")
-
         # 设置请求头
         headers = {
-            "Activation-Version": activation_version,
+            "Activation-Version": "2",
             "Device-Id": self.config_manager.get_config("SYSTEM_OPTIONS.DEVICE_ID"),
             "Client-Id": self.config_manager.get_config("SYSTEM_OPTIONS.CLIENT_ID"),
             "Content-Type": "application/json"
@@ -289,29 +203,6 @@ class DeviceActivator:
                 try:
                     response_json = response.json()
                     print(json.dumps(response_json, indent=2))
-
-                    # 保存激活请求和响应到文件
-                    try:
-                        log_dir = Path("logs")
-                        log_dir.mkdir(exist_ok=True)
-
-                        # 保存激活请求
-                        with open(log_dir / "activate_request.json", "w", encoding="utf-8") as f:
-                            request_data = {
-                                "url": activate_url,
-                                "headers": headers,
-                                "payload": payload
-                            }
-                            json.dump(request_data, f, indent=4, ensure_ascii=False)
-
-                        # 保存激活响应
-                        with open(log_dir / "activate_response.json", "w", encoding="utf-8") as f:
-                            json.dump(response_json, f, indent=4, ensure_ascii=False)
-
-                        self.logger.info("激活请求和响应已保存到logs目录")
-                    except Exception as e:
-                        self.logger.error(f"保存激活日志失败: {e}")
-
                 except Exception:
                     print(response.text)
 
@@ -365,4 +256,4 @@ class DeviceActivator:
         # 只有在达到最大重试次数后才真正失败
         self.logger.error(f"激活失败，达到最大重试次数 ({max_retries})，最后错误: {last_error}")
         print("\n激活失败，达到最大等待时间，请重新获取验证码并尝试激活\n")
-        return False 
+        return False
