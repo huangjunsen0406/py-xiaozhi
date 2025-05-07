@@ -600,20 +600,26 @@ Home Assistant是一个流行的开源家庭自动化平台，本项目通过HTT
     "TOKEN": "your-long-lived-access-token",
     "DEVICES": [
       {
-        "type": "light",
-        "entity_id": "light.living_room",
-        "friendly_name": "客厅灯"
+        "entity_id": "light.cuco_cn_573924446_v3_s_13_indicator_light",
+        "friendly_name": "米家智能插座3-冰箱  指示灯"
       },
       {
-        "type": "switch",
-        "entity_id": "switch.bedroom_fan",
-        "friendly_name": "卧室风扇"
+        "entity_id": "switch.cuco_cn_573924446_v3_on_p_2_1",
+        "friendly_name": "米家智能插座3-冰箱  开关 开关"
       }
     ]
   }
 }
 ```
-
+### 配置ha地址和密钥
+![Image](./images/home_assistatnt配置.png)
+### 设备选择
+- 左上角开关处点击可以切换设备类型
+- 选中设备后天机右下角添加选中设备
+- 导入后需要重启小智等待程序加载完成就可以通过语音控制了
+![Image](./images/设备选择.png)
+### 导入后
+![Image](./images/导入ha.png)
 2. **支持的设备类型**
 
 - `light`: 灯设备，支持开关和亮度控制
