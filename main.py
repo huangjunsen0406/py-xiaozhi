@@ -2,6 +2,7 @@ import argparse
 import logging
 import sys
 import signal
+import io
 from src.application import Application
 from src.utils.logging_config import setup_logging, get_logger
 
@@ -10,6 +11,12 @@ logger = get_logger(__name__)
 
 def parse_args():
     """解析命令行参数"""
+    # 确保sys.stdout和sys.stderr不为None
+    if sys.stdout is None:
+        sys.stdout = io.StringIO()
+    if sys.stderr is None:
+        sys.stderr = io.StringIO()
+        
     parser = argparse.ArgumentParser(description='小智Ai客户端')
     
     # 添加界面模式参数

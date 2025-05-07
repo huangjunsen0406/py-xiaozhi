@@ -36,16 +36,38 @@ CONFIG_PATH = Path(__file__).parent.parent.parent / "config" / "config.json"
 
 
 def restart_program():
-    """使用 os.execv 重启当前 Python 程序。"""
+    """重启当前 Python 程序，支持打包环境。"""
     try:
         python = sys.executable
-        print(f"Attempting to restart with: {python} {sys.argv}")
+        print(f"尝试使用以下命令重启: {python} {sys.argv}")
+
         # 尝试关闭 Qt 应用，虽然 execv 会接管，但这样做更规范
         app = QApplication.instance()
         if app:
             app.quit()
-        # 替换当前进程
-        os.execv(python, [python] + sys.argv)
+
+        # 在打包环境中使用不同的重启方法
+        if getattr(sys, 'frozen', False):
+            # 打包环境下，使用subprocess启动新进程
+            import subprocess
+
+            # 构建完整的命令行
+            if sys.platform.startswith('win'):
+                # Windows下使用detached创建独立进程
+                executable = os.path.abspath(sys.executable)
+                subprocess.Popen([executable] + sys.argv[1:],
+                                 creationflags=subprocess.CREATE_NEW_PROCESS_GROUP)
+            else:
+                # Linux/Mac下
+                executable = os.path.abspath(sys.executable)
+                subprocess.Popen([executable] + sys.argv[1:],
+                                 start_new_session=True)
+
+            # 退出当前进程
+            sys.exit(0)
+        else:
+            # 非打包环境，使用os.execv
+            os.execv(python, [python] + sys.argv)
     except Exception as e:
         print(f"重启程序失败: {e}")
         logging.getLogger("Display").error(f"重启程序失败: {e}", exc_info=True)
