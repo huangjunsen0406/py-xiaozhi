@@ -167,6 +167,8 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
 
         # 键盘监听器
         self.keyboard_listener = None
+        # 添加按键状态集合
+        self.pressed_keys = set()
 
         # 滑动手势相关
         self.last_mouse_pos = None
@@ -687,6 +689,30 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             self.auto_btn = self.root.findChild(QPushButton, "auto_btn")
             self.mode_btn = self.root.findChild(QPushButton, "mode_btn")
             
+            # 添加快捷键提示标签
+            try:
+                # 查找主界面的布局
+                main_page = self.root.findChild(QWidget, "mainPage")
+                if main_page:
+                    main_layout = main_page.layout()
+                    if main_layout:
+                        # 创建快捷键提示标签
+                        shortcut_label = QLabel("快捷键：Alt+Shift+V (按住说话) | Alt+Shift+A (自动对话) | Alt+Shift+X (打断) | Alt+Shift+M (切换模式)")
+                        shortcut_label.setStyleSheet("""
+                            font-size: 10px;
+                            color: #666;
+                            background-color: #f5f5f5;
+                            border-radius: 4px;
+                            padding: 3px;
+                            margin: 2px;
+                        """)
+                        shortcut_label.setAlignment(Qt.AlignCenter)
+                        # 将标签添加到布局末尾
+                        main_layout.addWidget(shortcut_label)
+                        self.logger.info("已添加快捷键提示标签")
+            except Exception as e:
+                self.logger.warning(f"添加快捷键提示标签失败: {e}")
+            
             # 获取IOT页面控件
             self.iot_card = self.root.findChild(QFrame, "iotPage")  # 注意这里使用 "iotPage" 作为ID
             if self.iot_card is None:
@@ -923,30 +949,59 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             except RuntimeError as e:
                 self.logger.error(f"更新音量UI失败: {e}")
 
+    def is_combo(self, *keys):
+        """判断是否同时按下了一组按键"""
+        return all(k in self.pressed_keys for k in keys)
+
     def start_keyboard_listener(self):
         """启动键盘监听"""
         try:
-
             def on_press(key):
                 try:
-                    # F2 按键处理 - 在手动模式下处理
-                    if key == pynput_keyboard.Key.f2 and not self.auto_mode:
+                    # 记录按下的键
+                    if key == pynput_keyboard.Key.alt_l or key == pynput_keyboard.Key.alt_r:
+                        self.pressed_keys.add('alt')
+                    elif key == pynput_keyboard.Key.shift_l or key == pynput_keyboard.Key.shift_r:
+                        self.pressed_keys.add('shift')
+                    elif hasattr(key, 'char') and key.char:
+                        self.pressed_keys.add(key.char.lower())
+                    
+                    # 长按说话 - 在手动模式下处理
+                    if not self.auto_mode and self.is_combo('alt', 'shift', 'v'):
                         if self.button_press_callback:
                             self.button_press_callback()
                             if self.manual_btn:
                                 self.update_queue.put(lambda: self._safe_update_button(self.manual_btn, "松开以停止"))
-
-                    # F3 按键处理 - 打断
-                    elif key == pynput_keyboard.Key.f3:
+                    
+                    # 自动对话模式
+                    if self.is_combo('alt', 'shift', 'a'):
+                        if self.auto_callback:
+                            self.auto_callback()
+                    
+                    # 打断
+                    if self.is_combo('alt', 'shift', 'x'):
                         if self.abort_callback:
                             self.abort_callback()
+                    
+                    # 模式切换
+                    if self.is_combo('alt', 'shift', 'm'):
+                        self._on_mode_button_click()
+                        
                 except Exception as e:
                     self.logger.error(f"键盘事件处理错误: {e}")
 
             def on_release(key):
                 try:
-                    # F2 释放处理 - 在手动模式下处理
-                    if key == pynput_keyboard.Key.f2 and not self.auto_mode:
+                    # 清除释放的键
+                    if key == pynput_keyboard.Key.alt_l or key == pynput_keyboard.Key.alt_r:
+                        self.pressed_keys.discard('alt')
+                    elif key == pynput_keyboard.Key.shift_l or key == pynput_keyboard.Key.shift_r:
+                        self.pressed_keys.discard('shift')
+                    elif hasattr(key, 'char') and key.char:
+                        self.pressed_keys.discard(key.char.lower())
+                    
+                    # 松开按键，停止语音输入（仅在手动模式下）
+                    if not self.auto_mode and not self.is_combo('alt', 'shift', 'v'):
                         if self.button_release_callback:
                             self.button_release_callback()
                             if self.manual_btn:
