@@ -7,7 +7,7 @@ from urllib.parse import urlparse
 
 from PyQt5.QtCore import (
     Qt, QTimer, QPropertyAnimation, QRect, 
-    QEvent, QObject
+    QEvent, QObject, QMetaObject, Q_ARG, QThread, pyqtSlot
 )
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, 
@@ -417,31 +417,49 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         self.update_queue.put(lambda: self._safe_update_label(self.tts_text_label, text))
 
     def update_emotion(self, emotion_path: str):
-        """更新表情，使用GIF动画显示"""
-        # 确保使用绝对路径
-        abs_path = os.path.abspath(emotion_path)
-        
-        # 检查是否与上次设置的表情相同，避免重复设置
-        if hasattr(self, 'last_emotion_path') and self.last_emotion_path == abs_path:
-            return  # 如果是相同的表情路径，直接返回不重复设置
+        """更新表情动画"""
+        # 如果路径相同，不重复设置表情
+        if hasattr(self, '_last_emotion_path') and self._last_emotion_path == emotion_path:
+            return
             
-        # 更新缓存的路径
-        self.last_emotion_path = abs_path
-        self.logger.info(f"设置表情GIF: {abs_path}")
-        self.update_queue.put(lambda: self._set_emotion_gif(self.emotion_label, abs_path))
+        # 记录当前设置的路径
+        self._last_emotion_path = emotion_path
         
+        # 确保在主线程中处理UI更新
+        if QApplication.instance().thread() != QThread.currentThread():
+            # 如果不在主线程，使用信号-槽方式或QMetaObject调用在主线程执行
+            QMetaObject.invokeMethod(self, "_update_emotion_safely",
+                                    Qt.QueuedConnection,
+                                    Q_ARG(str, emotion_path))
+        else:
+            # 已经在主线程，直接执行
+            self._update_emotion_safely(emotion_path)
+
+    # 新增一个槽函数，用于在主线程中安全地更新表情
+    @pyqtSlot(str)
+    def _update_emotion_safely(self, emotion_path: str):
+        """在主线程中安全地更新表情，避免线程问题"""
+        if self.emotion_label:
+            self.logger.info(f"设置表情GIF: {emotion_path}")
+            try:
+                self._set_emotion_gif(self.emotion_label, emotion_path)
+            except Exception as e:
+                self.logger.error(f"设置表情GIF时发生错误: {str(e)}")
+
     def _set_emotion_gif(self, label, gif_path):
-        """设置GIF动画到标签，带淡入淡出效果"""
+        """设置表情GIF动画，带渐变效果"""
+        # 基础检查
         if not label or self.root.isHidden():
             return
             
-        try:
-            # 检查文件是否存在
-            if not os.path.exists(gif_path):
-                self.logger.error(f"GIF文件不存在: {gif_path}")
-                label.setText("😊")
-                return
+        # 检查GIF是否已经在当前标签上显示
+        if hasattr(label, 'current_gif_path') and label.current_gif_path == gif_path:
+            return
             
+        # 记录当前GIF路径到标签对象
+        label.current_gif_path = gif_path
+
+        try:
             # 如果当前已经设置了相同路径的动画，且正在播放，则不重复设置
             if (self.emotion_movie and 
                 getattr(self.emotion_movie, '_gif_path', None) == gif_path and
@@ -453,8 +471,6 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
                 self.next_emotion_path = gif_path
                 return
                 
-            self.logger.info(f"加载GIF文件: {gif_path}")
-            
             # 标记正在进行动画
             self.is_emotion_animating = True
             
@@ -506,16 +522,27 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
     def _set_new_emotion_gif(self, label, gif_path):
         """设置新的GIF动画并执行淡入效果"""
         try:
-            # 创建动画对象
-            movie = QMovie(gif_path)
-            if not movie.isValid():
-                self.logger.error(f"无效的GIF文件: {gif_path}")
-                label.setText("😊")
-                self.is_emotion_animating = False
-                return
-            
-            # 配置动画
-            movie.setCacheMode(QMovie.CacheAll)
+            # 维护GIF缓存
+            if not hasattr(self, '_gif_cache'):
+                self._gif_cache = {}
+                
+            # 检查缓存中是否有该GIF
+            if gif_path in self._gif_cache:
+                movie = self._gif_cache[gif_path]
+            else:
+                # 记录日志(只在首次加载时记录)
+                self.logger.info(f"加载GIF文件: {gif_path}")
+                # 创建动画对象
+                movie = QMovie(gif_path)
+                if not movie.isValid():
+                    self.logger.error(f"无效的GIF文件: {gif_path}")
+                    label.setText("😊")
+                    self.is_emotion_animating = False
+                    return
+                
+                # 配置动画并存入缓存
+                movie.setCacheMode(QMovie.CacheAll)
+                self._gif_cache[gif_path] = movie
             
             # 保存GIF路径到movie对象，用于比较
             movie._gif_path = gif_path

@@ -936,9 +936,14 @@ class Application:
         if self.audio_codec:
             self.audio_codec.clear_audio_queue()
 
-        # 注释掉确保VAD检测器暂停的代码
-        # if hasattr(self, 'vad_detector') and self.vad_detector:
-        #     self.vad_detector.pause()
+        # 如果是因为唤醒词中止语音，先暂停唤醒词检测器以避免Vosk断言错误
+        if reason == AbortReason.WAKE_WORD_DETECTED and self.wake_word_detector:
+            if hasattr(self.wake_word_detector, 'is_running') and self.wake_word_detector.is_running():
+                # 暂停唤醒词检测器
+                self.wake_word_detector.pause()
+                logger.debug("暂时暂停唤醒词检测器以避免并发处理")
+                # 短暂等待确保唤醒词检测器已暂停处理
+                time.sleep(0.1)
 
         # 使用线程来处理状态变更和异步操作，避免阻塞主线程
         def process_abort():
