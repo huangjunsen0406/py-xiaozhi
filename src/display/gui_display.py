@@ -14,11 +14,12 @@ from PyQt5.QtWidgets import (
     QHBoxLayout, QLabel, QPushButton, QSlider, QLineEdit,
     QComboBox, QCheckBox, QMessageBox, QFrame,
     QStackedWidget, QTabBar, QStyleOptionSlider, QStyle,
-    QGraphicsOpacityEffect, QSizePolicy, QScrollArea, QGridLayout
+    QGraphicsOpacityEffect, QSizePolicy, QScrollArea, QGridLayout,
+    QSystemTrayIcon, QMenu, QAction
 )
 from PyQt5.QtGui import (
     QPainter, QColor, QFont, QMouseEvent, QMovie, QBrush, QPen, 
-    QLinearGradient, QTransform, QPainterPath
+    QLinearGradient, QTransform, QPainterPath, QIcon, QPixmap
 )
 
 from src.utils.config_manager import ConfigManager
@@ -198,6 +199,12 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         self.iot_card = None
         self.ha_update_timer = None
         self.device_states = {}
+        
+        # 新增系统托盘相关变量
+        self.tray_icon = None
+        self.tray_menu = None
+        self.current_status = ""  # 当前状态，用于判断颜色变化
+        self.is_connected = True  # 连接状态标志
 
     def eventFilter(self, source, event):
         if source == self.volume_scale and event.type() == QEvent.MouseButtonPress:
@@ -306,6 +313,36 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         self.abort_callback = abort_callback
         self.send_text_callback = send_text_callback
 
+        # 在初始化后将状态监听添加到应用程序的状态变化回调中
+        # 这样当设备状态变化时，我们可以更新系统托盘图标
+        from src.application import Application
+        app = Application.get_instance()
+        if app:
+            app.on_state_changed_callbacks.append(self._on_state_changed)
+            
+    def _on_state_changed(self, state):
+        """监听设备状态变化"""
+        # 设置连接状态标志
+        from src.constants.constants import DeviceState
+        
+        # 检查是否连接中或已连接
+        # (CONNECTING, LISTENING, SPEAKING 表示已连接)
+        if state == DeviceState.CONNECTING:
+            self.is_connected = True
+        elif state in [DeviceState.LISTENING, DeviceState.SPEAKING]:
+            self.is_connected = True
+        elif state == DeviceState.IDLE:
+            # 从应用程序中获取协议实例，检查WebSocket连接状态
+            from src.application import Application
+            app = Application.get_instance()
+            if app and app.protocol:
+                # 检查协议是否连接
+                self.is_connected = app.protocol.is_audio_channel_opened()
+            else:
+                self.is_connected = False
+        
+        # 更新状态的处理已经在 update_status 方法中完成
+
     def _process_updates(self):
         """处理更新队列"""
         if not self._running:
@@ -407,6 +444,11 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         """更新状态文本 (只更新主状态)"""
         full_status_text = f"状态: {status}"
         self.update_queue.put(lambda: self._safe_update_label(self.status_label, full_status_text))
+        
+        # 更新系统托盘图标
+        if status != self.current_status:
+            self.current_status = status
+            self.update_queue.put(lambda: self._update_tray_icon(status))
         
         # 根据状态更新麦克风可视化
         if "聆听中" in status:
@@ -654,6 +696,10 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             self.update_timer.stop()
         if self.mic_timer:
             self.mic_timer.stop()
+        if self.ha_update_timer:
+            self.ha_update_timer.stop()
+        if self.tray_icon:
+            self.tray_icon.hide()
         if self.root:
             self.root.close()
         self.stop_keyboard_listener()
@@ -869,6 +915,12 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             # 设置鼠标事件
             self.root.mousePressEvent = self.mousePressEvent
             self.root.mouseReleaseEvent = self.mouseReleaseEvent
+            
+            # 设置窗口关闭事件
+            self.root.closeEvent = self._closeEvent
+
+            # 初始化系统托盘
+            self._setup_tray_icon()
 
             # 启动键盘监听
             self.start_keyboard_listener()
@@ -891,6 +943,153 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             # 尝试回退到CLI模式
             print(f"GUI启动失败: {e}，请尝试使用CLI模式")
             raise
+
+    def _setup_tray_icon(self):
+        """设置系统托盘图标"""
+        try:
+            # 检查系统是否支持系统托盘
+            if not QSystemTrayIcon.isSystemTrayAvailable():
+                self.logger.warning("系统不支持系统托盘功能")
+                return
+
+            # 创建托盘菜单
+            self.tray_menu = QMenu()
+            
+            # 添加菜单项
+            show_action = QAction("显示主窗口", self.root)
+            show_action.triggered.connect(self._show_main_window)
+            self.tray_menu.addAction(show_action)
+            
+            # 添加分隔线
+            self.tray_menu.addSeparator()
+            
+            # 添加退出菜单项
+            quit_action = QAction("退出程序", self.root)
+            quit_action.triggered.connect(self._quit_application)
+            self.tray_menu.addAction(quit_action)
+            
+            # 创建系统托盘图标
+            self.tray_icon = QSystemTrayIcon(self.root)
+            self.tray_icon.setContextMenu(self.tray_menu)
+            
+            # 连接托盘图标的事件
+            self.tray_icon.activated.connect(self._tray_icon_activated)
+            
+            # 设置初始图标为绿色
+            self._update_tray_icon("待命")
+            
+            # 显示系统托盘图标
+            self.tray_icon.show()
+            self.logger.info("系统托盘图标已初始化")
+        
+        except Exception as e:
+            self.logger.error(f"初始化系统托盘图标失败: {e}", exc_info=True)
+    
+    def _update_tray_icon(self, status):
+        """根据不同状态更新托盘图标颜色
+        
+        绿色：已启动/待命状态
+        黄色：聆听中状态
+        蓝色：说话中状态
+        红色：错误状态
+        灰色：未连接状态
+        """
+        if not self.tray_icon:
+            return
+            
+        try:
+            icon_color = self._get_status_color(status)
+            
+            # 创建指定颜色的图标
+            pixmap = QPixmap(16, 16)
+            pixmap.fill(Qt.transparent)
+            
+            painter = QPainter(pixmap)
+            painter.setRenderHint(QPainter.Antialiasing)
+            painter.setBrush(QBrush(icon_color))
+            painter.setPen(Qt.NoPen)
+            painter.drawEllipse(2, 2, 12, 12)
+            painter.end()
+            
+            # 设置图标
+            self.tray_icon.setIcon(QIcon(pixmap))
+            
+            # 设置提示文本
+            tooltip = f"小智AI助手 - {status}"
+            self.tray_icon.setToolTip(tooltip)
+            
+        except Exception as e:
+            self.logger.error(f"更新系统托盘图标失败: {e}")
+    
+    def _get_status_color(self, status):
+        """根据状态返回对应的颜色"""
+        if not self.is_connected:
+            return QColor(128, 128, 128)  # 灰色 - 未连接
+            
+        if "错误" in status:
+            return QColor(255, 0, 0)  # 红色 - 错误状态
+        
+        elif "聆听中" in status:
+            return QColor(255, 200, 0)  # 黄色 - 聆听中状态
+            
+        elif "说话中" in status:
+            return QColor(0, 120, 255)  # 蓝色 - 说话中状态
+            
+        else:
+            return QColor(0, 180, 0)  # 绿色 - 待命/已启动状态
+    
+    def _tray_icon_activated(self, reason):
+        """处理托盘图标点击事件"""
+        if reason == QSystemTrayIcon.Trigger:  # 单击
+            self._show_main_window()
+    
+    def _show_main_window(self):
+        """显示主窗口"""
+        if self.root:
+            if self.root.isMinimized():
+                self.root.showNormal()
+            if not self.root.isVisible():
+                self.root.show()
+            self.root.activateWindow()
+            self.root.raise_()
+    
+    def _quit_application(self):
+        """退出应用程序"""
+        self._running = False
+        # 停止所有线程和计时器
+        if self.update_timer:
+            self.update_timer.stop()
+        if self.mic_timer:
+            self.mic_timer.stop()
+        if self.ha_update_timer:
+            self.ha_update_timer.stop()
+        
+        # 停止键盘监听
+        self.stop_keyboard_listener()
+        
+        # 隐藏托盘图标
+        if self.tray_icon:
+            self.tray_icon.hide()
+        
+        # 退出应用程序
+        QApplication.quit()
+    
+    def _closeEvent(self, event):
+        """处理窗口关闭事件"""
+        # 最小化到系统托盘而不是退出
+        if self.tray_icon and self.tray_icon.isVisible():
+            self.root.hide()
+            self.tray_icon.showMessage(
+                "小智AI助手",
+                "程序仍在运行中，点击托盘图标可以重新打开窗口。",
+                QSystemTrayIcon.Information,
+                2000
+            )
+            event.ignore()
+        else:
+            # 如果系统托盘不可用，则正常关闭
+            self._quit_application()
+            event.accept()
 
     def update_mode_button_status(self, text: str):
         """更新模式按钮状态"""
