@@ -10,6 +10,7 @@ from pynput import keyboard as pynput_keyboard
 
 from src.utils.logging_config import get_logger
 
+
 class CliDisplay(BaseDisplay):
     def __init__(self):
         super().__init__()  # 调用父类初始化
@@ -32,6 +33,8 @@ class CliDisplay(BaseDisplay):
         self.send_text_callback = None
         # 按键状态
         self.is_r_pressed = False
+        # 添加组合键支持
+        self.pressed_keys = set()
 
         # 状态缓存
         self.last_status = None
@@ -87,7 +90,8 @@ class CliDisplay(BaseDisplay):
             # 如果是gif文件路径，提取文件名作为表情名
             if emotion_path.endswith(".gif"):
                 # 从路径中提取文件名，去掉.gif后缀
-                emotion_name = os.path.basename(emotion_path).replace(".gif", "")
+                emotion_name = os.path.basename(emotion_path)
+                emotion_name = emotion_name.replace(".gif", "")
                 self.current_emotion = f"[{emotion_name}]"
             else:
                 # 如果不是gif路径，则直接使用
@@ -95,25 +99,56 @@ class CliDisplay(BaseDisplay):
             
             self._print_current_status()
 
+    def is_combo(self, *keys):
+        """判断是否同时按下了一组按键"""
+        return all(k in self.pressed_keys for k in keys)
+
     def start_keyboard_listener(self):
         """启动键盘监听"""
         try:
             def on_press(key):
                 try:
-                    # F2 按键处理 - 自动对话
-                    if key == pynput_keyboard.Key.f2:
-                        if self.auto_callback:
-                            self.auto_callback()
-                    # F3 按键处理 - 打断
-                    elif key == pynput_keyboard.Key.f3:
-                        if self.abort_callback:
-                            self.abort_callback()
+                    # 记录按下的键
+                    if (key == pynput_keyboard.Key.alt_l or 
+                            key == pynput_keyboard.Key.alt_r):
+                        self.pressed_keys.add('alt')
+                    elif (key == pynput_keyboard.Key.shift_l or 
+                          key == pynput_keyboard.Key.shift_r):
+                        self.pressed_keys.add('shift')
+                    elif hasattr(key, 'char') and key.char:
+                        self.pressed_keys.add(key.char.lower())
+                    
+                    # 自动对话模式 - Alt+Shift+A
+                    if (self.is_combo('alt', 'shift', 'a') and 
+                            self.auto_callback):
+                        self.auto_callback()
+                    
+                    # 打断对话 - Alt+Shift+X
+                    if (self.is_combo('alt', 'shift', 'x') and 
+                            self.abort_callback):
+                        self.abort_callback()
+                        
+                except Exception as e:
+                    self.logger.error(f"键盘事件处理错误: {e}")
+            
+            def on_release(key):
+                try:
+                    # 清除释放的键
+                    if (key == pynput_keyboard.Key.alt_l or 
+                            key == pynput_keyboard.Key.alt_r):
+                        self.pressed_keys.discard('alt')
+                    elif (key == pynput_keyboard.Key.shift_l or 
+                          key == pynput_keyboard.Key.shift_r):
+                        self.pressed_keys.discard('shift')
+                    elif hasattr(key, 'char') and key.char:
+                        self.pressed_keys.discard(key.char.lower())
                 except Exception as e:
                     self.logger.error(f"键盘事件处理错误: {e}")
 
             # 创建并启动监听器
             self.keyboard_listener = pynput_keyboard.Listener(
-                on_press=on_press
+                on_press=on_press,
+                on_release=on_release
             )
             self.keyboard_listener.start()
             self.logger.info("键盘监听器初始化成功")
@@ -168,6 +203,9 @@ class CliDisplay(BaseDisplay):
         print("  v 数字 - 设置音量(0-100)")
         print("  q     - 退出程序")
         print("  h     - 显示此帮助信息")
+        print("快捷键：")
+        print("  Alt+Shift+A - 自动对话模式")
+        print("  Alt+Shift+X - 打断当前对话")
         print("=====================\n")
 
     def _keyboard_listener(self):

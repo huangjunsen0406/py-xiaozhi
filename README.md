@@ -28,13 +28,17 @@ py-xiaozhi 是一个使用 Python 实现的小智语音客户端，旨在通过�
 ## 演示
 - [Bilibili 演示视频](https://www.bilibili.com/video/BV1HmPjeSED2/#reply255921347937)
 
-![Image](https://github.com/user-attachments/assets/df8bd5d2-a8e6-4203-8084-46789fc8e9ad)
+![Image](./documents/docs/guide/images/系统界面.png)
 
 ## 功能特点
 - **AI语音交互**：支持语音输入与识别，实现智能人机交互，提供自然流畅的对话体验。
 - **视觉多模态**：支持图像识别和处理，提供多模态交互能力，理解图像内容。
-- **IoT 设备集成**：支持智能家居设备控制，实现更多物联网功能，打造智能家居生态。
-- **联网音乐播放**：基于pygame实现的高性能音乐播放器，支持歌词显示和本地缓存，支持播放／暂停／停止、进度控制、歌词显示和本地缓存，提供更稳定的音乐播放体验。
+- **IoT 设备集成**：
+  - 支持智能家居设备控制，包括灯光、音量、温度传感器等
+  - 集成Home Assistant智能家居平台，控制灯具、开关、数值控制器和按钮设备
+  - 提供倒计时器功能，支持延时执行命令
+  - 内置多种虚拟设备和物理设备驱动，可轻松扩展
+- **联网音乐播放**：基于pygame实现的高性能音乐播放器，支持播放／暂停／停止、进度控制、歌词显示和本地缓存，提供更稳定的音乐播放体验。
 - **语音唤醒**：支持唤醒词激活交互，免去手动操作的烦恼（默认关闭需要手动开启）。
 - **自动对话模式**：实现连续对话体验，提升用户交互流畅度。
 - **图形化界面**：提供直观易用的 GUI，支持小智表情与文本显示，增强视觉体验。
@@ -58,6 +62,26 @@ py-xiaozhi 是一个使用 Python 实现的小智语音客户端，旨在通过�
 - main是最新代码，每次更新都需要手动重新安装一次pip依赖防止我新增依赖后你们本地没有
 
 [从零开始使用小智客户端（视频教程）](https://www.bilibili.com/video/BV1dWQhYEEmq/?vd_source=2065ec11f7577e7107a55bbdc3d12fce)
+
+## 配置系统
+项目使用分层配置系统，主要包括：
+
+1. **基础配置**：设置基本运行参数，位于`config/config.json`
+2. **设备激活**：设备身份信息，存储在`config/efuse.json`
+3. **唤醒词配置**：语音唤醒相关设置
+4. **物联网设备**：支持各种IoT设备的配置，包括温度传感器和Home Assistant集成
+
+详细配置说明请参考 [配置说明文档](./documents/docs/guide/02_配置说明.md)
+
+## IoT功能
+py-xiaozhi提供丰富的IoT设备控制功能：
+
+- **虚拟设备**：灯光控制、音量调节、倒计时器等
+- **物理设备集成**：温度传感器、摄像头等
+- **Home Assistant集成**：通过HTTP API接入智能家居系统
+- **自定义设备扩展**：提供完整的设备定义和注册框架
+
+支持的设备类型和使用示例请参考 [IoT功能说明](./documents/docs/guide/05_IoT功能说明.md)
 
 ## 状态流转图
 
@@ -83,6 +107,7 @@ py-xiaozhi 是一个使用 Python 实现的小智语音客户端，旨在通过�
 - **唤醒词不响应**：请检查`config.json`中的`USE_WAKE_WORD`设置是否为`true`，以及模型路径是否正确。
 - **网络连接失败**：请检查网络设置和防火墙配置，确保WebSocket或MQTT通信未被阻止。
 - **打包失败**：确保已安装PyInstaller (`pip install pyinstaller`)，并且所有依赖项都已安装。然后重新执行`python scripts/build.py`
+- **IoT设备不响应**：检查对应设备的配置信息是否正确，如Home Assistant的URL和Token。
 
 ## 相关第三方开源项目
 [小智手机端](https://github.com/TOM88812/xiaozhi-android-client)
@@ -95,11 +120,6 @@ py-xiaozhi 是一个使用 Python 实现的小智语音客户端，旨在通过�
 
 [open-xiaoai(小爱音响接入小智)](https://github.com/idootop/open-xiaoai.git)
 
-## 相关分支
-- main 主分支
-- feature/v1 第一个版本
-- feature/visual 视觉分支
-- feature/raspberry_pi 嵌入式设备分支
 ## 项目结构
 
 ```

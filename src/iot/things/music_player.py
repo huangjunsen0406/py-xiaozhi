@@ -120,6 +120,20 @@ class MusicPlayer(Thing):
         )
 
         self.add_method(
+            "Play",
+            "开始播放",
+            [],
+            lambda params: self.play()
+        )
+
+        self.add_method(
+            "Pause",
+            "暂停播放",
+            [],
+            lambda params: self.pause()
+        )
+
+        self.add_method(
             "Stop",
             "停止播放",
             [],
@@ -838,7 +852,8 @@ class MusicPlayer(Thing):
             # 状态变化了！
             if self._last_tts_playing and not tts_playing:
                 # 从 正在播放 -> 播放结束
-                if self.paused_for_tts:
+                if self.paused_for_tts and self.paused:
+                    # 只有在明确因为TTS而暂停时才自动恢复播放
                     logger.info("TTS播放结束，恢复音乐播放")
                     pygame.mixer.music.unpause()
                     self.paused = False
@@ -848,7 +863,8 @@ class MusicPlayer(Thing):
 
             elif not self._last_tts_playing and tts_playing:
                 # 从 不播放 -> 开始播放
-                if not self.paused and not self.paused_for_tts:
+                if not self.paused and self.is_playing:
+                    # 只有在音乐正在播放且未暂停时才因TTS而暂停
                     logger.info("TTS正在播放，暂停音乐播放")
                     pygame.mixer.music.pause()
                     self.paused = True
@@ -1027,6 +1043,7 @@ class MusicPlayer(Thing):
             # 暂停播放
             pygame.mixer.music.pause()
             self.paused = True
+            self.paused_for_tts = False  # 重要：确保这不是因为TTS而暂停的，避免TTS结束后音乐自动恢复
             self.current_position = time.time() - self.start_play_time
 
             if self.app:
@@ -1067,7 +1084,8 @@ class MusicPlayer(Thing):
         current_song = self.current_song
         self.is_playing = False
         self.paused = False
-        self.paused_for_tts = False  # 重置TTS暂停状态
+        self.paused_for_tts = False  # 明确重置TTS暂停状态
+        self._last_tts_playing = None  # 重置TTS状态跟踪
 
         # 清理临时文件
         temp_dir = os.path.join(self.cache_dir, "temp")
@@ -1233,3 +1251,93 @@ class MusicPlayer(Thing):
         minutes = int(seconds) // 60
         seconds = int(seconds) % 60
         return f"{minutes:02d}:{seconds:02d}"
+
+    def play(self) -> Dict[str, Any]:
+        """
+        开始播放
+
+        返回:
+            Dict[str, Any]: 操作结果
+        """
+        # 如果没有正在播放的歌曲但有URL，尝试播放
+        if not self.is_playing:
+            if self.current_url:
+                if self._play_url(self.current_url):
+                    return {
+                        "status": "success",
+                        "message": f"开始播放: {self.current_song}"
+                    }
+                else:
+                    return {
+                        "status": "error",
+                        "message": "播放失败"
+                    }
+            else:
+                return {
+                    "status": "error",
+                    "message": "没有可播放的歌曲"
+                }
+        # 如果已经在播放，检查是否暂停
+        elif self.paused:
+            # 恢复播放
+            pygame.mixer.music.unpause()
+            self.paused = False
+            self.paused_for_tts = False  # 确保重置TTS暂停标志
+            # 更新开始时间，考虑已经暂停的时间
+            self.start_play_time = time.time() - self.current_position
+
+            if self.app:
+                self.app.schedule(lambda: self.app.set_chat_message(
+                    "assistant", f"继续播放: {self.current_song}"))
+
+            return {
+                "status": "success",
+                "message": f"继续播放: {self.current_song}"
+            }
+        else:
+            # 已经在播放了
+            return {
+                "status": "info",
+                "message": f"音乐已经在播放中: {self.current_song}"
+            }
+
+    def pause(self) -> Dict[str, Any]:
+        """
+        暂停播放
+
+        返回:
+            Dict[str, Any]: 操作结果
+        """
+        # 如果没有正在播放的歌曲
+        if not self.is_playing:
+            return {
+                "status": "info",
+                "message": "没有正在播放的歌曲"
+            }
+        # 如果已经暂停
+        elif self.paused:
+            # 即使已经暂停，也确保重置TTS暂停标志，防止TTS结束后自动恢复
+            self.paused_for_tts = False
+            logger.info("音乐已经暂停，确保不会自动恢复")
+            return {
+                "status": "success",  # 改为success以确保用户收到正确反馈
+                "message": f"音乐已暂停: {self.current_song}"
+            }
+        else:
+            # 暂停播放
+            pygame.mixer.music.pause()
+            self.paused = True
+            self.paused_for_tts = False  # 明确设置：这不是因为TTS而暂停的
+            self.current_position = time.time() - self.start_play_time
+
+            if self.app:
+                pos_str = self._format_time(self.current_position)
+                dur_str = self._format_time(self.total_duration)
+                self.app.schedule(lambda: self.app.set_chat_message(
+                    "assistant", f"已暂停: {self.current_song} [{pos_str}/{dur_str}]"))
+
+            return {
+                "status": "success",
+                "message": f"已暂停: {self.current_song}",
+                "position": self.current_position
+            }

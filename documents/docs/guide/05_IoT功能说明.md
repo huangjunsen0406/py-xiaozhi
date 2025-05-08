@@ -15,8 +15,10 @@ IoT模块采用分层设计，由以下主要组件构成：
 │   │   ├── lamp.py              # 灯设备实现
 │   │   ├── speaker.py           # 音量控制实现
 │   │   ├── music_player.py      # 音乐播放器实现
+│   │   ├── countdown_timer.py   # 倒计时器实现
+│   │   ├── ha_control.py        # Home Assistant设备控制
 │   │   ├── CameraVL/            # 摄像头与视觉识别集成设备
-│   │   ├── temperature_sensor.py# 温度传感器示例实现
+│   │   ├── temperature_sensor.py# 温度传感器实现
 │   │   └── query_bridge_rag.py  # RAG检索桥接设备
 │   ├── thing.py                 # IoT设备基类和工具类定义
 │   │   ├── Thing                # IoT设备抽象基类
@@ -176,7 +178,117 @@ IoT模块采用分层设计，由以下主要组件构成：
 - "暂停播放"
 - "播放下一首"
 
-### 4. 摄像头与视觉识别 (CameraVL)
+### 4. 倒计时器 (CountdownTimer)
+
+一个用于延迟执行命令的倒计时器设备，可以设置定时任务。
+
+**属性**：
+- 无可查询属性
+
+**方法**：
+- `StartCountdown`：启动一个倒计时，结束后执行指定命令
+  - `command`：要执行的IoT命令（JSON格式字符串）
+  - `delay`：延迟时间（秒），默认为5秒
+- `CancelCountdown`：取消指定的倒计时
+  - `timer_id`：要取消的计时器ID
+
+**语音命令示例**：
+- "设置5秒后打开灯"
+- "10秒后把音量调到70%"
+- "取消倒计时3"
+
+### 5. 温度传感器 (TemperatureSensor)
+
+通过MQTT协议连接的温湿度传感器设备，可以实时获取环境温湿度数据。
+
+**属性**：
+- `temperature`：当前温度（摄氏度）
+- `humidity`：当前湿度（%）
+- `last_update_time`：最后更新时间（时间戳）
+
+**方法**：
+- 无可调用方法，设备自动通过MQTT接收数据并更新状态
+
+**特殊功能**：
+- 当接收到新的温湿度数据时，会自动通过语音播报结果
+
+**语音命令示例**：
+- "查询当前室内温度"
+- "室内湿度是多少"
+- "温湿度传感器状态"
+
+### 6. Home Assistant设备控制 (HomeAssistantDevice)
+
+通过HTTP API连接到Home Assistant智能家居平台，控制各种智能设备。
+
+#### 6.1 HomeAssistant灯设备 (HomeAssistantLight)
+
+**属性**：
+- `state`：灯的状态（on/off）
+- `brightness`：灯的亮度（0-100）
+- `last_update`：最后更新时间戳
+
+**方法**：
+- `TurnOn`：打开灯
+- `TurnOff`：关闭灯
+- `SetBrightness`：设置灯的亮度
+  - `brightness`：亮度值（0-100%）
+
+**语音命令示例**：
+- "打开客厅灯"
+- "把卧室灯亮度调到60%"
+- "关闭所有灯"
+
+#### 6.2 HomeAssistant开关 (HomeAssistantSwitch)
+
+**属性**：
+- `state`：开关状态（on/off）
+- `last_update`：最后更新时间戳
+
+**方法**：
+- `TurnOn`：打开开关
+- `TurnOff`：关闭开关
+
+**语音命令示例**：
+- "打开电风扇"
+- "关闭空调"
+
+#### 6.3 HomeAssistant数值控制器 (HomeAssistantNumber)
+
+**属性**：
+- `state`：当前状态（on/off）
+- `value`：当前数值
+- `min_value`：最小值
+- `max_value`：最大值
+- `last_update`：最后更新时间戳
+
+**方法**：
+- `TurnOn`：打开设备
+- `TurnOff`：关闭设备
+- `SetValue`：设置数值
+  - `value`：要设置的数值
+
+**语音命令示例**：
+- "把空调温度设为26度"
+- "将风扇转速调到3档"
+
+#### 6.4 HomeAssistant按钮 (HomeAssistantButton)
+
+**属性**：
+- `state`：当前状态（on/off，通常为虚拟状态）
+- `last_update`：最后更新时间戳
+
+**方法**：
+- `TurnOn`：激活按钮（执行Press操作）
+- `TurnOff`：形式方法，大多数情况下无实际效果
+- `Press`：按下按钮，触发按钮关联的动作
+
+**语音命令示例**：
+- "按下门铃按钮"
+- "触发紧急模式"
+- "启动场景播放"
+
+### 7. 摄像头与视觉识别 (CameraVL)
 
 集成摄像头控制和视觉识别功能，可以捕获画面并进行智能分析。
 
@@ -449,6 +561,20 @@ def _initialize_iot_devices(self):
 3. 播放器搜索歌曲，开始播放，并显示歌词
 4. 可以继续使用"暂停播放"等命令控制播放
 
+### 倒计时控制示例
+
+1. 使用指令"设置5秒后打开灯"
+2. 系统解析指令并调用CountdownTimer的StartCountdown方法
+3. 5秒后自动执行打开灯的命令
+4. 返回操作结果"倒计时已设置"
+
+### Home Assistant设备控制示例
+
+1. 使用指令"把客厅灯调暗一点"
+2. 系统解析指令并调用HomeAssistantLight的SetBrightness方法
+3. 通过HTTP API向Home Assistant发送亮度调整命令
+4. 返回操作结果"客厅灯亮度已调整"
+
 ## 注意事项
 
 1. 设备属性更新后，会自动通过WebSocket推送状态到服务端和UI界面
@@ -459,356 +585,54 @@ def _initialize_iot_devices(self):
 
 ## 高级主题：Home Assistant集成
 
-### 通过MQTT控制Home Assistant
+### 通过HTTP API控制Home Assistant
 
-Home Assistant是一个流行的开源家庭自动化平台，支持通过MQTT协议控制各种智能设备。以下是如何创建一个与Home Assistant集成的设备示例：
-
-```python
-import paho.mqtt.client as mqtt
-import json
-import time
-from src.iot.thing import Thing, Parameter, ValueType
-from src.utils.logging_config import get_logger
-from src.utils.config_manager import ConfigManager
-
-logger = get_logger(__name__)
-
-class HomeAssistantLight(Thing):
-    """
-    通过MQTT协议控制Home Assistant中的灯设备
-    
-    支持开关、亮度调节和颜色调整功能
-    """
-    
-    def __init__(self, entity_id, friendly_name=None):
-        """
-        初始化Home Assistant灯设备
-        
-        参数:
-            entity_id: Home Assistant中的实体ID，例如 'light.living_room'
-            friendly_name: 显示名称，如不提供则使用entity_id
-        """
-        self.entity_id = entity_id
-        name = friendly_name or entity_id.replace(".", "_")
-        super().__init__(name, f"Home Assistant灯设备: {friendly_name or entity_id}")
-        
-        # 设备状态
-        self.state = "off"
-        self.brightness = 255  # 亮度值 0-255
-        self.rgb_color = [255, 255, 255]  # RGB颜色
-        
-        # MQTT客户端配置
-        config = ConfigManager.get_instance()
-        self.mqtt_config = {
-            "host": config.get_config("HOME_ASSISTANT.MQTT.host", "localhost"),
-            "port": config.get_config("HOME_ASSISTANT.MQTT.port", 1883),
-            "username": config.get_config("HOME_ASSISTANT.MQTT.username", ""),
-            "password": config.get_config("HOME_ASSISTANT.MQTT.password", ""),
-            "command_topic": f"homeassistant/light/{self.entity_id}/set",
-            "state_topic": f"homeassistant/light/{self.entity_id}/state"
-        }
-        
-        # 创建MQTT客户端
-        self._setup_mqtt_client()
-        
-        # 注册属性
-        self.add_property("state", "灯的状态 (on/off)", lambda: self.state)
-        self.add_property("brightness", "灯的亮度 (0-255)", lambda: self.brightness)
-        self.add_property("rgb_color", "灯的RGB颜色", lambda: self.rgb_color)
-        
-        # 注册方法
-        self.add_method(
-            "TurnOn", 
-            "打开灯",
-            [],
-            lambda params: self._turn_on()
-        )
-        
-        self.add_method(
-            "TurnOff", 
-            "关闭灯",
-            [],
-            lambda params: self._turn_off()
-        )
-        
-        self.add_method(
-            "SetBrightness", 
-            "设置灯的亮度",
-            [Parameter("brightness", "亮度值 (0-100)", ValueType.NUMBER, True)],
-            lambda params: self._set_brightness(params["brightness"].get_value())
-        )
-        
-        self.add_method(
-            "SetColor", 
-            "设置灯的颜色",
-            [
-                Parameter("red", "红色分量 (0-255)", ValueType.NUMBER, True),
-                Parameter("green", "绿色分量 (0-255)", ValueType.NUMBER, True),
-                Parameter("blue", "蓝色分量 (0-255)", ValueType.NUMBER, True)
-            ],
-            lambda params: self._set_color(
-                params["red"].get_value(),
-                params["green"].get_value(),
-                params["blue"].get_value()
-            )
-        )
-        
-        # 刷新设备状态
-        self._request_state()
-    
-    def _setup_mqtt_client(self):
-        """设置MQTT客户端"""
-        self.mqtt_client = mqtt.Client()
-        
-        # 设置认证
-        if self.mqtt_config["username"] and self.mqtt_config["password"]:
-            self.mqtt_client.username_pw_set(
-                self.mqtt_config["username"], 
-                self.mqtt_config["password"]
-            )
-        
-        # 设置回调
-        self.mqtt_client.on_connect = self._on_connect
-        self.mqtt_client.on_message = self._on_message
-        self.mqtt_client.on_disconnect = self._on_disconnect
-        
-        # 连接MQTT服务器
-        try:
-            self.mqtt_client.connect(
-                self.mqtt_config["host"], 
-                self.mqtt_config["port"], 
-                60
-            )
-            self.mqtt_client.loop_start()
-            logger.info(f"MQTT客户端已连接到 {self.mqtt_config['host']}:{self.mqtt_config['port']}")
-        except Exception as e:
-            logger.error(f"MQTT连接失败: {e}")
-    
-    def _on_connect(self, client, userdata, flags, rc):
-        """连接回调"""
-        if rc == 0:
-            logger.info(f"已成功连接到MQTT服务器，订阅主题: {self.mqtt_config['state_topic']}")
-            # 订阅状态主题
-            client.subscribe(self.mqtt_config["state_topic"])
-            # 请求当前状态
-            self._request_state()
-        else:
-            logger.error(f"连接MQTT服务器失败，返回码: {rc}")
-    
-    def _on_disconnect(self, client, userdata, rc):
-        """断开连接回调"""
-        logger.warning(f"与MQTT服务器断开连接，返回码: {rc}")
-        if rc != 0:
-            logger.info("尝试重新连接...")
-            time.sleep(5)
-            try:
-                client.reconnect()
-            except Exception as e:
-                logger.error(f"重连失败: {e}")
-    
-    def _on_message(self, client, userdata, msg):
-        """消息回调"""
-        try:
-            payload = json.loads(msg.payload.decode())
-            logger.debug(f"收到MQTT消息: {payload}")
-            
-            # 更新设备状态
-            if "state" in payload:
-                self.state = payload["state"]
-            if "brightness" in payload:
-                self.brightness = payload["brightness"]
-            if "rgb_color" in payload and isinstance(payload["rgb_color"], list):
-                self.rgb_color = payload["rgb_color"]
-                
-            logger.info(f"设备 {self.entity_id} 状态已更新: state={self.state}, brightness={self.brightness}")
-        except Exception as e:
-            logger.error(f"处理MQTT消息时出错: {e}")
-    
-    def _request_state(self):
-        """请求设备当前状态"""
-        try:
-            self.mqtt_client.publish(
-                f"homeassistant/light/{self.entity_id}/get", 
-                ""
-            )
-            logger.debug(f"已请求设备 {self.entity_id} 的状态")
-        except Exception as e:
-            logger.error(f"请求设备状态失败: {e}")
-    
-    def _turn_on(self):
-        """打开灯"""
-        try:
-            payload = {
-                "state": "on"
-            }
-            self.mqtt_client.publish(
-                self.mqtt_config["command_topic"],
-                json.dumps(payload)
-            )
-            self.state = "on"
-            logger.info(f"发送命令: 打开灯 {self.entity_id}")
-            return {"status": "success", "message": f"已发送打开命令到 {self.entity_id}"}
-        except Exception as e:
-            logger.error(f"发送打开命令失败: {e}")
-            return {"status": "error", "message": f"发送命令失败: {e}"}
-    
-    def _turn_off(self):
-        """关闭灯"""
-        try:
-            payload = {
-                "state": "off"
-            }
-            self.mqtt_client.publish(
-                self.mqtt_config["command_topic"],
-                json.dumps(payload)
-            )
-            self.state = "off"
-            logger.info(f"发送命令: 关闭灯 {self.entity_id}")
-            return {"status": "success", "message": f"已发送关闭命令到 {self.entity_id}"}
-        except Exception as e:
-            logger.error(f"发送关闭命令失败: {e}")
-            return {"status": "error", "message": f"发送命令失败: {e}"}
-    
-    def _set_brightness(self, brightness_percent):
-        """
-        设置灯的亮度
-        
-        参数:
-            brightness_percent: 亮度百分比 (0-100)
-        """
-        try:
-            # 验证输入
-            if not 0 <= brightness_percent <= 100:
-                return {"status": "error", "message": "亮度必须在0-100之间"}
-            
-            # 将百分比转换为Home Assistant使用的0-255范围
-            brightness = int(brightness_percent * 255 / 100)
-            
-            payload = {
-                "state": "on",
-                "brightness": brightness
-            }
-            
-            self.mqtt_client.publish(
-                self.mqtt_config["command_topic"],
-                json.dumps(payload)
-            )
-            
-            self.state = "on"
-            self.brightness = brightness
-            
-            logger.info(f"发送命令: 设置灯 {self.entity_id} 亮度为 {brightness_percent}%")
-            return {
-                "status": "success", 
-                "message": f"已将 {self.entity_id} 亮度设置为 {brightness_percent}%"
-            }
-        except Exception as e:
-            logger.error(f"设置亮度失败: {e}")
-            return {"status": "error", "message": f"设置亮度失败: {e}"}
-    
-    def _set_color(self, red, green, blue):
-        """
-        设置灯的颜色
-        
-        参数:
-            red: 红色分量 (0-255)
-            green: 绿色分量 (0-255)
-            blue: 蓝色分量 (0-255)
-        """
-        try:
-            # 验证输入
-            for value, color in [(red, "红"), (green, "绿"), (blue, "蓝")]:
-                if not 0 <= value <= 255:
-                    return {"status": "error", "message": f"{color}色值必须在0-255之间"}
-            
-            payload = {
-                "state": "on",
-                "rgb_color": [red, green, blue]
-            }
-            
-            self.mqtt_client.publish(
-                self.mqtt_config["command_topic"],
-                json.dumps(payload)
-            )
-            
-            self.state = "on"
-            self.rgb_color = [red, green, blue]
-            
-            logger.info(f"发送命令: 设置灯 {self.entity_id} 颜色为 RGB({red},{green},{blue})")
-            return {
-                "status": "success", 
-                "message": f"已将 {self.entity_id} 颜色设置为 RGB({red},{green},{blue})"
-            }
-        except Exception as e:
-            logger.error(f"设置颜色失败: {e}")
-            return {"status": "error", "message": f"设置颜色失败: {e}"}
-```
-
-### 配置和使用Home Assistant设备
+Home Assistant是一个流行的开源家庭自动化平台，本项目通过HTTP API与Home Assistant集成，支持控制各种智能设备。以下是Home Assistant集成的关键点：
 
 1. **配置文件设置**
 
-在`config/config.json`中添加Home Assistant MQTT配置：
+在`config/config.json`中添加Home Assistant配置：
 
 ```json
 {
   "HOME_ASSISTANT": {
-    "MQTT": {
-      "host": "你的Home Assistant IP地址",
-      "port": 1883,
-      "username": "mqtt用户名",
-      "password": "mqtt密码"
-    },
+    "URL": "http://your-homeassistant-url:8123",
+    "TOKEN": "your-long-lived-access-token",
     "DEVICES": [
       {
-        "entity_id": "light.living_room",
-        "friendly_name": "客厅灯"
+        "entity_id": "light.cuco_cn_573924446_v3_s_13_indicator_light",
+        "friendly_name": "米家智能插座3-冰箱  指示灯"
       },
       {
-        "entity_id": "light.bedroom",
-        "friendly_name": "卧室灯"
+        "entity_id": "switch.cuco_cn_573924446_v3_on_p_2_1",
+        "friendly_name": "米家智能插座3-冰箱  开关 开关"
       }
     ]
   }
 }
 ```
+### 配置ha地址和密钥
+![Image](./images/home_assistatnt配置.png)
+### 设备选择
+- 左上角开关处点击可以切换设备类型
+- 选中设备后天机右下角添加选中设备
+- 导入后需要重启小智等待程序加载完成就可以通过语音控制了
+![Image](./images/设备选择.png)
+### 导入后
+![Image](./images/导入ha.png)
+2. **支持的设备类型**
 
-2. **注册Home Assistant设备**
-
-在`Application._initialize_iot_devices`方法中添加：
-
-```python
-# 添加Home Assistant设备
-from src.iot.things.ha_light import HomeAssistantLight
-
-# 从配置中读取Home Assistant设备列表
-ha_devices = self.config.get_config("HOME_ASSISTANT.DEVICES", [])
-for device in ha_devices:
-    entity_id = device.get("entity_id")
-    friendly_name = device.get("friendly_name")
-    if entity_id:
-        thing_manager.add_thing(HomeAssistantLight(entity_id, friendly_name))
-        logger.info(f"已添加Home Assistant设备: {friendly_name or entity_id}")
-```
+- `light`: 灯设备，支持开关和亮度控制
+- `switch`: 开关设备，支持开关控制
+- `number`: 数值控制器，支持设置数值
+- `button`: 按钮设备，支持按下操作
 
 3. **语音命令示例**
 
 - "打开客厅灯"
 - "把卧室灯调暗一点"
-- "将客厅灯设置为蓝色"
+- "将空调温度设为26度"
 - "关闭所有灯"
-
-### Home Assistant设备使用说明
-
-1. **先决条件**
-   - 已安装并配置好Home Assistant
-   - Home Assistant已启用MQTT集成
-   - 已在Home Assistant中配置好智能灯设备
-
-2. **注意事项**
-   - 需要确保MQTT服务器允许外部连接
-   - Home Assistant中的实体ID要与配置文件中一致
-   - MQTT主题格式可能需要根据你的Home Assistant配置进行调整 
 
 ### 通信协议限制
 

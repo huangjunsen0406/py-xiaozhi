@@ -7,18 +7,19 @@ from urllib.parse import urlparse
 
 from PyQt5.QtCore import (
     Qt, QTimer, QPropertyAnimation, QRect, 
-    QEvent, QObject
+    QEvent, QObject, QMetaObject, Q_ARG, QThread, pyqtSlot
 )
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, 
     QHBoxLayout, QLabel, QPushButton, QSlider, QLineEdit,
     QComboBox, QCheckBox, QMessageBox, QFrame,
     QStackedWidget, QTabBar, QStyleOptionSlider, QStyle,
-    QGraphicsOpacityEffect, QSizePolicy, QScrollArea, QGridLayout
+    QGraphicsOpacityEffect, QSizePolicy, QScrollArea, QGridLayout,
+    QSystemTrayIcon, QMenu, QAction
 )
 from PyQt5.QtGui import (
     QPainter, QColor, QFont, QMouseEvent, QMovie, QBrush, QPen, 
-    QLinearGradient, QTransform, QPainterPath
+    QLinearGradient, QTransform, QPainterPath, QIcon, QPixmap
 )
 
 from src.utils.config_manager import ConfigManager
@@ -36,16 +37,38 @@ CONFIG_PATH = Path(__file__).parent.parent.parent / "config" / "config.json"
 
 
 def restart_program():
-    """使用 os.execv 重启当前 Python 程序。"""
+    """重启当前 Python 程序，支持打包环境。"""
     try:
         python = sys.executable
-        print(f"Attempting to restart with: {python} {sys.argv}")
+        print(f"尝试使用以下命令重启: {python} {sys.argv}")
+
         # 尝试关闭 Qt 应用，虽然 execv 会接管，但这样做更规范
         app = QApplication.instance()
         if app:
             app.quit()
-        # 替换当前进程
-        os.execv(python, [python] + sys.argv)
+
+        # 在打包环境中使用不同的重启方法
+        if getattr(sys, 'frozen', False):
+            # 打包环境下，使用subprocess启动新进程
+            import subprocess
+
+            # 构建完整的命令行
+            if sys.platform.startswith('win'):
+                # Windows下使用detached创建独立进程
+                executable = os.path.abspath(sys.executable)
+                subprocess.Popen([executable] + sys.argv[1:],
+                                 creationflags=subprocess.CREATE_NEW_PROCESS_GROUP)
+            else:
+                # Linux/Mac下
+                executable = os.path.abspath(sys.executable)
+                subprocess.Popen([executable] + sys.argv[1:],
+                                 start_new_session=True)
+
+            # 退出当前进程
+            sys.exit(0)
+        else:
+            # 非打包环境，使用os.execv
+            os.execv(python, [python] + sys.argv)
     except Exception as e:
         print(f"重启程序失败: {e}")
         logging.getLogger("Display").error(f"重启程序失败: {e}", exc_info=True)
@@ -145,6 +168,8 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
 
         # 键盘监听器
         self.keyboard_listener = None
+        # 添加按键状态集合
+        self.pressed_keys = set()
 
         # 滑动手势相关
         self.last_mouse_pos = None
@@ -174,6 +199,12 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         self.iot_card = None
         self.ha_update_timer = None
         self.device_states = {}
+        
+        # 新增系统托盘相关变量
+        self.tray_icon = None
+        self.tray_menu = None
+        self.current_status = ""  # 当前状态，用于判断颜色变化
+        self.is_connected = True  # 连接状态标志
 
     def eventFilter(self, source, event):
         if source == self.volume_scale and event.type() == QEvent.MouseButtonPress:
@@ -282,6 +313,36 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         self.abort_callback = abort_callback
         self.send_text_callback = send_text_callback
 
+        # 在初始化后将状态监听添加到应用程序的状态变化回调中
+        # 这样当设备状态变化时，我们可以更新系统托盘图标
+        from src.application import Application
+        app = Application.get_instance()
+        if app:
+            app.on_state_changed_callbacks.append(self._on_state_changed)
+            
+    def _on_state_changed(self, state):
+        """监听设备状态变化"""
+        # 设置连接状态标志
+        from src.constants.constants import DeviceState
+        
+        # 检查是否连接中或已连接
+        # (CONNECTING, LISTENING, SPEAKING 表示已连接)
+        if state == DeviceState.CONNECTING:
+            self.is_connected = True
+        elif state in [DeviceState.LISTENING, DeviceState.SPEAKING]:
+            self.is_connected = True
+        elif state == DeviceState.IDLE:
+            # 从应用程序中获取协议实例，检查WebSocket连接状态
+            from src.application import Application
+            app = Application.get_instance()
+            if app and app.protocol:
+                # 检查协议是否连接
+                self.is_connected = app.protocol.is_audio_channel_opened()
+            else:
+                self.is_connected = False
+        
+        # 更新状态的处理已经在 update_status 方法中完成
+
     def _process_updates(self):
         """处理更新队列"""
         if not self._running:
@@ -384,6 +445,11 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         full_status_text = f"状态: {status}"
         self.update_queue.put(lambda: self._safe_update_label(self.status_label, full_status_text))
         
+        # 更新系统托盘图标
+        if status != self.current_status:
+            self.current_status = status
+            self.update_queue.put(lambda: self._update_tray_icon(status))
+        
         # 根据状态更新麦克风可视化
         if "聆听中" in status:
             self.update_queue.put(self._start_mic_visualization)
@@ -395,31 +461,49 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         self.update_queue.put(lambda: self._safe_update_label(self.tts_text_label, text))
 
     def update_emotion(self, emotion_path: str):
-        """更新表情，使用GIF动画显示"""
-        # 确保使用绝对路径
-        abs_path = os.path.abspath(emotion_path)
-        
-        # 检查是否与上次设置的表情相同，避免重复设置
-        if hasattr(self, 'last_emotion_path') and self.last_emotion_path == abs_path:
-            return  # 如果是相同的表情路径，直接返回不重复设置
+        """更新表情动画"""
+        # 如果路径相同，不重复设置表情
+        if hasattr(self, '_last_emotion_path') and self._last_emotion_path == emotion_path:
+            return
             
-        # 更新缓存的路径
-        self.last_emotion_path = abs_path
-        self.logger.info(f"设置表情GIF: {abs_path}")
-        self.update_queue.put(lambda: self._set_emotion_gif(self.emotion_label, abs_path))
+        # 记录当前设置的路径
+        self._last_emotion_path = emotion_path
         
+        # 确保在主线程中处理UI更新
+        if QApplication.instance().thread() != QThread.currentThread():
+            # 如果不在主线程，使用信号-槽方式或QMetaObject调用在主线程执行
+            QMetaObject.invokeMethod(self, "_update_emotion_safely",
+                                    Qt.QueuedConnection,
+                                    Q_ARG(str, emotion_path))
+        else:
+            # 已经在主线程，直接执行
+            self._update_emotion_safely(emotion_path)
+
+    # 新增一个槽函数，用于在主线程中安全地更新表情
+    @pyqtSlot(str)
+    def _update_emotion_safely(self, emotion_path: str):
+        """在主线程中安全地更新表情，避免线程问题"""
+        if self.emotion_label:
+            self.logger.info(f"设置表情GIF: {emotion_path}")
+            try:
+                self._set_emotion_gif(self.emotion_label, emotion_path)
+            except Exception as e:
+                self.logger.error(f"设置表情GIF时发生错误: {str(e)}")
+
     def _set_emotion_gif(self, label, gif_path):
-        """设置GIF动画到标签，带淡入淡出效果"""
+        """设置表情GIF动画，带渐变效果"""
+        # 基础检查
         if not label or self.root.isHidden():
             return
             
-        try:
-            # 检查文件是否存在
-            if not os.path.exists(gif_path):
-                self.logger.error(f"GIF文件不存在: {gif_path}")
-                label.setText("😊")
-                return
+        # 检查GIF是否已经在当前标签上显示
+        if hasattr(label, 'current_gif_path') and label.current_gif_path == gif_path:
+            return
             
+        # 记录当前GIF路径到标签对象
+        label.current_gif_path = gif_path
+
+        try:
             # 如果当前已经设置了相同路径的动画，且正在播放，则不重复设置
             if (self.emotion_movie and 
                 getattr(self.emotion_movie, '_gif_path', None) == gif_path and
@@ -431,8 +515,6 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
                 self.next_emotion_path = gif_path
                 return
                 
-            self.logger.info(f"加载GIF文件: {gif_path}")
-            
             # 标记正在进行动画
             self.is_emotion_animating = True
             
@@ -484,16 +566,27 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
     def _set_new_emotion_gif(self, label, gif_path):
         """设置新的GIF动画并执行淡入效果"""
         try:
-            # 创建动画对象
-            movie = QMovie(gif_path)
-            if not movie.isValid():
-                self.logger.error(f"无效的GIF文件: {gif_path}")
-                label.setText("😊")
-                self.is_emotion_animating = False
-                return
-            
-            # 配置动画
-            movie.setCacheMode(QMovie.CacheAll)
+            # 维护GIF缓存
+            if not hasattr(self, '_gif_cache'):
+                self._gif_cache = {}
+                
+            # 检查缓存中是否有该GIF
+            if gif_path in self._gif_cache:
+                movie = self._gif_cache[gif_path]
+            else:
+                # 记录日志(只在首次加载时记录)
+                self.logger.info(f"加载GIF文件: {gif_path}")
+                # 创建动画对象
+                movie = QMovie(gif_path)
+                if not movie.isValid():
+                    self.logger.error(f"无效的GIF文件: {gif_path}")
+                    label.setText("😊")
+                    self.is_emotion_animating = False
+                    return
+                
+                # 配置动画并存入缓存
+                movie.setCacheMode(QMovie.CacheAll)
+                self._gif_cache[gif_path] = movie
             
             # 保存GIF路径到movie对象，用于比较
             movie._gif_path = gif_path
@@ -603,6 +696,10 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             self.update_timer.stop()
         if self.mic_timer:
             self.mic_timer.stop()
+        if self.ha_update_timer:
+            self.ha_update_timer.stop()
+        if self.tray_icon:
+            self.tray_icon.hide()
         if self.root:
             self.root.close()
         self.stop_keyboard_listener()
@@ -637,6 +734,30 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             self.abort_btn = self.root.findChild(QPushButton, "abort_btn")
             self.auto_btn = self.root.findChild(QPushButton, "auto_btn")
             self.mode_btn = self.root.findChild(QPushButton, "mode_btn")
+            
+            # 添加快捷键提示标签
+            try:
+                # 查找主界面的布局
+                main_page = self.root.findChild(QWidget, "mainPage")
+                if main_page:
+                    main_layout = main_page.layout()
+                    if main_layout:
+                        # 创建快捷键提示标签
+                        shortcut_label = QLabel("快捷键：Alt+Shift+V (按住说话) | Alt+Shift+A (自动对话) | Alt+Shift+X (打断) | Alt+Shift+M (切换模式)")
+                        shortcut_label.setStyleSheet("""
+                            font-size: 10px;
+                            color: #666;
+                            background-color: #f5f5f5;
+                            border-radius: 4px;
+                            padding: 3px;
+                            margin: 2px;
+                        """)
+                        shortcut_label.setAlignment(Qt.AlignCenter)
+                        # 将标签添加到布局末尾
+                        main_layout.addWidget(shortcut_label)
+                        self.logger.info("已添加快捷键提示标签")
+            except Exception as e:
+                self.logger.warning(f"添加快捷键提示标签失败: {e}")
             
             # 获取IOT页面控件
             self.iot_card = self.root.findChild(QFrame, "iotPage")  # 注意这里使用 "iotPage" 作为ID
@@ -794,6 +915,12 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             # 设置鼠标事件
             self.root.mousePressEvent = self.mousePressEvent
             self.root.mouseReleaseEvent = self.mouseReleaseEvent
+            
+            # 设置窗口关闭事件
+            self.root.closeEvent = self._closeEvent
+
+            # 初始化系统托盘
+            self._setup_tray_icon()
 
             # 启动键盘监听
             self.start_keyboard_listener()
@@ -816,6 +943,153 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             # 尝试回退到CLI模式
             print(f"GUI启动失败: {e}，请尝试使用CLI模式")
             raise
+
+    def _setup_tray_icon(self):
+        """设置系统托盘图标"""
+        try:
+            # 检查系统是否支持系统托盘
+            if not QSystemTrayIcon.isSystemTrayAvailable():
+                self.logger.warning("系统不支持系统托盘功能")
+                return
+
+            # 创建托盘菜单
+            self.tray_menu = QMenu()
+            
+            # 添加菜单项
+            show_action = QAction("显示主窗口", self.root)
+            show_action.triggered.connect(self._show_main_window)
+            self.tray_menu.addAction(show_action)
+            
+            # 添加分隔线
+            self.tray_menu.addSeparator()
+            
+            # 添加退出菜单项
+            quit_action = QAction("退出程序", self.root)
+            quit_action.triggered.connect(self._quit_application)
+            self.tray_menu.addAction(quit_action)
+            
+            # 创建系统托盘图标
+            self.tray_icon = QSystemTrayIcon(self.root)
+            self.tray_icon.setContextMenu(self.tray_menu)
+            
+            # 连接托盘图标的事件
+            self.tray_icon.activated.connect(self._tray_icon_activated)
+            
+            # 设置初始图标为绿色
+            self._update_tray_icon("待命")
+            
+            # 显示系统托盘图标
+            self.tray_icon.show()
+            self.logger.info("系统托盘图标已初始化")
+        
+        except Exception as e:
+            self.logger.error(f"初始化系统托盘图标失败: {e}", exc_info=True)
+    
+    def _update_tray_icon(self, status):
+        """根据不同状态更新托盘图标颜色
+        
+        绿色：已启动/待命状态
+        黄色：聆听中状态
+        蓝色：说话中状态
+        红色：错误状态
+        灰色：未连接状态
+        """
+        if not self.tray_icon:
+            return
+            
+        try:
+            icon_color = self._get_status_color(status)
+            
+            # 创建指定颜色的图标
+            pixmap = QPixmap(16, 16)
+            pixmap.fill(Qt.transparent)
+            
+            painter = QPainter(pixmap)
+            painter.setRenderHint(QPainter.Antialiasing)
+            painter.setBrush(QBrush(icon_color))
+            painter.setPen(Qt.NoPen)
+            painter.drawEllipse(2, 2, 12, 12)
+            painter.end()
+            
+            # 设置图标
+            self.tray_icon.setIcon(QIcon(pixmap))
+            
+            # 设置提示文本
+            tooltip = f"小智AI助手 - {status}"
+            self.tray_icon.setToolTip(tooltip)
+            
+        except Exception as e:
+            self.logger.error(f"更新系统托盘图标失败: {e}")
+    
+    def _get_status_color(self, status):
+        """根据状态返回对应的颜色"""
+        if not self.is_connected:
+            return QColor(128, 128, 128)  # 灰色 - 未连接
+            
+        if "错误" in status:
+            return QColor(255, 0, 0)  # 红色 - 错误状态
+        
+        elif "聆听中" in status:
+            return QColor(255, 200, 0)  # 黄色 - 聆听中状态
+            
+        elif "说话中" in status:
+            return QColor(0, 120, 255)  # 蓝色 - 说话中状态
+            
+        else:
+            return QColor(0, 180, 0)  # 绿色 - 待命/已启动状态
+    
+    def _tray_icon_activated(self, reason):
+        """处理托盘图标点击事件"""
+        if reason == QSystemTrayIcon.Trigger:  # 单击
+            self._show_main_window()
+    
+    def _show_main_window(self):
+        """显示主窗口"""
+        if self.root:
+            if self.root.isMinimized():
+                self.root.showNormal()
+            if not self.root.isVisible():
+                self.root.show()
+            self.root.activateWindow()
+            self.root.raise_()
+    
+    def _quit_application(self):
+        """退出应用程序"""
+        self._running = False
+        # 停止所有线程和计时器
+        if self.update_timer:
+            self.update_timer.stop()
+        if self.mic_timer:
+            self.mic_timer.stop()
+        if self.ha_update_timer:
+            self.ha_update_timer.stop()
+        
+        # 停止键盘监听
+        self.stop_keyboard_listener()
+        
+        # 隐藏托盘图标
+        if self.tray_icon:
+            self.tray_icon.hide()
+        
+        # 退出应用程序
+        QApplication.quit()
+    
+    def _closeEvent(self, event):
+        """处理窗口关闭事件"""
+        # 最小化到系统托盘而不是退出
+        if self.tray_icon and self.tray_icon.isVisible():
+            self.root.hide()
+            self.tray_icon.showMessage(
+                "小智AI助手",
+                "程序仍在运行中，点击托盘图标可以重新打开窗口。",
+                QSystemTrayIcon.Information,
+                2000
+            )
+            event.ignore()
+        else:
+            # 如果系统托盘不可用，则正常关闭
+            self._quit_application()
+            event.accept()
 
     def update_mode_button_status(self, text: str):
         """更新模式按钮状态"""
@@ -874,30 +1148,59 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             except RuntimeError as e:
                 self.logger.error(f"更新音量UI失败: {e}")
 
+    def is_combo(self, *keys):
+        """判断是否同时按下了一组按键"""
+        return all(k in self.pressed_keys for k in keys)
+
     def start_keyboard_listener(self):
         """启动键盘监听"""
         try:
-
             def on_press(key):
                 try:
-                    # F2 按键处理 - 在手动模式下处理
-                    if key == pynput_keyboard.Key.f2 and not self.auto_mode:
+                    # 记录按下的键
+                    if key == pynput_keyboard.Key.alt_l or key == pynput_keyboard.Key.alt_r:
+                        self.pressed_keys.add('alt')
+                    elif key == pynput_keyboard.Key.shift_l or key == pynput_keyboard.Key.shift_r:
+                        self.pressed_keys.add('shift')
+                    elif hasattr(key, 'char') and key.char:
+                        self.pressed_keys.add(key.char.lower())
+                    
+                    # 长按说话 - 在手动模式下处理
+                    if not self.auto_mode and self.is_combo('alt', 'shift', 'v'):
                         if self.button_press_callback:
                             self.button_press_callback()
                             if self.manual_btn:
                                 self.update_queue.put(lambda: self._safe_update_button(self.manual_btn, "松开以停止"))
-
-                    # F3 按键处理 - 打断
-                    elif key == pynput_keyboard.Key.f3:
+                    
+                    # 自动对话模式
+                    if self.is_combo('alt', 'shift', 'a'):
+                        if self.auto_callback:
+                            self.auto_callback()
+                    
+                    # 打断
+                    if self.is_combo('alt', 'shift', 'x'):
                         if self.abort_callback:
                             self.abort_callback()
+                    
+                    # 模式切换
+                    if self.is_combo('alt', 'shift', 'm'):
+                        self._on_mode_button_click()
+                        
                 except Exception as e:
                     self.logger.error(f"键盘事件处理错误: {e}")
 
             def on_release(key):
                 try:
-                    # F2 释放处理 - 在手动模式下处理
-                    if key == pynput_keyboard.Key.f2 and not self.auto_mode:
+                    # 清除释放的键
+                    if key == pynput_keyboard.Key.alt_l or key == pynput_keyboard.Key.alt_r:
+                        self.pressed_keys.discard('alt')
+                    elif key == pynput_keyboard.Key.shift_l or key == pynput_keyboard.Key.shift_r:
+                        self.pressed_keys.discard('shift')
+                    elif hasattr(key, 'char') and key.char:
+                        self.pressed_keys.discard(key.char.lower())
+                    
+                    # 松开按键，停止语音输入（仅在手动模式下）
+                    if not self.auto_mode and not self.is_combo('alt', 'shift', 'v'):
                         if self.button_release_callback:
                             self.button_release_callback()
                             if self.manual_btn:

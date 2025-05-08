@@ -42,4 +42,3 @@ soundfile>=0.12.1
 pydub>=0.25.1
 pyttsx3==2.98
 pygame==2.6.1
-wmi==1.5.1
