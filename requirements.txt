@@ -23,7 +23,7 @@ pycaw==20240210
 pycparser==2.22
 pydantic==2.10.6
 pydantic_core==2.27.2
-pynput==1.8.0
+pynput
 pyperclip==1.9.0
 pypinyin==0.53.0
 requests==2.32.3
