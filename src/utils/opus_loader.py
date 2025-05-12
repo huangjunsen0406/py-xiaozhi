@@ -116,7 +116,7 @@ def get_search_paths(system, arch_name):
             lib_path = DIR_STRUCTURE[WINDOWS]['path']
             search_paths.append((base_dir / lib_path, lib_name))
         elif system == LINUX:
-            lib_path = DIR_STRUCTURE[LINUX]['path']
+            lib_path = DIR_STRUCTURE[LINUX]['path'].format(arch=arch_name)
             search_paths.append((base_dir / lib_path, lib_name))
         
         # 根目录 (作为备选)

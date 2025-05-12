@@ -4,7 +4,7 @@ import logging
 import threading
 from pathlib import Path
 from urllib.parse import urlparse
-
+import platform
 from PyQt5.QtCore import (
     Qt, QTimer, QPropertyAnimation, QRect, 
     QEvent, QObject, QMetaObject, Q_ARG, QThread, pyqtSlot
@@ -1555,6 +1555,10 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
 
     def _update_mic_visualizer(self):
         """更新麦克风可视化"""
+        # Linux系统下不运行可视化
+        if platform.system() == "Linux":
+            return
+            
         if not self.is_listening or not self.mic_visualizer:
             return
             
@@ -1566,7 +1570,7 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             self.mic_visualizer.set_volume(min(1.0, volume_level))
         except Exception as e:
             self.logger.error(f"更新麦克风可视化失败: {e}")
-    
+
     def _get_current_mic_level(self):
         """获取当前麦克风音量级别"""
         try:
@@ -1622,18 +1626,26 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
 
     def _start_mic_visualization(self):
         """开始麦克风可视化"""
+        # Linux系统下不运行可视化
+        if platform.system() == "Linux":
+            return
+            
         if self.mic_visualizer and self.mic_timer and self.audio_control_stack:
             self.is_listening = True
             
             # 切换到麦克风可视化页面
             self.audio_control_stack.setCurrentWidget(self.mic_page)
-            
+                
             # 启动定时器更新可视化
             if not self.mic_timer.isActive():
                 self.mic_timer.start(50)  # 20fps
                 
     def _stop_mic_visualization(self):
         """停止麦克风可视化"""
+        # Linux系统下不运行可视化
+        if platform.system() == "Linux":
+            return
+            
         self.is_listening = False
         
         # 停止定时器

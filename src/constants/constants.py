@@ -50,9 +50,9 @@ def get_frame_duration() -> int:
     import pyaudio
     try:
 
-        if (platform.system() == "Linux" or
-                not is_official_server(config.get_config("SYSTEM_OPTIONS.NETWORK.OTA_VERSION_URL"))):
-            return 60
+        # if (platform.system() == "Linux" or
+        #         not is_official_server(config.get_config("SYSTEM_OPTIONS.NETWORK.OTA_VERSION_URL"))):
+        #     return 60
 
         p = pyaudio.PyAudio()
         # 获取默认输入设备信息
@@ -82,7 +82,7 @@ class AudioConfig:
 
     # 根据不同采样率计算帧大小
     INPUT_FRAME_SIZE = int(INPUT_SAMPLE_RATE * (FRAME_DURATION / 1000))
-    OUTPUT_FRAME_SIZE = int(OUTPUT_SAMPLE_RATE * (FRAME_DURATION / 1000))
+    OUTPUT_FRAME_SIZE = 8192
 
     # Opus编码配置
     OPUS_APPLICATION = 2049  # OPUS_APPLICATION_AUDIO
