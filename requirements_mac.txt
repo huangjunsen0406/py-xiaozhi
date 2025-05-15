@@ -13,7 +13,7 @@ httpcore==1.0.7
 httpx==0.28.1
 idna==3.10
 jiter==0.9.0
-numpy==2.0.2
+numpy
 openai
 opuslib==3.0.1
 paho-mqtt==2.1.0
@@ -42,3 +42,4 @@ soundfile>=0.12.1
 pydub>=0.25.1
 pyttsx3==2.98
 pygame==2.6.1
+scipy

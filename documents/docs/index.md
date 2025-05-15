@@ -34,18 +34,10 @@ features:
     details: 兼容 Windows 10+、macOS 10.15+ 和 Linux 系统，随时随地使用。
   - title: 音量控制
     details: 支持音量调节，适应不同环境需求，统一声音控制接口。
-  - title: 会话管理
-    details: 有效管理多轮对话，保持交互的连续性。
   - title: 加密音频传输
     details: 支持 WSS 协议，保障音频数据的安全性，防止信息泄露。
   - title: 自动验证码处理
     details: 首次使用时，程序自动复制验证码并打开浏览器，简化用户操作。
-  - title: 自动获取 MAC 地址
-    details: 避免 MAC 地址冲突，提高连接稳定性。
-  - title: 代码模块化
-    details: 拆分代码并封装为类，职责分明，便于二次开发。
-  - title: 稳定性优化
-    details: 修复多项问题，包括断线重连、跨平台兼容等。
 ---
 
 <div class="developers-section">
