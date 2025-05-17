@@ -27,7 +27,10 @@ import queue
 import time
 import numpy as np
 from typing import Optional, Callable
-from pynput import keyboard as pynput_keyboard
+if os.environ.get('DISPLAY'):
+    from pynput import keyboard as pynput_keyboard
+else:
+    pynput_keyboard = None
 from abc import ABCMeta
 from src.display.base_display import BaseDisplay
 import json
