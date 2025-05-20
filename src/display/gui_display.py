@@ -27,10 +27,18 @@ import queue
 import time
 import numpy as np
 from typing import Optional, Callable
-if os.environ.get('DISPLAY'):
-    from pynput import keyboard as pynput_keyboard
-else:
+
+# 根据不同操作系统处理 pynput 导入
+try:
+    if platform.system() == 'Windows':
+        from pynput import keyboard as pynput_keyboard
+    elif os.environ.get('DISPLAY'):
+        from pynput import keyboard as pynput_keyboard
+    else:
+        pynput_keyboard = None
+except ImportError:
     pynput_keyboard = None
+
 from abc import ABCMeta
 from src.display.base_display import BaseDisplay
 import json
@@ -1170,6 +1178,11 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
 
     def start_keyboard_listener(self):
         """启动键盘监听"""
+        # 如果 pynput 不可用，记录警告并返回
+        if pynput_keyboard is None:
+            self.logger.warning("键盘监听不可用：pynput 库未能正确加载。快捷键功能将不可用。")
+            return
+        
         try:
             def on_press(key):
                 try:
