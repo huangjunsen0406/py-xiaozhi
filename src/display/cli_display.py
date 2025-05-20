@@ -6,7 +6,10 @@ from typing import Optional, Callable
 
 from src.display.base_display import BaseDisplay
 # 替换keyboard导入为pynput
-from pynput import keyboard as pynput_keyboard
+if os.environ.get('DISPLAY'):
+    from pynput import keyboard as pynput_keyboard
+else:
+    pynput_keyboard = None
 
 from src.utils.logging_config import get_logger
 
