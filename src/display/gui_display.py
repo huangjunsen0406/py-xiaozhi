@@ -692,12 +692,25 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
     def on_close(self):
         """关闭窗口处理"""
         self._running = False
-        if self.update_timer:
-            self.update_timer.stop()
-        if self.mic_timer:
-            self.mic_timer.stop()
-        if self.ha_update_timer:
-            self.ha_update_timer.stop()
+        
+        # 确保在主线程中停止定时器
+        if QThread.currentThread() != QApplication.instance().thread():
+            # 如果在非主线程，使用 QMetaObject.invokeMethod 在主线程中执行
+            if self.update_timer:
+                QMetaObject.invokeMethod(self.update_timer, "stop", Qt.QueuedConnection)
+            if self.mic_timer:
+                QMetaObject.invokeMethod(self.mic_timer, "stop", Qt.QueuedConnection)
+            if self.ha_update_timer:
+                QMetaObject.invokeMethod(self.ha_update_timer, "stop", Qt.QueuedConnection)
+        else:
+            # 已在主线程中，直接停止
+            if self.update_timer:
+                self.update_timer.stop()
+            if self.mic_timer:
+                self.mic_timer.stop()
+            if self.ha_update_timer:
+                self.ha_update_timer.stop()
+                
         if self.tray_icon:
             self.tray_icon.hide()
         if self.root:
@@ -1535,7 +1548,7 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             project_root = os.path.dirname(os.path.dirname(current_dir))
             
             # 获取脚本路径
-            script_path = os.path.join(project_root, "scripts", "ha_device_manager_ui.py")
+            script_path = os.path.join(project_root, "src", "ui", "ha_device_manager", "index.py")
             
             if not os.path.exists(script_path):
                 self.logger.error(f"设备管理器脚本不存在: {script_path}")
@@ -1630,7 +1643,22 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         if platform.system() == "Linux":
             return
             
-        if self.mic_visualizer and self.mic_timer and self.audio_control_stack:
+        if not self.mic_visualizer or not self.mic_timer or not self.audio_control_stack:
+            return
+            
+        try:
+            # 获取应用程序实例
+            from src.application import Application
+            app = Application.get_instance()
+            if not app or not hasattr(app, 'audio_codec') or not app.audio_codec:
+                self.logger.warning("音频编解码器未初始化，无法启动麦克风可视化")
+                return
+                
+            # 确保音频输入流可用
+            if not hasattr(app.audio_codec, 'input_stream') or not app.audio_codec.input_stream:
+                self.logger.warning("音频输入流未初始化，无法启动麦克风可视化")
+                return
+                
             self.is_listening = True
             
             # 切换到麦克风可视化页面
@@ -1639,6 +1667,9 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             # 启动定时器更新可视化
             if not self.mic_timer.isActive():
                 self.mic_timer.start(50)  # 20fps
+        except Exception as e:
+            self.logger.error(f"启动麦克风可视化失败: {e}")
+            self.is_listening = False
                 
     def _stop_mic_visualization(self):
         """停止麦克风可视化"""
@@ -1646,21 +1677,98 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         if platform.system() == "Linux":
             return
             
-        self.is_listening = False
-        
-        # 停止定时器
-        if self.mic_timer and self.mic_timer.isActive():
-            self.mic_timer.stop()
-            # 重置可视化音量
-            if self.mic_visualizer:
-                 self.mic_visualizer.set_volume(0.0)
-                 # 确保动画平滑过渡到0
-                 if hasattr(self, '_last_volume'):
-                     self._last_volume = 0.0
+        try:
+            self.is_listening = False
+            
+            # 停止定时器
+            if self.mic_timer and self.mic_timer.isActive():
+                # 确保在主线程中停止定时器
+                if QThread.currentThread() != QApplication.instance().thread():
+                    QMetaObject.invokeMethod(self.mic_timer, "stop", Qt.QueuedConnection)
+                else:
+                    self.mic_timer.stop()
+                    
+                # 重置可视化音量
+                if self.mic_visualizer:
+                    self.mic_visualizer.set_volume(0.0)
+                    # 确保动画平滑过渡到0
+                    if hasattr(self, '_last_volume'):
+                        self._last_volume = 0.0
 
-        # 切换回音量控制页面
-        if self.audio_control_stack:
-            self.audio_control_stack.setCurrentWidget(self.volume_page)
+            # 切换回音量控制页面
+            if self.audio_control_stack:
+                self.audio_control_stack.setCurrentWidget(self.volume_page)
+                
+            # 清理音频相关资源
+            try:
+                from src.application import Application
+                app = Application.get_instance()
+                if app and hasattr(app, 'audio_codec') and app.audio_codec:
+                    # 重置音频编解码器状态（如果需要）
+                    if hasattr(app.audio_codec, 'reset_state'):
+                        app.audio_codec.reset_state()
+            except Exception as e:
+                self.logger.debug(f"清理音频资源时出错: {e}")
+                
+        except Exception as e:
+            self.logger.error(f"停止麦克风可视化失败: {e}")
+            
+    def _get_current_mic_level(self):
+        """获取当前麦克风音量级别"""
+        try:
+            from src.application import Application
+            app = Application.get_instance()
+            if not app or not hasattr(app, 'audio_codec') or not app.audio_codec:
+                return 0.0
+                
+            # 从音频编解码器获取原始音频数据
+            if not hasattr(app.audio_codec, 'input_stream') or not app.audio_codec.input_stream:
+                return 0.0
+                
+            # 读取音频数据并计算音量级别
+            try:
+                # 获取输入流中可读取的数据量
+                available = app.audio_codec.input_stream.get_read_available()
+                if available > 0:
+                    # 读取一小块数据用于计算音量
+                    chunk_size = min(1024, available)
+                    audio_data = app.audio_codec.input_stream.read(
+                        chunk_size, 
+                        exception_on_overflow=False
+                    )
+                    
+                    # 将字节数据转换为numpy数组进行处理
+                    audio_array = np.frombuffer(audio_data, dtype=np.int16)
+                    
+                    # 计算音量级别 (0.0-1.0)
+                    # 16位音频的最大值是32768，计算音量占最大值的比例
+                    # 使用均方根(RMS)值计算有效音量
+                    rms = np.sqrt(np.mean(np.square(audio_array.astype(np.float32))))
+                    # 标准化为0-1范围，32768是16位音频的最大值
+                    # 增加放大系数以提高灵敏度
+                    volume = min(1.0, rms / 32768 * 10)  # 放大10倍使小音量更明显
+                    
+                    # 应用平滑处理
+                    if hasattr(self, '_last_volume'):
+                        # 平滑过渡，保留70%上次数值，增加30%新数值
+                        self._last_volume = self._last_volume * 0.7 + volume * 0.3
+                    else:
+                        self._last_volume = volume
+                        
+                    return self._last_volume
+            except Exception as e:
+                self.logger.debug(f"读取麦克风数据失败: {e}")
+        except Exception as e:
+            self.logger.debug(f"获取麦克风音量失败: {e}")
+            
+        # 如果无法获取实际音量，返回上次的音量或默认值
+        if hasattr(self, '_last_volume'):
+            # 缓慢衰减上次的音量
+            self._last_volume *= 0.9
+            return self._last_volume
+        else:
+            self._last_volume = 0.0 # 初始化为 0
+            return self._last_volume
 
     def _on_send_button_click(self):
         """处理发送文本按钮点击事件"""

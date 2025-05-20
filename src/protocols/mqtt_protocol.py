@@ -101,7 +101,10 @@ class MqttProtocol(Protocol):
                 tls_version=mqtt.ssl.PROTOCOL_TLS
             )
         except Exception as e:
-            logger.warning(f"TLS配置失败: {e}，尝试不使用TLS连接")
+            logger.error(f"TLS配置失败，无法安全连接到MQTT服务器: {e}")
+            if self.on_network_error:
+                await self.on_network_error(f"TLS配置失败: {str(e)}")
+            return False
 
         # 创建连接Future
         connect_future = self.loop.create_future()

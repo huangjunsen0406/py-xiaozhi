@@ -14,7 +14,7 @@ import logging
 
 # 添加项目根目录到系统路径
 current_dir = os.path.dirname(os.path.abspath(__file__))
-project_root = os.path.dirname(current_dir)
+project_root = os.path.dirname(os.path.dirname(os.path.dirname(current_dir)))
 sys.path.append(project_root)
 
 # 导入项目配置管理器
@@ -22,25 +22,13 @@ from src.utils.config_manager import ConfigManager
 
 try:
     from PyQt5.QtWidgets import (
-        QApplication, QMainWindow, QWidget, QPushButton, QTableWidgetItem,
-        QHeaderView, QMessageBox, QHBoxLayout, QLineEdit, QComboBox, 
-        QTableWidget, QStackedWidget, QTabBar, QAbstractItemView, QVBoxLayout,
-        QFrame # 添加 QFrame
+        QApplication, QMainWindow, QPushButton, QTableWidgetItem,
+        QHeaderView, QMessageBox, QTabBar # 添加 QFrame
     )
     from PyQt5.QtCore import Qt, QThread, pyqtSignal
-    from PyQt5.QtGui import QFont, QIcon, QColor
+    from PyQt5.QtGui import QColor
     from PyQt5 import uic
-    
-    # 移除 QFluentWidgets 相关导入
-    # try:
-    #     from qfluentwidgets import (
-    #         ComboBox, LineEdit, SearchLineEdit, TableWidget, Theme, setTheme, setThemeColor,
-    #         SegmentedWidget
-    #     )
-    # except ImportError:
-    #     print("错误: 未安装qfluentwidgets库")
-    #     print("请运行: pip install qfluentwidgets")
-    #     sys.exit(1)
+
         
 except ImportError:
     print("错误: 未安装PyQt5库")
@@ -398,14 +386,14 @@ class HomeAssistantDeviceManager(QMainWindow):
 
     def load_ui(self):
         """加载UI文件"""
-        ui_path = os.path.join(current_dir, "ha_manage.ui")
+        ui_path = os.path.join(current_dir, "index.ui")
         uic.loadUi(ui_path, self)
         
     def init_ui(self):
         """初始化UI组件"""
         try:
             # 加载UI文件
-            ui_path = os.path.join(current_dir, "ha_manage.ui")
+            ui_path = os.path.join(current_dir, "index.ui")
             uic.loadUi(ui_path, self)
             
             # 设置表格基本属性，保留功能性设置

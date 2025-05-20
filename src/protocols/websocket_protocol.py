@@ -1,14 +1,15 @@
-import ssl  # 需要在文件顶部导入
+import ssl
 import asyncio
 import json
 import logging
 import websockets
 
-ssl_context = ssl._create_unverified_context()
 from src.constants.constants import AudioConfig
 from src.protocols.protocol import Protocol
 from src.utils.config_manager import ConfigManager
 from src.utils.logging_config import get_logger
+
+ssl_context = ssl._create_unverified_context()
 
 logger = get_logger(__name__)
 
@@ -21,11 +22,17 @@ class WebsocketProtocol(Protocol):
         self.websocket = None
         self.connected = False
         self.hello_received = None  # 初始化时先设为 None
-        self.WEBSOCKET_URL = self.config.get_config("SYSTEM_OPTIONS.NETWORK.WEBSOCKET_URL")
+        self.WEBSOCKET_URL = self.config.get_config(
+            "SYSTEM_OPTIONS.NETWORK.WEBSOCKET_URL"
+        )
         self.HEADERS = {
-            "Authorization": f"Bearer {self.config.get_config('SYSTEM_OPTIONS.NETWORK.WEBSOCKET_ACCESS_TOKEN')}",
+            "Authorization": (
+                f"Bearer {self.config.get_config('SYSTEM_OPTIONS.NETWORK.WEBSOCKET_ACCESS_TOKEN')}"
+            ),
             "Protocol-Version": "1",
-            "Device-Id": self.config.get_config("SYSTEM_OPTIONS.DEVICE_ID"),  # 获取设备MAC地址
+            "Device-Id": self.config.get_config(
+                "SYSTEM_OPTIONS.DEVICE_ID"
+            ),  # 获取设备MAC地址
             "Client-Id": self.config.get_config("SYSTEM_OPTIONS.CLIENT_ID")
         }
 
@@ -35,19 +42,24 @@ class WebsocketProtocol(Protocol):
             # 在连接时创建 Event，确保在正确的事件循环中
             self.hello_received = asyncio.Event()
 
+            # 判断是否应该使用 SSL
+            current_ssl_context = None
+            if self.WEBSOCKET_URL.startswith('wss://'):
+                current_ssl_context = ssl_context
+
             # 建立WebSocket连接 (兼容不同Python版本的写法)
             try:
                 # 新的写法 (在Python 3.11+版本中)
                 self.websocket = await websockets.connect(
                     uri=self.WEBSOCKET_URL,
-                    ssl=ssl_context,
+                    ssl=current_ssl_context,
                     additional_headers=self.HEADERS
                 )
             except TypeError:
                 # 旧的写法 (在较早的Python版本中)
                 self.websocket = await websockets.connect(
                     self.WEBSOCKET_URL,
-                    ssl=ssl_context,
+                    ssl=current_ssl_context,
                     extra_headers=self.HEADERS
                 )
 
