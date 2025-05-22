@@ -1584,8 +1584,8 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
 
     def _update_mic_visualizer(self):
         """更新麦克风可视化"""
-        # Linux系统下不运行可视化
-        if platform.system() == "Linux":
+        # Linux和macOS系统下不运行可视化
+        if platform.system() in ["Linux", "Darwin"]:
             return
             
         if not self.is_listening or not self.mic_visualizer:
@@ -1655,8 +1655,8 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
 
     def _start_mic_visualization(self):
         """开始麦克风可视化"""
-        # Linux系统下不运行可视化
-        if platform.system() == "Linux":
+        # Linux和macOS系统下不运行可视化
+        if platform.system() in ["Linux", "Darwin"]:
             return
             
         if not self.mic_visualizer or not self.mic_timer or not self.audio_control_stack:
@@ -1689,8 +1689,8 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
                 
     def _stop_mic_visualization(self):
         """停止麦克风可视化"""
-        # Linux系统下不运行可视化
-        if platform.system() == "Linux":
+        # Linux和macOS系统下不运行可视化
+        if platform.system() in ["Linux", "Darwin"]:
             return
             
         try:
