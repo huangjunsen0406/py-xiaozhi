@@ -9,6 +9,7 @@ from src.application import Application
 from src.constants.constants import DeviceState
 from src.iot.thing import Thing
 from src.iot.things.CameraVL import VL
+from src.iot.things.CameraVL import face_recognition
 
 logger = logging.getLogger("Camera")
 
@@ -31,6 +32,8 @@ class Camera(Thing):
         # 摄像头控制器
         VL.ImageAnalyzer.get_instance().init(self.config.get_config('CAMERA.VLapi_key'), self.config.get_config('CAMERA.Loacl_VL_url'),self.config.get_config('CAMERA.models'))
         self.VL= VL.ImageAnalyzer.get_instance()
+        # 人脸识别控制器
+        self.FR= face_recognition.FaceRecognition()
         print(f"[虚拟设备] 摄像头设备初始化完成")
 
         self.add_property_and_method()#定义设备方法与状态属性
@@ -71,6 +74,12 @@ class Camera(Thing):
                 logger.error("无法读取画面")
                 break
 
+            #是否开启人脸识别
+            if self.FR.face_recognition_enabled:
+                face_infos=self.FR.recognize_face(frame)
+                if face_infos:  # 如果有人脸被检测到
+                    # 绘制人脸信息
+                    self.FR.draw_face_info(frame, face_infos)
             # 显示画面
             cv2.imshow('Camera', frame)
 
@@ -108,10 +117,21 @@ class Camera(Thing):
         # 将帧转换为 JPEG 格式
         _, buffer = cv2.imencode('.jpg', frame)
 
+        #人脸识别结果
+        self.result = ""
+        #判断是否启用人脸识别
+        #本来想加入prompt的，但是测试发现大模型会因为隐私问题屏蔽了人脸信息，所以就不加入了
+        if self.FR.face_recognition_enabled:
+            face_infos=self.FR.recognize_face(frame)
+            face_info_text = "当前画面中识别到以下人脸信息:\n"
+            for idx, face in enumerate(face_infos):
+                face_info_text += f"第{idx + 1}个人脸信息:\n"
+                face_info_text += f"图中位置 {face.get('location')}:\n"
+                face_info_text += f"人员信息 {face.get('info')}\n"
+            self.result+=face_info_text
         # 将 JPEG 图像转换为 Base64 编码
         frame_base64 = base64.b64encode(buffer).decode('utf-8')
-        self.result=str(self.VL.analyze_image(frame_base64))
-        print(self.result)
+        self.result += str(self.VL.analyze_image(frame_base64))
         # 获取应用程序实例
         self.app = Application.get_instance()
         logger.info("画面已经识别到啦")
@@ -119,6 +139,7 @@ class Camera(Thing):
         self.app.set_device_state(DeviceState.LISTENING)
         asyncio.create_task(self.app.protocol.send_wake_word_detected("播报识别结果"))
         return {"status": 'success', "message": "识别成功","result":self.result}
+
     def stop_camera(self):
         """停止摄像头线程"""
         self.is_running = False
