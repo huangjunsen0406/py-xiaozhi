@@ -66,7 +66,7 @@ QTabBar {
      <widget class="QWidget" name="mainPage">
       <property name="styleSheet">
        <string>QWidget#mainPage {
-    background-color: rgba(255, 255, 255, 140); 
+    background-color: rgba(255, 255, 255, 140);
     border-radius: 8px;
 }</string>
       </property>
@@ -518,6 +518,43 @@ QTabBar {
             </item>
             <item>
              <spacer name="horizontalSpacer_WakeEnable">
+              <property name="orientation">
+               <enum>Qt::Horizontal</enum>
+              </property>
+              <property name="sizeHint" stdset="0">
+               <size>
+                <width>40</width>
+                <height>20</height>
+               </size>
+              </property>
+             </spacer>
+            </item>
+           </layout>
+          </item>
+          <item>
+           <layout class="QHBoxLayout" name="realtimeChatEnableLayout">
+            <item>
+             <widget class="QLabel" name="realtimeChatEnableLabel">
+              <property name="text">
+               <string>启用实时对话模式:</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QCheckBox" name="realtimeChatEnableSwitch">
+              <property name="minimumSize">
+               <size>
+                <width>20</width>
+                <height>20</height>
+               </size>
+              </property>
+              <property name="text">
+               <string/>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <spacer name="horizontalSpacer_RealtimeEnable">
               <property name="orientation">
                <enum>Qt::Horizontal</enum>
               </property>

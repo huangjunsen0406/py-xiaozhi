@@ -445,8 +445,9 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
 
             # 更新按钮显示
             if self.auto_mode:
-                # 切换到自动模式
-                self.update_mode_button_status("自动对话")
+                # 切换到自动模式，检查是否启用了实时模式
+                mode_text = self._get_auto_mode_text()
+                self.update_mode_button_status(mode_text)
 
                 # 隐藏手动按钮，显示自动按钮
                 self.update_queue.put(self._switch_to_auto_mode)
@@ -459,6 +460,17 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
 
         except Exception as e:
             self.logger.error(f"模式切换按钮回调执行失败: {e}")
+
+    def _get_auto_mode_text(self):
+        """获取自动模式的显示文本"""
+        try:
+            from src.utils.config_manager import ConfigManager
+            config_manager = ConfigManager.get_instance()
+            realtime_enabled = config_manager.get_config("SYSTEM_OPTIONS.REALTIME_CHAT_ENABLED", True)
+            return "实时对话" if realtime_enabled else "自动对话"
+        except Exception as e:
+            self.logger.error(f"获取实时模式配置失败: {e}")
+            return "自动对话"
 
     def _switch_to_auto_mode(self):
         """切换到自动模式的UI更新"""
@@ -860,6 +872,7 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
 
             # 获取设置页面控件
             self.wakeWordEnableSwitch = self.root.findChild(QCheckBox, "wakeWordEnableSwitch")
+            self.realtimeChatEnableSwitch = self.root.findChild(QCheckBox, "realtimeChatEnableSwitch")
             self.wakeWordsLineEdit = self.root.findChild(QLineEdit, "wakeWordsLineEdit")
             self.saveSettingsButton = self.root.findChild(QPushButton, "saveSettingsButton")
             # 获取新增的控件
@@ -914,6 +927,9 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
                 self.auto_btn.hide()
             if self.mode_btn:
                 self.mode_btn.clicked.connect(self._on_mode_button_click)
+                # 初始化模式按钮显示
+                initial_mode_text = self._get_auto_mode_text() if self.auto_mode else "手动对话"
+                self.mode_btn.setText(initial_mode_text)
 
             # 初始化文本输入框和发送按钮
             self.text_input = self.root.findChild(QLineEdit, "text_input")
@@ -1314,6 +1330,11 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             if self.wakeWordsLineEdit:
                 self.wakeWordsLineEdit.setText(", ".join(wake_words))
 
+            # 获取实时聊天模式配置
+            realtime_chat_enabled = config_manager.get_config("SYSTEM_OPTIONS.REALTIME_CHAT_ENABLED", True)
+            if self.realtimeChatEnableSwitch:
+                self.realtimeChatEnableSwitch.setChecked(realtime_chat_enabled)
+
             # 获取系统选项
             device_id = config_manager.get_config("SYSTEM_OPTIONS.DEVICE_ID", "")
             websocket_url = config_manager.get_config("SYSTEM_OPTIONS.NETWORK.WEBSOCKET_URL", "")
@@ -1433,6 +1454,9 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             wake_words_text = self.wakeWordsLineEdit.text() if self.wakeWordsLineEdit else ""
             wake_words = [word.strip() for word in wake_words_text.split(',') if word.strip()]
 
+            # 实时聊天模式配置
+            realtime_chat_enabled = self.realtimeChatEnableSwitch.isChecked() if self.realtimeChatEnableSwitch else True
+
             # 系统选项
             new_device_id = self.deviceIdLineEdit.text() if self.deviceIdLineEdit else ""
             selected_protocol_text = self.wsProtocolComboBox.currentText() if self.wsProtocolComboBox else "wss://"
@@ -1513,6 +1537,7 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             if "SYSTEM_OPTIONS" not in current_config:
                 current_config["SYSTEM_OPTIONS"] = {}
             current_config["SYSTEM_OPTIONS"]["DEVICE_ID"] = new_device_id
+            current_config["SYSTEM_OPTIONS"]["REALTIME_CHAT_ENABLED"] = realtime_chat_enabled
 
             if "NETWORK" not in current_config["SYSTEM_OPTIONS"]:
                 current_config["SYSTEM_OPTIONS"]["NETWORK"] = {}

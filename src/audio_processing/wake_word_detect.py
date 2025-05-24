@@ -17,13 +17,13 @@ logger = get_logger(__name__)
 class WakeWordDetector:
     """唤醒词检测类（集成AudioCodec优化版）"""
 
-    def __init__(self, 
+    def __init__(self,
                  sample_rate=AudioConfig.INPUT_SAMPLE_RATE,
                  buffer_size=AudioConfig.INPUT_FRAME_SIZE,
                  audio_codec=None):
         """
         初始化唤醒词检测器
-        
+
         参数:
             audio_codec: AudioCodec实例（新增）
             sample_rate: 音频采样率
@@ -31,7 +31,7 @@ class WakeWordDetector:
         """
         # 初始化音频编解码器引用
         self.audio_codec = audio_codec
-        
+
         # 初始化基本属性
         self.on_detected_callbacks = []
         self.running = False
@@ -79,7 +79,7 @@ class WakeWordDetector:
             logger.info(f"已配置 {len(self.wake_words)} 个唤醒词")
             for idx, (word, pinyin) in enumerate(zip(self.wake_words, self.wake_words_pinyin)):
                 logger.debug(f"唤醒词 {idx+1}: {word.ljust(8)} => {pinyin}")
-                
+
         except Exception as e:
             logger.error(f"初始化失败: {e}", exc_info=True)
             self.enabled = False
@@ -88,46 +88,46 @@ class WakeWordDetector:
         """获取模型路径（更智能的路径查找）"""
         # 直接从配置中获取模型名称或路径
         model_name = config.get_config(
-            'WAKE_WORD_OPTIONS.MODEL_PATH', 
+            'WAKE_WORD_OPTIONS.MODEL_PATH',
             'vosk-model-small-cn-0.22'
         )
-        
+
         # 转换为Path对象
         model_path = Path(model_name)
-        
+
         # 如果只有模型名称（没有父目录），则标准化为models子目录下的路径
         if len(model_path.parts) == 1:
             model_path = Path('models') / model_path
-        
+
         # 可能的基准路径
         possible_base_dirs = [
             Path(__file__).parent.parent.parent,  # 项目根目录
             Path.cwd(),  # 当前工作目录
         ]
-        
+
         # 如果是打包后的环境，增加更多可能的基准路径
         if getattr(sys, 'frozen', False):
             # 可执行文件所在目录
             exe_dir = Path(sys.executable).parent
             possible_base_dirs.append(exe_dir)
-            
+
             # PyInstaller的_MEIPASS路径(如果存在)
             if hasattr(sys, '_MEIPASS'):
                 meipass_dir = Path(sys._MEIPASS)
                 possible_base_dirs.append(meipass_dir)
                 # 增加_MEIPASS的父目录(可能是应用根目录)
                 possible_base_dirs.append(meipass_dir.parent)
-                
+
             # 增加可执行文件父目录(处理某些安装情况)
             possible_base_dirs.append(exe_dir.parent)
-            
+
             logger.debug(f"可执行文件目录: {exe_dir}")
             if hasattr(sys, '_MEIPASS'):
                 logger.debug(f"PyInstaller临时目录: {meipass_dir}")
-        
+
         # 查找模型文件
         model_file_path = None
-        
+
         # 遍历所有可能的基准路径
         for base_dir in filter(None, possible_base_dirs):
             # 1. 尝试标准的models目录下的模型
@@ -136,7 +136,7 @@ class WakeWordDetector:
                 model_file_path = path_to_check
                 logger.info(f"找到模型文件: {model_file_path}")
                 break
-                
+
             # 2. 尝试直接使用模型名称(不包含models前缀)
             if len(model_path.parts) > 1 and model_path.parts[0] == 'models':
                 # 去掉models前缀
@@ -145,7 +145,7 @@ class WakeWordDetector:
                     model_file_path = alt_path
                     logger.info(f"在替代位置找到模型: {model_file_path}")
                     break
-        
+
         # 如果仍未找到，尝试一些特殊位置
         if model_file_path is None and getattr(sys, 'frozen', False):
             # 1. 检查与可执行文件同级的特定目录
@@ -157,13 +157,13 @@ class WakeWordDetector:
                 # 可执行文件同级直接放置模型
                 Path(sys.executable).parent / model_path.name
             ]
-            
+
             for path in special_paths:
                 if path.exists():
                     model_file_path = path
                     logger.info(f"在特殊位置找到模型: {model_file_path}")
                     break
-        
+
         # 如果找不到任何位置，使用配置的原始路径
         if model_file_path is None:
             # 如果是绝对路径直接使用
@@ -172,9 +172,9 @@ class WakeWordDetector:
             else:
                 # 否则使用项目根目录+相对路径
                 model_file_path = Path(__file__).parent.parent.parent / model_path
-                
+
             logger.warning(f"未找到模型，将使用默认路径: {model_file_path}")
-        
+
         # 转换为字符串返回
         model_path_str = str(model_file_path)
         logger.debug(f"最终模型路径: {model_path_str}")
@@ -269,7 +269,7 @@ class WakeWordDetector:
             # 设置参数
             self.sample_rate = AudioConfig.INPUT_SAMPLE_RATE
             self.buffer_size = AudioConfig.INPUT_FRAME_SIZE
-            
+
             # 启动检测线程
             self.running = True
             self.paused = False
@@ -279,7 +279,7 @@ class WakeWordDetector:
                 name="WakeWordDetector-ExternalStream"
             )
             self.detection_thread.start()
-            
+
             logger.info("唤醒词检测已启动（使用外部音频流）")
             return True
         except Exception as e:
@@ -304,7 +304,7 @@ class WakeWordDetector:
                     logger.warning("AudioCodec不可用，等待中...")
                     time.sleep(STREAM_TIMEOUT)
                     continue
-                    
+
                 # 直接使用当前流引用
                 stream = self.audio_codec.input_stream
                 if not stream or not stream.is_active():
@@ -333,7 +333,7 @@ class WakeWordDetector:
             except Exception as e:
                 error_count += 1
                 logger.error(f"检测循环错误({error_count}/{MAX_ERRORS}): {str(e)}")
-                
+
                 if error_count >= MAX_ERRORS:
                     logger.critical("达到最大错误次数，停止检测")
                     self.stop()
@@ -354,17 +354,19 @@ class WakeWordDetector:
         except OSError as e:
             error_msg = str(e)
             logger.warning(f"音频流错误: {error_msg}")
-            
+
             # 关键错误处理
-            critical_errors = ["Input overflowed", "Device unavailable"]
+            critical_errors = ["Input overflowed", "Device unavailable", "Unanticipated host error", "Stream not open"]
             if any(msg in error_msg for msg in critical_errors) and self.audio_codec:
                 logger.info("触发音频流重置...")
                 try:
+                    # 等待一段时间让设备释放
+                    time.sleep(0.5)
                     # 直接调用AudioCodec的重置方法
                     self.audio_codec._reinitialize_input_stream()
                 except Exception as re:
                     logger.error(f"流重置失败: {re}")
-                    
+
             time.sleep(0.5)
             return None
         except Exception as e:
@@ -390,7 +392,7 @@ class WakeWordDetector:
                             logger.warning("音频流不可用")
                             time.sleep(0.5)
                             continue
-                            
+
                         # 确保流是活跃的
                         if not self.stream.is_active():
                             try:
@@ -399,10 +401,10 @@ class WakeWordDetector:
                                 logger.error(f"启动音频流失败: {e}")
                                 time.sleep(0.5)
                                 continue
-                        
+
                         # 读取数据
                         data = self.stream.read(
-                            self.buffer_size, 
+                            self.buffer_size,
                             exception_on_overflow=False
                         )
                 except Exception as e:
@@ -414,16 +416,16 @@ class WakeWordDetector:
                 if data and len(data) > 0:
                     self._process_audio_data(data)
                     error_count = 0  # 重置错误计数
-                    
+
             except Exception as e:
                 error_count += 1
                 logger.error(f"检测循环错误({error_count}/{MAX_ERRORS}): {e}")
-                
+
                 if error_count >= MAX_ERRORS:
                     logger.critical("达到最大错误次数，停止检测")
                     self.stop()
                 time.sleep(0.5)
-                
+
     def stop(self):
         """停止检测（优化资源释放）"""
         if self.running:
@@ -441,7 +443,7 @@ class WakeWordDetector:
                     self.stream.close()
                 except Exception as e:
                     logger.error(f"关闭音频流失败: {e}")
-                    
+
             # 清理PyAudio实例
             if self.audio:
                 try:
@@ -454,11 +456,11 @@ class WakeWordDetector:
             self.audio = None
             self.external_stream = False
             logger.info("唤醒词检测已停止")
-            
+
     def is_running(self):
         """检查唤醒词检测是否正在运行"""
         return self.running and not self.paused
-        
+
     def update_stream(self, new_stream):
         """更新唤醒词检测器使用的音频流"""
         if not self.running:

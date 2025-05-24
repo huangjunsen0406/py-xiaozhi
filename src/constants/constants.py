@@ -8,6 +8,7 @@ class ListeningMode:
     ALWAYS_ON = "always_on"
     AUTO_STOP = "auto_stop"
     MANUAL = "manual"
+    REALTIME = "realtime"  # 实时模式，类似于C++中的kListeningModeRealtime
 
 class AbortReason:
     """中止原因"""
@@ -50,9 +51,8 @@ def get_frame_duration() -> int:
     import pyaudio
     try:
 
-        # if (platform.system() == "Linux" or
-        #         not is_official_server(config.get_config("SYSTEM_OPTIONS.NETWORK.OTA_VERSION_URL"))):
-        #     return 60
+        if not is_official_server(config.get_config("SYSTEM_OPTIONS.NETWORK.OTA_VERSION_URL")):
+            return 60
 
         p = pyaudio.PyAudio()
         # 获取默认输入设备信息

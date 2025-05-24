@@ -1111,7 +1111,9 @@ class MusicPlayer(Thing):
 
             # 每200ms检查一次TTS状态
             if current_time - last_tts_check > 0.2:
-                self._handle_tts_priority()
+                # self.app.realtime_chat_enabled 为true不执行 self._handle_tts_priority()
+                if not self.app.realtime_chat_enabled:
+                    self._handle_tts_priority()
                 last_tts_check = current_time
 
                 # 如果因为TTS而暂停，继续等待

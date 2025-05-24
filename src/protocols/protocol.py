@@ -37,6 +37,15 @@ class Protocol:
         """发送文本消息的抽象方法，需要在子类中实现"""
         raise NotImplementedError("send_text方法必须由子类实现")
 
+    async def send_audio(self, data, timestamp=None):
+        """发送音频数据的抽象方法，需要在子类中实现
+
+        Args:
+            data: 音频数据
+            timestamp: 可选的时间戳，用于音频同步
+        """
+        raise NotImplementedError("send_audio方法必须由子类实现")
+
     async def send_abort_speaking(self, reason):
         """发送中止语音的消息"""
         message = {
@@ -62,7 +71,8 @@ class Protocol:
         mode_map = {
             ListeningMode.ALWAYS_ON: "realtime",
             ListeningMode.AUTO_STOP: "auto",
-            ListeningMode.MANUAL: "manual"
+            ListeningMode.MANUAL: "manual",
+            ListeningMode.REALTIME: "realtime"  # 实时模式映射到realtime
         }
         message = {
             "session_id": self.session_id,

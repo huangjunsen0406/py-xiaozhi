@@ -70,6 +70,22 @@ class Application:
         self.current_text = ""
         self.current_emotion = "neutral"
 
+        # 实时聊天模式配置（参考C++中的realtime_chat_enabled_）
+        # 默认启用实时聊天模式，可以通过配置文件控制
+        self.realtime_chat_enabled = self.config.get_config("SYSTEM_OPTIONS.REALTIME_CHAT_ENABLED", True)
+
+        # 当前监听模式（参考C++中的listening_mode_）
+        self.listening_mode = ListeningMode.AUTO_STOP
+
+        # 时间戳队列管理（参考C++中的timestamp相关变量）
+        # 用于音频包的时间戳同步，特别是在使用服务器端AEC时
+        self.timestamp_queue = []  # 对应C++中的timestamp_queue_
+        self.timestamp_lock = asyncio.Lock()  # 对应C++中的timestamp_mutex_
+        self.last_output_timestamp = 0  # 对应C++中的last_output_timestamp_
+        self.use_server_aec = self.config.get_config(
+            "AUDIO.USE_SERVER_AEC", False
+        )
+
         # 音频处理相关
         self.audio_codec = None
         self._tts_lock = asyncio.Lock()
@@ -382,7 +398,14 @@ class Application:
 
         while self.running:
             try:
-                if (self.device_state == DeviceState.LISTENING and
+                # 在实时模式下，即使在SPEAKING状态也要继续录音和发送
+                should_send_audio = (
+                    (self.device_state == DeviceState.LISTENING) or
+                    (self.device_state == DeviceState.SPEAKING and
+                     self.listening_mode == ListeningMode.REALTIME)
+                )
+
+                if (should_send_audio and
                     self.audio_codec and
                     self.protocol and
                     self.protocol.is_audio_channel_opened()):
@@ -390,7 +413,9 @@ class Application:
                     # 读取并发送音频数据
                     encoded_data = self.audio_codec.read_audio()
                     if encoded_data:
-                        await self.protocol.send_audio(encoded_data)
+                        # 处理时间戳（参考C++实现）
+                        timestamp = await self._get_audio_timestamp()
+                        await self.protocol.send_audio(encoded_data, timestamp)
 
                 # 控制循环频率
                 sleep_time = min(20, AudioConfig.FRAME_DURATION) / 1000
@@ -424,6 +449,7 @@ class Application:
                     not self.audio_codec.audio_decode_queue.empty()):
 
                     await self.set_is_tts_playing(True)
+                    # 播放音频数据（参考C++实现的OnAudioOutput）
                     self.audio_codec.play_audio()
 
                 await asyncio.sleep(0.02)
@@ -560,12 +586,13 @@ class Application:
                         self.wake_word_detector.resume()
                     return
 
-            # 状态转换
-            if self.keep_listening:
-                await self.protocol.send_start_listening(ListeningMode.AUTO_STOP)
-                await self.set_device_state(DeviceState.LISTENING)
-            else:
+            # 状态转换（参考C++实现）
+            if self.listening_mode == ListeningMode.MANUAL:
+                # 手动模式下，TTS结束后回到IDLE状态
                 await self.set_device_state(DeviceState.IDLE)
+            else:
+                # 其他模式（包括REALTIME和AUTO_STOP）下，TTS结束后回到LISTENING状态
+                await self.set_device_state(DeviceState.LISTENING)
 
     async def _handle_stt_message(self, data):
         """处理STT消息"""
@@ -670,18 +697,21 @@ class Application:
         elif state == DeviceState.CONNECTING:
             if self.display:
                 self.display.update_status("连接中...")
+            # 清空时间戳队列（参考C++实现）
+            await self._clear_timestamp_queue()
 
         elif state == DeviceState.LISTENING:
             if self.display:
                 self.display.update_status("聆听中...")
             await self.set_emotion("neutral")
             await self._update_iot_states(True)
-            # 暂停唤醒词检测
-            if (self.wake_word_detector and
+            # 在非实时模式下暂停唤醒词检测
+            if (self.listening_mode != ListeningMode.REALTIME and
+                self.wake_word_detector and
                 hasattr(self.wake_word_detector, 'is_running') and
                 self.wake_word_detector.is_running()):
                 self.wake_word_detector.pause()
-                logger.info("唤醒词检测已暂停")
+                logger.info("唤醒词检测已暂停（非实时模式）")
             # 确保音频输入流活跃
             if self.audio_codec and self.audio_codec.is_input_paused():
                 self.audio_codec.resume_input()
@@ -689,10 +719,15 @@ class Application:
         elif state == DeviceState.SPEAKING:
             if self.display:
                 self.display.update_status("说话中...")
-            if (self.wake_word_detector and
-                hasattr(self.wake_word_detector, 'paused') and
-                self.wake_word_detector.paused):
-                self.wake_word_detector.resume()
+            # 根据监听模式决定是否恢复唤醒词检测（参考C++实现）
+            if self.listening_mode != ListeningMode.REALTIME:
+                # 非实时模式下，在说话时恢复唤醒词检测
+                if (self.wake_word_detector and
+                    hasattr(self.wake_word_detector, 'paused') and
+                    self.wake_word_detector.paused):
+                    self.wake_word_detector.resume()
+                    logger.info("唤醒词检测已恢复（非实时模式）")
+            # 在实时模式下，保持当前唤醒词检测状态
 
         # 通知状态变化
         for callback in self.on_state_changed_callbacks:
@@ -837,20 +872,26 @@ class Application:
                         self.wake_word_detector.resume()
                     return
 
-            # 强制重新初始化输入流
+            # 智能重新初始化输入流（只在必要时进行）
             try:
                 if self.audio_codec:
-                    self.audio_codec._reinitialize_input_stream()
+                    # 使用健康检查方法，更快速准确
+                    if not self.audio_codec.is_input_stream_healthy():
+                        logger.info("输入流不健康，进行重新初始化")
+                        self.audio_codec._reinitialize_input_stream()
+                    else:
+                        logger.debug("输入流健康，跳过重新初始化")
                 else:
-                    logger.warning("Cannot force reinitialization, audio_codec is None.")
+                    logger.warning("音频编解码器未初始化")
             except Exception as e:
-                logger.error(f"Forced reinitialization failed: {e}", exc_info=True)
+                logger.error(f"音频流检查失败: {e}", exc_info=True)
                 await self.set_device_state(DeviceState.IDLE)
                 if self.wake_word_detector and self.wake_word_detector.paused:
                     self.wake_word_detector.resume()
                 return
 
-            await self.protocol.send_start_listening(ListeningMode.MANUAL)
+            self.listening_mode = ListeningMode.MANUAL
+            await self.protocol.send_start_listening(self.listening_mode)
             await self.set_device_state(DeviceState.LISTENING)
 
         elif self.device_state == DeviceState.SPEAKING:
@@ -898,7 +939,9 @@ class Application:
                     return
 
             self.keep_listening = True
-            await self.protocol.send_start_listening(ListeningMode.AUTO_STOP)
+            # 根据realtime_chat_enabled选择监听模式（参考C++实现）
+            self.listening_mode = ListeningMode.REALTIME if self.realtime_chat_enabled else ListeningMode.AUTO_STOP
+            await self.protocol.send_start_listening(self.listening_mode)
             await self.set_device_state(DeviceState.LISTENING)
 
         elif self.device_state == DeviceState.SPEAKING:
@@ -965,6 +1008,48 @@ class Application:
 
     async def _send_text_tts(self, text: str):
         await self.protocol.send_wake_word_detected(text)
+
+    def is_realtime_chat_enabled(self) -> bool:
+        """获取实时聊天模式状态"""
+        return self.realtime_chat_enabled
+
+    def set_realtime_chat_enabled(self, enabled: bool):
+        """设置实时聊天模式状态"""
+        self.realtime_chat_enabled = enabled
+        logger.info(f"实时聊天模式已{'启用' if enabled else '禁用'}")
+        # 更新配置文件
+        self.config.update_config("SYSTEM_OPTIONS.REALTIME_CHAT_ENABLED", enabled)
+
+    async def _get_audio_timestamp(self) -> int:
+        """获取音频包的时间戳（参考C++实现）"""
+        if not self.use_server_aec:
+            return 0
+
+        async with self.timestamp_lock:
+            if self.timestamp_queue:
+                timestamp = self.timestamp_queue.pop(0)
+                return timestamp
+            else:
+                return 0
+
+    async def _add_output_timestamp(self, timestamp: int):
+        """添加输出音频的时间戳到队列（参考C++实现）"""
+        if not self.use_server_aec:
+            return
+
+        async with self.timestamp_lock:
+            self.timestamp_queue.append(timestamp)
+            self.last_output_timestamp = timestamp
+
+            # 限制队列长度为3（参考C++实现）
+            if len(self.timestamp_queue) > 3:
+                self.timestamp_queue.pop(0)
+
+    async def _clear_timestamp_queue(self):
+        """清空时间戳队列（参考C++实现）"""
+        async with self.timestamp_lock:
+            self.timestamp_queue.clear()
+            self.last_output_timestamp = 0
 
     def _on_mode_changed(self, auto_mode: bool) -> bool:
         """处理对话模式变更"""
@@ -1091,9 +1176,10 @@ class Application:
             return
 
         await self.protocol.send_wake_word_detected(wake_word)
-        # 设置为自动监听模式
+        # 根据realtime_chat_enabled选择监听模式（参考C++实现）
         self.keep_listening = True
-        await self.protocol.send_start_listening(ListeningMode.AUTO_STOP)
+        self.listening_mode = ListeningMode.REALTIME if self.realtime_chat_enabled else ListeningMode.AUTO_STOP
+        await self.protocol.send_start_listening(self.listening_mode)
         await self.set_device_state(DeviceState.LISTENING)
 
     async def _restart_wake_word_detector(self):

@@ -133,12 +133,19 @@ class WebsocketProtocol(Protocol):
                 # 使用 schedule 确保错误处理在主线程中执行
                 self.on_network_error(f"连接错误: {str(e)}")
 
-    async def send_audio(self, data: bytes):
-        """发送音频数据"""
+    async def send_audio(self, data: bytes, timestamp=None):
+        """发送音频数据
+
+        Args:
+            data: 音频数据
+            timestamp: 可选的时间戳，用于音频同步（WebSocket协议暂不使用）
+        """
         if not self.is_audio_channel_opened():  # 使用已有的 is_connected 方法
             return
 
         try:
+            # WebSocket协议目前不使用时间戳，直接发送音频数据
+            # 如果将来需要支持时间戳，可以在这里添加相关逻辑
             await self.websocket.send(data)
         except Exception as e:
             if self.on_network_error:

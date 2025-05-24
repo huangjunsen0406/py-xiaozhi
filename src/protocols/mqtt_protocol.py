@@ -368,8 +368,12 @@ class MqttProtocol(Protocol):
                 await self.on_network_error(f"发送MQTT消息失败: {e}")
             return False
 
-    async def send_audio(self, audio_data):
+    async def send_audio(self, audio_data, timestamp=None):
         """发送音频数据
+
+        Args:
+            audio_data: 音频数据
+            timestamp: 可选的时间戳，用于音频同步（MQTT协议暂不使用）
 
         参考 audio_sender.py 的实现方式
         """
