@@ -3,6 +3,7 @@ import json
 import platform
 import sys
 import time
+import threading
 from pathlib import Path
 from typing import Optional, Callable, Any
 
@@ -37,13 +38,16 @@ class Application:
     """异步版本的Application类，使用纯异步架构"""
 
     _instance: Optional['Application'] = None
+    _lock = threading.Lock()
 
     @classmethod
     def get_instance(cls) -> 'Application':
-        """获取单例实例"""
+        """获取单例实例（线程安全）"""
         if cls._instance is None:
-            logger.debug("创建Application单例实例")
-            cls._instance = Application()
+            with cls._lock:
+                if cls._instance is None:
+                    logger.debug("创建Application单例实例")
+                    cls._instance = Application()
         return cls._instance
 
     def __init__(self):
@@ -78,6 +82,9 @@ class Application:
         self._audio_input_task: Optional[asyncio.Task] = None
         self._audio_output_task: Optional[asyncio.Task] = None
 
+        # 状态管理锁
+        self._state_lock = asyncio.Lock()
+
         # 协议实例
         self.protocol = None
 
@@ -91,6 +98,13 @@ class Application:
         self.wake_word_detector = None
 
         logger.debug("Application实例初始化完成")
+
+    def _add_task(self, coro):
+        """添加任务并自动清理完成的任务"""
+        task = asyncio.create_task(coro)
+        self._tasks.add(task)
+        task.add_done_callback(self._tasks.discard)
+        return task
 
     async def run(self, **kwargs):
         """启动应用程序"""
@@ -176,13 +190,19 @@ class Application:
         """创建自动对话回调函数（同步版本，用于CLI线程调用）"""
         def auto_callback():
             try:
-                if self.loop and self.loop.is_running():
+                if self.loop and self.loop.is_running() and not self.loop.is_closed():
                     # 使用线程安全的方式调度异步任务
-                    self.loop.call_soon_threadsafe(
-                        lambda: asyncio.create_task(self._toggle_chat_state_impl())
+                    future = asyncio.run_coroutine_threadsafe(
+                        self._toggle_chat_state_impl(), self.loop
                     )
+                    # 可选：等待一小段时间确保任务被调度
+                    try:
+                        future.result(timeout=0.1)
+                    except Exception:
+                        # 忽略超时或其他异常，任务已经被调度
+                        pass
                 else:
-                    logger.warning("事件循环未运行，无法执行自动对话操作")
+                    logger.warning("事件循环未运行或已关闭，无法执行自动对话操作")
             except Exception as e:
                 logger.error(f"执行自动对话回调时出错: {e}", exc_info=True)
         return auto_callback
@@ -191,15 +211,20 @@ class Application:
         """创建中止回调函数（同步版本，用于GUI线程调用）"""
         def abort_callback():
             try:
-                if self.loop and self.loop.is_running():
+                if self.loop and self.loop.is_running() and not self.loop.is_closed():
                     # 使用线程安全的方式调度异步任务
-                    self.loop.call_soon_threadsafe(
-                        lambda: asyncio.create_task(
-                            self.abort_speaking(AbortReason.WAKE_WORD_DETECTED)
-                        )
+                    future = asyncio.run_coroutine_threadsafe(
+                        self.abort_speaking(AbortReason.WAKE_WORD_DETECTED),
+                        self.loop
                     )
+                    # 可选：等待一小段时间确保任务被调度
+                    try:
+                        future.result(timeout=0.1)
+                    except Exception:
+                        # 忽略超时或其他异常，任务已经被调度
+                        pass
                 else:
-                    logger.warning("事件循环未运行，无法执行中止操作")
+                    logger.warning("事件循环未运行或已关闭，无法执行中止操作")
             except Exception as e:
                 logger.error(f"执行中止回调时出错: {e}", exc_info=True)
         return abort_callback
@@ -208,13 +233,19 @@ class Application:
         """创建发送文本回调函数（同步版本，用于GUI线程调用）"""
         def send_text_callback(text: str):
             try:
-                if self.loop and self.loop.is_running():
+                if self.loop and self.loop.is_running() and not self.loop.is_closed():
                     # 使用线程安全的方式调度异步任务
-                    self.loop.call_soon_threadsafe(
-                        lambda: asyncio.create_task(self._send_text_tts(text))
+                    future = asyncio.run_coroutine_threadsafe(
+                        self._send_text_tts(text), self.loop
                     )
+                    # 可选：等待一小段时间确保任务被调度
+                    try:
+                        future.result(timeout=0.1)
+                    except Exception:
+                        # 忽略超时或其他异常，任务已经被调度
+                        pass
                 else:
-                    logger.warning("事件循环未运行，无法发送文本")
+                    logger.warning("事件循环未运行或已关闭，无法发送文本")
             except Exception as e:
                 logger.error(f"执行发送文本回调时出错: {e}", exc_info=True)
         return send_text_callback
@@ -279,7 +310,8 @@ class Application:
 
     def get_is_tts_playing_sync(self) -> bool:
         """获取TTS播放状态（同步版本，用于兼容性）"""
-        # 直接返回状态，不使用锁（因为布尔值的读取是原子操作）
+        # 注意：这是同步版本，无法使用异步锁，但布尔值读取是原子操作
+        # 在实际使用中应该优先使用异步版本 get_is_tts_playing()
         return self.is_tts_playing
 
     def schedule(self, callback):
@@ -345,6 +377,9 @@ class Application:
 
     async def _audio_input_loop(self):
         """音频输入循环"""
+        error_count = 0
+        max_errors = 10
+
         while self.running:
             try:
                 if (self.device_state == DeviceState.LISTENING and
@@ -361,12 +396,27 @@ class Application:
                 sleep_time = min(20, AudioConfig.FRAME_DURATION) / 1000
                 await asyncio.sleep(sleep_time)
 
+                # 重置错误计数
+                error_count = 0
+
             except Exception as e:
-                logger.error("音频输入循环错误: %s", e, exc_info=True)
-                await asyncio.sleep(0.1)
+                error_count += 1
+                logger.error("音频输入循环错误 (%d/%d): %s",
+                           error_count, max_errors, e, exc_info=True)
+
+                if error_count >= max_errors:
+                    logger.critical("音频输入错误过多，停止循环")
+                    break
+
+                # 指数退避策略
+                delay = min(2 ** error_count * 0.1, 5.0)
+                await asyncio.sleep(delay)
 
     async def _audio_output_loop(self):
         """音频输出循环"""
+        error_count = 0
+        max_errors = 10
+
         while self.running:
             try:
                 if (self.device_state == DeviceState.SPEAKING and
@@ -378,9 +428,21 @@ class Application:
 
                 await asyncio.sleep(0.02)
 
+                # 重置错误计数
+                error_count = 0
+
             except Exception as e:
-                logger.error("音频输出循环错误: %s", e, exc_info=True)
-                await asyncio.sleep(0.1)
+                error_count += 1
+                logger.error("音频输出循环错误 (%d/%d): %s",
+                           error_count, max_errors, e, exc_info=True)
+
+                if error_count >= max_errors:
+                    logger.critical("音频输出错误过多，停止循环")
+                    break
+
+                # 指数退避策略
+                delay = min(2 ** error_count * 0.1, 5.0)
+                await asyncio.sleep(delay)
 
     def _on_network_error(self, error_message=None):
         """网络错误回调"""
@@ -539,7 +601,12 @@ class Application:
                     self.audio_codec.input_stream.start_stream()
                 except Exception as e:
                     logger.warning(f"启动输入流时出错: {e}")
-                    self.audio_codec._reinitialize_input_stream()
+                    try:
+                        self.audio_codec._reinitialize_input_stream()
+                    except Exception as reinit_error:
+                        logger.error(f"重新初始化输入流失败: {reinit_error}",
+                                   exc_info=True)
+                        raise
 
             if (self.audio_codec.output_stream and
                 not self.audio_codec.output_stream.is_active()):
@@ -547,11 +614,17 @@ class Application:
                     self.audio_codec.output_stream.start_stream()
                 except Exception as e:
                     logger.warning(f"启动输出流时出错: {e}")
-                    self.audio_codec._reinitialize_output_stream()
+                    try:
+                        self.audio_codec._reinitialize_output_stream()
+                    except Exception as reinit_error:
+                        logger.error(f"重新初始化输出流失败: {reinit_error}",
+                                   exc_info=True)
+                        raise
 
             logger.info("音频流已启动")
         except Exception as e:
             logger.error(f"启动音频流失败: {e}", exc_info=True)
+            raise
 
     async def _on_audio_channel_closed(self):
         """音频通道关闭回调"""
@@ -572,11 +645,12 @@ class Application:
                 self.wake_word_detector.resume()
 
     async def set_device_state(self, state: DeviceState):
-        """设置设备状态"""
-        if self.device_state == state:
-            return
+        """设置设备状态（线程安全）"""
+        async with self._state_lock:
+            if self.device_state == state:
+                return
 
-        self.device_state = state
+            self.device_state = state
 
         # 根据状态执行相应操作
         if state == DeviceState.IDLE:
@@ -697,6 +771,7 @@ class Application:
 
     async def set_chat_message(self, role: str, message: str):
         """设置聊天消息"""
+        # role 参数保留用于未来扩展，当前仅使用 message
         self.current_text = message
         # 更新显示
         if self.display:
@@ -1138,24 +1213,44 @@ class Application:
         self.running = False
 
         # 取消所有任务
-        for task in self._tasks:
+        for task in list(self._tasks):
             if not task.done():
                 task.cancel()
 
-        # 等待任务完成
+        # 等待任务完成（设置超时）
         if self._tasks:
-            await asyncio.gather(*self._tasks, return_exceptions=True)
+            try:
+                await asyncio.wait_for(
+                    asyncio.gather(*self._tasks, return_exceptions=True),
+                    timeout=5.0
+                )
+            except asyncio.TimeoutError:
+                logger.warning("任务关闭超时，强制终止")
 
         # 关闭音频编解码器
         if self.audio_codec:
-            self.audio_codec.close()
+            try:
+                self.audio_codec.close()
+            except Exception as e:
+                logger.error(f"关闭音频编解码器时出错: {e}", exc_info=True)
 
         # 关闭协议
         if self.protocol:
-            await self.protocol.close_audio_channel()
+            try:
+                await asyncio.wait_for(
+                    self.protocol.close_audio_channel(),
+                    timeout=3.0
+                )
+            except asyncio.TimeoutError:
+                logger.warning("协议关闭超时")
+            except Exception as e:
+                logger.error(f"关闭协议时出错: {e}", exc_info=True)
 
         # 停止唤醒词检测
         if self.wake_word_detector:
-            self.wake_word_detector.stop()
+            try:
+                self.wake_word_detector.stop()
+            except Exception as e:
+                logger.error(f"停止唤醒词检测时出错: {e}", exc_info=True)
 
         logger.info("应用程序已关闭")
