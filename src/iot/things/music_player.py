@@ -1,4 +1,4 @@
-from src.async_application import AsyncApplication
+from src.application import Application
 from src.constants.constants import DeviceState, AudioConfig
 from src.iot.thing import Thing, Parameter, ValueType
 import os
@@ -67,22 +67,21 @@ class MusicPlayer(Thing):
         self.current_temp_file = None
 
         # 获取应用程序实例
-        self.app = AsyncApplication.get_instance()
+        self.app = Application.get_instance()
 
         # 加载配置文件
         self.config = self._load_config()
 
-        # 清空临时缓存
+        # 初始化清理和注册
+        self._initialize_cleanup_and_registration()
+
+    def _initialize_cleanup_and_registration(self):
+        """初始化清理工作和注册属性方法"""
         self._clear_temp_cache()
-
-        # 清理遗留的临时文件
         self._cleanup_temp_files()
-
-        logger.info("音乐播放器初始化完成")
-
-        # 注册属性和方法
         self._register_properties()
         self._register_methods()
+        logger.info("音乐播放器初始化完成")
 
     def _schedule_async_ui_update(self, message: str):
         """
@@ -477,7 +476,6 @@ class MusicPlayer(Thing):
 
         # 查找当前时间对应的歌词
         current_index = self._find_current_lyric_index(current_time)
-
         # 如果歌词索引变化了，更新显示
         if current_index != self.current_lyric_index:
             self._display_current_lyric(current_index)
@@ -558,103 +556,30 @@ class MusicPlayer(Thing):
             "lyrics": lyrics_text
         }
 
-    def _download_file(self, url: str, file_path: str) -> bool:
+    def _download_file_with_progress(self, url: str, file_path: str,
+                                     progress_interval: int = 4,
+                                     check_playing: bool = False) -> bool:
         """
-        下载音乐文件到指定路径（同步方法）
+        统一的文件下载方法，支持进度显示和播放状态检查
 
         参数:
-            url: 音乐URL
+            url: 下载URL
             file_path: 保存路径
+            progress_interval: 进度更新间隔（分母，如4表示每25%更新一次）
+            check_playing: 是否检查播放状态（用于缓存下载）
 
         返回:
             bool: 是否下载成功
         """
+        headers = self.config.get("HEADERS", {}).copy()
+        headers.update({
+            'Accept-Encoding': 'gzip, deflate, br',
+            'Referer': 'https://music.163.com/'
+        })
+
+        temp_path = f"{file_path}.{int(time.time())}.tmp"
+
         try:
-            # 使用配置中的请求头
-            headers = self.config.get("HEADERS", {}).copy()
-            headers.update({
-                'Accept-Encoding': 'gzip, deflate, br',
-                'Referer': 'https://music.163.com/'
-            })
-
-            # 创建唯一的临时文件路径，避免冲突
-            temp_path = f"{file_path}.{int(time.time())}.tmp"
-
-            # 下载文件
-            with requests.get(url, stream=True, headers=headers,
-                              timeout=30) as response:
-                response.raise_for_status()
-                total_size = int(response.headers.get('content-length', 0))
-                downloaded = 0
-
-                with open(temp_path, 'wb') as f:
-                    for chunk in response.iter_content(chunk_size=32768):
-                        if chunk:
-                            f.write(chunk)
-                            downloaded += len(chunk)
-                            # 每下载25%更新一次日志
-                            if (total_size > 0 and
-                                    downloaded % (total_size // 4) < 32768):
-                                progress = downloaded * 100 // total_size
-                                logger.info(f"下载进度: {progress}%")
-
-                # 下载完成后，将临时文件重命名为正式文件
-                if downloaded == total_size:
-                    # 如果目标文件已存在，先尝试删除
-                    if os.path.exists(file_path):
-                        try:
-                            os.remove(file_path)
-                        except Exception as e:
-                            logger.warning(f"删除已存在的文件失败: {str(e)}")
-                            # 如果无法删除，使用新名称
-                            file_path = f"{file_path}.new"
-
-                    try:
-                        os.replace(temp_path, file_path)
-                        logger.info(f"音乐文件下载完成: {file_path}")
-                        return True
-                    except Exception as e:
-                        logger.error(f"重命名临时文件失败: {str(e)}")
-                        return False
-                else:
-                    # 如果下载不完整，删除临时文件
-                    if os.path.exists(temp_path):
-                        try:
-                            os.remove(temp_path)
-                        except Exception:
-                            pass
-                    logger.warning("音乐文件下载不完整")
-                    return False
-
-        except Exception as e:
-            logger.error(f"下载音乐文件失败: {str(e)}")
-            # 清理临时文件
-            try:
-                if 'temp_path' in locals() and os.path.exists(temp_path):
-                    os.remove(temp_path)
-            except Exception:
-                pass
-            return False
-
-    def _download_mp3(self, url: str, cache_path: str):
-        """
-        下载完整的MP3文件到缓存目录
-
-        参数:
-            url: 音频URL
-            cache_path: 缓存文件路径
-        """
-        try:
-            # 使用配置中的请求头
-            headers = self.config.get("HEADERS", {}).copy()
-            headers.update({
-                'Accept-Encoding': 'gzip, deflate, br',
-                'Referer': 'https://music.163.com/'
-            })
-
-            # 创建唯一的临时文件路径，避免冲突
-            temp_path = f"{cache_path}.{int(time.time())}.temp"
-
             with requests.get(url, stream=True, headers=headers, timeout=30) as response:
                 response.raise_for_status()
                 total_size = int(response.headers.get('content-length', 0))
@@ -662,59 +587,61 @@ class MusicPlayer(Thing):
 
                 with open(temp_path, 'wb') as f:
                     for chunk in response.iter_content(chunk_size=32768):
-                        if not self.is_playing:
-                            logger.info("缓存下载被中止")
-                            break
+                        # 检查播放状态（仅用于缓存下载）
+                        if check_playing and not self.is_playing:
+                            logger.info("下载被中止")
+                            return False
+
                         if chunk:
                             f.write(chunk)
                             downloaded += len(chunk)
-                            # 每下载10%更新一次日志
-                            if total_size > 0 and downloaded % (total_size // 10) < 32768:
-                                progress = downloaded * 100 // total_size
-                                logger.info(f"缓存下载进度: {progress}%")
 
-                # 下载完成后，将临时文件重命名为正式文件
-                if downloaded == total_size and self.is_playing:
-                    # 如果目标文件已存在且正在使用，不覆盖
-                    if os.path.exists(cache_path):
-                        try:
-                            # 尝试删除已存在的文件
-                            os.remove(cache_path)
-                            os.replace(temp_path, cache_path)
-                            logger.info("MP3文件已缓存到本地")
-                        except Exception as e:
-                            logger.warning(f"替换缓存文件失败，可能正在使用中: {str(e)}")
-                            # 保留临时文件，不删除
-                            logger.info(f"保留临时缓存文件: {temp_path}")
-                    else:
-                        try:
-                            os.replace(temp_path, cache_path)
-                            logger.info("MP3文件已缓存到本地")
-                        except Exception as e:
-                            logger.error(f"缓存MP3文件失败: {str(e)}")
-                            if os.path.exists(temp_path):
-                                try:
-                                    os.remove(temp_path)
-                                except Exception:
-                                    pass
+                            # 进度更新
+                            if total_size > 0 and downloaded % (total_size // progress_interval) < 32768:
+                                progress = downloaded * 100 // total_size
+                                logger.info(f"下载进度: {progress}%")
+
+                # 验证下载完整性并移动文件
+                if downloaded == total_size and (not check_playing or self.is_playing):
+                    return self._finalize_download(temp_path, file_path)
                 else:
-                    # 如果下载不完整或播放已停止，删除临时文件
-                    if os.path.exists(temp_path):
-                        try:
-                            os.remove(temp_path)
-                            logger.info("已清理临时文件")
-                        except Exception as e:
-                            logger.error(f"清理临时文件失败: {str(e)}")
+                    self._cleanup_file(temp_path)
+                    logger.warning("下载不完整或被中止")
+                    return False
 
         except Exception as e:
-            logger.error(f"下载MP3文件失败: {str(e)}")
-            # 清理临时文件
-            try:
-                if 'temp_path' in locals() and os.path.exists(temp_path):
-                    os.remove(temp_path)
-                    logger.info("已清理临时文件")
-            except Exception as e:
-                logger.error(f"清理临时文件失败: {str(e)}")
+            logger.error(f"下载文件失败: {str(e)}")
+            self._cleanup_file(temp_path)
+            return False
+
+    def _finalize_download(self, temp_path: str, final_path: str) -> bool:
+        """完成下载，将临时文件移动到最终位置"""
+        try:
+            if os.path.exists(final_path):
+                os.remove(final_path)
+            os.replace(temp_path, final_path)
+            logger.info(f"文件下载完成: {final_path}")
+            return True
+        except Exception as e:
+            logger.error(f"移动文件失败: {str(e)}")
+            self._cleanup_file(temp_path)
+            return False
+
+    def _cleanup_file(self, file_path: str):
+        """安全清理文件"""
+        try:
+            if os.path.exists(file_path):
+                os.remove(file_path)
+        except Exception:
+            pass  # 静默处理清理失败
+
+    def _download_file(self, url: str, file_path: str) -> bool:
+        """下载音乐文件到指定路径（兼容性方法）"""
+        return self._download_file_with_progress(url, file_path, progress_interval=4)
+
+    def _download_mp3(self, url: str, cache_path: str):
+        """下载完整的MP3文件到缓存目录（兼容性方法）"""
+        self._download_file_with_progress(url, cache_path, progress_interval=10, check_playing=True)
 
     def _ensure_cache_dir(self):
         """确保缓存目录存在"""
@@ -788,62 +715,40 @@ class MusicPlayer(Thing):
         return result
 
     def _cleanup_temp_files(self, max_keep=1):
-        """
-        清理临时文件夹中的旧文件，只保留最新的几个
+        """清理临时文件夹中的旧文件，只保留最新的几个"""
+        temp_dir = os.path.join(self.cache_dir, "temp")
+        if not os.path.exists(temp_dir):
+            return
 
-        参数:
-            max_keep: 保留的最新文件数量
-        """
-        try:
-            temp_dir = os.path.join(self.cache_dir, "temp")
-            if not os.path.exists(temp_dir):
-                return
+        # 获取所有临时文件并按修改时间排序
+        files = []
+        for f in os.listdir(temp_dir):
+            if f.startswith("playing_") and f.endswith(".mp3"):
+                file_path = os.path.join(temp_dir, f)
+                files.append((file_path, os.path.getmtime(file_path)))
 
-            # 获取所有临时文件
-            files = []
-            for f in os.listdir(temp_dir):
-                if f.startswith("playing_") and f.endswith(".mp3"):
-                    file_path = os.path.join(temp_dir, f)
-                    files.append((file_path, os.path.getmtime(file_path)))
+        files.sort(key=lambda x: x[1], reverse=True)
 
-            # 按修改时间排序
-            files.sort(key=lambda x: x[1], reverse=True)
-
-            # 保留最新的几个，删除其余的
-            for file_path, _ in files[max_keep:]:
-                try:
-                    if file_path != self.current_temp_file:
-                        os.remove(file_path)
-                        logger.info(f"已清理旧的临时文件: {file_path}")
-                except Exception as e:
-                    logger.warning(f"清理临时文件失败: {str(e)}")
-
-        except Exception as e:
-            logger.warning(f"清理临时文件操作失败: {str(e)}")
+        # 删除多余的文件
+        for file_path, _ in files[max_keep:]:
+            if file_path != self.current_temp_file:
+                self._cleanup_file(file_path)
+                logger.info(f"已清理旧的临时文件: {file_path}")
 
     def _clear_temp_cache(self):
-        """
-        清空临时缓存目录
-        """
-        try:
-            temp_dir = os.path.join(self.cache_dir, "temp")
-            if not os.path.exists(temp_dir):
-                return
+        """清空临时缓存目录"""
+        temp_dir = os.path.join(self.cache_dir, "temp")
+        if not os.path.exists(temp_dir):
+            return
 
-            cleared = 0
-            for f in os.listdir(temp_dir):
-                if f.endswith(".mp3") or f.endswith(".tmp") or f.endswith(".temp"):
-                    try:
-                        os.remove(os.path.join(temp_dir, f))
-                        cleared += 1
-                    except Exception as e:
-                        logger.warning(f"删除临时文件失败: {str(e)}")
+        cleared = 0
+        for f in os.listdir(temp_dir):
+            if f.endswith((".mp3", ".tmp", ".temp")):
+                self._cleanup_file(os.path.join(temp_dir, f))
+                cleared += 1
 
-            if cleared > 0:
-                logger.info(f"启动时清理了 {cleared} 个临时缓存文件")
-
-        except Exception as e:
-            logger.warning(f"清理临时缓存失败: {str(e)}")
+        if cleared > 0:
+            logger.info(f"启动时清理了 {cleared} 个临时缓存文件")
 
     def _handle_tts_priority(self):
         """处理TTS优先级逻辑"""
@@ -1017,60 +922,59 @@ class MusicPlayer(Thing):
             self.is_playing = False
             return False
 
-    def play_pause(self) -> Dict[str, Any]:
-        """
-        播放/暂停切换
+    def _start_playback(self) -> Dict[str, Any]:
+        """启动播放的通用逻辑"""
+        if not self.current_url:
+            return {"status": "error", "message": "没有可播放的歌曲"}
 
-        返回:
-            Dict[str, Any]: 操作结果
-        """
-        if not self.is_playing:
-            # 如果没有正在播放的歌曲但有URL，尝试播放
-            if self.current_url:
-                if self._play_url(self.current_url):
-                    return {
-                        "status": "success",
-                        "message": f"开始播放: {self.current_song}"
-                    }
-                else:
-                    return {
-                        "status": "error",
-                        "message": "播放失败"
-                    }
-            else:
-                return {
-                    "status": "error",
-                    "message": "没有可播放的歌曲"
-                }
-        elif self.paused:
-            # 恢复播放
-            pygame.mixer.music.unpause()
-            self.paused = False
-            # 更新开始时间，考虑已经暂停的时间
-            self.start_play_time = time.time() - self.current_position
-
-            self._schedule_async_ui_update(f"继续播放: {self.current_song}")
-
+        if self._play_url(self.current_url):
             return {
                 "status": "success",
-                "message": f"继续播放: {self.current_song}"
+                "message": f"开始播放: {self.current_song}"
             }
         else:
-            # 暂停播放
-            pygame.mixer.music.pause()
-            self.paused = True
-            self.paused_for_tts = False  # 重要：确保这不是因为TTS而暂停的，避免TTS结束后音乐自动恢复
-            self.current_position = time.time() - self.start_play_time
+            return {"status": "error", "message": "播放失败"}
 
-            pos_str = self._format_time(self.current_position)
-            dur_str = self._format_time(self.total_duration)
-            self._schedule_async_ui_update(f"已暂停: {self.current_song} [{pos_str}/{dur_str}]")
+    def _resume_playback(self) -> Dict[str, Any]:
+        """恢复播放的通用逻辑"""
+        pygame.mixer.music.unpause()
+        self.paused = False
+        self.paused_for_tts = False  # 确保重置TTS暂停标志
+        self.start_play_time = time.time() - self.current_position
 
-            return {
-                "status": "success",
-                "message": f"已暂停: {self.current_song}",
-                "position": self.current_position
-            }
+        self._schedule_async_ui_update(f"继续播放: {self.current_song}")
+
+        return {
+            "status": "success",
+            "message": f"继续播放: {self.current_song}"
+        }
+
+    def _pause_playback(self) -> Dict[str, Any]:
+        """暂停播放的通用逻辑"""
+        pygame.mixer.music.pause()
+        self.paused = True
+        self.paused_for_tts = False  # 确保这不是因为TTS而暂停的
+        self.current_position = time.time() - self.start_play_time
+
+        pos_str = self._format_time(self.current_position)
+        dur_str = self._format_time(self.total_duration)
+        self._schedule_async_ui_update(
+            f"已暂停: {self.current_song} [{pos_str}/{dur_str}]")
+
+        return {
+            "status": "success",
+            "message": f"已暂停: {self.current_song}",
+            "position": self.current_position
+        }
+
+    def play_pause(self) -> Dict[str, Any]:
+        """播放/暂停切换"""
+        if not self.is_playing:
+            return self._start_playback()
+        elif self.paused:
+            return self._resume_playback()
+        else:
+            return self._pause_playback()
 
     def stop(self) -> Dict[str, Any]:
         """
@@ -1262,87 +1166,31 @@ class MusicPlayer(Thing):
         return f"{minutes:02d}:{seconds:02d}"
 
     def play(self) -> Dict[str, Any]:
-        """
-        开始播放
-
-        返回:
-            Dict[str, Any]: 操作结果
-        """
-        # 如果没有正在播放的歌曲但有URL，尝试播放
+        """开始播放"""
         if not self.is_playing:
-            if self.current_url:
-                if self._play_url(self.current_url):
-                    return {
-                        "status": "success",
-                        "message": f"开始播放: {self.current_song}"
-                    }
-                else:
-                    return {
-                        "status": "error",
-                        "message": "播放失败"
-                    }
-            else:
-                return {
-                    "status": "error",
-                    "message": "没有可播放的歌曲"
-                }
-        # 如果已经在播放，检查是否暂停
+            return self._start_playback()
         elif self.paused:
-            # 恢复播放
-            pygame.mixer.music.unpause()
-            self.paused = False
-            self.paused_for_tts = False  # 确保重置TTS暂停标志
-            # 更新开始时间，考虑已经暂停的时间
-            self.start_play_time = time.time() - self.current_position
-
-            self._schedule_async_ui_update(f"继续播放: {self.current_song}")
-
-            return {
-                "status": "success",
-                "message": f"继续播放: {self.current_song}"
-            }
+            return self._resume_playback()
         else:
-            # 已经在播放了
             return {
                 "status": "info",
                 "message": f"音乐已经在播放中: {self.current_song}"
             }
 
     def pause(self) -> Dict[str, Any]:
-        """
-        暂停播放
-
-        返回:
-            Dict[str, Any]: 操作结果
-        """
-        # 如果没有正在播放的歌曲
+        """暂停播放"""
         if not self.is_playing:
             return {
                 "status": "info",
                 "message": "没有正在播放的歌曲"
             }
-        # 如果已经暂停
         elif self.paused:
             # 即使已经暂停，也确保重置TTS暂停标志，防止TTS结束后自动恢复
             self.paused_for_tts = False
             logger.info("音乐已经暂停，确保不会自动恢复")
             return {
-                "status": "success",  # 改为success以确保用户收到正确反馈
+                "status": "success",
                 "message": f"音乐已暂停: {self.current_song}"
             }
         else:
-            # 暂停播放
-            pygame.mixer.music.pause()
-            self.paused = True
-            self.paused_for_tts = False  # 明确设置：这不是因为TTS而暂停的
-            self.current_position = time.time() - self.start_play_time
-
-            pos_str = self._format_time(self.current_position)
-            dur_str = self._format_time(self.total_duration)
-            self._schedule_async_ui_update(f"已暂停: {self.current_song} [{pos_str}/{dur_str}]")
-
-            return {
-                "status": "success",
-                "message": f"已暂停: {self.current_song}",
-                "position": self.current_position
-            }
+            return self._pause_playback()
