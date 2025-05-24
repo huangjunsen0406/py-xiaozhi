@@ -6,11 +6,11 @@ from pathlib import Path
 from urllib.parse import urlparse
 import platform
 from PyQt5.QtCore import (
-    Qt, QTimer, QPropertyAnimation, QRect, 
+    Qt, QTimer, QPropertyAnimation, QRect,
     QEvent, QObject, QMetaObject, Q_ARG, QThread, pyqtSlot
 )
 from PyQt5.QtWidgets import (
-    QApplication, QWidget, QVBoxLayout, 
+    QApplication, QWidget, QVBoxLayout,
     QHBoxLayout, QLabel, QPushButton, QSlider, QLineEdit,
     QComboBox, QCheckBox, QMessageBox, QFrame,
     QStackedWidget, QTabBar, QStyleOptionSlider, QStyle,
@@ -18,7 +18,7 @@ from PyQt5.QtWidgets import (
     QSystemTrayIcon, QMenu, QAction
 )
 from PyQt5.QtGui import (
-    QPainter, QColor, QFont, QMouseEvent, QMovie, QBrush, QPen, 
+    QPainter, QColor, QFont, QMouseEvent, QMovie, QBrush, QPen,
     QLinearGradient, QTransform, QPainterPath, QIcon, QPixmap
 )
 
@@ -100,10 +100,10 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
 
         # 初始化日志
         self.logger = logging.getLogger("Display")
-        
+
         self.app = None
         self.root = None
-        
+
         # 一些提前初始化的变量
         self.status_label = None
         self.emotion_label = None
@@ -116,7 +116,7 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         self.mute = None
         self.stackedWidget = None
         self.nav_tab_bar = None
-        
+
         # 添加表情动画对象
         self.emotion_movie = None
         # 新增表情动画特效相关变量
@@ -124,17 +124,17 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         self.emotion_animation = None  # 表情动画对象
         self.next_emotion_path = None  # 下一个待显示的表情
         self.is_emotion_animating = False  # 是否正在进行表情切换动画
-        
+
         # 音量控制相关
         self.volume_label = None  # 音量百分比标签
         self.volume_control_available = False  # 系统音量控制是否可用
         self.volume_controller_failed = False  # 标记音量控制是否失败
-        
+
         # 麦克风可视化相关
         self.mic_visualizer = None  # 麦克风可视化组件
         self.mic_timer = None  # 麦克风音量更新定时器
         self.is_listening = False  # 是否正在监听
-        
+
         # 设置页面控件
         self.wakeWordEnableSwitch = None
         self.wakeWordsLineEdit = None
@@ -156,7 +156,7 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
 
         self.is_muted = False
         self.pre_mute_volume = self.current_volume
-        
+
         # 对话模式标志
         self.auto_mode = False
 
@@ -184,22 +184,22 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
 
         # 滑动手势相关
         self.last_mouse_pos = None
-        
+
         # 保存定时器引用以避免被销毁
         self.update_timer = None
         self.volume_update_timer = None
-        
+
         # 动画相关
         self.current_effect = None
         self.current_animation = None
         self.animation = None
         self.fade_widget = None
         self.animated_widget = None
-        
+
         # 检查系统音量控制是否可用
         self.volume_control_available = (hasattr(self, 'volume_controller') and
                                          self.volume_controller is not None)
-        
+
         # 尝试获取一次系统音量，检测音量控制是否正常工作
         self.get_current_volume()
 
@@ -210,7 +210,7 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         self.iot_card = None
         self.ha_update_timer = None
         self.device_states = {}
-        
+
         # 新增系统托盘相关变量
         self.tray_icon = None
         self.tray_menu = None
@@ -223,7 +223,7 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
                 slider = self.volume_scale
                 opt = QStyleOptionSlider()
                 slider.initStyleOption(opt)
-                
+
                 # 获取滑块手柄和轨道的矩形区域
                 handle_rect = slider.style().subControlRect(
                     QStyle.CC_Slider, opt, QStyle.SC_SliderHandle, slider)
@@ -232,7 +232,7 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
 
                 # 如果点击在手柄上，则让默认处理器处理拖动
                 if handle_rect.contains(event.pos()):
-                    return False 
+                    return False
 
                 # 计算点击位置相对于轨道的位置
                 if slider.orientation() == Qt.Horizontal:
@@ -254,12 +254,12 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
                     # 根据点击位置计算新的值
                     new_value = slider.minimum() + round(
                         (value_range * pos) / max_pos)
-                    
+
                     # 直接设置滑块的值
                     slider.setValue(int(new_value))
-                    
+
                     return True  # 表示事件已处理
-        
+
         return super().eventFilter(source, event)
 
     def _setup_navigation(self):
@@ -330,12 +330,12 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         app = Application.get_instance()
         if app:
             app.on_state_changed_callbacks.append(self._on_state_changed)
-            
+
     def _on_state_changed(self, state):
         """监听设备状态变化"""
         # 设置连接状态标志
         from src.constants.constants import DeviceState
-        
+
         # 检查是否连接中或已连接
         # (CONNECTING, LISTENING, SPEAKING 表示已连接)
         if state == DeviceState.CONNECTING:
@@ -351,14 +351,14 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
                 self.is_connected = app.protocol.is_audio_channel_opened()
             else:
                 self.is_connected = False
-        
+
         # 更新状态的处理已经在 update_status 方法中完成
 
     def _process_updates(self):
         """处理更新队列"""
         if not self._running:
             return
-            
+
         try:
             while True:
                 try:
@@ -371,6 +371,32 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         except Exception as e:
             self.logger.error(f"处理更新队列时发生错误: {e}")
 
+    def _run_callback_safely(self, callback):
+        """安全地运行回调函数"""
+        try:
+            if callback is None:
+                return
+
+            # 检查是否是AsyncApplication实例
+            from src.async_application import AsyncApplication
+            app = AsyncApplication.get_instance()
+
+            if app and hasattr(app, 'loop') and app.loop:
+                # 如果是AsyncApplication，使用其事件循环来调度回调
+                def safe_callback():
+                    try:
+                        callback()
+                    except Exception as e:
+                        self.logger.error(f"回调函数执行失败: {e}")
+
+                # 在AsyncApplication的事件循环中调度回调
+                app.loop.call_soon_threadsafe(safe_callback)
+            else:
+                # 如果不是AsyncApplication或没有事件循环，直接调用
+                callback()
+        except Exception as e:
+            self.logger.error(f"回调函数执行失败: {e}")
+
     def _on_manual_button_press(self):
         """手动模式按钮按下事件处理"""
         try:
@@ -378,9 +404,9 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             if self.manual_btn and self.manual_btn.isVisible():
                 self.manual_btn.setText("松开以停止")
 
-            # 调用回调函数
+            # 调用回调函数 - 支持异步回调
             if self.button_press_callback:
-                self.button_press_callback()
+                self._run_callback_safely(self.button_press_callback)
         except Exception as e:
             self.logger.error(f"按钮按下回调执行失败: {e}")
 
@@ -391,9 +417,9 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             if self.manual_btn and self.manual_btn.isVisible():
                 self.manual_btn.setText("按住后说话")
 
-            # 调用回调函数
+            # 调用回调函数 - 支持异步回调
             if self.button_release_callback:
-                self.button_release_callback()
+                self._run_callback_safely(self.button_release_callback)
         except Exception as e:
             self.logger.error(f"按钮释放回调执行失败: {e}")
 
@@ -401,14 +427,14 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         """自动模式按钮点击事件处理"""
         try:
             if self.auto_callback:
-                self.auto_callback()
+                self._run_callback_safely(self.auto_callback)
         except Exception as e:
             self.logger.error(f"自动模式按钮回调执行失败: {e}")
 
     def _on_abort_button_click(self):
         """处理中止按钮点击事件"""
         if self.abort_callback:
-            self.abort_callback()
+            self._run_callback_safely(self.abort_callback)
 
     def _on_mode_button_click(self):
         """对话模式切换按钮点击事件"""
@@ -455,12 +481,12 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         """更新状态文本 (只更新主状态)"""
         full_status_text = f"状态: {status}"
         self.update_queue.put(lambda: self._safe_update_label(self.status_label, full_status_text))
-        
+
         # 更新系统托盘图标
         if status != self.current_status:
             self.current_status = status
             self.update_queue.put(lambda: self._update_tray_icon(status))
-        
+
         # 根据状态更新麦克风可视化
         if "聆听中" in status:
             self.update_queue.put(self._start_mic_visualization)
@@ -476,10 +502,10 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         # 如果路径相同，不重复设置表情
         if hasattr(self, '_last_emotion_path') and self._last_emotion_path == emotion_path:
             return
-            
+
         # 记录当前设置的路径
         self._last_emotion_path = emotion_path
-        
+
         # 确保在主线程中处理UI更新
         if QApplication.instance().thread() != QThread.currentThread():
             # 如果不在主线程，使用信号-槽方式或QMetaObject调用在主线程执行
@@ -506,29 +532,29 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         # 基础检查
         if not label or self.root.isHidden():
             return
-            
+
         # 检查GIF是否已经在当前标签上显示
         if hasattr(label, 'current_gif_path') and label.current_gif_path == gif_path:
             return
-            
+
         # 记录当前GIF路径到标签对象
         label.current_gif_path = gif_path
 
         try:
             # 如果当前已经设置了相同路径的动画，且正在播放，则不重复设置
-            if (self.emotion_movie and 
+            if (self.emotion_movie and
                 getattr(self.emotion_movie, '_gif_path', None) == gif_path and
                 self.emotion_movie.state() == QMovie.Running):
                 return
-                
+
             # 如果正在进行动画，则只记录下一个待显示的表情，等当前动画完成后再切换
             if self.is_emotion_animating:
                 self.next_emotion_path = gif_path
                 return
-                
+
             # 标记正在进行动画
             self.is_emotion_animating = True
-            
+
             # 如果已有动画在播放，先淡出当前动画
             if self.emotion_movie and label.movie() == self.emotion_movie:
                 # 创建透明度效果（如果尚未创建）
@@ -536,35 +562,35 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
                     self.emotion_effect = QGraphicsOpacityEffect(label)
                     label.setGraphicsEffect(self.emotion_effect)
                     self.emotion_effect.setOpacity(1.0)
-                
+
                 # 创建淡出动画
                 self.emotion_animation = QPropertyAnimation(self.emotion_effect, b"opacity")
                 self.emotion_animation.setDuration(180)  # 设置动画持续时间（毫秒）
                 self.emotion_animation.setStartValue(1.0)
                 self.emotion_animation.setEndValue(0.25)
-                
+
                 # 当淡出完成后，设置新的GIF并开始淡入
                 def on_fade_out_finished():
                     try:
                         # 停止当前GIF
                         if self.emotion_movie:
                             self.emotion_movie.stop()
-                        
+
                         # 设置新的GIF并淡入
                         self._set_new_emotion_gif(label, gif_path)
                     except Exception as e:
                         self.logger.error(f"淡出动画完成后设置GIF失败: {e}")
                         self.is_emotion_animating = False
-                
+
                 # 连接淡出完成信号
                 self.emotion_animation.finished.connect(on_fade_out_finished)
-                
+
                 # 开始淡出动画
                 self.emotion_animation.start()
             else:
                 # 如果没有之前的动画，直接设置新的GIF并淡入
                 self._set_new_emotion_gif(label, gif_path)
-                
+
         except Exception as e:
             self.logger.error(f"更新表情GIF动画失败: {e}")
             # 如果GIF加载失败，尝试显示默认表情
@@ -573,14 +599,14 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             except Exception:
                 pass
             self.is_emotion_animating = False
-    
+
     def _set_new_emotion_gif(self, label, gif_path):
         """设置新的GIF动画并执行淡入效果"""
         try:
             # 维护GIF缓存
             if not hasattr(self, '_gif_cache'):
                 self._gif_cache = {}
-                
+
             # 检查缓存中是否有该GIF
             if gif_path in self._gif_cache:
                 movie = self._gif_cache[gif_path]
@@ -594,30 +620,30 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
                     label.setText("😊")
                     self.is_emotion_animating = False
                     return
-                
+
                 # 配置动画并存入缓存
                 movie.setCacheMode(QMovie.CacheAll)
                 self._gif_cache[gif_path] = movie
-            
+
             # 保存GIF路径到movie对象，用于比较
             movie._gif_path = gif_path
-            
+
             # 连接信号
             movie.error.connect(lambda: self.logger.error(f"GIF播放错误: {movie.lastError()}"))
-            
+
             # 保存新的动画对象
             self.emotion_movie = movie
-            
+
             # 设置标签大小策略
             label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
             label.setAlignment(Qt.AlignCenter)
-            
+
             # 设置动画到标签
             label.setMovie(movie)
-            
+
             # 设置QMovie的速度为110，使动画更流畅(默认是100)
             movie.setSpeed(105)
-            
+
             # 确保不透明度是0（完全透明）
             if self.emotion_effect:
                 self.emotion_effect.setOpacity(0.0)
@@ -625,16 +651,16 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
                 self.emotion_effect = QGraphicsOpacityEffect(label)
                 label.setGraphicsEffect(self.emotion_effect)
                 self.emotion_effect.setOpacity(0.0)
-            
+
             # 开始播放动画
             movie.start()
-            
+
             # 创建淡入动画
             self.emotion_animation = QPropertyAnimation(self.emotion_effect, b"opacity")
             self.emotion_animation.setDuration(180)  # 淡入时间（毫秒）
             self.emotion_animation.setStartValue(0.25)
             self.emotion_animation.setEndValue(1.0)
-            
+
             # 淡入完成后检查是否有下一个待显示的表情
             def on_fade_in_finished():
                 self.is_emotion_animating = False
@@ -643,13 +669,13 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
                     next_path = self.next_emotion_path
                     self.next_emotion_path = None
                     self._set_emotion_gif(label, next_path)
-            
+
             # 连接淡入完成信号
             self.emotion_animation.finished.connect(on_fade_in_finished)
-            
+
             # 开始淡入动画
             self.emotion_animation.start()
-            
+
         except Exception as e:
             self.logger.error(f"设置新的GIF动画失败: {e}")
             self.is_emotion_animating = False
@@ -703,7 +729,7 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
     def on_close(self):
         """关闭窗口处理"""
         self._running = False
-        
+
         # 确保在主线程中停止定时器
         if QThread.currentThread() != QApplication.instance().thread():
             # 如果在非主线程，使用 QMetaObject.invokeMethod 在主线程中执行
@@ -721,7 +747,7 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
                 self.mic_timer.stop()
             if self.ha_update_timer:
                 self.ha_update_timer.stop()
-                
+
         if self.tray_icon:
             self.tray_icon.hide()
         if self.root:
@@ -735,11 +761,11 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             self.app = QApplication.instance()
             if self.app is None:
                 self.app = QApplication(sys.argv)
-                
+
             # 设置UI默认字体
             default_font = QFont("ASLantTermuxFont Mono", 12)
             self.app.setFont(default_font)
-                
+
             # 加载UI文件
             from PyQt5 import uic
             self.root = QWidget()
@@ -747,7 +773,7 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             if not ui_path.exists():
                 self.logger.error(f"UI文件不存在: {ui_path}")
                 raise FileNotFoundError(f"UI文件不存在: {ui_path}")
-                
+
             uic.loadUi(str(ui_path), self.root)
 
             # 获取UI中的控件
@@ -758,7 +784,7 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             self.abort_btn = self.root.findChild(QPushButton, "abort_btn")
             self.auto_btn = self.root.findChild(QPushButton, "auto_btn")
             self.mode_btn = self.root.findChild(QPushButton, "mode_btn")
-            
+
             # 添加快捷键提示标签
             try:
                 # 查找主界面的布局
@@ -782,7 +808,7 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
                         self.logger.info("已添加快捷键提示标签")
             except Exception as e:
                 self.logger.warning(f"添加快捷键提示标签失败: {e}")
-            
+
             # 获取IOT页面控件
             self.iot_card = self.root.findChild(QFrame, "iotPage")  # 注意这里使用 "iotPage" 作为ID
             if self.iot_card is None:
@@ -798,20 +824,20 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
                         self.logger.warning("无法找到 iot_card，IOT设备功能将不可用")
             else:
                 self.logger.info(f"找到 iot_card: {self.iot_card}")
-            
+
             # 音频控制栈组件
             self.audio_control_stack = self.root.findChild(QStackedWidget, "audio_control_stack")
             self.volume_page = self.root.findChild(QWidget, "volume_page")
             self.mic_page = self.root.findChild(QWidget, "mic_page")
-            
+
             # 音量控制组件
             self.volume_scale = self.root.findChild(QSlider, "volume_scale")
             self.mute = self.root.findChild(QPushButton, "mute")
-            
+
             if self.mute:
                 self.mute.setCheckable(True)
                 self.mute.clicked.connect(self._on_mute_click)
-            
+
             # 获取或创建音量百分比标签
             self.volume_label = self.root.findChild(QLabel, "volume_label")
             if not self.volume_label and self.volume_scale:
@@ -823,24 +849,24 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
                     self.volume_label.setMinimumWidth(40)
                     self.volume_label.setAlignment(Qt.AlignCenter)
                     volume_layout.addWidget(self.volume_label)
-            
+
             # 初始化麦克风可视化组件 - 使用UI中定义的QFrame
             self.mic_visualizer_card = self.root.findChild(QFrame, "mic_visualizer_card")
             self.mic_visualizer_widget = self.root.findChild(QWidget, "mic_visualizer_widget")
-            
+
             if self.mic_visualizer_widget:
                 # 创建可视化组件实例
                 self.mic_visualizer = MicrophoneVisualizer(self.mic_visualizer_widget)
-                
+
                 # 设置布局以使可视化组件填充整个区域
                 layout = QVBoxLayout(self.mic_visualizer_widget)
                 layout.setContentsMargins(0, 0, 0, 0)
                 layout.addWidget(self.mic_visualizer)
-                
+
                 # 创建更新定时器，但不启动
                 self.mic_timer = QTimer()
                 self.mic_timer.timeout.connect(self._update_mic_visualizer)
-            
+
             # 根据音量控制可用性设置组件状态
             volume_control_working = self.volume_control_available and not self.volume_controller_failed
             if not volume_control_working:
@@ -862,7 +888,7 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
                 # 更新音量百分比显示
                 if self.volume_label:
                     self.volume_label.setText(f"{self.current_volume}%")
-            
+
             # 获取设置页面控件
             self.wakeWordEnableSwitch = self.root.findChild(QCheckBox, "wakeWordEnableSwitch")
             self.wakeWordsLineEdit = self.root.findChild(QLineEdit, "wakeWordsLineEdit")
@@ -889,7 +915,7 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
                 # 先清空，避免重复添加 (如果 .ui 文件也成功加载了选项)
                 self.wsProtocolComboBox.clear()
                 self.wsProtocolComboBox.addItems(["wss://", "ws://"])
-                
+
             # 显式添加OTA ComboBox选项
             if self.otaProtocolComboBox:
                 self.otaProtocolComboBox.clear()
@@ -919,7 +945,7 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
                 self.auto_btn.hide()
             if self.mode_btn:
                 self.mode_btn.clicked.connect(self._on_mode_button_click)
-                
+
             # 初始化文本输入框和发送按钮
             self.text_input = self.root.findChild(QLineEdit, "text_input")
             self.send_btn = self.root.findChild(QPushButton, "send_btn")
@@ -939,7 +965,7 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             # 设置鼠标事件
             self.root.mousePressEvent = self.mousePressEvent
             self.root.mouseReleaseEvent = self.mouseReleaseEvent
-            
+
             # 设置窗口关闭事件
             self.root.closeEvent = self._closeEvent
 
@@ -948,20 +974,20 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
 
             # 启动键盘监听
             self.start_keyboard_listener()
-            
+
             # 启动更新线程
             self.start_update_threads()
-            
+
             # 定时器处理更新队列
             self.update_timer = QTimer()
             self.update_timer.timeout.connect(self._process_updates)
             self.update_timer.start(100)
-            
+
             # 在主线程中运行主循环
             self.logger.info("开始启动GUI主循环")
             self.root.show()
             # self.root.showFullScreen() # 全屏显示
-            
+
         except Exception as e:
             self.logger.error(f"GUI启动失败: {e}", exc_info=True)
             # 尝试回退到CLI模式
@@ -978,40 +1004,40 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
 
             # 创建托盘菜单
             self.tray_menu = QMenu()
-            
+
             # 添加菜单项
             show_action = QAction("显示主窗口", self.root)
             show_action.triggered.connect(self._show_main_window)
             self.tray_menu.addAction(show_action)
-            
+
             # 添加分隔线
             self.tray_menu.addSeparator()
-            
+
             # 添加退出菜单项
             quit_action = QAction("退出程序", self.root)
             quit_action.triggered.connect(self._quit_application)
             self.tray_menu.addAction(quit_action)
-            
+
             # 创建系统托盘图标
             self.tray_icon = QSystemTrayIcon(self.root)
             self.tray_icon.setContextMenu(self.tray_menu)
-            
+
             # 连接托盘图标的事件
             self.tray_icon.activated.connect(self._tray_icon_activated)
-            
+
             # 设置初始图标为绿色
             self._update_tray_icon("待命")
-            
+
             # 显示系统托盘图标
             self.tray_icon.show()
             self.logger.info("系统托盘图标已初始化")
-        
+
         except Exception as e:
             self.logger.error(f"初始化系统托盘图标失败: {e}", exc_info=True)
-    
+
     def _update_tray_icon(self, status):
         """根据不同状态更新托盘图标颜色
-        
+
         绿色：已启动/待命状态
         黄色：聆听中状态
         蓝色：说话中状态
@@ -1020,53 +1046,53 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         """
         if not self.tray_icon:
             return
-            
+
         try:
             icon_color = self._get_status_color(status)
-            
+
             # 创建指定颜色的图标
             pixmap = QPixmap(16, 16)
             pixmap.fill(Qt.transparent)
-            
+
             painter = QPainter(pixmap)
             painter.setRenderHint(QPainter.Antialiasing)
             painter.setBrush(QBrush(icon_color))
             painter.setPen(Qt.NoPen)
             painter.drawEllipse(2, 2, 12, 12)
             painter.end()
-            
+
             # 设置图标
             self.tray_icon.setIcon(QIcon(pixmap))
-            
+
             # 设置提示文本
             tooltip = f"小智AI助手 - {status}"
             self.tray_icon.setToolTip(tooltip)
-            
+
         except Exception as e:
             self.logger.error(f"更新系统托盘图标失败: {e}")
-    
+
     def _get_status_color(self, status):
         """根据状态返回对应的颜色"""
         if not self.is_connected:
             return QColor(128, 128, 128)  # 灰色 - 未连接
-            
+
         if "错误" in status:
             return QColor(255, 0, 0)  # 红色 - 错误状态
-        
+
         elif "聆听中" in status:
             return QColor(255, 200, 0)  # 黄色 - 聆听中状态
-            
+
         elif "说话中" in status:
             return QColor(0, 120, 255)  # 蓝色 - 说话中状态
-            
+
         else:
             return QColor(0, 180, 0)  # 绿色 - 待命/已启动状态
-    
+
     def _tray_icon_activated(self, reason):
         """处理托盘图标点击事件"""
         if reason == QSystemTrayIcon.Trigger:  # 单击
             self._show_main_window()
-    
+
     def _show_main_window(self):
         """显示主窗口"""
         if self.root:
@@ -1076,7 +1102,7 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
                 self.root.show()
             self.root.activateWindow()
             self.root.raise_()
-    
+
     def _quit_application(self):
         """退出应用程序"""
         self._running = False
@@ -1087,17 +1113,17 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             self.mic_timer.stop()
         if self.ha_update_timer:
             self.ha_update_timer.stop()
-        
+
         # 停止键盘监听
         self.stop_keyboard_listener()
-        
+
         # 隐藏托盘图标
         if self.tray_icon:
             self.tray_icon.hide()
-        
+
         # 退出应用程序
         QApplication.quit()
-    
+
     def _closeEvent(self, event):
         """处理窗口关闭事件"""
         # 最小化到系统托盘而不是退出
@@ -1128,7 +1154,7 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             # 在手动模式下，不通过此方法更新按钮文本
             # 因为按钮文本由按下/释放事件直接控制
             pass
-            
+
     def _safe_update_button(self, button, text):
         """安全地更新按钮文本"""
         if button and not self.root.isHidden():
@@ -1158,10 +1184,10 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         # 检查音量控制是否可用
         if not self.volume_control_available or self.volume_controller_failed:
             return
-            
+
         # 调用父类的update_volume方法更新系统音量
         super().update_volume(volume)
-        
+
         # 更新UI音量滑块和标签
         if not self.root.isHidden():
             try:
@@ -1182,7 +1208,7 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         if pynput_keyboard is None:
             self.logger.warning("键盘监听不可用：pynput 库未能正确加载。快捷键功能将不可用。")
             return
-        
+
         try:
             def on_press(key):
                 try:
@@ -1193,28 +1219,28 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
                         self.pressed_keys.add('shift')
                     elif hasattr(key, 'char') and key.char:
                         self.pressed_keys.add(key.char.lower())
-                    
+
                     # 长按说话 - 在手动模式下处理
                     if not self.auto_mode and self.is_combo('alt', 'shift', 'v'):
                         if self.button_press_callback:
-                            self.button_press_callback()
+                            self._run_callback_safely(self.button_press_callback)
                             if self.manual_btn:
                                 self.update_queue.put(lambda: self._safe_update_button(self.manual_btn, "松开以停止"))
-                    
+
                     # 自动对话模式
                     if self.is_combo('alt', 'shift', 'a'):
                         if self.auto_callback:
-                            self.auto_callback()
-                    
+                            self._run_callback_safely(self.auto_callback)
+
                     # 打断
                     if self.is_combo('alt', 'shift', 'x'):
                         if self.abort_callback:
-                            self.abort_callback()
-                    
+                            self._run_callback_safely(self.abort_callback)
+
                     # 模式切换
                     if self.is_combo('alt', 'shift', 'm'):
                         self._on_mode_button_click()
-                        
+
                 except Exception as e:
                     self.logger.error(f"键盘事件处理错误: {e}")
 
@@ -1227,11 +1253,11 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
                         self.pressed_keys.discard('shift')
                     elif hasattr(key, 'char') and key.char:
                         self.pressed_keys.discard(key.char.lower())
-                    
+
                     # 松开按键，停止语音输入（仅在手动模式下）
                     if not self.auto_mode and not self.is_combo('alt', 'shift', 'v'):
                         if self.button_release_callback:
-                            self.button_release_callback()
+                            self._run_callback_safely(self.button_release_callback)
                             if self.manual_btn:
                                 self.update_queue.put(lambda: self._safe_update_button(self.manual_btn, "按住后说话"))
                 except Exception as e:
@@ -1308,11 +1334,11 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         try:
             # 使用ConfigManager获取配置
             config_manager = ConfigManager.get_instance()
-            
+
             # 获取唤醒词配置
             use_wake_word = config_manager.get_config("WAKE_WORD_OPTIONS.USE_WAKE_WORD", False)
             wake_words = config_manager.get_config("WAKE_WORD_OPTIONS.WAKE_WORDS", [])
-            
+
             if self.wakeWordEnableSwitch:
                 self.wakeWordEnableSwitch.setChecked(use_wake_word)
 
@@ -1328,15 +1354,15 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             if self.deviceIdLineEdit:
                 self.deviceIdLineEdit.setText(device_id)
 
-            # 解析 WebSocket URL 并设置协议和地址 
+            # 解析 WebSocket URL 并设置协议和地址
             if websocket_url and self.wsProtocolComboBox and self.wsAddressLineEdit:
                 try:
                     parsed_url = urlparse(websocket_url)
                     protocol = parsed_url.scheme
-                    
+
                     # 保留URL末尾的斜杠
                     address = parsed_url.netloc + parsed_url.path
-                    
+
                     # 确保地址不以协议开头
                     if address.startswith(f"{protocol}://"):
                         address = address[len(f"{protocol}://"):]
@@ -1362,14 +1388,14 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
                 try:
                     parsed_url = urlparse(ota_url)
                     protocol = parsed_url.scheme
-                    
+
                     # 保留URL末尾的斜杠
                     address = parsed_url.netloc + parsed_url.path
-                    
+
                     # 确保地址不以协议开头
                     if address.startswith(f"{protocol}://"):
                         address = address[len(f"{protocol}://"):]
-                        
+
                     if protocol == "https":
                         self.otaProtocolComboBox.setCurrentIndex(0)
                     elif protocol == "http":
@@ -1377,7 +1403,7 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
                     else:
                         self.logger.warning(f"未知的OTA协议: {protocol}")
                         self.otaProtocolComboBox.setCurrentIndex(0)  # 默认为https
-                        
+
                     self.otaAddressLineEdit.setText(address)
                 except Exception as e:
                     self.logger.error(f"解析OTA URL时出错: {ota_url} - {e}")
@@ -1388,7 +1414,7 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             ha_options = config_manager.get_config("HOME_ASSISTANT", {})
             ha_url = ha_options.get("URL", "")
             ha_token = ha_options.get("TOKEN", "")
-            
+
             # 解析Home Assistant URL并设置协议和地址
             if ha_url and self.haProtocolComboBox and self.ha_server:
                 try:
@@ -1399,16 +1425,16 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
                     address = parsed_url.netloc
                     if ":" in address:  # 如果地址中包含端口号
                         address = address.split(":")[0]
-                        
+
                     # 设置协议
                     if protocol == "https":
                         self.haProtocolComboBox.setCurrentIndex(1)
                     else:  # http或其他协议，默认http
                         self.haProtocolComboBox.setCurrentIndex(0)
-                    
+
                     # 设置地址
                     self.ha_server.setText(address)
-                    
+
                     # 设置端口（如果有）
                     if port and self.ha_port:
                         self.ha_port.setText(str(port))
@@ -1417,7 +1443,7 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
                     # 出错时使用默认值
                     self.haProtocolComboBox.setCurrentIndex(0)  # 默认为http
                     self.ha_server.clear()
-                    
+
             # 设置Home Assistant Token
             if self.ha_key:
                 self.ha_key.setText(ha_token)
@@ -1431,45 +1457,45 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         try:
             # 使用ConfigManager获取实例
             config_manager = ConfigManager.get_instance()
-            
+
             # 收集所有UI界面上的配置值
             # 唤醒词配置
             use_wake_word = self.wakeWordEnableSwitch.isChecked() if self.wakeWordEnableSwitch else False
             wake_words_text = self.wakeWordsLineEdit.text() if self.wakeWordsLineEdit else ""
             wake_words = [word.strip() for word in wake_words_text.split(',') if word.strip()]
-            
+
             # 系统选项
             new_device_id = self.deviceIdLineEdit.text() if self.deviceIdLineEdit else ""
             selected_protocol_text = self.wsProtocolComboBox.currentText() if self.wsProtocolComboBox else "wss://"
             selected_protocol = selected_protocol_text.replace("://", "")
             new_ws_address = self.wsAddressLineEdit.text() if self.wsAddressLineEdit else ""
             new_ws_token = self.wsTokenLineEdit.text() if self.wsTokenLineEdit else ""
-            
+
             # OTA地址配置
             selected_ota_protocol_text = self.otaProtocolComboBox.currentText() if self.otaProtocolComboBox else "https://"
             selected_ota_protocol = selected_ota_protocol_text.replace("://", "")
             new_ota_address = self.otaAddressLineEdit.text() if self.otaAddressLineEdit else ""
-            
+
             # 确保地址不以 / 开头
             if new_ws_address.startswith('/'):
                 new_ws_address = new_ws_address[1:]
-                
+
             # 构造WebSocket URL
             new_websocket_url = f"{selected_protocol}://{new_ws_address}"
             if new_websocket_url and not new_websocket_url.endswith('/'):
                 new_websocket_url += '/'
-            
+
             # 构造OTA URL
             new_ota_url = f"{selected_ota_protocol}://{new_ota_address}"
             if new_ota_url and not new_ota_url.endswith('/'):
                 new_ota_url += '/'
-            
+
             # Home Assistant配置
             ha_protocol = self.haProtocolComboBox.currentText().replace("://", "") if self.haProtocolComboBox else "http"
             ha_server = self.ha_server.text() if self.ha_server else ""
             ha_port = self.ha_port.text() if self.ha_port else ""
             ha_key = self.ha_key.text() if self.ha_key else ""
-            
+
             # 构建Home Assistant URL
             if ha_server:
                 ha_url = f"{ha_protocol}://{ha_server}"
@@ -1477,10 +1503,10 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
                     ha_url += f":{ha_port}"
             else:
                 ha_url = ""
-            
+
             # 获取完整的当前配置
             current_config = config_manager._config.copy()
-            
+
             # 直接从磁盘读取最新的config.json，获取最新的设备列表
             try:
                 import json
@@ -1488,9 +1514,9 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
                 if config_path.exists():
                     with open(config_path, 'r', encoding='utf-8') as f:
                         disk_config = json.load(f)
-                    
+
                     # 获取磁盘上最新的设备列表
-                    if ("HOME_ASSISTANT" in disk_config and 
+                    if ("HOME_ASSISTANT" in disk_config and
                         "DEVICES" in disk_config["HOME_ASSISTANT"]):
                         # 使用磁盘上的设备列表
                         latest_devices = disk_config["HOME_ASSISTANT"]["DEVICES"]
@@ -1506,37 +1532,37 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
                     latest_devices = current_config["HOME_ASSISTANT"]["DEVICES"]
                 else:
                     latest_devices = []
-            
+
             # 更新配置对象（不写入文件）
             # 1. 更新唤醒词配置
             if "WAKE_WORD_OPTIONS" not in current_config:
                 current_config["WAKE_WORD_OPTIONS"] = {}
             current_config["WAKE_WORD_OPTIONS"]["USE_WAKE_WORD"] = use_wake_word
             current_config["WAKE_WORD_OPTIONS"]["WAKE_WORDS"] = wake_words
-            
+
             # 2. 更新系统选项
             if "SYSTEM_OPTIONS" not in current_config:
                 current_config["SYSTEM_OPTIONS"] = {}
             current_config["SYSTEM_OPTIONS"]["DEVICE_ID"] = new_device_id
-            
+
             if "NETWORK" not in current_config["SYSTEM_OPTIONS"]:
                 current_config["SYSTEM_OPTIONS"]["NETWORK"] = {}
             current_config["SYSTEM_OPTIONS"]["NETWORK"]["WEBSOCKET_URL"] = new_websocket_url
             current_config["SYSTEM_OPTIONS"]["NETWORK"]["WEBSOCKET_ACCESS_TOKEN"] = new_ws_token
             current_config["SYSTEM_OPTIONS"]["NETWORK"]["OTA_VERSION_URL"] = new_ota_url
-            
+
             # 3. 更新Home Assistant配置
             if "HOME_ASSISTANT" not in current_config:
                 current_config["HOME_ASSISTANT"] = {}
             current_config["HOME_ASSISTANT"]["URL"] = ha_url
             current_config["HOME_ASSISTANT"]["TOKEN"] = ha_key
-            
+
             # 使用最新的设备列表
             current_config["HOME_ASSISTANT"]["DEVICES"] = latest_devices
-            
+
             # 一次性保存整个配置
             save_success = config_manager._save_config(current_config)
-            
+
             if save_success:
                 self.logger.info("设置已成功保存到 config.json")
                 reply = QMessageBox.question(self.root, "保存成功",
@@ -1548,7 +1574,7 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
                     restart_program()
             else:
                 raise Exception("保存配置文件失败")
-                
+
         except Exception as e:
             self.logger.error(f"保存设置时发生未知错误: {e}", exc_info=True)
             QMessageBox.critical(self.root, "错误", f"保存设置失败: {e}")
@@ -1557,27 +1583,27 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         """处理添加Home Assistant设备按钮点击事件"""
         try:
             self.logger.info("启动Home Assistant设备管理器...")
-            
+
             # 获取当前文件所在目录
             current_dir = os.path.dirname(os.path.abspath(__file__))
             # 获取项目根目录(假设current_dir是src/display，上级目录就是src，再上级就是项目根目录)
             project_root = os.path.dirname(os.path.dirname(current_dir))
-            
+
             # 获取脚本路径
             script_path = os.path.join(project_root, "src", "ui", "ha_device_manager", "index.py")
-            
+
             if not os.path.exists(script_path):
                 self.logger.error(f"设备管理器脚本不存在: {script_path}")
                 QMessageBox.critical(self.root, "错误", "设备管理器脚本不存在")
                 return
-                
+
             # 构建命令并执行
             cmd = [sys.executable, script_path]
-            
+
             # 使用subprocess启动新进程
             import subprocess
             subprocess.Popen(cmd)
-            
+
         except Exception as e:
             self.logger.error(f"启动Home Assistant设备管理器失败: {e}", exc_info=True)
             QMessageBox.critical(self.root, "错误", f"启动设备管理器失败: {e}")
@@ -1587,14 +1613,14 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         # Linux和macOS系统下不运行可视化
         if platform.system() in ["Linux", "Darwin"]:
             return
-            
+
         if not self.is_listening or not self.mic_visualizer:
             return
-            
+
         try:
             # 获取当前麦克风音量级别，范围0-1
             volume_level = self._get_current_mic_level()
-                
+
             # 更新可视化组件
             self.mic_visualizer.set_volume(min(1.0, volume_level))
         except Exception as e:
@@ -1603,8 +1629,8 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
     def _get_current_mic_level(self):
         """获取当前麦克风音量级别"""
         try:
-            from src.application import Application
-            app = Application.get_instance()
+            from src.async_application import AsyncApplication
+            app = AsyncApplication.get_instance()
             if app and hasattr(app, 'audio_codec') and app.audio_codec:
                 # 从音频编解码器获取原始音频数据
                 if hasattr(app.audio_codec, 'input_stream') and app.audio_codec.input_stream:
@@ -1616,13 +1642,13 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
                             # 读取一小块数据用于计算音量
                             chunk_size = min(1024, available)
                             audio_data = app.audio_codec.input_stream.read(
-                                chunk_size, 
+                                chunk_size,
                                 exception_on_overflow=False
                             )
-                            
+
                             # 将字节数据转换为numpy数组进行处理
                             audio_array = np.frombuffer(audio_data, dtype=np.int16)
-                            
+
                             # 计算音量级别 (0.0-1.0)
                             # 16位音频的最大值是32768，计算音量占最大值的比例
                             # 使用均方根(RMS)值计算有效音量
@@ -1630,20 +1656,20 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
                             # 标准化为0-1范围，32768是16位音频的最大值
                             # 增加放大系数以提高灵敏度
                             volume = min(1.0, rms / 32768 * 10)  # 放大10倍使小音量更明显
-                            
+
                             # 应用平滑处理
                             if hasattr(self, '_last_volume'):
                                 # 平滑过渡，保留70%上次数值，增加30%新数值
                                 self._last_volume = self._last_volume * 0.7 + volume * 0.3
                             else:
                                 self._last_volume = volume
-                                
+
                             return self._last_volume
                     except Exception as e:
                         self.logger.debug(f"读取麦克风数据失败: {e}")
         except Exception as e:
             self.logger.debug(f"获取麦克风音量失败: {e}")
-            
+
         # 如果无法获取实际音量，返回上次的音量或默认值
         if hasattr(self, '_last_volume'):
             # 缓慢衰减上次的音量
@@ -1658,44 +1684,53 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         # Linux和macOS系统下不运行可视化
         if platform.system() in ["Linux", "Darwin"]:
             return
-            
+
         if not self.mic_visualizer or not self.mic_timer or not self.audio_control_stack:
             return
-            
+
         try:
-            # 获取应用程序实例
-            from src.application import Application
-            app = Application.get_instance()
+            # 获取应用程序实例 - 尝试两种类型
+            app = None
+            try:
+                from src.async_application import AsyncApplication
+                app = AsyncApplication.get_instance()
+            except:
+                try:
+                    from src.application import Application
+                    app = Application.get_instance()
+                except:
+                    pass
+
             if not app or not hasattr(app, 'audio_codec') or not app.audio_codec:
                 self.logger.warning("音频编解码器未初始化，无法启动麦克风可视化")
                 return
-                
+
             # 确保音频输入流可用
             if not hasattr(app.audio_codec, 'input_stream') or not app.audio_codec.input_stream:
                 self.logger.warning("音频输入流未初始化，无法启动麦克风可视化")
                 return
-                
+
             self.is_listening = True
-            
+
             # 切换到麦克风可视化页面
             self.audio_control_stack.setCurrentWidget(self.mic_page)
-                
+
             # 启动定时器更新可视化
             if not self.mic_timer.isActive():
                 self.mic_timer.start(50)  # 20fps
         except Exception as e:
             self.logger.error(f"启动麦克风可视化失败: {e}")
             self.is_listening = False
-                
+
     def _stop_mic_visualization(self):
         """停止麦克风可视化"""
         # Linux和macOS系统下不运行可视化
         if platform.system() in ["Linux", "Darwin"]:
             return
-            
+
         try:
             self.is_listening = False
-            
+
             # 停止定时器
             if self.mic_timer and self.mic_timer.isActive():
                 # 确保在主线程中停止定时器
@@ -1703,7 +1738,7 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
                     QMetaObject.invokeMethod(self.mic_timer, "stop", Qt.QueuedConnection)
                 else:
                     self.mic_timer.stop()
-                    
+
                 # 重置可视化音量
                 if self.mic_visualizer:
                     self.mic_visualizer.set_volume(0.0)
@@ -1714,33 +1749,53 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             # 切换回音量控制页面
             if self.audio_control_stack:
                 self.audio_control_stack.setCurrentWidget(self.volume_page)
-                
+
             # 清理音频相关资源
             try:
-                from src.application import Application
-                app = Application.get_instance()
+                # 获取应用程序实例 - 尝试两种类型
+                app = None
+                try:
+                    from src.async_application import AsyncApplication
+                    app = AsyncApplication.get_instance()
+                except:
+                    try:
+                        from src.application import Application
+                        app = Application.get_instance()
+                    except:
+                        pass
+
                 if app and hasattr(app, 'audio_codec') and app.audio_codec:
                     # 重置音频编解码器状态（如果需要）
                     if hasattr(app.audio_codec, 'reset_state'):
                         app.audio_codec.reset_state()
             except Exception as e:
                 self.logger.debug(f"清理音频资源时出错: {e}")
-                
+
         except Exception as e:
             self.logger.error(f"停止麦克风可视化失败: {e}")
-            
+
     def _get_current_mic_level(self):
         """获取当前麦克风音量级别"""
         try:
-            from src.application import Application
-            app = Application.get_instance()
+            # 获取应用程序实例 - 尝试两种类型
+            app = None
+            try:
+                from src.async_application import AsyncApplication
+                app = AsyncApplication.get_instance()
+            except:
+                try:
+                    from src.application import Application
+                    app = Application.get_instance()
+                except:
+                    pass
+
             if not app or not hasattr(app, 'audio_codec') or not app.audio_codec:
                 return 0.0
-                
+
             # 从音频编解码器获取原始音频数据
             if not hasattr(app.audio_codec, 'input_stream') or not app.audio_codec.input_stream:
                 return 0.0
-                
+
             # 读取音频数据并计算音量级别
             try:
                 # 获取输入流中可读取的数据量
@@ -1749,13 +1804,13 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
                     # 读取一小块数据用于计算音量
                     chunk_size = min(1024, available)
                     audio_data = app.audio_codec.input_stream.read(
-                        chunk_size, 
+                        chunk_size,
                         exception_on_overflow=False
                     )
-                    
+
                     # 将字节数据转换为numpy数组进行处理
                     audio_array = np.frombuffer(audio_data, dtype=np.int16)
-                    
+
                     # 计算音量级别 (0.0-1.0)
                     # 16位音频的最大值是32768，计算音量占最大值的比例
                     # 使用均方根(RMS)值计算有效音量
@@ -1763,20 +1818,20 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
                     # 标准化为0-1范围，32768是16位音频的最大值
                     # 增加放大系数以提高灵敏度
                     volume = min(1.0, rms / 32768 * 10)  # 放大10倍使小音量更明显
-                    
+
                     # 应用平滑处理
                     if hasattr(self, '_last_volume'):
                         # 平滑过渡，保留70%上次数值，增加30%新数值
                         self._last_volume = self._last_volume * 0.7 + volume * 0.3
                     else:
                         self._last_volume = volume
-                        
+
                     return self._last_volume
             except Exception as e:
                 self.logger.debug(f"读取麦克风数据失败: {e}")
         except Exception as e:
             self.logger.debug(f"获取麦克风音量失败: {e}")
-            
+
         # 如果无法获取实际音量，返回上次的音量或默认值
         if hasattr(self, '_last_volume'):
             # 缓慢衰减上次的音量
@@ -1790,25 +1845,55 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         """处理发送文本按钮点击事件"""
         if not self.text_input or not self.send_text_callback:
             return
-            
+
         text = self.text_input.text().strip()
         if not text:
             return
-            
+
         # 清空输入框
         self.text_input.clear()
-        
+
         # 获取应用程序的事件循环并在其中运行协程
-        from src.application import Application
-        app = Application.get_instance()
-        if app and app.loop:
-            import asyncio
-            asyncio.run_coroutine_threadsafe(
-                self.send_text_callback(text),
-                app.loop
-            )
+        # 获取应用程序实例 - 尝试两种类型
+        app = None
+        try:
+            from src.async_application import AsyncApplication
+            app = AsyncApplication.get_instance()
+        except:
+            try:
+                from src.application import Application
+                app = Application.get_instance()
+            except:
+                pass
+
+        if app:
+            # 检查是否是异步应用程序
+            if hasattr(app, 'loop') and app.loop:
+                # AsyncApplication 的 send_text_callback 是同步函数，直接调用
+                try:
+                    self.send_text_callback(text)
+                except Exception as e:
+                    self.logger.error(f"调用发送文本回调失败: {e}")
+            else:
+                # 旧版本应用程序，直接调用回调
+                if self.send_text_callback:
+                    try:
+                        import asyncio
+                        import inspect
+                        if inspect.iscoroutinefunction(self.send_text_callback):
+                            # 如果是协程函数，需要在事件循环中运行
+                            loop = asyncio.get_event_loop()
+                            if loop.is_running():
+                                asyncio.create_task(self.send_text_callback(text))
+                            else:
+                                asyncio.run(self.send_text_callback(text))
+                        else:
+                            # 同步函数，直接调用
+                            self.send_text_callback(text)
+                    except Exception as e:
+                        self.logger.error(f"调用发送文本回调失败: {e}")
         else:
-            self.logger.error("应用程序实例或事件循环不可用")
+            self.logger.error("应用程序实例不可用")
 
     def _load_iot_devices(self):
         """加载并显示Home Assistant设备列表"""
@@ -1818,20 +1903,20 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
                 for widget in self.devices_list:
                     widget.deleteLater()
                 self.devices_list = []
-            
+
             # 清空设备状态标签引用
             self.device_labels = {}
-            
+
             # 获取设备布局
             if self.iot_card:
                 # 记录原来的标题文本，以便后面重新设置
                 title_text = ""
                 if self.history_title:
                     title_text = self.history_title.text()
-                
+
                 # 设置self.history_title为None，以避免在清除旧布局时被删除导致引用错误
                 self.history_title = None
-                
+
                 # 获取原布局并删除所有子控件
                 old_layout = self.iot_card.layout()
                 if old_layout:
@@ -1841,18 +1926,18 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
                         widget = item.widget()
                         if widget:
                             widget.deleteLater()
-                    
+
                     # 在现有布局中重新添加控件，而不是创建新布局
                     new_layout = old_layout
                 else:
                     # 如果没有现有布局，则创建一个新的
                     new_layout = QVBoxLayout()
                     self.iot_card.setLayout(new_layout)
-                
+
                 # 重置布局属性
                 new_layout.setContentsMargins(2, 2, 2, 2)  # 进一步减小外边距
                 new_layout.setSpacing(2)  # 进一步减小控件间距
-                
+
                 # 创建标题
                 self.history_title = QLabel(title_text)
                 self.history_title.setFont(QFont(self.app.font().family(), 12))  # 字体缩小
@@ -1860,41 +1945,41 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
                 self.history_title.setContentsMargins(5, 2, 0, 2)  # 设置标题的边距
                 self.history_title.setMaximumHeight(25)  # 减小标题高度
                 new_layout.addWidget(self.history_title)
-                
+
                 # 尝试从配置文件加载设备列表
                 try:
                     with open(CONFIG_PATH, 'r', encoding='utf-8') as f:
                         config_data = json.load(f)
-                    
+
                     devices = config_data.get("HOME_ASSISTANT", {}).get("DEVICES", [])
-                    
+
                     # 更新标题
                     self.history_title.setText(f"已连接设备 ({len(devices)})")
-                    
+
                     # 创建滚动区域
                     scroll_area = QScrollArea()
                     scroll_area.setWidgetResizable(True)
                     scroll_area.setFrameShape(QFrame.NoFrame)  # 移除边框
                     scroll_area.setStyleSheet("background: transparent;")  # 透明背景
-                    
+
                     # 创建滚动区域的内容容器
                     container = QWidget()
                     container.setStyleSheet("background: transparent;")  # 透明背景
-                    
+
                     # 创建网格布局，设置顶部对齐
                     grid_layout = QGridLayout(container)
                     grid_layout.setContentsMargins(3, 3, 3, 3)  # 增加外边距
                     grid_layout.setSpacing(8)  # 增加网格间距
                     grid_layout.setAlignment(Qt.AlignTop)  # 设置顶部对齐
-                    
+
                     # 设置网格每行显示的卡片数量
                     cards_per_row = 3  # 每行显示3个设备卡片
-                    
+
                     # 遍历设备并添加到网格布局
                     for i, device in enumerate(devices):
                         entity_id = device.get('entity_id', '')
                         friendly_name = device.get('friendly_name', '')
-                        
+
                         # 解析friendly_name - 提取位置和设备名称
                         location = friendly_name
                         device_name = ""
@@ -1902,7 +1987,7 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
                             parts = friendly_name.split(',', 1)
                             location = parts[0].strip()
                             device_name = parts[1].strip()
-                        
+
                         # 创建设备卡片 (使用QFrame替代CardWidget)
                         device_card = QFrame()
                         device_card.setMinimumHeight(90)  # 增加最小高度
@@ -1917,11 +2002,11 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
                                 border: none;
                             }
                         """)
-                        
+
                         card_layout = QVBoxLayout(device_card)
                         card_layout.setContentsMargins(10, 8, 10, 8)  # 内边距
                         card_layout.setSpacing(2)  # 控件间距
-                        
+
                         # 设备名称 - 显示在第一行（加粗）并允许换行
                         device_name_label = QLabel(f"<b>{device_name}</b>")
                         device_name_label.setFont(QFont(self.app.font().family(), 14))
@@ -1929,13 +2014,13 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
                         device_name_label.setMinimumHeight(20)  # 设置最小高度
                         device_name_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)  # 水平扩展，垂直最小
                         card_layout.addWidget(device_name_label)
-                        
+
                         # 设备位置 - 显示在第二行（不加粗）
                         location_label = QLabel(f"{location}")
                         location_label.setFont(QFont(self.app.font().family(), 12))
                         location_label.setStyleSheet("color: #666666;")
                         card_layout.addWidget(location_label)
-                        
+
                         # 添加分隔线
                         line = QFrame()
                         line.setFrameShape(QFrame.HLine)
@@ -1943,7 +2028,7 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
                         line.setStyleSheet("background-color: #E0E0E0;")
                         line.setMaximumHeight(1)
                         card_layout.addWidget(line)
-                        
+
                         # 设备状态 - 根据设备类型设置不同的默认状态
                         state_text = "未知"
                         if "light" in entity_id:
@@ -1967,33 +2052,33 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
                             status_display = f"状态: {state_text}"
                         else:
                             status_display = state_text
-                        
+
                         # 直接显示状态值
                         state_label = QLabel(status_display)
                         state_label.setFont(QFont(self.app.font().family(), 14))
                         state_label.setStyleSheet("color: #2196F3; border: none;")  # 添加无边框样式
                         card_layout.addWidget(state_label)
-                        
+
                         # 保存状态标签引用
                         self.device_labels[entity_id] = state_label
-                        
+
                         # 计算行列位置
                         row = i // cards_per_row
                         col = i % cards_per_row
-                        
+
                         # 将卡片添加到网格布局
                         grid_layout.addWidget(device_card, row, col)
-                        
+
                         # 保存引用以便后续清理
                         self.devices_list.append(device_card)
-                    
+
                     # 设置滚动区域内容
                     container.setLayout(grid_layout)
                     scroll_area.setWidget(container)
-                    
+
                     # 将滚动区域添加到主布局
                     new_layout.addWidget(scroll_area)
-                    
+
                     # 设置滚动区域样式
                     scroll_area.setStyleSheet("""
                         QScrollArea {
@@ -2014,19 +2099,19 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
                             height: 0px;
                         }
                     """)
-                    
+
                     # 停止现有的更新定时器（如果存在）
                     if self.ha_update_timer and self.ha_update_timer.isActive():
                         self.ha_update_timer.stop()
-                    
+
                     # 创建并启动一个定时器，每1秒更新一次设备状态
                     self.ha_update_timer = QTimer()
                     self.ha_update_timer.timeout.connect(self._update_device_states)
                     self.ha_update_timer.start(1000)  # 1秒更新一次
-                    
+
                     # 立即执行一次更新
                     self._update_device_states()
-                    
+
                 except Exception as e:
                     # 如果加载设备失败，创建一个错误提示布局
                     self.logger.error(f"读取设备配置失败: {e}")
@@ -2034,18 +2119,18 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
                     self.history_title.setFont(QFont(self.app.font().family(), 14, QFont.Bold))
                     self.history_title.setAlignment(Qt.AlignCenter)
                     new_layout.addWidget(self.history_title)
-                    
+
                     error_label = QLabel(f"错误信息: {str(e)}")
                     error_label.setWordWrap(True)
                     error_label.setStyleSheet("color: red;")
                     new_layout.addWidget(error_label)
-                
+
         except Exception as e:
             self.logger.error(f"加载IOT设备失败: {e}", exc_info=True)
             try:
                 # 在发生错误时尝试恢复界面
                 old_layout = self.iot_card.layout()
-                
+
                 # 如果已有布局，清空它
                 if old_layout:
                     while old_layout.count():
@@ -2053,24 +2138,24 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
                         widget = item.widget()
                         if widget:
                             widget.deleteLater()
-                    
+
                     # 使用现有布局
                     new_layout = old_layout
                 else:
                     # 创建新布局
                     new_layout = QVBoxLayout()
                     self.iot_card.setLayout(new_layout)
-                
+
                 self.history_title = QLabel("加载设备失败")
                 self.history_title.setFont(QFont(self.app.font().family(), 14, QFont.Bold))
                 self.history_title.setAlignment(Qt.AlignCenter)
                 new_layout.addWidget(self.history_title)
-                
+
                 error_label = QLabel(f"错误信息: {str(e)}")
                 error_label.setWordWrap(True)
                 error_label.setStyleSheet("color: red;")
                 new_layout.addWidget(error_label)
-                
+
             except Exception as e2:
                 self.logger.error(f"恢复界面失败: {e2}", exc_info=True)
 
@@ -2079,20 +2164,20 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         # 检查当前是否在IOT界面
         if not self.stackedWidget or self.stackedWidget.currentIndex() != 1:
             return
-            
+
         # 读取配置文件获取Home Assistant连接信息
         try:
             with open(CONFIG_PATH, 'r', encoding='utf-8') as f:
                 config_data = json.load(f)
-                
+
             ha_options = config_data.get("HOME_ASSISTANT", {})
             ha_url = ha_options.get("URL", "")
             ha_token = ha_options.get("TOKEN", "")
-            
+
             if not ha_url or not ha_token:
                 self.logger.warning("Home Assistant URL或Token未配置，无法更新设备状态")
                 return
-                
+
             # 为每个设备查询状态
             for entity_id, label in self.device_labels.items():
                 threading.Thread(
@@ -2100,14 +2185,14 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
                     args=(ha_url, ha_token, entity_id, label),
                     daemon=True
                 ).start()
-                
+
         except Exception as e:
             self.logger.error(f"更新Home Assistant设备状态失败: {e}", exc_info=True)
-            
+
     def _fetch_device_state(self, ha_url, ha_token, entity_id, label):
         """获取单个设备的状态"""
         import requests
-        
+
         try:
             # 构造API请求URL
             api_url = f"{ha_url}/api/states/{entity_id}"
@@ -2115,40 +2200,40 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
                 "Authorization": f"Bearer {ha_token}",
                 "Content-Type": "application/json"
             }
-            
+
             # 发送请求
             response = requests.get(api_url, headers=headers, timeout=5)
-            
+
             if response.status_code == 200:
                 state_data = response.json()
                 state = state_data.get("state", "unknown")
-                
+
                 # 更新设备状态
                 self.device_states[entity_id] = state
-                
+
                 # 更新UI
                 self._update_device_ui(entity_id, state, label)
             else:
                 self.logger.warning(f"获取设备状态失败: {entity_id}, 状态码: {response.status_code}")
-                
+
         except requests.RequestException as e:
             self.logger.error(f"请求Home Assistant API失败: {e}")
         except Exception as e:
             self.logger.error(f"处理设备状态时出错: {e}")
-            
+
     def _update_device_ui(self, entity_id, state, label):
         """更新设备UI显示"""
         # 在主线程中执行UI更新
         self.update_queue.put(lambda: self._safe_update_device_label(entity_id, state, label))
-        
+
     def _safe_update_device_label(self, entity_id, state, label):
         """安全地更新设备状态标签"""
         if not label or self.root.isHidden():
             return
-            
+
         try:
             display_state = state  # 默认显示原始状态
-            
+
             # 根据设备类型格式化状态显示
             if "light" in entity_id or "switch" in entity_id:
                 if state == "on":
@@ -2185,7 +2270,7 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             else:
                 display_state = f"状态: {state}"
                 label.setStyleSheet("color: #2196F3; border: none;")  # 默认颜色，无边框
-                
+
             # 显示状态值
             label.setText(f"{display_state}")
         except RuntimeError as e:
@@ -2193,53 +2278,53 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
 
 class MicrophoneVisualizer(QFrame):
     """麦克风音量可视化组件 - 波形显示版"""
-    
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setMinimumHeight(50)
         self.setFrameShape(QFrame.NoFrame)
-        
+
         # 初始化音量数据
         self.current_volume = 0.0
         self.target_volume = 0.0
-        
+
         # 波形历史数据（用于绘制波形图）- 增加历史点数使波形更平滑
         self.history_max = 30  # 增加历史数据点数量
         self.volume_history = [0.0] * self.history_max
-        
+
         # 创建平滑动画效果
         self.animation_timer = QTimer()
         self.animation_timer.timeout.connect(self._update_animation)
         self.animation_timer.start(16)  # 约60fps
-        
+
         # 颜色设置
         self.min_color = QColor(80, 150, 255)  # 低音量时的颜色 (蓝色)
         self.max_color = QColor(255, 100, 100)  # 高音量时的颜色 (红色)
         self.current_color = self.min_color.name()
-        
+
         # 添加状态持续时间计数器，防止状态频繁变化
         self.current_status = "安静"  # 当前显示的状态
         self.target_status = "安静"   # 目标状态
         self.status_hold_count = 0    # 状态保持计数器
         self.status_threshold = 5     # 状态变化阈值（必须连续5帧达到阈值才切换状态）
-        
+
         # 透明背景
         self.setStyleSheet("background-color: transparent;")
-        
+
     def set_volume(self, volume):
         """设置当前音量，范围0.0-1.0"""
         # 确保音量在有效范围内
         volume = max(0.0, min(1.0, volume))
         self.target_volume = volume
-        
+
         # 更新历史数据（添加新值并移除最旧的值）
         self.volume_history.append(volume)
         if len(self.volume_history) > self.history_max:
             self.volume_history.pop(0)
-            
+
         # 更新状态文本（带状态变化滞后）
         volume_percent = int(volume * 100)
-        
+
         # 根据音量级别确定目标状态
         if volume_percent < 5:
             new_status = "静音"
@@ -2251,7 +2336,7 @@ class MicrophoneVisualizer(QFrame):
             new_status = "较大"
         else:
             new_status = "很大"
-            
+
         # 状态切换逻辑（带滞后性）
         if new_status == self.target_status:
             # 相同状态，增加计数
@@ -2260,13 +2345,13 @@ class MicrophoneVisualizer(QFrame):
             # 不同状态，重置为新状态
             self.target_status = new_status
             self.status_hold_count = 0
-            
-        # 只有当状态持续一定时间后才切换显示状态  
+
+        # 只有当状态持续一定时间后才切换显示状态
         if self.status_hold_count >= self.status_threshold:
             self.current_status = self.target_status
-            
+
         self.update()  # 触发重绘
-        
+
     def _update_animation(self):
         """更新动画效果"""
         # 平滑过渡到目标音量 - 提高响应性
@@ -2279,99 +2364,99 @@ class MicrophoneVisualizer(QFrame):
         self.current_color = QColor(r, g, b).name()
 
         self.update()
-        
+
     def paintEvent(self, event):
         """绘制事件"""
         super().paintEvent(event)
-        
+
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
-        
+
         try:
             # 获取绘制区域
             rect = self.rect()
-            
+
             # 绘制波形图
             self._draw_waveform(painter, rect)
-            
+
             # 添加音量状态文本
             small_font = painter.font()
             small_font.setPointSize(10)
             painter.setFont(small_font)
             painter.setPen(QColor(100, 100, 100))
-            
+
             # 在底部显示状态文本
             status_rect = QRect(rect.left(), rect.bottom() - 20, rect.width(), 20)
-            
+
             # 使用稳定的状态文本显示
             status_text = f"声音: {self.current_status}"
-            
+
             painter.drawText(status_rect, Qt.AlignCenter, status_text)
         except Exception as e:
             self.logger.error(f"绘制波形图失败: {e}") if hasattr(self, 'logger') else None
         finally:
             painter.end()
-        
+
     def _draw_waveform(self, painter, rect):
         """绘制波形图"""
         # 如果没有足够的历史数据，返回
         if len(self.volume_history) < 2:
             return
-            
+
         # 波形图区域 - 扩大为几乎整个控件
-        wave_rect = QRect(rect.left() + 10, rect.top() + 10, 
+        wave_rect = QRect(rect.left() + 10, rect.top() + 10,
                         rect.width() - 20, rect.height() - 40)
-        
+
         # 设置半透明背景
         bg_color = QColor(240, 240, 240, 30)
         painter.setPen(Qt.NoPen)
         painter.setBrush(QBrush(bg_color))
         painter.drawRoundedRect(wave_rect, 5, 5)
-        
+
         # 设置波形图线条样式
         wave_pen = QPen(QColor(self.current_color))
         wave_pen.setWidth(2)
         painter.setPen(wave_pen)
-        
+
         # 计算波形图点
         history_len = len(self.volume_history)
         point_interval = wave_rect.width() / (history_len - 1)
-        
+
         # 创建波形图路径
         path = QPainterPath()
-        
+
         # 波形图起点（从左下角开始）
         start_x = wave_rect.left()
         mid_y = wave_rect.top() + wave_rect.height() / 2
-        
+
         # 平滑波形显示 - 减小振幅变化，让无声和小声时波形更平稳
         amplitude_factor = 0.8  # 振幅因子
         min_amplitude = 0.1     # 最小振幅（确保有轻微波动）
-        
+
         # 计算第一个点的y坐标
         vol = self.volume_history[0]
         amp = max(min_amplitude, vol) * amplitude_factor  # 确保最小振幅
         start_y = mid_y - amp * wave_rect.height() / 2
-        
+
         path.moveTo(start_x, start_y)
-        
+
         # 添加波形点
         for i in range(1, history_len):
             x = start_x + i * point_interval
-            
+
             # 获取当前音量
             vol = self.volume_history[i]
-            
+
             # 计算振幅（上下波动），确保最小振幅以保持波形的可见性
             amp = max(min_amplitude, vol) * amplitude_factor
-            
+
             # 添加正弦波动，使波形更自然
             wave_phase = i / 2.0  # 波相位
             sine_factor = 0.08 * amp  # 正弦波因子随音量变化
             sine_wave = sine_factor * np.sin(wave_phase)
-            
+
             y = mid_y - (amp * wave_rect.height() / 2 + sine_wave * wave_rect.height())
-            
+
             # 使用曲线连接点，使波形更平滑
             if i > 1:
                 # 使用二次贝塞尔曲线，需要一个控制点
@@ -2384,62 +2469,62 @@ class MicrophoneVisualizer(QFrame):
         else:
                 # 第一个点直接连接
                 path.lineTo(x, y)
-        
+
         # 绘制波形路径
         painter.drawPath(path)
-        
+
         # 添加渐变效果
         # 创建从波形底部到顶部的渐变
         gradient = QLinearGradient(
             wave_rect.left(), wave_rect.top() + wave_rect.height(),
             wave_rect.left(), wave_rect.top()
         )
-        
+
         # 根据当前音量设置渐变颜色
         gradient.setColorAt(0, QColor(self.current_color).lighter(140))
         gradient.setColorAt(0.5, QColor(self.current_color))
         gradient.setColorAt(1, QColor(self.current_color).darker(140))
-        
+
         # 保存画家状态
         painter.save()
-        
+
         # 创建反射路径（波形的镜像）
         reflect_path = QPainterPath(path)
         # 将路径向下移动，创建反射效果
         transform = QTransform()
         transform.translate(0, wave_rect.height() / 4)
         reflect_path = transform.map(reflect_path)
-        
+
         # 设置半透明画笔绘制反射
         reflect_pen = QPen()
         reflect_pen.setWidth(1)
         reflect_pen.setColor(QColor(self.current_color).lighter(160))
         painter.setPen(reflect_pen)
-        
+
         # 设置透明度
         painter.setOpacity(0.3)
-        
+
         # 绘制反射波形
         painter.drawPath(reflect_path)
-        
+
         # 恢复画家状态
         painter.restore()
-        
+
         # 添加音量百分比小浮标
         if self.current_volume > 0.1:  # 只有当音量足够大时才显示
             percent_text = f"{int(self.current_volume * 100)}%"
             painter.setPen(QColor(self.current_color).darker(120))
-            
+
             # 字体大小随音量变化
             font = painter.font()
             font.setPointSize(8 + int(self.current_volume * 4))  # 8-12pt
             font.setBold(True)
             painter.setFont(font)
-            
+
             # 在波形最右侧显示百分比
             right_edge = wave_rect.right() - 40
             y_position = mid_y - amp * wave_rect.height() / 3  # 根据当前振幅定位
-            
+
             # 使用QPoint而不是单独的x,y坐标，或者将浮点数转为整数
             # Windows下QPainter.drawText对坐标类型要求更严格
             painter.drawText(int(right_edge), int(y_position), percent_text)
