@@ -42,6 +42,7 @@ class ConfigManager:
                 "ACTIVATION_VERSION": "v2",  # 可选值: v1, v2
                 "AUTHORIZATION_URL": "https://xiaozhi.me/"
             },
+            "REALTIME_CHAT_ENABLED": True
         },
         "WAKE_WORD_OPTIONS": {
             "USE_WAKE_WORD": False,
