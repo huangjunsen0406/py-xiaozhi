@@ -1210,7 +1210,6 @@ class Application:
         from src.iot.things.lamp import Lamp
         from src.iot.things.speaker import Speaker
         from src.iot.things.music_player import MusicPlayer
-        from src.iot.things.CameraVL.Camera import Camera
         from src.iot.things.ha_control import (
             HomeAssistantLight, HomeAssistantSwitch,
             HomeAssistantNumber, HomeAssistantButton
@@ -1220,13 +1219,26 @@ class Application:
         # 获取物联网设备管理器实例
         thing_manager = ThingManager.get_instance()
 
-        # 添加设备
+        # 添加基础设备
         thing_manager.add_thing(Lamp())
         thing_manager.add_thing(Speaker())
         thing_manager.add_thing(MusicPlayer())
-        thing_manager.add_thing(Camera())
         thing_manager.add_thing(CountdownTimer())
         logger.info("已添加倒计时器设备,用于计时执行命令用")
+
+        # 尝试添加摄像头设备（可选）
+        try:
+            from src.iot.things.CameraVL.Camera import Camera
+            thing_manager.add_thing(Camera())
+            logger.info("已添加摄像头设备")
+        except ImportError as e:
+            if "libgomp" in str(e) or "cv2" in str(e):
+                logger.warning("由于OpenCV库问题，跳过摄像头设备初始化。这在嵌入式设备上是正常的。")
+                logger.warning(f"具体错误: {e}")
+            else:
+                logger.error(f"导入摄像头设备时出现未知错误: {e}")
+        except Exception as e:
+            logger.error(f"初始化摄像头设备时出错: {e}", exc_info=True)
 
         # 添加Home Assistant设备
         ha_devices = self.config.get_config("HOME_ASSISTANT.DEVICES", [])
@@ -1264,6 +1276,7 @@ class Application:
         for command in commands:
             try:
                 result = thing_manager.invoke(command)
+                self.schedule(lambda: self._update_iot_states())
                 logger.info(f"执行物联网命令结果: {result}")
             except Exception as e:
                 logger.error(f"执行物联网命令失败: {e}", exc_info=True)
