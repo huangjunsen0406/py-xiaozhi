@@ -1,6 +1,4 @@
 import asyncio
-
-import cv2
 import base64
 import logging
 import threading
@@ -25,33 +23,45 @@ class Camera(Thing):
         self.cap = None
         self.is_running = False
         self.camera_thread = None
-        self.result=""
+        self.result = ""
         from src.utils.config_manager import ConfigManager
         self.config = ConfigManager.get_instance()
         # 摄像头控制器
-        VL.ImageAnalyzer.get_instance().init(self.config.get_config('CAMERA.VLapi_key'), self.config.get_config('CAMERA.Loacl_VL_url'),self.config.get_config('CAMERA.models'))
-        self.VL= VL.ImageAnalyzer.get_instance()
-        print(f"[虚拟设备] 摄像头设备初始化完成")
+        api_key = self.config.get_config('CAMERA.VLapi_key')
+        local_url = self.config.get_config('CAMERA.Loacl_VL_url')
+        models = self.config.get_config('CAMERA.models')
+        VL.ImageAnalyzer.get_instance().init(api_key, local_url, models)
+        self.VL = VL.ImageAnalyzer.get_instance()
+        print("[虚拟设备] 摄像头设备初始化完成")
 
-        self.add_property_and_method()#定义设备方法与状态属性
+        self.add_property_and_method()  # 定义设备方法与状态属性
 
     def add_property_and_method(self):
         # 定义属性
-        self.add_property("power", "摄像头是否打开", lambda: self.is_running )
-        self.add_property("result", "识别画面的内容", lambda: self.result )
+        self.add_property("power", "摄像头是否打开", lambda: self.is_running)
+        self.add_property("result", "识别画面的内容", lambda: self.result)
         # 定义方法
         self.add_method("start_camera", "打开摄像头", [],
-                        lambda params: self.start_camera())
+                        lambda _: self.start_camera())
 
         self.add_method("stop_camera", "关闭摄像头", [],
-                        lambda params: self.stop_camera())
+                        lambda _: self.stop_camera())
 
         self.add_method("capture_frame_to_base64", "识别画面", [],
-                        lambda params: self.capture_frame_to_base64())
-
+                        lambda _: self.capture_frame_to_base64())
 
     def _camera_loop(self):
         """摄像头线程的主循环"""
+        try:
+            # 延迟导入 cv2，避免模块级别的 TLS 冲突
+            import cv2
+        except ImportError as e:
+            logger.error(f"无法导入 OpenCV: {e}")
+            return
+        except Exception as e:
+            logger.error(f"OpenCV 导入时发生 TLS 冲突: {e}")
+            return
+
         camera_index = self.config.get_config('CAMERA.camera_index')
         self.cap = cv2.VideoCapture(camera_index)
 
@@ -60,9 +70,13 @@ class Camera(Thing):
             return
 
         # 设置摄像头参数
-        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.config.get_config('CAMERA.frame_width'))
-        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.config.get_config('CAMERA.frame_height'))
-        self.cap.set(cv2.CAP_PROP_FPS, self.config.get_config('CAMERA.fps'))
+        frame_width = self.config.get_config('CAMERA.frame_width')
+        frame_height = self.config.get_config('CAMERA.frame_height')
+        fps = self.config.get_config('CAMERA.fps')
+
+        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, frame_width)
+        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, frame_height)
+        self.cap.set(cv2.CAP_PROP_FPS, fps)
 
         self.is_running = True
         while self.is_running:
@@ -88,37 +102,50 @@ class Camera(Thing):
             logger.warning("摄像头线程已在运行")
             return
 
-        self.camera_thread = threading.Thread(target=self._camera_loop, daemon=True)
+        self.camera_thread = threading.Thread(
+            target=self._camera_loop, daemon=True)
         self.camera_thread.start()
         logger.info("摄像头线程已启动")
-        print(f"[虚拟设备] 摄像头线程已启动")
+        print("[虚拟设备] 摄像头线程已启动")
         return {"status": "success", "message": "摄像头线程已打开"}
 
     def capture_frame_to_base64(self):
         """截取当前画面并转换为 Base64 编码"""
+        try:
+            # 延迟导入 cv2，避免模块级别的 TLS 冲突
+            import cv2
+        except ImportError as e:
+            logger.error(f"无法导入 OpenCV: {e}")
+            return {"status": "error", "message": "OpenCV 未安装"}
+        except Exception as e:
+            logger.error(f"OpenCV 导入时发生 TLS 冲突: {e}")
+            return {"status": "error", "message": "OpenCV TLS 冲突"}
+
         if not self.cap or not self.cap.isOpened():
             logger.error("摄像头未打开")
-            return None
+            return {"status": "error", "message": "摄像头未打开"}
 
         ret, frame = self.cap.read()
         if not ret:
             logger.error("无法读取画面")
-            return None
+            return {"status": "error", "message": "无法读取画面"}
 
         # 将帧转换为 JPEG 格式
         _, buffer = cv2.imencode('.jpg', frame)
 
         # 将 JPEG 图像转换为 Base64 编码
         frame_base64 = base64.b64encode(buffer).decode('utf-8')
-        self.result=str(self.VL.analyze_image(frame_base64))
+        self.result = str(self.VL.analyze_image(frame_base64))
         print(self.result)
         # 获取应用程序实例
         self.app = Application.get_instance()
         logger.info("画面已经识别到啦")
-        print(f"[虚拟设备] 画面已经识别完成")
+        print("[虚拟设备] 画面已经识别完成")
         self.app.set_device_state(DeviceState.LISTENING)
-        asyncio.create_task(self.app.protocol.send_wake_word_detected("播报识别结果"))
-        return {"status": 'success', "message": "识别成功","result":self.result}
+        task = self.app.protocol.send_wake_word_detected("播报识别结果")
+        asyncio.create_task(task)
+        return {"status": "success", "message": "识别成功", "result": self.result}
+
     def stop_camera(self):
         """停止摄像头线程"""
         self.is_running = False
@@ -126,7 +153,5 @@ class Camera(Thing):
             self.camera_thread.join()  # 等待线程结束
             self.camera_thread = None
             logger.info("摄像头线程已停止")
-            print(f"[虚拟设备] 摄像头线程已停止")
+            print("[虚拟设备] 摄像头线程已停止")
             return {"status": "success", "message": "摄像头线程已停止"}
-
-
