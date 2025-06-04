@@ -30,9 +30,7 @@ class AudioCodec:
         self._input_paused_lock = threading.Lock()
         self._stream_lock = threading.Lock()
 
-        # 新增设备索引缓存
-        self._cached_input_device = -1
-        self._cached_output_device = -1
+        # 设备索引缓存已移除（未使用）
 
         self._initialize_audio()
         
@@ -74,46 +72,36 @@ class AudioCodec:
         
         return self.audio.open(**params)
 
-    def _reinitialize_input_stream(self):
-        """输入流重建"""
+    def _reinitialize_stream(self, is_input=True):
+        """通用流重建方法"""
         if self._is_closing:
-            return False
+            return False if is_input else None
 
         try:
-            if self.input_stream:
+            stream_attr = 'input_stream' if is_input else 'output_stream'
+            current_stream = getattr(self, stream_attr)
+            
+            if current_stream:
                 try:
-                    self.input_stream.stop_stream()
-                    self.input_stream.close()
+                    current_stream.stop_stream()
+                    current_stream.close()
                 except Exception:
                     pass
 
-            self.input_stream = self._create_stream(is_input=True)
-            self.input_stream.start_stream()
-            logger.info("音频输入流重新初始化成功")
-            return True
+            new_stream = self._create_stream(is_input=is_input)
+            setattr(self, stream_attr, new_stream)
+            new_stream.start_stream()
+            
+            stream_type = "输入" if is_input else "输出"
+            logger.info(f"音频{stream_type}流重新初始化成功")
+            return True if is_input else None
         except Exception as e:
-            logger.error(f"输入流重建失败: {e}")
-            return False
-
-    def _reinitialize_output_stream(self):
-        """输出流重建"""
-        if self._is_closing:
-            return
-
-        try:
-            if self.output_stream:
-                try:
-                    self.output_stream.stop_stream()
-                    self.output_stream.close()
-                except Exception:
-                    pass
-
-            self.output_stream = self._create_stream(is_input=False)
-            self.output_stream.start_stream()
-            logger.info("音频输出流重新初始化成功")
-        except Exception as e:
-            logger.error(f"输出流重建失败: {e}")
-            raise
+            stream_type = "输入" if is_input else "输出"
+            logger.error(f"{stream_type}流重建失败: {e}")
+            if is_input:
+                return False
+            else:
+                raise
 
     def pause_input(self):
         with self._input_paused_lock:
@@ -138,8 +126,7 @@ class AudioCodec:
             with self._stream_lock:
                 # 流状态检查优化
                 if not self.input_stream or not self.input_stream.is_active():
-                    self._reinitialize_input_stream()
-                    if not self.input_stream.is_active():
+                    if not self._reinitialize_stream(is_input=True):
                         return None
 
                 # 动态缓冲区调整 - 实时性能优化
@@ -162,14 +149,14 @@ class AudioCodec:
                 # 数据验证
                 if len(data) != AudioConfig.INPUT_FRAME_SIZE * 2:
                     logger.warning("音频数据长度异常，重置输入流")
-                    self._reinitialize_input_stream()
+                    self._reinitialize_stream(is_input=True)
                     return None
 
                 return self.opus_encoder.encode(data, AudioConfig.INPUT_FRAME_SIZE)
 
         except Exception as e:
             logger.error(f"音频读取失败: {e}")
-            self._reinitialize_input_stream()
+            self._reinitialize_stream(is_input=True)
             return None
 
     def play_audio(self):
@@ -204,7 +191,7 @@ class AudioCodec:
                     except OSError as e:
                         logger.warning(f"音频播放失败，丢弃此帧: {e}")
                         if "Stream closed" in str(e):
-                            self._reinitialize_output_stream()
+                            self._reinitialize_stream(is_input=False)
                     
                     processed_count += 1
                     
@@ -268,8 +255,7 @@ class AudioCodec:
             logger.info("音频资源已完全释放")
         except Exception as e:
             logger.error(f"关闭音频编解码器过程中发生错误: {e}")
-        finally:
-            self._is_closing = False
+        # 移除冗余的状态重置
 
     def write_audio(self, opus_data):
         """将Opus数据写入播放队列，处理队列满的情况"""
@@ -286,31 +272,27 @@ class AudioCodec:
                 # 如果队列突然变空，直接添加
                 self.audio_decode_queue.put_nowait(opus_data)
 
-    def has_pending_audio(self):
-        return not self.audio_decode_queue.empty()
+    # has_pending_audio 方法已移除（可直接使用 not audio_decode_queue.empty()）
 
     def get_queue_status(self):
-        """获取队列状态信息，用于监控和调试"""
+        """获取队列状态信息（简化版）"""
         queue_size = self.audio_decode_queue.qsize()
         max_size = self.audio_decode_queue.maxsize
-        usage_percent = (queue_size / max_size) * 100 if max_size > 0 else 0
         return {
             'current_size': queue_size,
             'max_size': max_size,
-            'usage_percent': round(usage_percent, 1),
-            'is_full': queue_size >= max_size,
             'is_empty': queue_size == 0
         }
 
     def wait_for_audio_complete(self, timeout=5.0):
+        """等待音频播放完成（简化版）"""
         start = time.time()
-        while self.has_pending_audio() and time.time() - start < timeout:
+        while not self.audio_decode_queue.empty() and time.time() - start < timeout:
             time.sleep(0.1)
         
-        # 记录最终状态
-        if self.has_pending_audio():
-            status = self.get_queue_status()
-            logger.warning(f"音频播放超时，剩余队列: {status['current_size']} 帧")
+        if not self.audio_decode_queue.empty():
+            remaining = self.audio_decode_queue.qsize()
+            logger.warning(f"音频播放超时，剩余队列: {remaining} 帧")
 
     def clear_audio_queue(self):
         with self._stream_lock:
@@ -324,13 +306,7 @@ class AudioCodec:
             if cleared_count > 0:
                 logger.info(f"清空音频队列，丢弃 {cleared_count} 帧音频数据")
 
-    def start_streams(self):
-        for stream in [self.input_stream, self.output_stream]:
-            if stream and not stream.is_active():
-                try:
-                    stream.start_stream()
-                except OSError as e:
-                    logger.error(f"启动失败: {e}")
+    # start_streams 方法已移除（功能冗余，可直接调用各流的 start_stream）
 
     def stop_streams(self):
         """安全停止流（优化错误处理）"""

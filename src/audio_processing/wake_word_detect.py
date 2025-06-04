@@ -336,7 +336,7 @@ class WakeWordDetector:
                 logger.info("触发音频流重置...")
                 try:
                     # 直接调用AudioCodec的重置方法
-                    self.audio_codec._reinitialize_input_stream()
+                    self.audio_codec._reinitialize_stream(is_input=True)
                 except Exception as re:
                     logger.error(f"流重置失败: {re}")
                     
