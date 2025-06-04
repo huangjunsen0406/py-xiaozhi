@@ -2,11 +2,12 @@ import json
 import threading
 import time
 import os
-import sys
 from pathlib import Path
 from vosk import Model, KaldiRecognizer, SetLogLevel
-from pypinyin import lazy_pinyin
-
+from pypinyin import lazy_pinyin, Style
+import difflib
+import re
+from functools import lru_cache
 
 from src.constants.constants import AudioConfig
 from src.utils.config_manager import ConfigManager
@@ -17,22 +18,10 @@ logger = get_logger(__name__)
 class WakeWordDetector:
     """唤醒词检测类"""
 
-    def __init__(self,
-                 sample_rate=AudioConfig.INPUT_SAMPLE_RATE,
-                 buffer_size=AudioConfig.INPUT_FRAME_SIZE,
-                 audio_codec=None):
-        """
-        初始化唤醒词检测器
-
-        参数:
-            audio_codec: AudioCodec实例（必需，用于共享音频流）
-            sample_rate: 音频采样率
-            buffer_size: 音频缓冲区大小
-        """
-        # 初始化音频编解码器引用
-        self.audio_codec = audio_codec
-
+    def __init__(self):
+        """初始化唤醒词检测器"""
         # 初始化基本属性
+        self.audio_codec = None
         self.on_detected_callbacks = []
         self.running = False
         self.detection_thread = None
@@ -40,7 +29,6 @@ class WakeWordDetector:
         self.stream = None
         self.external_stream = False
         self.stream_lock = threading.Lock()
-        self.on_error = None
 
         # 配置检查
         config = ConfigManager.get_instance()
@@ -49,19 +37,36 @@ class WakeWordDetector:
             self.enabled = False
             return
 
-        # 基本参数初始化
+        # 基本参数初始化（直接从配置获取）
         self.enabled = True
-        self.sample_rate = sample_rate
-        self.buffer_size = buffer_size
+        self.sample_rate = AudioConfig.INPUT_SAMPLE_RATE
+        self.buffer_size = AudioConfig.INPUT_FRAME_SIZE
         self.sensitivity = config.get_config("WAKE_WORD_OPTIONS.SENSITIVITY", 0.5)
 
         # 唤醒词配置
         self.wake_words = config.get_config('WAKE_WORD_OPTIONS.WAKE_WORDS', [
             "你好小明", "你好小智", "你好小天", "小爱同学", "贾维斯"
         ])
-        self.wake_words_pinyin = [''.join(lazy_pinyin(word)) for word in self.wake_words]
+        
+        # 预计算拼音变体以提升性能
+        self.wake_word_patterns = self._build_wake_word_patterns()
+        
+        # 匹配参数
+        self.similarity_threshold = config.get_config('WAKE_WORD_OPTIONS.SIMILARITY_THRESHOLD', 0.8)
+        self.max_edit_distance = config.get_config('WAKE_WORD_OPTIONS.MAX_EDIT_DISTANCE', 2)
+        
+        # 性能优化：缓存最近的识别结果
+        self._recent_texts = []
+        self._max_recent_cache = 10
 
         # 模型初始化
+        self._init_model(config)
+        
+        # 验证配置
+        self._validate_config()
+
+    def _init_model(self, config):
+        """初始化语音识别模型"""
         try:
             model_path = self._get_model_path(config)
             if not os.path.exists(model_path):
@@ -72,157 +77,110 @@ class WakeWordDetector:
             self.model = Model(model_path=model_path)
             self.recognizer = KaldiRecognizer(self.model, self.sample_rate)
             self.recognizer.SetWords(True)
-            logger.info("模型加载完成")
-
-            # 调试日志
-            logger.info(f"已配置 {len(self.wake_words)} 个唤醒词")
-            for idx, (word, pinyin) in enumerate(zip(self.wake_words, self.wake_words_pinyin)):
-                logger.debug(f"唤醒词 {idx+1}: {word.ljust(8)} => {pinyin}")
+            logger.info(f"模型加载完成，已配置 {len(self.wake_words)} 个唤醒词")
                 
         except Exception as e:
             logger.error(f"初始化失败: {e}", exc_info=True)
             self.enabled = False
 
     def _get_model_path(self, config):
-        """获取模型路径（使用统一的资源查找器）"""
+        """获取模型路径"""
         from src.utils.resource_finder import resource_finder
         
-        # 直接从配置中获取模型名称或路径
         model_name = config.get_config(
             'WAKE_WORD_OPTIONS.MODEL_PATH', 
             'vosk-model-small-cn-0.22'
         )
         
-        # 转换为Path对象
         model_path = Path(model_name)
         
-        # 如果是绝对路径且存在，直接返回
+        # 绝对路径直接返回
         if model_path.is_absolute() and model_path.exists():
-            logger.info(f"使用绝对路径模型: {model_path}")
             return str(model_path)
         
-        # 如果只有模型名称（没有父目录），则标准化为models子目录下的路径
+        # 标准化为models子目录路径
         if len(model_path.parts) == 1:
             model_path = Path('models') / model_path
         
-        # 使用resource_finder查找模型目录
+        # 使用resource_finder查找
         model_dir_path = resource_finder.find_directory(model_path)
-        
         if model_dir_path:
-            logger.info(f"找到模型目录: {model_dir_path}")
             return str(model_dir_path)
         
-        # 如果没找到完整路径，尝试在models目录中查找模型名称
+        # 在models目录中查找
         models_dir = resource_finder.find_models_dir()
         if models_dir:
-            # 尝试直接在models目录下查找模型名称
             model_name_only = model_path.name if len(model_path.parts) > 1 else model_path
             direct_model_path = models_dir / model_name_only
             if direct_model_path.exists():
-                logger.info(f"在models目录中找到模型: {direct_model_path}")
                 return str(direct_model_path)
             
-            # 遍历models目录下的所有子目录，查找匹配的模型
+            # 遍历子目录查找
             for item in models_dir.iterdir():
                 if item.is_dir() and item.name == model_name_only:
-                    logger.info(f"在models子目录中找到模型: {item}")
                     return str(item)
         
-        # 如果仍然找不到，使用默认路径
+        # 使用默认路径
         project_root = resource_finder.get_project_root()
         default_path = project_root / model_path
-        
         logger.warning(f"未找到模型，将使用默认路径: {default_path}")
         return str(default_path)
 
     def start(self, audio_codec_or_stream=None):
-        """启动检测（仅支持AudioCodec共享流或外部流）"""
+        """启动检测"""
         if not self.enabled:
             logger.warning("唤醒词功能未启用")
             return False
 
-        # 检查参数类型，区分音频编解码器和流对象
+        # 设置音频源
         if audio_codec_or_stream:
-            # 检查是否是流对象
             if hasattr(audio_codec_or_stream, 'read') and hasattr(audio_codec_or_stream, 'is_active'):
-                # 是流对象，使用直接流模式
+                # 外部流
                 self.stream = audio_codec_or_stream
                 self.external_stream = True
-                return self._start_with_external_stream()
+                return self._start_detection_thread("ExternalStream")
             else:
-                # 是AudioCodec对象，使用AudioCodec模式
+                # AudioCodec对象
                 self.audio_codec = audio_codec_or_stream
-
-        # 强制要求AudioCodec实例
+                return self._start_with_audio_codec()
+        
         if self.audio_codec:
             return self._start_with_audio_codec()
-        else:
-            logger.error("唤醒词检测器需要AudioCodec实例或外部音频流，无法启动独立模式")
-            return False
+        
+        logger.error("需要AudioCodec实例或外部音频流")
+        return False
 
     def _start_with_audio_codec(self):
-        """使用AudioCodec的输入流（直接访问）"""
-        try:
-            # 直接访问input_stream属性
-            if not self.audio_codec or not self.audio_codec.input_stream:
-                logger.error("音频编解码器无效或输入流不可用")
-                return False
-
-            # 直接使用AudioCodec的输入流
-            self.stream = self.audio_codec.input_stream
-            self.external_stream = True  # 标记为外部流，避免错误关闭
-
-            # 配置流参数
-            self.sample_rate = AudioConfig.INPUT_SAMPLE_RATE
-            self.buffer_size = AudioConfig.INPUT_FRAME_SIZE
-
-            # 启动检测线程
-            self.running = True
-            self.paused = False
-            self.detection_thread = threading.Thread(
-                target=self._audio_codec_detection_loop,
-                daemon=True,
-                name="WakeWordDetector-AudioCodec"
-            )
-            self.detection_thread.start()
-
-            logger.info("唤醒词检测已启动（直接使用AudioCodec输入流）")
-            return True
-        except Exception as e:
-            logger.error(f"通过AudioCodec启动失败: {e}")
+        """使用AudioCodec启动"""
+        if not self.audio_codec or not hasattr(self.audio_codec, 'input_stream'):
+            logger.error("AudioCodec无效或输入流不可用")
             return False
 
+        self.stream = self.audio_codec.input_stream
+        self.external_stream = True
+        return self._start_detection_thread("AudioCodec")
 
-
-    def _start_with_external_stream(self):
-        """使用外部提供的音频流"""
+    def _start_detection_thread(self, mode_name):
+        """启动检测线程"""
         try:
-            # 设置参数
-            self.sample_rate = AudioConfig.INPUT_SAMPLE_RATE
-            self.buffer_size = AudioConfig.INPUT_FRAME_SIZE
-            
-            # 启动检测线程
             self.running = True
             self.paused = False
             self.detection_thread = threading.Thread(
                 target=self._detection_loop,
                 daemon=True,
-                name="WakeWordDetector-ExternalStream"
+                name=f"WakeWordDetector-{mode_name}"
             )
             self.detection_thread.start()
-            
-            logger.info("唤醒词检测已启动（使用外部音频流）")
+            logger.info(f"唤醒词检测已启动（{mode_name}模式）")
             return True
         except Exception as e:
-            logger.error(f"使用外部流启动失败: {e}")
+            logger.error(f"启动失败: {e}")
             return False
 
-    def _audio_codec_detection_loop(self):
-        """AudioCodec专用检测循环（优化直接访问）"""
-        logger.info("进入AudioCodec检测循环")
+    def _detection_loop(self):
+        """统一的检测循环"""
         error_count = 0
         MAX_ERRORS = 5
-        STREAM_TIMEOUT = 3.0  # 流等待超时时间
 
         while self.running:
             try:
@@ -230,156 +188,371 @@ class WakeWordDetector:
                     time.sleep(0.1)
                     continue
 
-                # 直接访问AudioCodec的输入流
-                if not self.audio_codec or not hasattr(self.audio_codec, 'input_stream'):
-                    logger.warning("AudioCodec不可用，等待中...")
-                    time.sleep(STREAM_TIMEOUT)
+                # 获取音频流
+                stream = self._get_active_stream()
+                if not stream:
+                    time.sleep(0.5)
                     continue
-                    
-                # 直接使用当前流引用
-                stream = self.audio_codec.input_stream
-                if not stream or not stream.is_active():
-                    logger.debug("AudioCodec输入流不活跃，等待恢复...")
-                    try:
-                        # 尝试重新激活或等待AudioCodec恢复流
-                        if stream and hasattr(stream, 'start_stream'):
-                            stream.start_stream()
-                        else:
-                            time.sleep(0.5)
-                            continue
-                    except Exception as e:
-                        logger.warning(f"激活流失败: {e}")
-                        time.sleep(0.5)
-                        continue
 
                 # 读取音频数据
-                data = self._read_audio_data_direct(stream)
-                if not data:
-                    continue
-
-                # 处理数据
-                self._process_audio_data(data)
-                error_count = 0  # 重置错误计数
+                data = self._read_audio_data(stream)
+                if data:
+                    self._process_audio_data(data)
+                    error_count = 0
 
             except Exception as e:
                 error_count += 1
-                logger.error(f"检测循环错误({error_count}/{MAX_ERRORS}): {str(e)}")
+                logger.error(f"检测循环错误({error_count}/{MAX_ERRORS}): {e}")
                 
                 if error_count >= MAX_ERRORS:
                     logger.critical("达到最大错误次数，停止检测")
                     self.stop()
+                    break
                 time.sleep(0.5)
 
-    def _read_audio_data_direct(self, stream):
-        """直接从流读取数据（简化版）"""
+    def _get_active_stream(self):
+        """获取活跃的音频流"""
+        if self.audio_codec:
+            if not hasattr(self.audio_codec, 'input_stream'):
+                return None
+            stream = self.audio_codec.input_stream
+            if stream and stream.is_active():
+                return stream
+            # 尝试重新激活
+            if stream and hasattr(stream, 'start_stream'):
+                try:
+                    stream.start_stream()
+                    return stream if stream.is_active() else None
+                except Exception:
+                    pass
+            return None
+        
+        return self.stream if self.stream and self.stream.is_active() else None
+
+    def _read_audio_data(self, stream):
+        """读取音频数据"""
         try:
             with self.stream_lock:
                 # 检查可用数据
                 if hasattr(stream, 'get_read_available'):
-                    available = stream.get_read_available()
-                    if available < self.buffer_size:
+                    if stream.get_read_available() < self.buffer_size:
                         return None
-
-                # 精确读取
                 return stream.read(self.buffer_size, exception_on_overflow=False)
         except OSError as e:
+            # 处理关键错误
             error_msg = str(e)
-            logger.warning(f"音频流错误: {error_msg}")
-            
-            # 关键错误处理
-            critical_errors = ["Input overflowed", "Device unavailable"]
-            if any(msg in error_msg for msg in critical_errors) and self.audio_codec:
-                logger.info("触发音频流重置...")
+            if any(msg in error_msg for msg in ["Input overflowed", "Device unavailable"]) and self.audio_codec:
                 try:
-                    # 直接调用AudioCodec的重置方法
                     self.audio_codec._reinitialize_stream(is_input=True)
-                except Exception as re:
-                    logger.error(f"流重置失败: {re}")
-                    
-            time.sleep(0.5)
+                except Exception:
+                    pass
             return None
-        except Exception as e:
-            logger.error(f"读取音频数据异常: {e}")
+        except Exception:
             return None
 
+    def _process_audio_data(self, data):
+        """优化的音频数据处理"""
+        try:
+            # 处理完整识别结果
+            if self.recognizer.AcceptWaveform(data):
+                result = json.loads(self.recognizer.Result())
+                if text := result.get('text', '').strip():
+                    # 过滤过短的文本以减少误触发
+                    if len(text) >= 2:
+                        self._check_wake_word(text)
+
+            # 处理部分识别结果（降低频率以提升性能）
+            if hasattr(self, '_partial_check_counter'):
+                self._partial_check_counter += 1
+            else:
+                self._partial_check_counter = 0
+                
+            # 每3次才检查一次部分结果，减少计算负担
+            if self._partial_check_counter % 3 == 0:
+                partial = json.loads(self.recognizer.PartialResult()).get('partial', '').strip()
+                if partial and len(partial) >= 2:
+                    self._check_wake_word(partial)
+                    
+        except json.JSONDecodeError as e:
+            logger.warning(f"JSON解析错误: {e}")
+        except Exception as e:
+            logger.error(f"音频数据处理错误: {e}")
+
+    def _build_wake_word_patterns(self):
+        """构建唤醒词的拼音模式，包括多种变体"""
+        patterns = {}
+        for word in self.wake_words:
+            # 标准拼音（无音调）
+            standard_pinyin = ''.join(lazy_pinyin(word, style=Style.NORMAL))
+            
+            # 首字母拼音
+            initials_pinyin = ''.join(lazy_pinyin(word, style=Style.FIRST_LETTER))
+            
+            # 音调拼音
+            tone_pinyin = ''.join(lazy_pinyin(word, style=Style.TONE))
+            
+            # 韵母拼音
+            finals_pinyin = ''.join(lazy_pinyin(word, style=Style.FINALS))
+            
+            patterns[word] = {
+                'standard': standard_pinyin.lower(),
+                'initials': initials_pinyin.lower(),
+                'tone': tone_pinyin.lower(),
+                'finals': finals_pinyin.lower(),
+                'original': word,
+                'length': len(standard_pinyin)
+            }
+            
+        return patterns
+    
+    @lru_cache(maxsize=128)
+    def _get_text_pinyin_variants(self, text):
+        """获取文本的拼音变体（带缓存）"""
+        if not text or not text.strip():
+            return {}
+            
+        # 清理文本
+        cleaned_text = re.sub(r'[^\u4e00-\u9fff\w]', '', text)
+        if not cleaned_text:
+            return {}
+            
+        return {
+            'standard': ''.join(lazy_pinyin(cleaned_text, style=Style.NORMAL)).lower(),
+            'initials': ''.join(lazy_pinyin(cleaned_text, style=Style.FIRST_LETTER)).lower(),
+            'tone': ''.join(lazy_pinyin(cleaned_text, style=Style.TONE)).lower(),
+            'finals': ''.join(lazy_pinyin(cleaned_text, style=Style.FINALS)).lower()
+        }
+    
+    def _calculate_similarity(self, text_variants, pattern):
+        """计算文本与唤醒词模式的相似度"""
+        max_similarity = 0.0
+        best_match_type = None
+        
+        # 检查各种拼音变体的匹配
+        for variant_type in ['standard', 'tone', 'initials', 'finals']:
+            text_variant = text_variants.get(variant_type, '')
+            pattern_variant = pattern.get(variant_type, '')
+            
+            if not text_variant or not pattern_variant:
+                continue
+                
+            # 1. 精确匹配（最高优先级）
+            if pattern_variant in text_variant:
+                return 1.0, f'exact_{variant_type}'
+            
+            # 2. 序列匹配器相似度
+            similarity = difflib.SequenceMatcher(None, text_variant, pattern_variant).ratio()
+            
+            # 3. 编辑距离匹配（适用于短文本）
+            if len(pattern_variant) <= 10:
+                edit_distance = self._levenshtein_distance(text_variant, pattern_variant)
+                max_allowed_distance = min(self.max_edit_distance, len(pattern_variant) // 2)
+                if edit_distance <= max_allowed_distance:
+                    edit_similarity = 1.0 - (edit_distance / len(pattern_variant))
+                    similarity = max(similarity, edit_similarity)
+            
+            # 4. 子序列匹配（对于首字母缩写）
+            if variant_type == 'initials' and len(pattern_variant) >= 2:
+                if self._is_subsequence(pattern_variant, text_variant):
+                    similarity = max(similarity, 0.85)
+            
+            if similarity > max_similarity:
+                max_similarity = similarity
+                best_match_type = variant_type
+                
+        return max_similarity, best_match_type
+    
+    def _levenshtein_distance(self, s1, s2):
+        """计算编辑距离"""
+        if len(s1) < len(s2):
+            return self._levenshtein_distance(s2, s1)
+        
+        if len(s2) == 0:
+            return len(s1)
+        
+        previous_row = list(range(len(s2) + 1))
+        for i, c1 in enumerate(s1):
+            current_row = [i + 1]
+            for j, c2 in enumerate(s2):
+                insertions = previous_row[j + 1] + 1
+                deletions = current_row[j] + 1
+                substitutions = previous_row[j] + (c1 != c2)
+                current_row.append(min(insertions, deletions, substitutions))
+            previous_row = current_row
+        
+        return previous_row[-1]
+    
+    def _is_subsequence(self, pattern, text):
+        """检查pattern是否为text的子序列"""
+        i = 0
+        for char in text:
+            if i < len(pattern) and char == pattern[i]:
+                i += 1
+        return i == len(pattern)
+    
+    def _check_wake_word(self, text):
+        """优化的唤醒词检查"""
+        if not text or not text.strip():
+            return
+            
+        # 避免重复处理相同文本
+        if text in self._recent_texts:
+            return
+            
+        # 更新最近文本缓存
+        self._recent_texts.append(text)
+        if len(self._recent_texts) > self._max_recent_cache:
+            self._recent_texts.pop(0)
+        
+        # 获取文本的拼音变体
+        text_variants = self._get_text_pinyin_variants(text)
+        if not text_variants or not any(text_variants.values()):
+            return
+        
+        best_match = None
+        best_similarity = 0.0
+        best_match_info = None
+        
+        # 检查每个唤醒词模式
+        for wake_word, pattern in self.wake_word_patterns.items():
+            similarity, match_type = self._calculate_similarity(text_variants, pattern)
+            
+            if similarity > best_similarity and similarity >= self.similarity_threshold:
+                best_similarity = similarity
+                best_match = wake_word
+                best_match_info = match_type
+        
+        # 触发检测
+        if best_match:
+            logger.info(f"检测到唤醒词 '{best_match}' (相似度: {best_similarity:.3f}, 匹配类型: {best_match_info})")
+            logger.debug(f"原始文本: '{text}', 拼音变体: {text_variants}")
+            self._trigger_callbacks(best_match, text)
+            self.recognizer.Reset()
+            # 清空缓存避免重复触发
+            self._recent_texts.clear()
 
     def stop(self):
-        """停止检测（仅清理外部流资源）"""
+        """停止检测"""
         if self.running:
-            logger.info("正在停止唤醒词检测...")
             self.running = False
-
             if self.detection_thread and self.detection_thread.is_alive():
                 self.detection_thread.join(timeout=1.0)
-
-            # 重置状态（不清理AudioCodec的共享流）
             self.stream = None
             self.external_stream = False
             logger.info("唤醒词检测已停止")
             
     def is_running(self):
-        """检查唤醒词检测是否正在运行"""
+        """检查是否正在运行"""
         return self.running and not self.paused
         
     def update_stream(self, new_stream):
-        """更新唤醒词检测器使用的音频流（仅支持外部流）"""
+        """更新音频流"""
         if not self.running:
-            logger.warning("唤醒词检测器未运行，无法更新流")
             return False
-
         with self.stream_lock:
-            # 更新为新的外部流
             self.stream = new_stream
             self.external_stream = True
-            logger.info("已更新唤醒词检测器的音频流")
         return True
-
-    def _process_audio_data(self, data):
-        """处理音频数据（优化日志）"""
-        if self.recognizer.AcceptWaveform(data):
-            result = json.loads(self.recognizer.Result())
-            if text := result.get('text', ''):
-                logger.debug(f"完整识别: {text}")
-                self._check_wake_word(text)
-
-        partial = json.loads(self.recognizer.PartialResult()).get('partial', '')
-        if partial:
-            logger.debug(f"部分识别: {partial}")
-            self._check_wake_word(partial, is_partial=True)
-
-    def _check_wake_word(self, text, is_partial=False):
-        """唤醒词检查（优化拼音匹配）"""
-        text_pinyin = ''.join(lazy_pinyin(text)).replace(' ', '')
-        for word, pinyin in zip(self.wake_words, self.wake_words_pinyin):
-            if pinyin in text_pinyin:
-                logger.info(f"检测到唤醒词 '{word}' (匹配拼音: {pinyin})")
-                self._trigger_callbacks(word, text)
-                self.recognizer.Reset()
-                return
 
     def pause(self):
         """暂停检测"""
         if self.running and not self.paused:
             self.paused = True
-            logger.info("检测已暂停")
 
     def resume(self):
         """恢复检测"""
         if self.running and self.paused:
             self.paused = False
-            logger.info("检测已恢复")
 
     def on_detected(self, callback):
         """注册回调"""
         self.on_detected_callbacks.append(callback)
 
     def _trigger_callbacks(self, wake_word, text):
-        """触发回调（带异常处理）"""
+        """触发回调"""
         for cb in self.on_detected_callbacks:
             try:
                 cb(wake_word, text)
             except Exception as e:
-                logger.error(f"回调执行失败: {e}", exc_info=True)
+                logger.error(f"回调执行失败: {e}")
+
+    def _validate_config(self):
+        """验证配置参数"""
+        if not self.enabled:
+            return
+            
+        # 验证相似度阈值
+        if not 0.1 <= self.similarity_threshold <= 1.0:
+            logger.warning(f"相似度阈值 {self.similarity_threshold} 超出合理范围，重置为0.8")
+            self.similarity_threshold = 0.8
+            
+        # 验证编辑距离
+        if self.max_edit_distance < 0 or self.max_edit_distance > 5:
+            logger.warning(f"最大编辑距离 {self.max_edit_distance} 超出合理范围，重置为2")
+            self.max_edit_distance = 2
+            
+        # 验证唤醒词
+        if not self.wake_words:
+            logger.error("未配置唤醒词")
+            self.enabled = False
+            return
+            
+        # 检查唤醒词长度
+        for word in self.wake_words:
+            if len(word) < 2:
+                logger.warning(f"唤醒词 '{word}' 过短，可能导致误触发")
+            elif len(word) > 10:
+                logger.warning(f"唤醒词 '{word}' 过长，可能影响识别准确度")
+                
+        logger.info(f"配置验证完成 - 阈值: {self.similarity_threshold}, 编辑距离: {self.max_edit_distance}")
+    
+    def get_performance_stats(self):
+        """获取性能统计信息"""
+        cache_info = self._get_text_pinyin_variants.cache_info()
+        return {
+            'enabled': self.enabled,
+            'wake_words_count': len(self.wake_words),
+            'similarity_threshold': self.similarity_threshold,
+            'max_edit_distance': self.max_edit_distance,
+            'cache_hits': cache_info.hits,
+            'cache_misses': cache_info.misses,
+            'cache_size': cache_info.currsize,
+            'recent_texts_count': len(self._recent_texts)
+        }
+    
+    def clear_cache(self):
+        """清空缓存"""
+        self._get_text_pinyin_variants.cache_clear()
+        self._recent_texts.clear()
+        logger.info("缓存已清空")
+    
+    def update_config(self, **kwargs):
+        """动态更新配置"""
+        updated = False
+        
+        if 'similarity_threshold' in kwargs:
+            new_threshold = kwargs['similarity_threshold']
+            if 0.1 <= new_threshold <= 1.0:
+                self.similarity_threshold = new_threshold
+                updated = True
+                logger.info(f"相似度阈值更新为: {new_threshold}")
+            else:
+                logger.warning(f"无效的相似度阈值: {new_threshold}")
+                
+        if 'max_edit_distance' in kwargs:
+            new_distance = kwargs['max_edit_distance']
+            if 0 <= new_distance <= 5:
+                self.max_edit_distance = new_distance
+                updated = True
+                logger.info(f"最大编辑距离更新为: {new_distance}")
+            else:
+                logger.warning(f"无效的编辑距离: {new_distance}")
+                
+        if updated:
+            # 清空缓存以应用新配置
+            self.clear_cache()
+            
+        return updated
 
     def __del__(self):
         self.stop()

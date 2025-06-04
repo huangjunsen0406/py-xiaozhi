@@ -322,7 +322,7 @@ class Application:
     def _on_network_error(self, error_message=None):
         """网络错误回调"""
         if error_message:
-            logger.error(f"网络错误: {error_message}")
+            logger.error(error_message)
             
         self.keep_listening = False
         self.schedule(lambda: self.set_device_state(DeviceState.IDLE))

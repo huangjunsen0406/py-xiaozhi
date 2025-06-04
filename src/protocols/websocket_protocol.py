@@ -152,7 +152,7 @@ class WebsocketProtocol(Protocol):
             except Exception as e:
                 await self.close_audio_channel()
                 if self.on_network_error:
-                    self.on_network_error(f"发送消息失败: {str(e)}")
+                    self.on_network_error("客户端已关闭")
 
     def is_audio_channel_opened(self) -> bool:
         """检查音频通道是否打开"""
