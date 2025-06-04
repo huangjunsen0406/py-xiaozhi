@@ -446,7 +446,7 @@ class Application:
 
                 try:
                     if self.audio_codec:
-                        self.audio_codec._reinitialize_input_stream()  # 调用重新初始化
+                        self.audio_codec._reinitialize_stream(is_input=True)  # 调用重新初始化
                     else:
                         logger.warning("Cannot force reinitialization, audio_codec is None.")
                 except Exception as force_reinit_e:
@@ -499,7 +499,7 @@ class Application:
                 except Exception as e:
                     logger.warning(f"启动输入流时出错: {e}")
                     # 只有在出错时才重新初始化
-                    self.audio_codec._reinitialize_input_stream()
+                    self.audio_codec._reinitialize_stream(is_input=True)
 
             if self.audio_codec.output_stream and not self.audio_codec.output_stream.is_active():
                 try:
@@ -507,7 +507,7 @@ class Application:
                 except Exception as e:
                     logger.warning(f"启动输出流时出错: {e}")
                     # 只有在出错时才重新初始化
-                    self.audio_codec._reinitialize_output_stream()
+                    self.audio_codec._reinitialize_stream(is_input=False)
 
             # 设置事件触发器
             if self.input_event_thread is None or not self.input_event_thread.is_alive():
@@ -562,7 +562,7 @@ class Application:
                             self.audio_codec.output_stream.start_stream()
                         except Exception as e:
                             logger.warning(f"启动输出流失败，尝试重新初始化: {e}")
-                            self.audio_codec._reinitialize_output_stream()
+                            self.audio_codec._reinitialize_stream(is_input=False)
 
                     # 当队列中有数据时才触发事件
                     if not self.audio_codec.audio_decode_queue.empty():
@@ -771,7 +771,7 @@ class Application:
             # --- 强制重新初始化输入流 ---
             try:
                 if self.audio_codec:
-                     self.audio_codec._reinitialize_input_stream() # 调用重新初始化
+                     self.audio_codec._reinitialize_stream(is_input=True) # 调用重新初始化
                 else:
                      logger.warning("Cannot force reinitialization, audio_codec is None.")
             except Exception as force_reinit_e:

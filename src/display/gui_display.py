@@ -25,7 +25,7 @@ from PyQt5.QtGui import (
 from src.utils.config_manager import ConfigManager
 import queue
 import time
-import numpy as np
+
 from typing import Optional, Callable
 
 # 根据不同操作系统处理 pynput 导入
@@ -130,9 +130,6 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         self.volume_control_available = False  # 系统音量控制是否可用
         self.volume_controller_failed = False  # 标记音量控制是否失败
         
-        # 麦克风可视化相关
-        self.mic_visualizer = None  # 麦克风可视化组件
-        self.mic_timer = None  # 麦克风音量更新定时器
         self.is_listening = False  # 是否正在监听
         
         # 设置页面控件
@@ -461,11 +458,7 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             self.current_status = status
             self.update_queue.put(lambda: self._update_tray_icon(status))
         
-        # 根据状态更新麦克风可视化
-        if "聆听中" in status:
-            self.update_queue.put(self._start_mic_visualization)
-        elif "待命" in status or "说话中" in status:
-            self.update_queue.put(self._stop_mic_visualization)
+
 
     def update_text(self, text: str):
         """更新TTS文本"""
@@ -709,16 +702,14 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             # 如果在非主线程，使用 QMetaObject.invokeMethod 在主线程中执行
             if self.update_timer:
                 QMetaObject.invokeMethod(self.update_timer, "stop", Qt.QueuedConnection)
-            if self.mic_timer:
-                QMetaObject.invokeMethod(self.mic_timer, "stop", Qt.QueuedConnection)
+
             if self.ha_update_timer:
                 QMetaObject.invokeMethod(self.ha_update_timer, "stop", Qt.QueuedConnection)
         else:
             # 已在主线程中，直接停止
             if self.update_timer:
                 self.update_timer.stop()
-            if self.mic_timer:
-                self.mic_timer.stop()
+
             if self.ha_update_timer:
                 self.ha_update_timer.stop()
                 
@@ -799,10 +790,8 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             else:
                 self.logger.info(f"找到 iot_card: {self.iot_card}")
             
-            # 音频控制栈组件
-            self.audio_control_stack = self.root.findChild(QStackedWidget, "audio_control_stack")
+            # 音量控制组件页面
             self.volume_page = self.root.findChild(QWidget, "volume_page")
-            self.mic_page = self.root.findChild(QWidget, "mic_page")
             
             # 音量控制组件
             self.volume_scale = self.root.findChild(QSlider, "volume_scale")
@@ -824,22 +813,7 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
                     self.volume_label.setAlignment(Qt.AlignCenter)
                     volume_layout.addWidget(self.volume_label)
             
-            # 初始化麦克风可视化组件 - 使用UI中定义的QFrame
-            self.mic_visualizer_card = self.root.findChild(QFrame, "mic_visualizer_card")
-            self.mic_visualizer_widget = self.root.findChild(QWidget, "mic_visualizer_widget")
-            
-            if self.mic_visualizer_widget:
-                # 创建可视化组件实例
-                self.mic_visualizer = MicrophoneVisualizer(self.mic_visualizer_widget)
-                
-                # 设置布局以使可视化组件填充整个区域
-                layout = QVBoxLayout(self.mic_visualizer_widget)
-                layout.setContentsMargins(0, 0, 0, 0)
-                layout.addWidget(self.mic_visualizer)
-                
-                # 创建更新定时器，但不启动
-                self.mic_timer = QTimer()
-                self.mic_timer.timeout.connect(self._update_mic_visualizer)
+
             
             # 根据音量控制可用性设置组件状态
             volume_control_working = self.volume_control_available and not self.volume_controller_failed
@@ -1083,8 +1057,7 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         # 停止所有线程和计时器
         if self.update_timer:
             self.update_timer.stop()
-        if self.mic_timer:
-            self.mic_timer.stop()
+
         if self.ha_update_timer:
             self.ha_update_timer.stop()
         
@@ -1582,209 +1555,15 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             self.logger.error(f"启动Home Assistant设备管理器失败: {e}", exc_info=True)
             QMessageBox.critical(self.root, "错误", f"启动设备管理器失败: {e}")
 
-    def _update_mic_visualizer(self):
-        """更新麦克风可视化"""
-        # Linux和macOS系统下不运行可视化
-        if platform.system() in ["Linux", "Darwin"]:
-            return
-            
-        if not self.is_listening or not self.mic_visualizer:
-            return
-            
-        try:
-            # 获取当前麦克风音量级别，范围0-1
-            volume_level = self._get_current_mic_level()
-                
-            # 更新可视化组件
-            self.mic_visualizer.set_volume(min(1.0, volume_level))
-        except Exception as e:
-            self.logger.error(f"更新麦克风可视化失败: {e}")
 
-    def _get_current_mic_level(self):
-        """获取当前麦克风音量级别"""
-        try:
-            from src.application import Application
-            app = Application.get_instance()
-            if app and hasattr(app, 'audio_codec') and app.audio_codec:
-                # 从音频编解码器获取原始音频数据
-                if hasattr(app.audio_codec, 'input_stream') and app.audio_codec.input_stream:
-                    # 读取音频数据并计算音量级别
-                    try:
-                        # 获取输入流中可读取的数据量
-                        available = app.audio_codec.input_stream.get_read_available()
-                        if available > 0:
-                            # 读取一小块数据用于计算音量
-                            chunk_size = min(1024, available)
-                            audio_data = app.audio_codec.input_stream.read(
-                                chunk_size, 
-                                exception_on_overflow=False
-                            )
-                            
-                            # 将字节数据转换为numpy数组进行处理
-                            audio_array = np.frombuffer(audio_data, dtype=np.int16)
-                            
-                            # 计算音量级别 (0.0-1.0)
-                            # 16位音频的最大值是32768，计算音量占最大值的比例
-                            # 使用均方根(RMS)值计算有效音量
-                            rms = np.sqrt(np.mean(np.square(audio_array.astype(np.float32))))
-                            # 标准化为0-1范围，32768是16位音频的最大值
-                            # 增加放大系数以提高灵敏度
-                            volume = min(1.0, rms / 32768 * 10)  # 放大10倍使小音量更明显
-                            
-                            # 应用平滑处理
-                            if hasattr(self, '_last_volume'):
-                                # 平滑过渡，保留70%上次数值，增加30%新数值
-                                self._last_volume = self._last_volume * 0.7 + volume * 0.3
-                            else:
-                                self._last_volume = volume
-                                
-                            return self._last_volume
-                    except Exception as e:
-                        self.logger.debug(f"读取麦克风数据失败: {e}")
-        except Exception as e:
-            self.logger.debug(f"获取麦克风音量失败: {e}")
-            
-        # 如果无法获取实际音量，返回上次的音量或默认值
-        if hasattr(self, '_last_volume'):
-            # 缓慢衰减上次的音量
-            self._last_volume *= 0.9
-            return self._last_volume
-        else:
-            self._last_volume = 0.0 # 初始化为 0
-            return self._last_volume
 
-    def _start_mic_visualization(self):
-        """开始麦克风可视化"""
-        # Linux和macOS系统下不运行可视化
-        if platform.system() in ["Linux", "Darwin"]:
-            return
-            
-        if not self.mic_visualizer or not self.mic_timer or not self.audio_control_stack:
-            return
-            
-        try:
-            # 获取应用程序实例
-            from src.application import Application
-            app = Application.get_instance()
-            if not app or not hasattr(app, 'audio_codec') or not app.audio_codec:
-                self.logger.warning("音频编解码器未初始化，无法启动麦克风可视化")
-                return
-                
-            # 确保音频输入流可用
-            if not hasattr(app.audio_codec, 'input_stream') or not app.audio_codec.input_stream:
-                self.logger.warning("音频输入流未初始化，无法启动麦克风可视化")
-                return
-                
-            self.is_listening = True
-            
-            # 切换到麦克风可视化页面
-            self.audio_control_stack.setCurrentWidget(self.mic_page)
-                
-            # 启动定时器更新可视化
-            if not self.mic_timer.isActive():
-                self.mic_timer.start(50)  # 20fps
-        except Exception as e:
-            self.logger.error(f"启动麦克风可视化失败: {e}")
-            self.is_listening = False
-                
-    def _stop_mic_visualization(self):
-        """停止麦克风可视化"""
-        # Linux和macOS系统下不运行可视化
-        if platform.system() in ["Linux", "Darwin"]:
-            return
-            
-        try:
-            self.is_listening = False
-            
-            # 停止定时器
-            if self.mic_timer and self.mic_timer.isActive():
-                # 确保在主线程中停止定时器
-                if QThread.currentThread() != QApplication.instance().thread():
-                    QMetaObject.invokeMethod(self.mic_timer, "stop", Qt.QueuedConnection)
-                else:
-                    self.mic_timer.stop()
-                    
-                # 重置可视化音量
-                if self.mic_visualizer:
-                    self.mic_visualizer.set_volume(0.0)
-                    # 确保动画平滑过渡到0
-                    if hasattr(self, '_last_volume'):
-                        self._last_volume = 0.0
 
-            # 切换回音量控制页面
-            if self.audio_control_stack:
-                self.audio_control_stack.setCurrentWidget(self.volume_page)
+
+
                 
-            # 清理音频相关资源
-            try:
-                from src.application import Application
-                app = Application.get_instance()
-                if app and hasattr(app, 'audio_codec') and app.audio_codec:
-                    # 重置音频编解码器状态（如果需要）
-                    if hasattr(app.audio_codec, 'reset_state'):
-                        app.audio_codec.reset_state()
-            except Exception as e:
-                self.logger.debug(f"清理音频资源时出错: {e}")
-                
-        except Exception as e:
-            self.logger.error(f"停止麦克风可视化失败: {e}")
+
             
-    def _get_current_mic_level(self):
-        """获取当前麦克风音量级别"""
-        try:
-            from src.application import Application
-            app = Application.get_instance()
-            if not app or not hasattr(app, 'audio_codec') or not app.audio_codec:
-                return 0.0
-                
-            # 从音频编解码器获取原始音频数据
-            if not hasattr(app.audio_codec, 'input_stream') or not app.audio_codec.input_stream:
-                return 0.0
-                
-            # 读取音频数据并计算音量级别
-            try:
-                # 获取输入流中可读取的数据量
-                available = app.audio_codec.input_stream.get_read_available()
-                if available > 0:
-                    # 读取一小块数据用于计算音量
-                    chunk_size = min(1024, available)
-                    audio_data = app.audio_codec.input_stream.read(
-                        chunk_size, 
-                        exception_on_overflow=False
-                    )
-                    
-                    # 将字节数据转换为numpy数组进行处理
-                    audio_array = np.frombuffer(audio_data, dtype=np.int16)
-                    
-                    # 计算音量级别 (0.0-1.0)
-                    # 16位音频的最大值是32768，计算音量占最大值的比例
-                    # 使用均方根(RMS)值计算有效音量
-                    rms = np.sqrt(np.mean(np.square(audio_array.astype(np.float32))))
-                    # 标准化为0-1范围，32768是16位音频的最大值
-                    # 增加放大系数以提高灵敏度
-                    volume = min(1.0, rms / 32768 * 10)  # 放大10倍使小音量更明显
-                    
-                    # 应用平滑处理
-                    if hasattr(self, '_last_volume'):
-                        # 平滑过渡，保留70%上次数值，增加30%新数值
-                        self._last_volume = self._last_volume * 0.7 + volume * 0.3
-                    else:
-                        self._last_volume = volume
-                        
-                    return self._last_volume
-            except Exception as e:
-                self.logger.debug(f"读取麦克风数据失败: {e}")
-        except Exception as e:
-            self.logger.debug(f"获取麦克风音量失败: {e}")
-            
-        # 如果无法获取实际音量，返回上次的音量或默认值
-        if hasattr(self, '_last_volume'):
-            # 缓慢衰减上次的音量
-            self._last_volume *= 0.9
-            return self._last_volume
-        else:
-            self._last_volume = 0.0 # 初始化为 0
-            return self._last_volume
+
 
     def _on_send_button_click(self):
         """处理发送文本按钮点击事件"""
@@ -2190,256 +1969,3 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             label.setText(f"{display_state}")
         except RuntimeError as e:
             self.logger.error(f"更新设备状态标签失败: {e}")
-
-class MicrophoneVisualizer(QFrame):
-    """麦克风音量可视化组件 - 波形显示版"""
-    
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setMinimumHeight(50)
-        self.setFrameShape(QFrame.NoFrame)
-        
-        # 初始化音量数据
-        self.current_volume = 0.0
-        self.target_volume = 0.0
-        
-        # 波形历史数据（用于绘制波形图）- 增加历史点数使波形更平滑
-        self.history_max = 30  # 增加历史数据点数量
-        self.volume_history = [0.0] * self.history_max
-        
-        # 创建平滑动画效果
-        self.animation_timer = QTimer()
-        self.animation_timer.timeout.connect(self._update_animation)
-        self.animation_timer.start(16)  # 约60fps
-        
-        # 颜色设置
-        self.min_color = QColor(80, 150, 255)  # 低音量时的颜色 (蓝色)
-        self.max_color = QColor(255, 100, 100)  # 高音量时的颜色 (红色)
-        self.current_color = self.min_color.name()
-        
-        # 添加状态持续时间计数器，防止状态频繁变化
-        self.current_status = "安静"  # 当前显示的状态
-        self.target_status = "安静"   # 目标状态
-        self.status_hold_count = 0    # 状态保持计数器
-        self.status_threshold = 5     # 状态变化阈值（必须连续5帧达到阈值才切换状态）
-        
-        # 透明背景
-        self.setStyleSheet("background-color: transparent;")
-        
-    def set_volume(self, volume):
-        """设置当前音量，范围0.0-1.0"""
-        # 确保音量在有效范围内
-        volume = max(0.0, min(1.0, volume))
-        self.target_volume = volume
-        
-        # 更新历史数据（添加新值并移除最旧的值）
-        self.volume_history.append(volume)
-        if len(self.volume_history) > self.history_max:
-            self.volume_history.pop(0)
-            
-        # 更新状态文本（带状态变化滞后）
-        volume_percent = int(volume * 100)
-        
-        # 根据音量级别确定目标状态
-        if volume_percent < 5:
-            new_status = "静音"
-        elif volume_percent < 20:
-            new_status = "安静"
-        elif volume_percent < 50:
-            new_status = "正常"
-        elif volume_percent < 75:
-            new_status = "较大"
-        else:
-            new_status = "很大"
-            
-        # 状态切换逻辑（带滞后性）
-        if new_status == self.target_status:
-            # 相同状态，增加计数
-            self.status_hold_count += 1
-        else:
-            # 不同状态，重置为新状态
-            self.target_status = new_status
-            self.status_hold_count = 0
-            
-        # 只有当状态持续一定时间后才切换显示状态  
-        if self.status_hold_count >= self.status_threshold:
-            self.current_status = self.target_status
-            
-        self.update()  # 触发重绘
-        
-    def _update_animation(self):
-        """更新动画效果"""
-        # 平滑过渡到目标音量 - 提高响应性
-        self.current_volume += (self.target_volume - self.current_volume) * 0.3
-
-        # 计算颜色过渡
-        r = int(self.min_color.red() + (self.max_color.red() - self.min_color.red()) * self.current_volume)
-        g = int(self.min_color.green() + (self.max_color.green() - self.min_color.green()) * self.current_volume)
-        b = int(self.min_color.blue() + (self.max_color.blue() - self.min_color.blue()) * self.current_volume)
-        self.current_color = QColor(r, g, b).name()
-
-        self.update()
-        
-    def paintEvent(self, event):
-        """绘制事件"""
-        super().paintEvent(event)
-        
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.Antialiasing)
-        
-        try:
-            # 获取绘制区域
-            rect = self.rect()
-            
-            # 绘制波形图
-            self._draw_waveform(painter, rect)
-            
-            # 添加音量状态文本
-            small_font = painter.font()
-            small_font.setPointSize(10)
-            painter.setFont(small_font)
-            painter.setPen(QColor(100, 100, 100))
-            
-            # 在底部显示状态文本
-            status_rect = QRect(rect.left(), rect.bottom() - 20, rect.width(), 20)
-            
-            # 使用稳定的状态文本显示
-            status_text = f"声音: {self.current_status}"
-            
-            painter.drawText(status_rect, Qt.AlignCenter, status_text)
-        except Exception as e:
-            self.logger.error(f"绘制波形图失败: {e}") if hasattr(self, 'logger') else None
-        finally:
-            painter.end()
-        
-    def _draw_waveform(self, painter, rect):
-        """绘制波形图"""
-        # 如果没有足够的历史数据，返回
-        if len(self.volume_history) < 2:
-            return
-            
-        # 波形图区域 - 扩大为几乎整个控件
-        wave_rect = QRect(rect.left() + 10, rect.top() + 10, 
-                        rect.width() - 20, rect.height() - 40)
-        
-        # 设置半透明背景
-        bg_color = QColor(240, 240, 240, 30)
-        painter.setPen(Qt.NoPen)
-        painter.setBrush(QBrush(bg_color))
-        painter.drawRoundedRect(wave_rect, 5, 5)
-        
-        # 设置波形图线条样式
-        wave_pen = QPen(QColor(self.current_color))
-        wave_pen.setWidth(2)
-        painter.setPen(wave_pen)
-        
-        # 计算波形图点
-        history_len = len(self.volume_history)
-        point_interval = wave_rect.width() / (history_len - 1)
-        
-        # 创建波形图路径
-        path = QPainterPath()
-        
-        # 波形图起点（从左下角开始）
-        start_x = wave_rect.left()
-        mid_y = wave_rect.top() + wave_rect.height() / 2
-        
-        # 平滑波形显示 - 减小振幅变化，让无声和小声时波形更平稳
-        amplitude_factor = 0.8  # 振幅因子
-        min_amplitude = 0.1     # 最小振幅（确保有轻微波动）
-        
-        # 计算第一个点的y坐标
-        vol = self.volume_history[0]
-        amp = max(min_amplitude, vol) * amplitude_factor  # 确保最小振幅
-        start_y = mid_y - amp * wave_rect.height() / 2
-        
-        path.moveTo(start_x, start_y)
-        
-        # 添加波形点
-        for i in range(1, history_len):
-            x = start_x + i * point_interval
-            
-            # 获取当前音量
-            vol = self.volume_history[i]
-            
-            # 计算振幅（上下波动），确保最小振幅以保持波形的可见性
-            amp = max(min_amplitude, vol) * amplitude_factor
-            
-            # 添加正弦波动，使波形更自然
-            wave_phase = i / 2.0  # 波相位
-            sine_factor = 0.08 * amp  # 正弦波因子随音量变化
-            sine_wave = sine_factor * np.sin(wave_phase)
-            
-            y = mid_y - (amp * wave_rect.height() / 2 + sine_wave * wave_rect.height())
-            
-            # 使用曲线连接点，使波形更平滑
-            if i > 1:
-                # 使用二次贝塞尔曲线，需要一个控制点
-                ctrl_x = start_x + (i - 0.5) * point_interval
-                prev_vol = self.volume_history[i-1]
-                prev_amp = max(min_amplitude, prev_vol) * amplitude_factor
-                prev_sine = sine_factor * np.sin((i-1) / 2.0)
-                ctrl_y = mid_y - (prev_amp * wave_rect.height() / 2 + prev_sine * wave_rect.height())
-                path.quadTo(ctrl_x, ctrl_y, x, y)
-        else:
-                # 第一个点直接连接
-                path.lineTo(x, y)
-        
-        # 绘制波形路径
-        painter.drawPath(path)
-        
-        # 添加渐变效果
-        # 创建从波形底部到顶部的渐变
-        gradient = QLinearGradient(
-            wave_rect.left(), wave_rect.top() + wave_rect.height(),
-            wave_rect.left(), wave_rect.top()
-        )
-        
-        # 根据当前音量设置渐变颜色
-        gradient.setColorAt(0, QColor(self.current_color).lighter(140))
-        gradient.setColorAt(0.5, QColor(self.current_color))
-        gradient.setColorAt(1, QColor(self.current_color).darker(140))
-        
-        # 保存画家状态
-        painter.save()
-        
-        # 创建反射路径（波形的镜像）
-        reflect_path = QPainterPath(path)
-        # 将路径向下移动，创建反射效果
-        transform = QTransform()
-        transform.translate(0, wave_rect.height() / 4)
-        reflect_path = transform.map(reflect_path)
-        
-        # 设置半透明画笔绘制反射
-        reflect_pen = QPen()
-        reflect_pen.setWidth(1)
-        reflect_pen.setColor(QColor(self.current_color).lighter(160))
-        painter.setPen(reflect_pen)
-        
-        # 设置透明度
-        painter.setOpacity(0.3)
-        
-        # 绘制反射波形
-        painter.drawPath(reflect_path)
-        
-        # 恢复画家状态
-        painter.restore()
-        
-        # 添加音量百分比小浮标
-        if self.current_volume > 0.1:  # 只有当音量足够大时才显示
-            percent_text = f"{int(self.current_volume * 100)}%"
-            painter.setPen(QColor(self.current_color).darker(120))
-            
-            # 字体大小随音量变化
-            font = painter.font()
-            font.setPointSize(8 + int(self.current_volume * 4))  # 8-12pt
-            font.setBold(True)
-            painter.setFont(font)
-            
-            # 在波形最右侧显示百分比
-            right_edge = wave_rect.right() - 40
-            y_position = mid_y - amp * wave_rect.height() / 3  # 根据当前振幅定位
-            
-            # 使用QPoint而不是单独的x,y坐标，或者将浮点数转为整数
-            # Windows下QPainter.drawText对坐标类型要求更严格
-            painter.drawText(int(right_edge), int(y_position), percent_text)

@@ -159,7 +159,7 @@ QTabBar {
         </widget>
        </item>
        <item>
-        <widget class="QFrame" name="mic_visualizer_card">
+        <widget class="QFrame" name="volume_control_card">
          <property name="minimumSize">
           <size>
            <width>0</width>
@@ -178,7 +178,7 @@ QTabBar {
          <property name="frameShadow">
           <enum>QFrame::Raised</enum>
          </property>
-         <layout class="QVBoxLayout" name="mic_visualizer_layout">
+         <layout class="QVBoxLayout" name="volume_control_layout">
           <property name="spacing">
            <number>0</number>
           </property>
@@ -195,84 +195,47 @@ QTabBar {
            <number>5</number>
           </property>
           <item>
-           <widget class="QStackedWidget" name="audio_control_stack">
-            <property name="currentIndex">
-             <number>0</number>
-            </property>
-            <widget class="QWidget" name="volume_page">
-             <layout class="QHBoxLayout" name="volume_layout">
-              <property name="spacing">
-               <number>5</number>
-              </property>
-              <property name="leftMargin">
-               <number>0</number>
-              </property>
-              <property name="topMargin">
-               <number>0</number>
-              </property>
-              <property name="rightMargin">
-               <number>0</number>
-              </property>
-              <property name="bottomMargin">
-               <number>0</number>
-              </property>
-              <item>
-               <widget class="QPushButton" name="mute">
-                <property name="minimumSize">
-                 <size>
-                  <width>72</width>
-                  <height>34</height>
-                 </size>
-                </property>
-                <property name="text">
-                 <string>点击静音</string>
-                </property>
-                <property name="checkable">
-                 <bool>true</bool>
-                </property>
-               </widget>
-              </item>
-              <item>
-               <widget class="QSlider" name="volume_scale">
-                <property name="orientation">
-                 <enum>Qt::Horizontal</enum>
-                </property>
-               </widget>
-              </item>
-             </layout>
-            </widget>
-            <widget class="QWidget" name="mic_page">
-             <layout class="QVBoxLayout" name="mic_page_layout">
-              <property name="spacing">
-               <number>0</number>
-              </property>
-              <property name="leftMargin">
-               <number>0</number>
-              </property>
-              <property name="topMargin">
-               <number>0</number>
-              </property>
-              <property name="rightMargin">
-               <number>0</number>
-              </property>
-              <property name="bottomMargin">
-               <number>0</number>
-              </property>
-              <item>
-               <widget class="QWidget" name="mic_visualizer_widget" native="true">
-                <property name="minimumSize">
-                 <size>
-                  <width>0</width>
-                  <height>50</height>
-                 </size>
-                </property>
-                <property name="styleSheet">
-                 <string notr="true">border-radius: 8px;</string>
-                </property>
-               </widget>
-              </item>
-             </layout>
-            </widget>
+           <widget class="QWidget" name="volume_page">
+            <layout class="QHBoxLayout" name="volume_layout">
+             <property name="spacing">
+              <number>5</number>
+             </property>
+             <property name="leftMargin">
+              <number>0</number>
+             </property>
+             <property name="topMargin">
+              <number>0</number>
+             </property>
+             <property name="rightMargin">
+              <number>0</number>
+             </property>
+             <property name="bottomMargin">
+              <number>0</number>
+             </property>
+             <item>
+              <widget class="QPushButton" name="mute">
+               <property name="minimumSize">
+                <size>
+                 <width>72</width>
+                 <height>34</height>
+                </size>
+               </property>
+               <property name="text">
+                <string>点击静音</string>
+               </property>
+               <property name="checkable">
+                <bool>true</bool>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QSlider" name="volume_scale">
+               <property name="orientation">
+                <enum>Qt::Horizontal</enum>
+               </property>
+              </widget>
+             </item>
+            </layout>
            </widget>
           </item>
          </layout>
