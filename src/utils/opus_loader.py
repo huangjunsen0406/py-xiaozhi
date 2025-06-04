@@ -67,102 +67,40 @@ def get_system_info():
 
 
 def get_search_paths(system, arch_name):
-    """获取库文件搜索路径列表"""
-    # 可能的基准路径
-    possible_base_dirs = [
-        Path(__file__).parent.parent.parent,  # 项目根目录
-        Path.cwd(),  # 当前工作目录
-    ]
+    """获取库文件搜索路径列表（使用统一的资源查找器）"""
+    from .resource_finder import resource_finder
     
-    # 如果是打包后的环境，添加可执行文件目录
-    if getattr(sys, 'frozen', False):
-        # 可执行文件所在目录
-        exe_dir = Path(sys.executable).parent
-        possible_base_dirs.append(exe_dir)
-        
-        # PyInstaller的_MEIPASS路径(如果存在) - 包含解压的所有资源
-        if hasattr(sys, '_MEIPASS'):
-            meipass_dir = Path(sys._MEIPASS)
-            possible_base_dirs.append(meipass_dir)
-            # 支持PyInstaller 6.0.0+：_MEIPASS可能是_internal目录
-            if meipass_dir.name == '_internal':
-                # 添加_internal的父目录
-                possible_base_dirs.append(meipass_dir.parent)
-        
-        # 增加向上一级目录的搜索
-        parent_dir = exe_dir.parent
-        possible_base_dirs.append(parent_dir)
-        
-        # 支持PyInstaller 6.0.0+：检查_internal目录
-        internal_dir = exe_dir / '_internal'
-        if internal_dir.exists():
-            possible_base_dirs.append(internal_dir)
-        
-        logger.debug(f"可执行文件目录: {exe_dir}")
-        logger.debug(f"可执行文件父目录: {parent_dir}")
-        if hasattr(sys, '_MEIPASS'):
-            logger.debug(f"PyInstaller资源目录: {meipass_dir}")
-        
-    # 根据系统和架构构建搜索路径
     lib_name = LIB_INFO[system]['name']
     search_paths = []
     
-    for base_dir in filter(None, possible_base_dirs):
-        # 使用标准化的目录结构
+    # 首先查找通用libs目录
+    general_libs_dir = resource_finder.find_libs_dir()
+    if general_libs_dir:
+        # 构建特定平台和架构的路径
         if system == MACOS:
-            lib_path = DIR_STRUCTURE[MACOS]['path'].format(arch=arch_name)
-            search_paths.append((base_dir / lib_path, lib_name))
+            specific_dir = general_libs_dir / f"libopus/mac/{arch_name}"
         elif system == WINDOWS:
-            lib_path = DIR_STRUCTURE[WINDOWS]['path']
-            search_paths.append((base_dir / lib_path, lib_name))
+            specific_dir = general_libs_dir / f"libopus/win/{arch_name}"
         elif system == LINUX:
-            lib_path = DIR_STRUCTURE[LINUX]['path'].format(arch=arch_name)
-            search_paths.append((base_dir / lib_path, lib_name))
+            specific_dir = general_libs_dir / f"libopus/linux/{arch_name}"
         
-        # 根目录 (作为备选)
-        search_paths.append((base_dir, lib_name))
+        # 如果特定目录存在，优先使用
+        if specific_dir.exists():
+            search_paths.append((specific_dir, lib_name))
+            logger.debug(f"找到特定平台libs目录: {specific_dir}")
         
-        # 如果是打包环境，也搜索和可执行文件同级的libs子目录
-        is_exe_dir = (
-            getattr(sys, 'frozen', False) and 
-            base_dir == Path(sys.executable).parent
-        )
-        if is_exe_dir:
-            # 检查与可执行文件同级的libs目录
-            libs_dir = base_dir / 'libs'
-            if libs_dir.exists():
-                if system == MACOS:
-                    macos_lib_path = f"libopus/mac/{arch_name}"
-                    search_paths.append((libs_dir / macos_lib_path, lib_name))
-                elif system == WINDOWS:
-                    win_lib_path = "libopus/win/x86_64"
-                    search_paths.append((libs_dir / win_lib_path, lib_name))
-                elif system == LINUX:
-                    linux_lib_path = f"libopus/linux/{arch_name}"
-                    search_paths.append((libs_dir / linux_lib_path, lib_name))
-            
-            # 检查_internal/libs目录 (PyInstaller 6.0.0+)
-            internal_libs_dir = base_dir / '_internal' / 'libs'
-            if internal_libs_dir.exists():
-                if system == MACOS:
-                    macos_path = f"libopus/mac/{arch_name}"
-                    search_paths.append(
-                        (internal_libs_dir / macos_path, lib_name)
-                    )
-                elif system == WINDOWS:
-                    win_path = "libopus/win/x86_64"
-                    search_paths.append(
-                        (internal_libs_dir / win_path, lib_name)
-                    )
-                elif system == LINUX:
-                    linux_path = f"libopus/linux/{arch_name}"
-                    search_paths.append(
-                        (internal_libs_dir / linux_path, lib_name)
-                    )
+        # 添加通用libs目录作为备选
+        search_paths.append((general_libs_dir, lib_name))
+        logger.debug(f"添加通用libs目录: {general_libs_dir}")
+    
+    # 添加项目根目录作为最后的备选
+    project_root = resource_finder.get_project_root()
+    search_paths.append((project_root, lib_name))
     
     # 打印所有搜索路径，帮助调试
     for dir_path, filename in search_paths:
-        logger.debug(f"搜索路径: {dir_path / filename}")
+        full_path = dir_path / filename
+        logger.debug(f"搜索路径: {full_path} (存在: {full_path.exists()})")
     
     return search_paths
 

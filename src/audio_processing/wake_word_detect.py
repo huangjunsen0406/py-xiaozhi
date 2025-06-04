@@ -15,7 +15,7 @@ from src.utils.logging_config import get_logger
 logger = get_logger(__name__)
 
 class WakeWordDetector:
-    """唤醒词检测类（集成AudioCodec优化版）"""
+    """唤醒词检测类"""
 
     def __init__(self,
                  sample_rate=AudioConfig.INPUT_SAMPLE_RATE,
@@ -84,7 +84,9 @@ class WakeWordDetector:
             self.enabled = False
 
     def _get_model_path(self, config):
-        """获取模型路径（更智能的路径查找）"""
+        """获取模型路径（使用统一的资源查找器）"""
+        from src.utils.resource_finder import resource_finder
+        
         # 直接从配置中获取模型名称或路径
         model_name = config.get_config(
             'WAKE_WORD_OPTIONS.MODEL_PATH', 
@@ -94,90 +96,44 @@ class WakeWordDetector:
         # 转换为Path对象
         model_path = Path(model_name)
         
+        # 如果是绝对路径且存在，直接返回
+        if model_path.is_absolute() and model_path.exists():
+            logger.info(f"使用绝对路径模型: {model_path}")
+            return str(model_path)
+        
         # 如果只有模型名称（没有父目录），则标准化为models子目录下的路径
         if len(model_path.parts) == 1:
             model_path = Path('models') / model_path
         
-        # 可能的基准路径
-        possible_base_dirs = [
-            Path(__file__).parent.parent.parent,  # 项目根目录
-            Path.cwd(),  # 当前工作目录
-        ]
+        # 使用resource_finder查找模型目录
+        model_dir_path = resource_finder.find_directory(model_path)
         
-        # 如果是打包后的环境，增加更多可能的基准路径
-        if getattr(sys, 'frozen', False):
-            # 可执行文件所在目录
-            exe_dir = Path(sys.executable).parent
-            possible_base_dirs.append(exe_dir)
+        if model_dir_path:
+            logger.info(f"找到模型目录: {model_dir_path}")
+            return str(model_dir_path)
+        
+        # 如果没找到完整路径，尝试在models目录中查找模型名称
+        models_dir = resource_finder.find_models_dir()
+        if models_dir:
+            # 尝试直接在models目录下查找模型名称
+            model_name_only = model_path.name if len(model_path.parts) > 1 else model_path
+            direct_model_path = models_dir / model_name_only
+            if direct_model_path.exists():
+                logger.info(f"在models目录中找到模型: {direct_model_path}")
+                return str(direct_model_path)
             
-            # PyInstaller的_MEIPASS路径(如果存在)
-            if hasattr(sys, '_MEIPASS'):
-                meipass_dir = Path(sys._MEIPASS)
-                possible_base_dirs.append(meipass_dir)
-                # 增加_MEIPASS的父目录(可能是应用根目录)
-                possible_base_dirs.append(meipass_dir.parent)
-                
-            # 增加可执行文件父目录(处理某些安装情况)
-            possible_base_dirs.append(exe_dir.parent)
-            
-            logger.debug(f"可执行文件目录: {exe_dir}")
-            if hasattr(sys, '_MEIPASS'):
-                logger.debug(f"PyInstaller临时目录: {meipass_dir}")
+            # 遍历models目录下的所有子目录，查找匹配的模型
+            for item in models_dir.iterdir():
+                if item.is_dir() and item.name == model_name_only:
+                    logger.info(f"在models子目录中找到模型: {item}")
+                    return str(item)
         
-        # 查找模型文件
-        model_file_path = None
+        # 如果仍然找不到，使用默认路径
+        project_root = resource_finder.get_project_root()
+        default_path = project_root / model_path
         
-        # 遍历所有可能的基准路径
-        for base_dir in filter(None, possible_base_dirs):
-            # 1. 尝试标准的models目录下的模型
-            path_to_check = base_dir / model_path
-            if path_to_check.exists():
-                model_file_path = path_to_check
-                logger.info(f"找到模型文件: {model_file_path}")
-                break
-                
-            # 2. 尝试直接使用模型名称(不包含models前缀)
-            if len(model_path.parts) > 1 and model_path.parts[0] == 'models':
-                # 去掉models前缀
-                alt_path = base_dir / Path(*model_path.parts[1:])
-                if alt_path.exists():
-                    model_file_path = alt_path
-                    logger.info(f"在替代位置找到模型: {model_file_path}")
-                    break
-        
-        # 如果仍未找到，尝试一些特殊位置
-        if model_file_path is None and getattr(sys, 'frozen', False):
-            # 1. 检查与可执行文件同级的特定目录
-            special_paths = [
-                # PyInstaller 6.0.0+ 的_internal目录
-                Path(sys.executable).parent / "_internal" / model_path,
-                # 与可执行文件同级的models目录
-                Path(sys.executable).parent / "models" / model_path.name,
-                # 可执行文件同级直接放置模型
-                Path(sys.executable).parent / model_path.name
-            ]
-            
-            for path in special_paths:
-                if path.exists():
-                    model_file_path = path
-                    logger.info(f"在特殊位置找到模型: {model_file_path}")
-                    break
-        
-        # 如果找不到任何位置，使用配置的原始路径
-        if model_file_path is None:
-            # 如果是绝对路径直接使用
-            if model_path.is_absolute():
-                model_file_path = model_path
-            else:
-                # 否则使用项目根目录+相对路径
-                model_file_path = Path(__file__).parent.parent.parent / model_path
-                
-            logger.warning(f"未找到模型，将使用默认路径: {model_file_path}")
-        
-        # 转换为字符串返回
-        model_path_str = str(model_file_path)
-        logger.debug(f"最终模型路径: {model_path_str}")
-        return model_path_str
+        logger.warning(f"未找到模型，将使用默认路径: {default_path}")
+        return str(default_path)
 
     def start(self, audio_codec_or_stream=None):
         """启动检测（仅支持AudioCodec共享流或外部流）"""

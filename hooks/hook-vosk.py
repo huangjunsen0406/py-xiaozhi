@@ -5,14 +5,23 @@ PyInstaller 钩子文件: hook-vosk.py
 """
 
 import os
+import sys
+from pathlib import Path
 from PyInstaller.utils.hooks import (
     collect_dynamic_libs, 
     copy_metadata,
-    collect_submodules
+    collect_submodules,
+    collect_data_files
 )
 
-# 常量定义
-DEFAULT_MODEL_PATH = "models/vosk-model-small-cn-0.22"
+# 添加src目录到Python路径，以便导入资源查找器
+src_path = Path(__file__).parent.parent / "src"
+if str(src_path) not in sys.path:
+    sys.path.insert(0, str(src_path))
+
+from utils.resource_finder import find_models_dir
+
+print(f"当前工作目录: {os.getcwd()}")
 
 # 收集 datas 和 binaries
 datas = []
@@ -24,29 +33,25 @@ datas.extend(copy_metadata('vosk'))
 # 收集 vosk 可能用到的动态库
 binaries.extend(collect_dynamic_libs('vosk'))
 
-# 获取模型路径
-try:
-    model_path = os.path.join(os.getcwd(), DEFAULT_MODEL_PATH)
-    if os.path.exists(model_path) and os.path.isdir(model_path):
-        print(f"Found Vosk model directory: {model_path}")
-        
-        # 收集模型目录下的所有文件
-        for root, dirs, files in os.walk(model_path):
-            rel_dir = os.path.relpath(root, os.getcwd())
-            for file in files:
-                # 跳过临时文件
-                if file.startswith('.') or file.endswith('.tmp'):
-                    continue
-                    
-                src_file = os.path.join(root, file)
-                # 确保是相对路径
-                datas.append((src_file, rel_dir))
-        
-        print(f"Added {len(datas)} model files to package resources")
-    else:
-        print(f"Vosk model directory not found: {model_path}")
-except Exception as e:
-    print(f"Error collecting Vosk model files: {e}")
+# 使用统一的资源查找器查找模型目录
+models_dir = find_models_dir()
+if models_dir:
+    print(f"找到模型目录: {models_dir}")
+    
+    # 遍历模型目录下的所有子目录
+    for item in models_dir.iterdir():
+        if item.is_dir():
+            print(f"收集模型: {item}")
+            # 收集整个模型目录
+            model_files = collect_data_files(str(item))
+            datas.extend(model_files)
+            print(f"收集了 {len(model_files)} 个文件")
+else:
+    print("未找到模型目录")
+
+print(f"总共收集了 {len(datas)} 个数据文件")
+for data in datas[:5]:  # 只打印前5个文件作为示例
+    print(f"  {data}")
 
 # 自动收集 vosk 的所有子模块
 hiddenimports = collect_submodules('vosk')
@@ -60,4 +65,4 @@ additional_imports = [
 ]
 
 # 合并所有导入
-hiddenimports.extend(additional_imports) 
+hiddenimports.extend(additional_imports)
