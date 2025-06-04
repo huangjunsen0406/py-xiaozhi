@@ -23,6 +23,7 @@ from PyQt5.QtGui import (
 )
 
 from src.utils.config_manager import ConfigManager
+from src.utils.resource_finder import find_config_dir, find_assets_dir
 import queue
 import time
 
@@ -43,8 +44,7 @@ from abc import ABCMeta
 from src.display.base_display import BaseDisplay
 import json
 
-# 定义配置文件路径
-CONFIG_PATH = Path(__file__).parent.parent.parent / "config" / "config.json"
+# ConfigManager 将在需要时动态获取
 
 
 def restart_program():
@@ -1454,26 +1454,14 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             # 获取完整的当前配置
             current_config = config_manager._config.copy()
             
-            # 直接从磁盘读取最新的config.json，获取最新的设备列表
+            # 通过 ConfigManager 获取最新的设备列表
             try:
-                import json
-                config_path = Path(__file__).parent.parent.parent / "config" / "config.json"
-                if config_path.exists():
-                    with open(config_path, 'r', encoding='utf-8') as f:
-                        disk_config = json.load(f)
-                    
-                    # 获取磁盘上最新的设备列表
-                    if ("HOME_ASSISTANT" in disk_config and 
-                        "DEVICES" in disk_config["HOME_ASSISTANT"]):
-                        # 使用磁盘上的设备列表
-                        latest_devices = disk_config["HOME_ASSISTANT"]["DEVICES"]
-                        self.logger.info(f"从配置文件读取了 {len(latest_devices)} 个设备")
-                    else:
-                        latest_devices = []
-                else:
-                    latest_devices = []
+                # 重新获取 ConfigManager 实例以确保获取最新配置
+                fresh_config_manager = ConfigManager.get_instance()
+                latest_devices = fresh_config_manager.get_config("HOME_ASSISTANT.DEVICES", [])
+                self.logger.info(f"从配置管理器读取了 {len(latest_devices)} 个设备")
             except Exception as e:
-                self.logger.error(f"读取配置文件中的设备列表失败: {e}")
+                self.logger.error(f"通过配置管理器读取设备列表失败: {e}")
                 # 如果读取失败，使用内存中的设备列表
                 if "HOME_ASSISTANT" in current_config and "DEVICES" in current_config["HOME_ASSISTANT"]:
                     latest_devices = current_config["HOME_ASSISTANT"]["DEVICES"]
@@ -1531,21 +1519,18 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         try:
             self.logger.info("启动Home Assistant设备管理器...")
             
-            # 获取当前文件所在目录
-            current_dir = os.path.dirname(os.path.abspath(__file__))
-            # 获取项目根目录(假设current_dir是src/display，上级目录就是src，再上级就是项目根目录)
-            project_root = os.path.dirname(os.path.dirname(current_dir))
+            # 使用resource_finder查找脚本路径
+            from src.utils.resource_finder import get_project_root
+            project_root = get_project_root()
+            script_path = project_root / "src" / "ui" / "ha_device_manager" / "index.py"
             
-            # 获取脚本路径
-            script_path = os.path.join(project_root, "src", "ui", "ha_device_manager", "index.py")
-            
-            if not os.path.exists(script_path):
+            if not script_path.exists():
                 self.logger.error(f"设备管理器脚本不存在: {script_path}")
                 QMessageBox.critical(self.root, "错误", "设备管理器脚本不存在")
                 return
                 
             # 构建命令并执行
-            cmd = [sys.executable, script_path]
+            cmd = [sys.executable, str(script_path)]
             
             # 使用subprocess启动新进程
             import subprocess
@@ -1640,12 +1625,10 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
                 self.history_title.setMaximumHeight(25)  # 减小标题高度
                 new_layout.addWidget(self.history_title)
                 
-                # 尝试从配置文件加载设备列表
+                # 尝试通过 ConfigManager 加载设备列表
                 try:
-                    with open(CONFIG_PATH, 'r', encoding='utf-8') as f:
-                        config_data = json.load(f)
-                    
-                    devices = config_data.get("HOME_ASSISTANT", {}).get("DEVICES", [])
+                    config_manager = ConfigManager.get_instance()
+                    devices = config_manager.get_config("HOME_ASSISTANT.DEVICES", [])
                     
                     # 更新标题
                     self.history_title.setText(f"已连接设备 ({len(devices)})")
@@ -1859,14 +1842,11 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         if not self.stackedWidget or self.stackedWidget.currentIndex() != 1:
             return
             
-        # 读取配置文件获取Home Assistant连接信息
+        # 通过 ConfigManager 获取Home Assistant连接信息
         try:
-            with open(CONFIG_PATH, 'r', encoding='utf-8') as f:
-                config_data = json.load(f)
-                
-            ha_options = config_data.get("HOME_ASSISTANT", {})
-            ha_url = ha_options.get("URL", "")
-            ha_token = ha_options.get("TOKEN", "")
+            config_manager = ConfigManager.get_instance()
+            ha_url = config_manager.get_config("HOME_ASSISTANT.URL", "")
+            ha_token = config_manager.get_config("HOME_ASSISTANT.TOKEN", "")
             
             if not ha_url or not ha_token:
                 self.logger.warning("Home Assistant URL或Token未配置，无法更新设备状态")

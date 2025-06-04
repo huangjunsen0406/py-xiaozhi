@@ -2,21 +2,20 @@ import logging
 import os
 from logging.handlers import TimedRotatingFileHandler
 from colorlog import ColoredFormatter
+from pathlib import Path
 
 
 def setup_logging():
     """配置日志系统"""
-    # 创建logs目录（如果不存在）
-    log_dir = os.path.join(
-        os.path.dirname(os.path.abspath(__file__)), 
-        '..', 
-        '..', 
-        'logs'
-    )
-    os.makedirs(log_dir, exist_ok=True)
+    from .resource_finder import get_project_root
+    
+    # 使用resource_finder获取项目根目录并创建logs目录
+    project_root = get_project_root()
+    log_dir = project_root / 'logs'
+    log_dir.mkdir(exist_ok=True)
     
     # 日志文件路径
-    log_file = os.path.join(log_dir, 'app.log')
+    log_file = log_dir / 'app.log'
     
     # 创建根日志记录器
     root_logger = logging.getLogger()

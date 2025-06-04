@@ -68,40 +68,48 @@ def get_system_info():
 
 def get_search_paths(system, arch_name):
     """获取库文件搜索路径列表（使用统一的资源查找器）"""
-    from .resource_finder import resource_finder
+    from .resource_finder import find_libs_dir, get_project_root
     
     lib_name = LIB_INFO[system]['name']
     search_paths = []
     
-    # 首先查找通用libs目录
-    general_libs_dir = resource_finder.find_libs_dir()
+    # 映射系统名称到目录名称
+    system_dir_map = {
+        WINDOWS: 'win',
+        MACOS: 'mac', 
+        LINUX: 'linux'
+    }
+    
+    system_dir = system_dir_map.get(system)
+    
+    # 首先尝试查找特定平台和架构的libs目录
+    if system_dir:
+        specific_libs_dir = find_libs_dir(f"libopus/{system_dir}", arch_name)
+        if specific_libs_dir:
+            search_paths.append((specific_libs_dir, lib_name))
+            logger.debug(f"找到特定平台架构libs目录: {specific_libs_dir}")
+    
+    # 然后查找特定平台的libs目录
+    if system_dir:
+        platform_libs_dir = find_libs_dir(f"libopus/{system_dir}")
+        if platform_libs_dir:
+            search_paths.append((platform_libs_dir, lib_name))
+            logger.debug(f"找到特定平台libs目录: {platform_libs_dir}")
+    
+    # 查找通用libs目录
+    general_libs_dir = find_libs_dir()
     if general_libs_dir:
-        # 构建特定平台和架构的路径
-        if system == MACOS:
-            specific_dir = general_libs_dir / f"libopus/mac/{arch_name}"
-        elif system == WINDOWS:
-            specific_dir = general_libs_dir / f"libopus/win/{arch_name}"
-        elif system == LINUX:
-            specific_dir = general_libs_dir / f"libopus/linux/{arch_name}"
-        
-        # 如果特定目录存在，优先使用
-        if specific_dir.exists():
-            search_paths.append((specific_dir, lib_name))
-            logger.debug(f"找到特定平台libs目录: {specific_dir}")
-        
-        # 添加通用libs目录作为备选
         search_paths.append((general_libs_dir, lib_name))
         logger.debug(f"添加通用libs目录: {general_libs_dir}")
     
     # 添加项目根目录作为最后的备选
-    project_root = resource_finder.get_project_root()
+    project_root = get_project_root()
     search_paths.append((project_root, lib_name))
     
     # 打印所有搜索路径，帮助调试
     for dir_path, filename in search_paths:
         full_path = dir_path / filename
         logger.debug(f"搜索路径: {full_path} (存在: {full_path.exists()})")
-    
     return search_paths
 
 
@@ -145,6 +153,8 @@ def find_system_opus():
 
 def copy_opus_to_project(system_lib_path):
     """将系统库复制到项目目录"""
+    from .resource_finder import get_project_root
+    
     system, arch_name = get_system_info()
     
     if not system_lib_path:
@@ -152,13 +162,8 @@ def copy_opus_to_project(system_lib_path):
         return None
     
     try:
-        # 确定目标根目录
-        if getattr(sys, 'frozen', False):
-            # 在打包环境中，使用可执行文件目录
-            project_root = Path(sys.executable).parent
-        else:
-            # 在开发环境中，使用项目根目录
-            project_root = Path(__file__).parent.parent.parent
+        # 使用resource_finder获取项目根目录
+        project_root = get_project_root()
         
         # 获取目标目录路径 - 使用实际目录结构
         if system == MACOS:

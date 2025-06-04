@@ -12,6 +12,7 @@ import sys
 from src.utils.device_activator import DeviceActivator
 from src.utils.logging_config import get_logger
 from src.utils.device_fingerprint import get_device_fingerprint
+from src.utils.resource_finder import find_config_dir, find_file, get_app_path
 logger = get_logger(__name__)
 
 
@@ -22,12 +23,15 @@ class ConfigManager:
     _lock = threading.Lock()
 
     # 配置文件路径
-    CONFIG_DIR = Path(__file__).parent.parent.parent / "config"
-    CONFIG_FILE = CONFIG_DIR / "config.json"
+    CONFIG_DIR = find_config_dir()
+    CONFIG_FILE = CONFIG_DIR / "config.json" if CONFIG_DIR else None
 
     # 记录配置文件路径
-    logger.info(f"配置目录: {CONFIG_DIR.absolute()}")
-    logger.info(f"配置文件: {CONFIG_FILE.absolute()}")
+    if CONFIG_DIR:
+        logger.info(f"配置目录: {CONFIG_DIR.absolute()}")
+        logger.info(f"配置文件: {CONFIG_FILE.absolute()}")
+    else:
+        logger.warning("未找到配置目录，将使用默认配置")
 
     # 默认配置
     DEFAULT_CONFIG = {
@@ -58,6 +62,11 @@ class ConfigManager:
             "password": "123456",
             "publish_topic": "sensors/temperature/command",
             "subscribe_topic": "sensors/temperature/device_001/state"
+        },
+        "HOME_ASSISTANT": {
+            "URL": "http://localhost:8123",
+            "TOKEN": "",
+            "DEVICES": []
         },
         "CAMERA": {
             "camera_index": 0,
@@ -94,31 +103,23 @@ class ConfigManager:
     def _load_config(self) -> Dict[str, Any]:
         """加载配置文件，如果不存在则创建"""
         try:
-            # 先尝试从当前工作目录加载
-            config_file = Path("config/config.json")
-            if config_file.exists():
-                config = json.loads(config_file.read_text(encoding='utf-8'))
+            # 使用 resource_finder 查找配置文件
+            config_file_path = find_file("config/config.json")
+            if config_file_path and config_file_path.exists():
+                config = json.loads(config_file_path.read_text(encoding='utf-8'))
                 return self._merge_configs(self.DEFAULT_CONFIG, config)
 
-            # 再尝试从打包目录加载
-            if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
-                config_file = Path(sys._MEIPASS) / "config" / "config.json"
-                if config_file.exists():
-                    config = json.loads(
-                        config_file.read_text(encoding='utf-8')
-                    )
-                    return self._merge_configs(self.DEFAULT_CONFIG, config)
-
-            # 最后尝试从开发环境目录加载
-            if self.CONFIG_FILE.exists():
+            # 如果找不到配置文件，尝试使用类变量中的路径
+            if self.CONFIG_FILE and self.CONFIG_FILE.exists():
                 config = json.loads(
                     self.CONFIG_FILE.read_text(encoding='utf-8')
                 )
                 return self._merge_configs(self.DEFAULT_CONFIG, config)
             else:
                 # 创建默认配置
-                self.CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-                self._save_config(self.DEFAULT_CONFIG)
+                if self.CONFIG_DIR:
+                    self.CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+                    self._save_config(self.DEFAULT_CONFIG)
                 return self.DEFAULT_CONFIG.copy()
         except Exception as e:
             logger.error(f"Error loading config: {e}")
@@ -127,12 +128,16 @@ class ConfigManager:
     def _save_config(self, config: dict) -> bool:
         """保存配置到文件"""
         try:
-            self.CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-            self.CONFIG_FILE.write_text(
-                json.dumps(config, indent=2, ensure_ascii=False),
-                encoding='utf-8'
-            )
-            return True
+            if self.CONFIG_DIR and self.CONFIG_FILE:
+                self.CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+                self.CONFIG_FILE.write_text(
+                    json.dumps(config, indent=2, ensure_ascii=False),
+                    encoding='utf-8'
+                )
+                return True
+            else:
+                logger.error("配置目录或文件路径未找到，无法保存配置")
+                return False
         except Exception as e:
             logger.error(f"Error saving config: {e}")
             return False
@@ -461,9 +466,4 @@ class ConfigManager:
 
     def get_app_path(self) -> Path:
         """获取应用程序的基础路径（支持开发环境和打包环境）"""
-        if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
-            # 如果是通过 PyInstaller 打包运行
-            return Path(sys._MEIPASS)
-        else:
-            # 如果是开发环境运行
-            return Path(__file__).parent.parent.parent
+        return get_app_path()

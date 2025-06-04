@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Dict, Optional, List, Tuple
 
 from src.utils.logging_config import get_logger
+from src.utils.resource_finder import find_config_dir
 
 # 获取日志记录器
 logger = get_logger(__name__)
@@ -23,10 +24,16 @@ class DeviceFingerprint:
     def __init__(self):
         """初始化设备指纹收集器"""
         self.system = platform.system()
-        self.fingerprint_cache_file = (Path(__file__).parent.parent.parent / 
-                                      "config" / ".device_fingerprint")
-        self.efuse_file = (Path(__file__).parent.parent.parent / 
-                           "config" / "efuse.json")
+        config_dir = find_config_dir()
+        if config_dir:
+            self.fingerprint_cache_file = config_dir / ".device_fingerprint"
+            self.efuse_file = config_dir / "efuse.json"
+            logger.debug(f"使用配置目录: {config_dir}")
+        else:
+            # 备用方案：使用相对路径
+            self.fingerprint_cache_file = Path("config/.device_fingerprint")
+            self.efuse_file = Path("config/efuse.json")
+            logger.warning("未找到配置目录，使用相对路径作为备用方案")
 
     def get_hostname(self) -> str:
         """获取计算机主机名"""
