@@ -6,6 +6,7 @@ class ValueType:
     BOOLEAN = "boolean"
     NUMBER = "number"
     STRING = "string"
+    FLOAT = "float"
 
 
 class Property:

@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 from vosk import Model, KaldiRecognizer, SetLogLevel
 from pypinyin import lazy_pinyin
-import pyaudio
+
 
 from src.constants.constants import AudioConfig
 from src.utils.config_manager import ConfigManager
@@ -17,27 +17,26 @@ logger = get_logger(__name__)
 class WakeWordDetector:
     """唤醒词检测类（集成AudioCodec优化版）"""
 
-    def __init__(self, 
+    def __init__(self,
                  sample_rate=AudioConfig.INPUT_SAMPLE_RATE,
                  buffer_size=AudioConfig.INPUT_FRAME_SIZE,
                  audio_codec=None):
         """
         初始化唤醒词检测器
-        
+
         参数:
-            audio_codec: AudioCodec实例（新增）
+            audio_codec: AudioCodec实例（必需，用于共享音频流）
             sample_rate: 音频采样率
             buffer_size: 音频缓冲区大小
         """
         # 初始化音频编解码器引用
         self.audio_codec = audio_codec
-        
+
         # 初始化基本属性
         self.on_detected_callbacks = []
         self.running = False
         self.detection_thread = None
         self.paused = False
-        self.audio = None
         self.stream = None
         self.external_stream = False
         self.stream_lock = threading.Lock()
@@ -181,7 +180,7 @@ class WakeWordDetector:
         return model_path_str
 
     def start(self, audio_codec_or_stream=None):
-        """启动检测（支持音频编解码器或直接流传入）"""
+        """启动检测（仅支持AudioCodec共享流或外部流）"""
         if not self.enabled:
             logger.warning("唤醒词功能未启用")
             return False
@@ -198,11 +197,12 @@ class WakeWordDetector:
                 # 是AudioCodec对象，使用AudioCodec模式
                 self.audio_codec = audio_codec_or_stream
 
-        # 优先使用audio_codec的流
+        # 强制要求AudioCodec实例
         if self.audio_codec:
             return self._start_with_audio_codec()
         else:
-            return self._start_standalone()
+            logger.error("唤醒词检测器需要AudioCodec实例或外部音频流，无法启动独立模式")
+            return False
 
     def _start_with_audio_codec(self):
         """使用AudioCodec的输入流（直接访问）"""
@@ -236,32 +236,7 @@ class WakeWordDetector:
             logger.error(f"通过AudioCodec启动失败: {e}")
             return False
 
-    def _start_standalone(self):
-        """独立音频模式"""
-        try:
-            self.audio = pyaudio.PyAudio()
-            self.stream = self.audio.open(
-                format=pyaudio.paInt16,
-                channels=AudioConfig.CHANNELS,
-                rate=self.sample_rate,
-                input=True,
-                frames_per_buffer=self.buffer_size
-            )
 
-            self.running = True
-            self.paused = False
-            self.detection_thread = threading.Thread(
-                target=self._detection_loop,
-                daemon=True,
-                name="WakeWordDetector-Standalone"
-            )
-            self.detection_thread.start()
-
-            logger.info("唤醒词检测已启动（独立音频模式）")
-            return True
-        except Exception as e:
-            logger.error(f"独立模式启动失败: {e}")
-            return False
 
     def _start_with_external_stream(self):
         """使用外部提供的音频流"""
@@ -371,61 +346,9 @@ class WakeWordDetector:
             logger.error(f"读取音频数据异常: {e}")
             return None
 
-    def _detection_loop(self):
-        """标准检测循环（用于外部流或独立模式）"""
-        logger.info("进入标准检测循环")
-        error_count = 0
-        MAX_ERRORS = 5
 
-        while self.running:
-            try:
-                if self.paused:
-                    time.sleep(0.1)
-                    continue
-
-                # 读取音频数据（带锁保护）
-                try:
-                    with self.stream_lock:
-                        if not self.stream:
-                            logger.warning("音频流不可用")
-                            time.sleep(0.5)
-                            continue
-                            
-                        # 确保流是活跃的
-                        if not self.stream.is_active():
-                            try:
-                                self.stream.start_stream()
-                            except Exception as e:
-                                logger.error(f"启动音频流失败: {e}")
-                                time.sleep(0.5)
-                                continue
-                        
-                        # 读取数据
-                        data = self.stream.read(
-                            self.buffer_size, 
-                            exception_on_overflow=False
-                        )
-                except Exception as e:
-                    logger.error(f"读取音频数据失败: {e}")
-                    time.sleep(0.5)
-                    continue
-
-                # 处理音频数据
-                if data and len(data) > 0:
-                    self._process_audio_data(data)
-                    error_count = 0  # 重置错误计数
-                    
-            except Exception as e:
-                error_count += 1
-                logger.error(f"检测循环错误({error_count}/{MAX_ERRORS}): {e}")
-                
-                if error_count >= MAX_ERRORS:
-                    logger.critical("达到最大错误次数，停止检测")
-                    self.stop()
-                time.sleep(0.5)
-                
     def stop(self):
-        """停止检测（优化资源释放）"""
+        """停止检测（仅清理外部流资源）"""
         if self.running:
             logger.info("正在停止唤醒词检测...")
             self.running = False
@@ -433,25 +356,8 @@ class WakeWordDetector:
             if self.detection_thread and self.detection_thread.is_alive():
                 self.detection_thread.join(timeout=1.0)
 
-            # 仅清理自有资源，不清理外部传入的流
-            if not self.external_stream and not self.audio_codec and self.stream:
-                try:
-                    if self.stream.is_active():
-                        self.stream.stop_stream()
-                    self.stream.close()
-                except Exception as e:
-                    logger.error(f"关闭音频流失败: {e}")
-                    
-            # 清理PyAudio实例
-            if self.audio:
-                try:
-                    self.audio.terminate()
-                except Exception as e:
-                    logger.error(f"终止音频设备失败: {e}")
-
-            # 重置状态
+            # 重置状态（不清理AudioCodec的共享流）
             self.stream = None
-            self.audio = None
             self.external_stream = False
             logger.info("唤醒词检测已停止")
             
@@ -460,22 +366,13 @@ class WakeWordDetector:
         return self.running and not self.paused
         
     def update_stream(self, new_stream):
-        """更新唤醒词检测器使用的音频流"""
+        """更新唤醒词检测器使用的音频流（仅支持外部流）"""
         if not self.running:
             logger.warning("唤醒词检测器未运行，无法更新流")
             return False
 
         with self.stream_lock:
-            # 如果当前不是使用外部流或AudioCodec，先清理现有资源
-            if not self.external_stream and not self.audio_codec and self.stream:
-                try:
-                    if self.stream.is_active():
-                        self.stream.stop_stream()
-                    self.stream.close()
-                except Exception as e:
-                    logger.warning(f"关闭旧流时出错: {e}")
-
-            # 更新为新的流
+            # 更新为新的外部流
             self.stream = new_stream
             self.external_stream = True
             logger.info("已更新唤醒词检测器的音频流")

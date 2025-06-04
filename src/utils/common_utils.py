@@ -2,16 +2,15 @@
 通用工具函数集合模块
 包含文本转语音、浏览器操作、剪贴板等通用工具函数
 """
-import logging
 import shutil
 import webbrowser
 from typing import Optional
-import asyncio
 import traceback
 
 from src.utils.logging_config import get_logger
 
 logger = get_logger(__name__)
+
 
 def open_url(url: str) -> bool:
     """
@@ -33,6 +32,7 @@ def open_url(url: str) -> bool:
     except Exception as e:
         logger.error(f"打开网页时出错: {e}")
         return False
+
 
 def copy_to_clipboard(text: str) -> bool:
     """
@@ -86,6 +86,7 @@ async def text_to_opus_audio(text: str) -> Optional[list]:
         logger.error(f"文本转音频时出错: {e}")
         logger.error(traceback.format_exc())
         return None
+
 
 def play_audio_nonblocking(text: str) -> None:
     """
@@ -148,68 +149,44 @@ def play_audio_nonblocking(text: str) -> None:
             logger.error(f"音频工作线程出错: {e}")
 
     def fallback_opus_tts():
-        """使用opus实现的备用TTS方式"""
+        """使用系统TTS的备用方式（避免独立PyAudio实例）"""
         try:
-            # 在这个函数中实现完整的opus音频播放逻辑
-            import asyncio
+            logger.warning("Opus音频播放需要AudioCodec支持，回退到系统TTS")
 
-            # 创建新的事件循环
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
+            # 使用系统TTS作为备用方案
+            import platform
+            import subprocess
 
-            # 确保Opus库已经设置好
-            from src.utils.opus_loader import setup_opus
-            setup_opus()
-
-            # 导入必要的库
-            import opuslib
-            import pyaudio
-            import numpy as np
-            from src.constants.constants import AudioConfig
-
-            async def generate_and_play():
-                # 转换文本到opus音频
-                opus_frames = await text_to_opus_audio(text)
-                if not opus_frames:
-                    return
-
-                # 创建Opus解码器
-                decoder = opuslib.Decoder(AudioConfig.OUTPUT_SAMPLE_RATE, AudioConfig.CHANNELS)
-
-                # 创建PyAudio实例
-                p = pyaudio.PyAudio()
-
-                # 打开音频输出流
-                stream = p.open(
-                    format=pyaudio.paInt16,
-                    channels=AudioConfig.CHANNELS,
-                    rate=AudioConfig.OUTPUT_SAMPLE_RATE,
-                    output=True
-                )
-
-                # 解码并播放每一帧
-                for frame in opus_frames:
-                    # 解码Opus帧到PCM
-                    pcm = decoder.decode(frame, AudioConfig.OUTPUT_FRAME_SIZE)
-                    # 转换为numpy数组以便处理
-                    pcm_array = np.frombuffer(pcm, dtype=np.int16)
-                    # 播放音频
-                    stream.write(pcm_array.tobytes())
-
-                # 清理资源
-                stream.stop_stream()
-                stream.close()
-                p.terminate()
-
-                logger.info(f"文本 \"{text}\" 已使用opus音频播放")
-
-            # 运行协程直到完成
-            loop.run_until_complete(generate_and_play())
-            # 关闭事件循环
-            loop.close()
+            system = platform.system()
+            if system == "Windows":
+                try:
+                    import win32com.client
+                    speaker = win32com.client.Dispatch("SAPI.SpVoice")
+                    speaker.Speak(text)
+                    logger.info("已使用Windows系统TTS播放文本")
+                except ImportError:
+                    logger.warning("Windows TTS不可用，跳过音频播放")
+            elif system == "Linux":
+                if shutil.which('espeak'):
+                    subprocess.Popen(['espeak', '-v', 'zh', text],
+                                   stdout=subprocess.DEVNULL,
+                                   stderr=subprocess.DEVNULL)
+                    logger.info("已使用espeak播放文本")
+                else:
+                    logger.warning("espeak不可用，跳过音频播放")
+            elif system == "Darwin":  # macOS
+                if shutil.which('say'):
+                    subprocess.Popen(['say', text],
+                                   stdout=subprocess.DEVNULL,
+                                   stderr=subprocess.DEVNULL)
+                    logger.info("已使用say播放文本")
+                else:
+                    logger.warning("say命令不可用，跳过音频播放")
+            else:
+                logger.warning(f"不支持的系统 {system}，跳过音频播放")
 
         except Exception as e:
-            logger.error(f"opus音频回退方案出错: {e}")
+            logger.error(f"系统TTS备用方案出错: {e}")
 
     # 创建并启动线程
     audio_thread = threading.Thread(target=audio_worker)

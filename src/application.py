@@ -27,7 +27,6 @@ logger = get_logger(__name__)
 # 现在导入 opuslib
 try:
     import opuslib  # noqa: F401
-    from src.utils.tts_utility import TtsUtility
 except Exception as e:
     logger.critical("导入 opuslib 失败: %s", e, exc_info=True)
     logger.critical("请确保 opus 动态库已正确安装或位于正确的位置")
@@ -307,49 +306,11 @@ class Application:
             )
 
     async def _send_text_tts(self, text):
-        """将文本转换为语音并发送"""
-        try:
-            tts_utility = TtsUtility(AudioConfig)
+        """将文本通过唤醒词发送"""
+        if not self.protocol.is_audio_channel_opened():
+            await self.protocol.open_audio_channel()
 
-            # 生成 Opus 音频数据包
-            opus_frames = await tts_utility.text_to_opus_audio(text)
-
-            # 尝试打开音频通道
-            if (not self.protocol.is_audio_channel_opened() and
-                    DeviceState.IDLE == self.device_state):
-                # 打开音频通道
-                success = await self.protocol.open_audio_channel()
-                if not success:
-                    logger.error("打开音频通道失败")
-                    return
-
-            # 确认 opus 帧生成成功
-            if opus_frames:
-                logger.info(f"生成了 {len(opus_frames)} 个 Opus 音频帧")
-
-                # 设置状态为说话中
-                self.schedule(lambda: self.set_device_state(DeviceState.SPEAKING))
-
-                # 发送音频数据
-                for i, frame in enumerate(opus_frames):
-                    await self.protocol.send_audio(frame)
-                    await asyncio.sleep(0.06)
-
-                # 设置聊天消息
-                self.set_chat_message("user", text)
-                await self.protocol.send_text(
-                    json.dumps({"session_id": "", "type": "listen", "state": "stop"}))
-                await self.protocol.send_text(b'')
-
-                return True
-            else:
-                logger.error("生成音频失败")
-                return False
-
-        except Exception as e:
-            logger.error(f"发送文本到TTS时出错: {e}")
-            logger.error(traceback.format_exc())
-            return False
+        await self.protocol.send_wake_word_detected(text)
 
     def _handle_output_audio(self):
         """处理音频输出"""
@@ -622,11 +583,17 @@ class Application:
         if self.wake_word_detector:
             if not self.wake_word_detector.is_running():
                 logger.info("在空闲状态下启动唤醒词检测")
-                # 直接使用AudioCodec实例，而不是尝试获取共享流
+                # 强制要求AudioCodec实例
                 if hasattr(self, 'audio_codec') and self.audio_codec:
-                    self.wake_word_detector.start(self.audio_codec)
+                    success = self.wake_word_detector.start(self.audio_codec)
+                    if not success:
+                        logger.error("唤醒词检测器启动失败，禁用唤醒词功能")
+                        self.config.update_config("WAKE_WORD_OPTIONS.USE_WAKE_WORD", False)
+                        self.wake_word_detector = None
                 else:
-                    self.wake_word_detector.start()
+                    logger.error("音频编解码器不可用，无法启动唤醒词检测器")
+                    self.config.update_config("WAKE_WORD_OPTIONS.USE_WAKE_WORD", False)
+                    self.wake_word_detector = None
             elif self.wake_word_detector.paused:
                 logger.info("在空闲状态下恢复唤醒词检测")
                 self.wake_word_detector.resume()
@@ -1100,15 +1067,19 @@ class Application:
         """启动唤醒词检测器"""
         if not self.wake_word_detector:
             return
-        
-        # 确保音频编解码器已初始化
+
+        # 强制要求音频编解码器已初始化
         if hasattr(self, 'audio_codec') and self.audio_codec:
             logger.info("使用音频编解码器启动唤醒词检测器")
-            self.wake_word_detector.start(self.audio_codec)
+            success = self.wake_word_detector.start(self.audio_codec)
+            if not success:
+                logger.error("唤醒词检测器启动失败，禁用唤醒词功能")
+                self.config.update_config("WAKE_WORD_OPTIONS.USE_WAKE_WORD", False)
+                self.wake_word_detector = None
         else:
-            # 如果没有音频编解码器，使用独立模式
-            logger.info("使用独立模式启动唤醒词检测器")
-            self.wake_word_detector.start()
+            logger.error("音频编解码器不可用，无法启动唤醒词检测器")
+            self.config.update_config("WAKE_WORD_OPTIONS.USE_WAKE_WORD", False)
+            self.wake_word_detector = None
 
     def _on_wake_word_detected(self, wake_word, full_text):
         """唤醒词检测回调"""
@@ -1161,7 +1132,7 @@ class Application:
         self.schedule(lambda: self.set_device_state(DeviceState.LISTENING))
 
     def _restart_wake_word_detector(self):
-        """重新启动唤醒词检测器"""
+        """重新启动唤醒词检测器（仅支持AudioCodec共享流模式）"""
         logger.info("尝试重新启动唤醒词检测器")
         try:
             # 停止现有的检测器
@@ -1169,18 +1140,23 @@ class Application:
                 self.wake_word_detector.stop()
                 time.sleep(0.5)  # 给予一些时间让资源释放
 
-            # 直接使用音频编解码器
+            # 强制要求音频编解码器
             if hasattr(self, 'audio_codec') and self.audio_codec:
-                self.wake_word_detector.start(self.audio_codec)
-                logger.info("使用音频编解码器重新启动唤醒词检测器")
+                success = self.wake_word_detector.start(self.audio_codec)
+                if success:
+                    logger.info("使用音频编解码器重新启动唤醒词检测器成功")
+                else:
+                    logger.error("唤醒词检测器重新启动失败，禁用唤醒词功能")
+                    self.config.update_config("WAKE_WORD_OPTIONS.USE_WAKE_WORD", False)
+                    self.wake_word_detector = None
             else:
-                # 如果没有音频编解码器，使用独立模式
-                self.wake_word_detector.start()
-                logger.info("使用独立模式重新启动唤醒词检测器")
-
-            logger.info("唤醒词检测器重新启动成功")
+                logger.error("音频编解码器不可用，无法重新启动唤醒词检测器")
+                self.config.update_config("WAKE_WORD_OPTIONS.USE_WAKE_WORD", False)
+                self.wake_word_detector = None
         except Exception as e:
             logger.error(f"重新启动唤醒词检测器失败: {e}")
+            self.config.update_config("WAKE_WORD_OPTIONS.USE_WAKE_WORD", False)
+            self.wake_word_detector = None
 
     def _initialize_iot_devices(self):
         """初始化物联网设备"""
@@ -1189,10 +1165,6 @@ class Application:
         from src.iot.things.speaker import Speaker
         from src.iot.things.music_player import MusicPlayer
         from src.iot.things.CameraVL.Camera import Camera
-        # from src.iot.things.query_bridge_rag import QueryBridgeRAG
-        # from src.iot.things.temperature_sensor import TemperatureSensor
-        # 导入Home Assistant设备控制类
-        from src.iot.things.ha_control import HomeAssistantLight, HomeAssistantSwitch, HomeAssistantNumber, HomeAssistantButton
         # 导入新的倒计时器设备
         from src.iot.things.countdown_timer import CountdownTimer
         
@@ -1205,40 +1177,43 @@ class Application:
         thing_manager.add_thing(MusicPlayer())
         # 默认不启用以下示例
         thing_manager.add_thing(Camera())
-        # thing_manager.add_thing(QueryBridgeRAG())
-        # thing_manager.add_thing(TemperatureSensor())
 
         # 添加倒计时器设备
         thing_manager.add_thing(CountdownTimer())
         logger.info("已添加倒计时器设备,用于计时执行命令用")
 
-        # 添加Home Assistant设备
-        ha_devices = self.config.get_config("HOME_ASSISTANT.DEVICES", [])
-        for device in ha_devices:
-            entity_id = device.get("entity_id")
-            friendly_name = device.get("friendly_name")
-            if entity_id:
-                # 根据实体ID判断设备类型
-                if entity_id.startswith("light."):
-                    # 灯设备
-                    thing_manager.add_thing(HomeAssistantLight(entity_id, friendly_name))
-                    logger.info(f"已添加Home Assistant灯设备: {friendly_name or entity_id}")
-                elif entity_id.startswith("switch."):
-                    # 开关设备
-                    thing_manager.add_thing(HomeAssistantSwitch(entity_id, friendly_name))
-                    logger.info(f"已添加Home Assistant开关设备: {friendly_name or entity_id}")
-                elif entity_id.startswith("number."):
-                    # 数值设备（如音量控制）
-                    thing_manager.add_thing(HomeAssistantNumber(entity_id, friendly_name))
-                    logger.info(f"已添加Home Assistant数值设备: {friendly_name or entity_id}")
-                elif entity_id.startswith("button."):
-                    # 按钮设备
-                    thing_manager.add_thing(HomeAssistantButton(entity_id, friendly_name))
-                    logger.info(f"已添加Home Assistant按钮设备: {friendly_name or entity_id}")
-                else:
-                    # 默认作为灯设备处理
-                    thing_manager.add_thing(HomeAssistantLight(entity_id, friendly_name))
-                    logger.info(f"已添加Home Assistant设备(默认作为灯处理): {friendly_name or entity_id}")
+        # 判断是否配置了home assistant才注册
+        if self.config.get_config("HOME_ASSISTANT.TOKEN"):
+            # 导入Home Assistant设备控制类
+            from src.iot.things.ha_control import HomeAssistantLight, HomeAssistantSwitch, HomeAssistantNumber, HomeAssistantButton
+
+            # 添加Home Assistant设备
+            ha_devices = self.config.get_config("HOME_ASSISTANT.DEVICES", [])
+            for device in ha_devices:
+                entity_id = device.get("entity_id")
+                friendly_name = device.get("friendly_name")
+                if entity_id:
+                    # 根据实体ID判断设备类型
+                    if entity_id.startswith("light."):
+                        # 灯设备
+                        thing_manager.add_thing(HomeAssistantLight(entity_id, friendly_name))
+                        logger.info(f"已添加Home Assistant灯设备: {friendly_name or entity_id}")
+                    elif entity_id.startswith("switch."):
+                        # 开关设备
+                        thing_manager.add_thing(HomeAssistantSwitch(entity_id, friendly_name))
+                        logger.info(f"已添加Home Assistant开关设备: {friendly_name or entity_id}")
+                    elif entity_id.startswith("number."):
+                        # 数值设备（如音量控制）
+                        thing_manager.add_thing(HomeAssistantNumber(entity_id, friendly_name))
+                        logger.info(f"已添加Home Assistant数值设备: {friendly_name or entity_id}")
+                    elif entity_id.startswith("button."):
+                        # 按钮设备
+                        thing_manager.add_thing(HomeAssistantButton(entity_id, friendly_name))
+                        logger.info(f"已添加Home Assistant按钮设备: {friendly_name or entity_id}")
+                    else:
+                        # 默认作为灯设备处理
+                        thing_manager.add_thing(HomeAssistantLight(entity_id, friendly_name))
+                        logger.info(f"已添加Home Assistant设备(默认作为灯处理): {friendly_name or entity_id}")
 
         logger.info("物联网设备初始化完成")
 

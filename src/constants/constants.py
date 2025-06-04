@@ -42,38 +42,44 @@ def is_official_server(ws_addr: str) -> bool:
 
 def get_frame_duration() -> int:
     """
-    获取设备的帧长度
+    获取设备的帧长度（优化版：避免独立PyAudio实例创建）
 
     返回:
         int: 帧长度(毫秒)
     """
-    import pyaudio
     try:
-
-        if not is_official_server(config.get_config("SYSTEM_OPTIONS.NETWORK.OTA_VERSION_URL")):
+        # 检查是否为官方服务器
+        ota_url = config.get_config("SYSTEM_OPTIONS.NETWORK.OTA_VERSION_URL")
+        if not is_official_server(ota_url):
             return 60
 
-        p = pyaudio.PyAudio()
-        # 获取默认输入设备信息
-        device_info = p.get_default_input_device_info()
-        # 一些设备会提供建议的缓冲区大小
-        default_rate = device_info.get('defaultSampleRate', 48000)
-        # 默认20ms的缓冲区
-        suggested_buffer = device_info.get('defaultSampleRate', 0) / 50
-        # 计算帧长度
-        frame_duration = int(1000 * suggested_buffer / default_rate)
-        # 确保帧长度在合理范围内 (10ms-50ms)
-        frame_duration = max(10, min(50, frame_duration))
-        p.terminate()
-        return frame_duration
+        import platform
+        system = platform.system()
+
+        if system == "Windows":
+            # Windows通常支持较小的缓冲区
+            return 20
+        elif system == "Linux":
+            # Linux可能需要稍大的缓冲区以减少延迟(如果发现不行改为60)
+            return 25
+        elif system == "Darwin":  # macOS
+            # macOS通常有良好的音频性能
+            return 20
+        else:
+            # 其他系统使用保守值
+            return 60
+
     except Exception:
         return 20  # 如果获取失败，返回默认值20ms
+
 
 class AudioConfig:
     """音频配置类"""
     # 固定配置
     INPUT_SAMPLE_RATE = 16000  # 输入采样率16kHz
-    OUTPUT_SAMPLE_RATE = 24000 if is_official_server(config.get_config("SYSTEM_OPTIONS.NETWORK.OTA_VERSION_URL")) else 16000  # 输出采样率
+    # 输出采样率：官方服务器使用24kHz，其他使用16kHz
+    _ota_url = config.get_config("SYSTEM_OPTIONS.NETWORK.OTA_VERSION_URL")
+    OUTPUT_SAMPLE_RATE = 24000 if is_official_server(_ota_url) else 16000
     CHANNELS = 1
 
     # 动态获取帧长度
@@ -82,7 +88,10 @@ class AudioConfig:
     # 根据不同采样率计算帧大小
     INPUT_FRAME_SIZE = int(INPUT_SAMPLE_RATE * (FRAME_DURATION / 1000))
     # Linux系统使用固定帧大小以减少PCM打印，其他系统动态计算
-    OUTPUT_FRAME_SIZE = 8192 if platform.system() == 'Linux' else int(OUTPUT_SAMPLE_RATE * (FRAME_DURATION / 1000))
+    OUTPUT_FRAME_SIZE = (
+        4096 if platform.system() == 'Linux'
+        else int(OUTPUT_SAMPLE_RATE * (FRAME_DURATION / 1000))
+    )
 
     # Opus编码配置
     OPUS_APPLICATION = 2049  # OPUS_APPLICATION_AUDIO
