@@ -2,22 +2,20 @@ import asyncio
 import json
 import logging
 import platform
+import sys
 import threading
 import time
-import sys
 import traceback
 from pathlib import Path
 
+from src.constants.constants import (AbortReason, AudioConfig, DeviceState,
+                                     EventType, ListeningMode)
+from src.display import cli_display, gui_display
+from src.utils.common_utils import handle_verification_code
+from src.utils.config_manager import ConfigManager
 from src.utils.logging_config import get_logger
 # 在导入 opuslib 之前处理 opus 动态库
 from src.utils.opus_loader import setup_opus
-from src.constants.constants import (
-    DeviceState, EventType, AudioConfig,
-    AbortReason, ListeningMode
-)
-from src.display import gui_display, cli_display
-from src.utils.config_manager import ConfigManager
-from src.utils.common_utils import handle_verification_code
 
 setup_opus()
 
@@ -93,7 +91,7 @@ class Application:
         self.events = {
             EventType.SCHEDULE_EVENT: threading.Event(),
             EventType.AUDIO_INPUT_READY_EVENT: threading.Event(),
-            EventType.AUDIO_OUTPUT_READY_EVENT: threading.Event()
+            EventType.AUDIO_OUTPUT_READY_EVENT: threading.Event(),
         }
 
         # 创建显示界面
@@ -106,8 +104,8 @@ class Application:
     def run(self, **kwargs):
         """启动应用程序"""
         logger.info("启动应用程序，参数: %s", kwargs)
-        mode = kwargs.get('mode', 'gui')
-        protocol = kwargs.get('protocol', 'websocket')
+        mode = kwargs.get("mode", "gui")
+        protocol = kwargs.get("protocol", "websocket")
 
         # 启动主循环线程
         logger.debug("启动主循环线程")
@@ -130,10 +128,7 @@ class Application:
 
         # 初始化应用程序（移除自动连接）
         logger.debug("初始化应用程序组件")
-        asyncio.run_coroutine_threadsafe(
-            self._initialize_without_connect(), 
-            self.loop
-        )
+        asyncio.run_coroutine_threadsafe(self._initialize_without_connect(), self.loop)
 
         # 初始化物联网设备
         self._initialize_iot_devices()
@@ -172,7 +167,7 @@ class Application:
 
         # 初始化并启动唤醒词检测
         self._initialize_wake_word_detector()
-        
+
         # 设置联网协议回调（MQTT AND WEBSOCKET）
         logger.debug("设置协议回调函数")
         self.protocol.on_network_error = self._on_network_error
@@ -188,13 +183,14 @@ class Application:
         try:
             logger.debug("开始初始化音频编解码器")
             from src.audio_codecs.audio_codec import AudioCodec
+
             self.audio_codec = AudioCodec()
             logger.info("音频编解码器初始化成功")
 
             # 记录音量控制状态
             has_volume_control = (
-                hasattr(self.display, 'volume_controller') and
-                self.display.volume_controller
+                hasattr(self.display, "volume_controller")
+                and self.display.volume_controller
             )
             if has_volume_control:
                 logger.info("系统音量控制已启用")
@@ -208,7 +204,7 @@ class Application:
     def set_protocol_type(self, protocol_type: str):
         """设置协议类型"""
         logger.debug("设置协议类型: %s", protocol_type)
-        if protocol_type == 'mqtt':
+        if protocol_type == "mqtt":
             self.protocol = MqttProtocol(self.loop)
             logger.debug("已创建MQTT协议实例")
         else:  # websocket
@@ -219,7 +215,7 @@ class Application:
         """初始化显示界面"""
         logger.debug("设置显示界面类型: %s", mode)
         # 通过适配器的概念管理不同的显示模式
-        if mode == 'gui':
+        if mode == "gui":
             self.display = gui_display.GuiDisplay()
             logger.debug("已创建GUI显示界面")
             self.display.set_callbacks(
@@ -233,7 +229,7 @@ class Application:
                 abort_callback=lambda: self.abort_speaking(
                     AbortReason.WAKE_WORD_DETECTED
                 ),
-                send_text_callback=self._send_text_tts
+                send_text_callback=self._send_text_tts,
             )
         else:
             self.display = cli_display.CliDisplay()
@@ -246,7 +242,7 @@ class Application:
                 status_callback=self._get_status_text,
                 text_callback=self._get_current_text,
                 emotion_callback=self._get_current_emotion,
-                send_text_callback=self._send_text_tts
+                send_text_callback=self._send_text_tts,
             )
         logger.debug("显示界面回调函数设置完成")
 
@@ -298,11 +294,9 @@ class Application:
 
         # 读取并发送音频数据
         encoded_data = self.audio_codec.read_audio()
-        if (encoded_data and self.protocol and
-                self.protocol.is_audio_channel_opened()):
+        if encoded_data and self.protocol and self.protocol.is_audio_channel_opened():
             asyncio.run_coroutine_threadsafe(
-                self.protocol.send_audio(encoded_data),
-                self.loop
+                self.protocol.send_audio(encoded_data), self.loop
             )
 
     async def _send_text_tts(self, text):
@@ -316,14 +310,14 @@ class Application:
         """处理音频输出"""
         if self.device_state != DeviceState.SPEAKING:
             return
-        self.set_is_tts_playing(True)   # 开始播放
+        self.set_is_tts_playing(True)  # 开始播放
         self.audio_codec.play_audio()
 
     def _on_network_error(self, error_message=None):
         """网络错误回调"""
         if error_message:
             logger.error(error_message)
-            
+
         self.keep_listening = False
         self.schedule(lambda: self.set_device_state(DeviceState.IDLE))
         # 恢复唤醒词检测
@@ -337,8 +331,7 @@ class Application:
             # 关闭现有连接，但不关闭音频流
             if self.protocol:
                 asyncio.run_coroutine_threadsafe(
-                    self.protocol.close_audio_channel(),
-                    self.loop
+                    self.protocol.close_audio_channel(), self.loop
                 )
 
     def _on_incoming_audio(self, data):
@@ -388,18 +381,22 @@ class Application:
 
                 # 检查是否包含验证码信息
                 import re
-                match = re.search(r'((?:\d\s*){6,})', text)
+
+                match = re.search(r"((?:\d\s*){6,})", text)
                 if match:
                     self.schedule(lambda: handle_verification_code(text))
 
     def _handle_tts_start(self):
         """处理TTS开始事件"""
         self.aborted = False
-        self.set_is_tts_playing(True)   # 开始播放
+        self.set_is_tts_playing(True)  # 开始播放
         # 清空可能存在的旧音频数据
         self.audio_codec.clear_audio_queue()
 
-        if self.device_state == DeviceState.IDLE or self.device_state == DeviceState.LISTENING:
+        if (
+            self.device_state == DeviceState.IDLE
+            or self.device_state == DeviceState.LISTENING
+        ):
             self.schedule(lambda: self.set_device_state(DeviceState.SPEAKING))
 
         # 注释掉恢复VAD检测器的代码
@@ -418,8 +415,10 @@ class Application:
                 attempts = 0
 
                 # 等待直到队列为空或超过最大尝试次数
-                while (not self.audio_codec.audio_decode_queue.empty() and 
-                       attempts < max_wait_attempts):
+                while (
+                    not self.audio_codec.audio_decode_queue.empty()
+                    and attempts < max_wait_attempts
+                ):
                     time.sleep(wait_interval)
                     attempts += 1
 
@@ -435,7 +434,7 @@ class Application:
                 if self.keep_listening:
                     asyncio.run_coroutine_threadsafe(
                         self.protocol.send_start_listening(ListeningMode.AUTO_STOP),
-                        self.loop
+                        self.loop,
                     )
                     self.schedule(lambda: self.set_device_state(DeviceState.LISTENING))
                 else:
@@ -446,11 +445,18 @@ class Application:
 
                 try:
                     if self.audio_codec:
-                        self.audio_codec._reinitialize_stream(is_input=True)  # 调用重新初始化
+                        self.audio_codec._reinitialize_stream(
+                            is_input=True
+                        )  # 调用重新初始化
                     else:
-                        logger.warning("Cannot force reinitialization, audio_codec is None.")
+                        logger.warning(
+                            "Cannot force reinitialization, audio_codec is None."
+                        )
                 except Exception as force_reinit_e:
-                    logger.error(f"Forced reinitialization failed: {force_reinit_e}", exc_info=True)
+                    logger.error(
+                        f"Forced reinitialization failed: {force_reinit_e}",
+                        exc_info=True,
+                    )
                     self.schedule(lambda: self.set_device_state(DeviceState.IDLE))
                     if self.wake_word_detector and self.wake_word_detector.paused:
                         self.wake_word_detector.resume()
@@ -481,19 +487,22 @@ class Application:
 
         # 发送物联网设备描述符
         from src.iot.thing_manager import ThingManager
+
         thing_manager = ThingManager.get_instance()
         asyncio.run_coroutine_threadsafe(
             self.protocol.send_iot_descriptors(thing_manager.get_descriptors_json()),
-            self.loop
+            self.loop,
         )
         self._update_iot_states(False)
-
 
     def _start_audio_streams(self):
         """启动音频流"""
         try:
             # 不再关闭和重新打开流，只确保它们处于活跃状态
-            if self.audio_codec.input_stream and not self.audio_codec.input_stream.is_active():
+            if (
+                self.audio_codec.input_stream
+                and not self.audio_codec.input_stream.is_active()
+            ):
                 try:
                     self.audio_codec.input_stream.start_stream()
                 except Exception as e:
@@ -501,7 +510,10 @@ class Application:
                     # 只有在出错时才重新初始化
                     self.audio_codec._reinitialize_stream(is_input=True)
 
-            if self.audio_codec.output_stream and not self.audio_codec.output_stream.is_active():
+            if (
+                self.audio_codec.output_stream
+                and not self.audio_codec.output_stream.is_active()
+            ):
                 try:
                     self.audio_codec.output_stream.start_stream()
                 except Exception as e:
@@ -510,16 +522,24 @@ class Application:
                     self.audio_codec._reinitialize_stream(is_input=False)
 
             # 设置事件触发器
-            if self.input_event_thread is None or not self.input_event_thread.is_alive():
+            if (
+                self.input_event_thread is None
+                or not self.input_event_thread.is_alive()
+            ):
                 self.input_event_thread = threading.Thread(
-                    target=self._audio_input_event_trigger, daemon=True)
+                    target=self._audio_input_event_trigger, daemon=True
+                )
                 self.input_event_thread.start()
                 logger.info("已启动输入事件触发线程")
 
             # 检查输出事件线程
-            if self.output_event_thread is None or not self.output_event_thread.is_alive():
+            if (
+                self.output_event_thread is None
+                or not self.output_event_thread.is_alive()
+            ):
                 self.output_event_thread = threading.Thread(
-                    target=self._audio_output_event_trigger, daemon=True)
+                    target=self._audio_output_event_trigger, daemon=True
+                )
                 self.output_event_thread.start()
                 logger.info("已启动输出事件触发线程")
 
@@ -532,7 +552,10 @@ class Application:
         while self.running:
             try:
                 # 只有在主动监听状态下才触发输入事件
-                if self.device_state == DeviceState.LISTENING and self.audio_codec.input_stream:
+                if (
+                    self.device_state == DeviceState.LISTENING
+                    and self.audio_codec.input_stream
+                ):
                     self.events[EventType.AUDIO_INPUT_READY_EVENT].set()
             except OSError as e:
                 logger.error(f"音频输入流错误: {e}")
@@ -541,7 +564,7 @@ class Application:
             except Exception as e:
                 logger.error(f"音频输入事件触发器错误: {e}")
                 time.sleep(0.5)
-            
+
             # 确保触发频率足够高，即使帧长度较大
             # 使用20ms作为最大触发间隔，确保即使帧长度为60ms也能有足够的采样率
             sleep_time = min(20, AudioConfig.FRAME_DURATION) / 1000
@@ -552,9 +575,11 @@ class Application:
         while self.running:
             try:
                 # 确保输出流是活跃的
-                if (self.device_state == DeviceState.SPEAKING and
-                    self.audio_codec and
-                    self.audio_codec.output_stream):
+                if (
+                    self.device_state == DeviceState.SPEAKING
+                    and self.audio_codec
+                    and self.audio_codec.output_stream
+                ):
 
                     # 如果输出流不活跃，尝试重新激活
                     if not self.audio_codec.output_stream.is_active():
@@ -584,11 +609,13 @@ class Application:
             if not self.wake_word_detector.is_running():
                 logger.info("在空闲状态下启动唤醒词检测")
                 # 强制要求AudioCodec实例
-                if hasattr(self, 'audio_codec') and self.audio_codec:
+                if hasattr(self, "audio_codec") and self.audio_codec:
                     success = self.wake_word_detector.start(self.audio_codec)
                     if not success:
                         logger.error("唤醒词检测器启动失败，禁用唤醒词功能")
-                        self.config.update_config("WAKE_WORD_OPTIONS.USE_WAKE_WORD", False)
+                        self.config.update_config(
+                            "WAKE_WORD_OPTIONS.USE_WAKE_WORD", False
+                        )
                         self.wake_word_detector = None
                 else:
                     logger.error("音频编解码器不可用，无法启动唤醒词检测器")
@@ -611,7 +638,11 @@ class Application:
             # self.display.update_emotion("😶")
             self.set_emotion("neutral")
             # 恢复唤醒词检测（添加安全检查）
-            if self.wake_word_detector and hasattr(self.wake_word_detector, 'paused') and self.wake_word_detector.paused:
+            if (
+                self.wake_word_detector
+                and hasattr(self.wake_word_detector, "paused")
+                and self.wake_word_detector.paused
+            ):
                 self.wake_word_detector.resume()
                 logger.info("唤醒词检测已恢复")
             # 恢复音频输入流
@@ -624,7 +655,11 @@ class Application:
             self.set_emotion("neutral")
             self._update_iot_states(True)
             # 暂停唤醒词检测（添加安全检查）
-            if self.wake_word_detector and hasattr(self.wake_word_detector, 'is_running') and self.wake_word_detector.is_running():
+            if (
+                self.wake_word_detector
+                and hasattr(self.wake_word_detector, "is_running")
+                and self.wake_word_detector.is_running()
+            ):
                 self.wake_word_detector.pause()
                 logger.info("唤醒词检测已暂停")
             # 确保音频输入流活跃
@@ -633,12 +668,16 @@ class Application:
                     self.audio_codec.resume_input()
         elif state == DeviceState.SPEAKING:
             self.display.update_status("说话中...")
-            if self.wake_word_detector and hasattr(self.wake_word_detector, 'paused') and self.wake_word_detector.paused:
+            if (
+                self.wake_word_detector
+                and hasattr(self.wake_word_detector, "paused")
+                and self.wake_word_detector.paused
+            ):
                 self.wake_word_detector.resume()
             # 暂停唤醒词检测（添加安全检查）
             # if self.wake_word_detector and hasattr(self.wake_word_detector, 'is_running') and self.wake_word_detector.is_running():
-                # self.wake_word_detector.pause()
-                # logger.info("唤醒词检测已暂停")
+            # self.wake_word_detector.pause()
+            # logger.info("唤醒词检测已暂停")
             # 暂停音频输入流以避免自我监听
             # if self.audio_codec and not self.audio_codec.is_input_paused():
             #     self.audio_codec.pause_input()
@@ -656,7 +695,7 @@ class Application:
             DeviceState.IDLE: "待命",
             DeviceState.CONNECTING: "连接中...",
             DeviceState.LISTENING: "聆听中...",
-            DeviceState.SPEAKING: "说话中..."
+            DeviceState.SPEAKING: "说话中...",
         }
         return states.get(self.device_state, "未知")
 
@@ -667,22 +706,25 @@ class Application:
     def _get_current_emotion(self):
         """获取当前表情"""
         # 如果表情没有变化，直接返回缓存的路径
-        if hasattr(self, '_last_emotion') and self._last_emotion == self.current_emotion:
+        if (
+            hasattr(self, "_last_emotion")
+            and self._last_emotion == self.current_emotion
+        ):
             return self._last_emotion_path
-        
+
         # 获取基础路径
-        if getattr(sys, 'frozen', False):
+        if getattr(sys, "frozen", False):
             # 打包环境
-            if hasattr(sys, '_MEIPASS'):
+            if hasattr(sys, "_MEIPASS"):
                 base_path = Path(sys._MEIPASS)
             else:
                 base_path = Path(sys.executable).parent
         else:
             # 开发环境
             base_path = Path(__file__).parent.parent
-            
+
         emotion_dir = base_path / "assets" / "emojis"
-            
+
         emotions = {
             "neutral": str(emotion_dir / "neutral.gif"),
             "happy": str(emotion_dir / "happy.gif"),
@@ -704,13 +746,15 @@ class Application:
             "confident": str(emotion_dir / "confident.gif"),
             "sleepy": str(emotion_dir / "sleepy.gif"),
             "silly": str(emotion_dir / "silly.gif"),
-            "confused": str(emotion_dir / "confused.gif")
+            "confused": str(emotion_dir / "confused.gif"),
         }
-        
+
         # 保存当前表情和对应的路径
         self._last_emotion = self.current_emotion
-        self._last_emotion_path = emotions.get(self.current_emotion, str(emotion_dir / "neutral.gif"))
-        
+        self._last_emotion_path = emotions.get(
+            self.current_emotion, str(emotion_dir / "neutral.gif")
+        )
+
         logger.debug(f"表情路径: {self._last_emotion_path}")
         return self._last_emotion_path
 
@@ -745,14 +789,15 @@ class Application:
             self.wake_word_detector.pause()
 
         if self.device_state == DeviceState.IDLE:
-            self.schedule(lambda: self.set_device_state(DeviceState.CONNECTING))  # 设置设备状态为连接中
+            self.schedule(
+                lambda: self.set_device_state(DeviceState.CONNECTING)
+            )  # 设置设备状态为连接中
             # 尝试打开音频通道
             if not self.protocol.is_audio_channel_opened():
                 try:
                     # 等待异步操作完成
                     future = asyncio.run_coroutine_threadsafe(
-                        self.protocol.open_audio_channel(),
-                        self.loop
+                        self.protocol.open_audio_channel(), self.loop
                     )
                     # 等待操作完成并获取结果
                     success = future.result(timeout=10.0)  # 添加超时时间
@@ -767,24 +812,29 @@ class Application:
                     self.alert("错误", f"打开音频通道失败: {str(e)}")
                     self.schedule(lambda: self.set_device_state(DeviceState.IDLE))
                     return
-                
+
             # --- 强制重新初始化输入流 ---
             try:
                 if self.audio_codec:
-                     self.audio_codec._reinitialize_stream(is_input=True) # 调用重新初始化
+                    self.audio_codec._reinitialize_stream(
+                        is_input=True
+                    )  # 调用重新初始化
                 else:
-                     logger.warning("Cannot force reinitialization, audio_codec is None.")
+                    logger.warning(
+                        "Cannot force reinitialization, audio_codec is None."
+                    )
             except Exception as force_reinit_e:
-                logger.error(f"Forced reinitialization failed: {force_reinit_e}", exc_info=True)
+                logger.error(
+                    f"Forced reinitialization failed: {force_reinit_e}", exc_info=True
+                )
                 self.schedule(lambda: self.set_device_state(DeviceState.IDLE))
                 if self.wake_word_detector and self.wake_word_detector.paused:
-                     self.wake_word_detector.resume()
+                    self.wake_word_detector.resume()
                 return
             # --- 强制重新初始化结束 ---
 
             asyncio.run_coroutine_threadsafe(
-                self.protocol.send_start_listening(ListeningMode.MANUAL),
-                self.loop
+                self.protocol.send_start_listening(ListeningMode.MANUAL), self.loop
             )
             self.schedule(lambda: self.set_device_state(DeviceState.LISTENING))
         elif self.device_state == DeviceState.SPEAKING:
@@ -817,7 +867,10 @@ class Application:
 
         # 如果设备当前处于空闲状态，尝试连接并开始监听
         if self.device_state == DeviceState.IDLE:
-            self.schedule(lambda: self.set_device_state(DeviceState.CONNECTING))  # 设置设备状态为连接中
+            self.schedule(
+                lambda: self.set_device_state(DeviceState.CONNECTING)
+            )  # 设置设备状态为连接中
+
             # 使用线程来处理连接操作，避免阻塞
             def connect_and_listen():
                 # 尝试打开音频通道
@@ -825,26 +878,31 @@ class Application:
                     try:
                         # 等待异步操作完成
                         future = asyncio.run_coroutine_threadsafe(
-                            self.protocol.open_audio_channel(),
-                            self.loop
+                            self.protocol.open_audio_channel(), self.loop
                         )
                         # 等待操作完成并获取结果，使用较短的超时时间
                         try:
                             success = future.result(timeout=5.0)
                         except asyncio.TimeoutError:
                             logger.error("打开音频通道超时")
-                            self.schedule(lambda: self.set_device_state(DeviceState.IDLE))
+                            self.schedule(
+                                lambda: self.set_device_state(DeviceState.IDLE)
+                            )
                             self.alert("错误", "打开音频通道超时")
                             return
                         except Exception as e:
                             logger.error(f"打开音频通道时发生未知错误: {e}")
-                            self.schedule(lambda: self.set_device_state(DeviceState.IDLE))
+                            self.schedule(
+                                lambda: self.set_device_state(DeviceState.IDLE)
+                            )
                             self.alert("错误", f"打开音频通道失败: {str(e)}")
                             return
 
                         if not success:
                             self.alert("错误", "打开音频通道失败")  # 弹出错误提示
-                            self.schedule(lambda: self.set_device_state(DeviceState.IDLE))
+                            self.schedule(
+                                lambda: self.set_device_state(DeviceState.IDLE)
+                            )
                             return
 
                     except Exception as e:
@@ -858,7 +916,7 @@ class Application:
                 try:
                     asyncio.run_coroutine_threadsafe(
                         self.protocol.send_start_listening(ListeningMode.AUTO_STOP),
-                        self.loop
+                        self.loop,
                     )
                     self.schedule(lambda: self.set_device_state(DeviceState.LISTENING))
                 except Exception as e:
@@ -879,13 +937,12 @@ class Application:
             def close_audio_channel():
                 try:
                     future = asyncio.run_coroutine_threadsafe(
-                        self.protocol.close_audio_channel(),
-                        self.loop
+                        self.protocol.close_audio_channel(), self.loop
                     )
                     future.result(timeout=3.0)  # 使用较短的超时
                 except Exception as e:
                     logger.error(f"关闭音频通道时发生错误: {e}")
-            
+
             threading.Thread(target=close_audio_channel, daemon=True).start()
             # 立即设置为空闲状态，不等待关闭完成
             self.schedule(lambda: self.set_device_state(DeviceState.IDLE))
@@ -898,8 +955,7 @@ class Application:
         """停止监听的实现"""
         if self.device_state == DeviceState.LISTENING:
             asyncio.run_coroutine_threadsafe(
-                self.protocol.send_stop_listening(),
-                self.loop
+                self.protocol.send_stop_listening(), self.loop
             )
             self.set_device_state(DeviceState.IDLE)
 
@@ -915,14 +971,17 @@ class Application:
 
         # 设置TTS播放状态为False
         self.set_is_tts_playing(False)
-        
+
         # 立即清空音频队列
         if self.audio_codec:
             self.audio_codec.clear_audio_queue()
 
         # 如果是因为唤醒词中止语音，先暂停唤醒词检测器以避免Vosk断言错误
         if reason == AbortReason.WAKE_WORD_DETECTED and self.wake_word_detector:
-            if hasattr(self.wake_word_detector, 'is_running') and self.wake_word_detector.is_running():
+            if (
+                hasattr(self.wake_word_detector, "is_running")
+                and self.wake_word_detector.is_running()
+            ):
                 # 暂停唤醒词检测器
                 self.wake_word_detector.pause()
                 logger.debug("暂时暂停唤醒词检测器以避免并发处理")
@@ -934,25 +993,26 @@ class Application:
             # 先发送中止指令
             try:
                 future = asyncio.run_coroutine_threadsafe(
-                    self.protocol.send_abort_speaking(reason),
-                    self.loop
+                    self.protocol.send_abort_speaking(reason), self.loop
                 )
                 # 使用较短的超时确保不会长时间阻塞
                 future.result(timeout=1.0)
             except Exception as e:
                 logger.error(f"发送中止指令时出错: {e}")
-            
+
             # 然后设置状态
             # self.set_device_state(DeviceState.IDLE)
             self.schedule(lambda: self.set_device_state(DeviceState.IDLE))
             # 如果是唤醒词触发的中止，并且启用了自动聆听，则自动进入录音模式
-            if (reason == AbortReason.WAKE_WORD_DETECTED and 
-                    self.keep_listening and 
-                    self.protocol.is_audio_channel_opened()):
+            if (
+                reason == AbortReason.WAKE_WORD_DETECTED
+                and self.keep_listening
+                and self.protocol.is_audio_channel_opened()
+            ):
                 # 短暂延迟确保abort命令被处理
                 time.sleep(0.1)  # 缩短延迟时间
                 self.schedule(lambda: self.toggle_chat_state())
-        
+
         # 启动处理线程
         threading.Thread(target=process_abort, daemon=True).start()
 
@@ -979,8 +1039,7 @@ class Application:
         # 关闭协议
         if self.protocol:
             asyncio.run_coroutine_threadsafe(
-                self.protocol.close_audio_channel(),
-                self.loop
+                self.protocol.close_audio_channel(), self.loop
             )
 
         # 停止事件循环
@@ -1015,7 +1074,7 @@ class Application:
     def _initialize_wake_word_detector(self):
         """初始化唤醒词检测器"""
         # 首先检查配置中是否启用了唤醒词功能
-        if not self.config.get_config('WAKE_WORD_OPTIONS.USE_WAKE_WORD', False):
+        if not self.config.get_config("WAKE_WORD_OPTIONS.USE_WAKE_WORD", False):
             logger.info("唤醒词功能已在配置中禁用，跳过初始化")
             self.wake_word_detector = None
             return
@@ -1027,7 +1086,7 @@ class Application:
             self.wake_word_detector = WakeWordDetector()
 
             # 如果唤醒词检测器被禁用（内部故障），则更新配置
-            if not getattr(self.wake_word_detector, 'enabled', True):
+            if not getattr(self.wake_word_detector, "enabled", True):
                 logger.warning("唤醒词检测器被禁用（内部故障）")
                 self.config.update_config("WAKE_WORD_OPTIONS.USE_WAKE_WORD", False)
                 self.wake_word_detector = None
@@ -1035,12 +1094,12 @@ class Application:
 
             # 注册唤醒词检测回调和错误处理
             self.wake_word_detector.on_detected(self._on_wake_word_detected)
-            
+
             # 使用lambda捕获self，而不是单独定义函数
             self.wake_word_detector.on_error = lambda error: (
                 self._handle_wake_word_error(error)
             )
-            
+
             logger.info("唤醒词检测器初始化成功")
 
             # 启动唤醒词检测器
@@ -1049,6 +1108,7 @@ class Application:
         except Exception as e:
             logger.error(f"初始化唤醒词检测器失败: {e}")
             import traceback
+
             logger.error(traceback.format_exc())
 
             # 禁用唤醒词功能，但不影响程序其他功能
@@ -1069,7 +1129,7 @@ class Application:
             return
 
         # 强制要求音频编解码器已初始化
-        if hasattr(self, 'audio_codec') and self.audio_codec:
+        if hasattr(self, "audio_codec") and self.audio_codec:
             logger.info("使用音频编解码器启动唤醒词检测器")
             success = self.wake_word_detector.start(self.audio_codec)
             if not success:
@@ -1097,8 +1157,7 @@ class Application:
             self.schedule(lambda: self.set_device_state(DeviceState.CONNECTING))
             # 尝试连接并打开音频通道
             asyncio.run_coroutine_threadsafe(
-                self._connect_and_start_listening(wake_word),
-                self.loop
+                self._connect_and_start_listening(wake_word), self.loop
             )
         elif self.device_state == DeviceState.SPEAKING:
             self.abort_speaking(AbortReason.WAKE_WORD_DETECTED)
@@ -1141,7 +1200,7 @@ class Application:
                 time.sleep(0.5)  # 给予一些时间让资源释放
 
             # 强制要求音频编解码器
-            if hasattr(self, 'audio_codec') and self.audio_codec:
+            if hasattr(self, "audio_codec") and self.audio_codec:
                 success = self.wake_word_detector.start(self.audio_codec)
                 if success:
                     logger.info("使用音频编解码器重新启动唤醒词检测器成功")
@@ -1161,13 +1220,13 @@ class Application:
     def _initialize_iot_devices(self):
         """初始化物联网设备"""
         from src.iot.thing_manager import ThingManager
-        from src.iot.things.lamp import Lamp
-        from src.iot.things.speaker import Speaker
-        from src.iot.things.music_player import MusicPlayer
         from src.iot.things.CameraVL.Camera import Camera
         # 导入新的倒计时器设备
         from src.iot.things.countdown_timer import CountdownTimer
-        
+        from src.iot.things.lamp import Lamp
+        from src.iot.things.music_player import MusicPlayer
+        from src.iot.things.speaker import Speaker
+
         # 获取物联网设备管理器实例
         thing_manager = ThingManager.get_instance()
 
@@ -1185,7 +1244,10 @@ class Application:
         # 判断是否配置了home assistant才注册
         if self.config.get_config("HOME_ASSISTANT.TOKEN"):
             # 导入Home Assistant设备控制类
-            from src.iot.things.ha_control import HomeAssistantLight, HomeAssistantSwitch, HomeAssistantNumber, HomeAssistantButton
+            from src.iot.things.ha_control import (HomeAssistantButton,
+                                                   HomeAssistantLight,
+                                                   HomeAssistantNumber,
+                                                   HomeAssistantSwitch)
 
             # 添加Home Assistant设备
             ha_devices = self.config.get_config("HOME_ASSISTANT.DEVICES", [])
@@ -1196,30 +1258,51 @@ class Application:
                     # 根据实体ID判断设备类型
                     if entity_id.startswith("light."):
                         # 灯设备
-                        thing_manager.add_thing(HomeAssistantLight(entity_id, friendly_name))
-                        logger.info(f"已添加Home Assistant灯设备: {friendly_name or entity_id}")
+                        thing_manager.add_thing(
+                            HomeAssistantLight(entity_id, friendly_name)
+                        )
+                        logger.info(
+                            f"已添加Home Assistant灯设备: {friendly_name or entity_id}"
+                        )
                     elif entity_id.startswith("switch."):
                         # 开关设备
-                        thing_manager.add_thing(HomeAssistantSwitch(entity_id, friendly_name))
-                        logger.info(f"已添加Home Assistant开关设备: {friendly_name or entity_id}")
+                        thing_manager.add_thing(
+                            HomeAssistantSwitch(entity_id, friendly_name)
+                        )
+                        logger.info(
+                            f"已添加Home Assistant开关设备: {friendly_name or entity_id}"
+                        )
                     elif entity_id.startswith("number."):
                         # 数值设备（如音量控制）
-                        thing_manager.add_thing(HomeAssistantNumber(entity_id, friendly_name))
-                        logger.info(f"已添加Home Assistant数值设备: {friendly_name or entity_id}")
+                        thing_manager.add_thing(
+                            HomeAssistantNumber(entity_id, friendly_name)
+                        )
+                        logger.info(
+                            f"已添加Home Assistant数值设备: {friendly_name or entity_id}"
+                        )
                     elif entity_id.startswith("button."):
                         # 按钮设备
-                        thing_manager.add_thing(HomeAssistantButton(entity_id, friendly_name))
-                        logger.info(f"已添加Home Assistant按钮设备: {friendly_name or entity_id}")
+                        thing_manager.add_thing(
+                            HomeAssistantButton(entity_id, friendly_name)
+                        )
+                        logger.info(
+                            f"已添加Home Assistant按钮设备: {friendly_name or entity_id}"
+                        )
                     else:
                         # 默认作为灯设备处理
-                        thing_manager.add_thing(HomeAssistantLight(entity_id, friendly_name))
-                        logger.info(f"已添加Home Assistant设备(默认作为灯处理): {friendly_name or entity_id}")
+                        thing_manager.add_thing(
+                            HomeAssistantLight(entity_id, friendly_name)
+                        )
+                        logger.info(
+                            f"已添加Home Assistant设备(默认作为灯处理): {friendly_name or entity_id}"
+                        )
 
         logger.info("物联网设备初始化完成")
 
     def _handle_iot_message(self, data):
         """处理物联网消息"""
         from src.iot.thing_manager import ThingManager
+
         thing_manager = ThingManager.get_instance()
 
         commands = data.get("commands", [])
@@ -1242,6 +1325,7 @@ class Application:
                    - False: 发送所有状态并重置缓存
         """
         from src.iot.thing_manager import ThingManager
+
         thing_manager = ThingManager.get_instance()
 
         # 处理向下兼容
@@ -1251,8 +1335,7 @@ class Application:
 
             # 发送状态更新
             asyncio.run_coroutine_threadsafe(
-                self.protocol.send_iot_states(states_json),
-                self.loop
+                self.protocol.send_iot_states(states_json), self.loop
             )
             logger.info("物联网设备状态已更新")
             return
@@ -1262,8 +1345,7 @@ class Application:
         # delta=False总是发送，delta=True只在有变化时发送
         if not delta or changed:
             asyncio.run_coroutine_threadsafe(
-                self.protocol.send_iot_states(states_json),
-                self.loop
+                self.protocol.send_iot_states(states_json), self.loop
             )
             if delta:
                 logger.info("物联网设备状态已更新(增量)")
@@ -1274,9 +1356,16 @@ class Application:
 
     def _update_wake_word_detector_stream(self):
         """更新唤醒词检测器的音频流"""
-        if self.wake_word_detector and self.audio_codec and self.wake_word_detector.is_running():
+        if (
+            self.wake_word_detector
+            and self.audio_codec
+            and self.wake_word_detector.is_running()
+        ):
             # 直接引用AudioCodec实例中的输入流
-            if self.audio_codec.input_stream and self.audio_codec.input_stream.is_active():
+            if (
+                self.audio_codec.input_stream
+                and self.audio_codec.input_stream.is_active()
+            ):
                 self.wake_word_detector.stream = self.audio_codec.input_stream
                 self.wake_word_detector.external_stream = True
                 logger.info("已更新唤醒词检测器的音频流引用")

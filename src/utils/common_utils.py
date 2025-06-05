@@ -2,10 +2,10 @@
 通用工具函数集合模块
 包含文本转语音、浏览器操作、剪贴板等通用工具函数
 """
+
 import shutil
 import webbrowser
 from typing import Optional
-import traceback
 
 from src.utils.logging_config import get_logger
 
@@ -15,10 +15,10 @@ logger = get_logger(__name__)
 def open_url(url: str) -> bool:
     """
     打开指定URL的网页
-    
+
     Args:
         url: 要打开的URL
-        
+
     Returns:
         bool: 是否成功打开
     """
@@ -37,17 +37,18 @@ def open_url(url: str) -> bool:
 def copy_to_clipboard(text: str) -> bool:
     """
     复制文本到剪贴板
-    
+
     Args:
         text: 要复制的文本
-        
+
     Returns:
         bool: 是否成功复制
     """
     try:
         import pyperclip
+
         pyperclip.copy(text)
-        logger.info(f"文本 \"{text}\" 已复制到剪贴板")
+        logger.info(f'文本 "{text}" 已复制到剪贴板')
         return True
     except ImportError:
         logger.warning("未安装pyperclip模块，无法复制到剪贴板")
@@ -55,37 +56,6 @@ def copy_to_clipboard(text: str) -> bool:
     except Exception as e:
         logger.error(f"复制到剪贴板时出错: {e}")
         return False
-
-async def text_to_opus_audio(text: str) -> Optional[list]:
-    """
-    将文本转换为Opus编码的音频数据
-
-    Args:
-        text: 要转换的文本
-
-    Returns:
-        Optional[list]: Opus编码的音频帧列表，失败时返回None
-    """
-    try:
-        from src.utils.tts_utility import TtsUtility
-        from src.constants.constants import AudioConfig
-
-        tts_utility = TtsUtility(AudioConfig)
-
-        # 生成 Opus 音频数据包
-        opus_frames = await tts_utility.text_to_opus_audio(text)
-
-        if opus_frames:
-            logger.info(f"已成功将文本转换为{len(opus_frames)}个Opus音频帧")
-            return opus_frames
-        else:
-            logger.error("生成音频失败")
-            return None
-
-    except Exception as e:
-        logger.error(f"文本转音频时出错: {e}")
-        logger.error(traceback.format_exc())
-        return None
 
 
 def play_audio_nonblocking(text: str) -> None:
@@ -105,13 +75,13 @@ def play_audio_nonblocking(text: str) -> None:
             # 这个函数在完全独立的线程中运行
             import os
             import subprocess
-            import tempfile
 
             # 检查是否安装了espeak
             try:
-                if os.name == 'nt':  # Windows
+                if os.name == "nt":  # Windows
                     # 尝试使用Windows内置的语音合成
                     import win32com.client
+
                     speaker = win32com.client.Dispatch("SAPI.SpVoice")
                     # 设置为中文音色（如果有）
                     try:
@@ -120,23 +90,27 @@ def play_audio_nonblocking(text: str) -> None:
                             if "Chinese" in voices.Item(i).GetDescription():
                                 speaker.Voice = voices.Item(i)
                                 break
-                    except:
-                        pass
+                    except Exception as e:
+                        logger.warning(f"设置中文音色时出错: {e}")
                     # 播放文本
                     speaker.Speak(text)
-                    logger.info(f"已使用Windows语音合成播放文本")
+                    logger.info("已使用Windows语音合成播放文本")
                 else:  # Linux/Mac
                     # 使用espeak或say命令
-                    if shutil.which('espeak'):
-                        subprocess.Popen(['espeak', '-v', 'zh', text],
-                                        stdout=subprocess.DEVNULL,
-                                        stderr=subprocess.DEVNULL)
-                        logger.info(f"已使用espeak播放文本")
-                    elif shutil.which('say'):  # macOS
-                        subprocess.Popen(['say', text],
-                                        stdout=subprocess.DEVNULL,
-                                        stderr=subprocess.DEVNULL)
-                        logger.info(f"已使用say播放文本")
+                    if shutil.which("espeak"):
+                        subprocess.Popen(
+                            ["espeak", "-v", "zh", text],
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL,
+                        )
+                        logger.info("已使用espeak播放文本")
+                    elif shutil.which("say"):  # macOS
+                        subprocess.Popen(
+                            ["say", text],
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL,
+                        )
+                        logger.info("已使用say播放文本")
                     else:
                         logger.warning("未找到可用的文本到语音命令")
             except Exception as e:
@@ -161,24 +135,29 @@ def play_audio_nonblocking(text: str) -> None:
             if system == "Windows":
                 try:
                     import win32com.client
+
                     speaker = win32com.client.Dispatch("SAPI.SpVoice")
                     speaker.Speak(text)
                     logger.info("已使用Windows系统TTS播放文本")
                 except ImportError:
                     logger.warning("Windows TTS不可用，跳过音频播放")
             elif system == "Linux":
-                if shutil.which('espeak'):
-                    subprocess.Popen(['espeak', '-v', 'zh', text],
-                                   stdout=subprocess.DEVNULL,
-                                   stderr=subprocess.DEVNULL)
+                if shutil.which("espeak"):
+                    subprocess.Popen(
+                        ["espeak", "-v", "zh", text],
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                    )
                     logger.info("已使用espeak播放文本")
                 else:
                     logger.warning("espeak不可用，跳过音频播放")
             elif system == "Darwin":  # macOS
-                if shutil.which('say'):
-                    subprocess.Popen(['say', text],
-                                   stdout=subprocess.DEVNULL,
-                                   stderr=subprocess.DEVNULL)
+                if shutil.which("say"):
+                    subprocess.Popen(
+                        ["say", text],
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                    )
                     logger.info("已使用say播放文本")
                 else:
                     logger.warning("say命令不可用，跳过音频播放")
@@ -207,11 +186,12 @@ def extract_verification_code(text: str) -> Optional[str]:
     """
     try:
         import re
+
         # 匹配类似 222944 或 2 2 2 9 4 4 这种形式
-        match = re.search(r'((?:\d\s*){6,})', text)
+        match = re.search(r"((?:\d\s*){6,})", text)
         if match:
             code_with_spaces = match.group(1)
-            code = ''.join(code_with_spaces.split())  # 去除空格
+            code = "".join(code_with_spaces.split())  # 去除空格
             logger.info(f"已从文本中提取验证码: {code}")
             return code
         else:
@@ -239,6 +219,7 @@ def handle_verification_code(text: str) -> None:
 
     # 从配置中获取OTA_URL的域名部分
     from src.utils.config_manager import ConfigManager
+
     config = ConfigManager.get_instance()
     ota_url = config.get_config("SYSTEM_OPTIONS.NETWORK.AUTHORIZATION_URL", "")
     # 尝试打开浏览器，仅打开根域名

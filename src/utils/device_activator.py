@@ -1,16 +1,17 @@
 import asyncio
-import json
 import hashlib
 import hmac
+import json
 import threading
 import time
-import requests
 import uuid
 from pathlib import Path
 
+import requests
+
 from src.utils.common_utils import handle_verification_code
-from src.utils.logging_config import get_logger
 from src.utils.device_fingerprint import get_device_fingerprint
+from src.utils.logging_config import get_logger
 
 logger = get_logger(__name__)
 
@@ -26,11 +27,15 @@ class DeviceActivator:
         self.device_fingerprint = get_device_fingerprint()
         # 确保设备身份信息已创建
         self._ensure_device_identity()
-        
+
     def _ensure_device_identity(self):
         """确保设备身份信息已创建"""
-        serial_number, hmac_key, is_activated = self.device_fingerprint.ensure_device_identity()
-        self.logger.info(f"设备身份信息: 序列号: {serial_number}, 激活状态: {'已激活' if is_activated else '未激活'}")
+        serial_number, hmac_key, is_activated = (
+            self.device_fingerprint.ensure_device_identity()
+        )
+        self.logger.info(
+            f"设备身份信息: 序列号: {serial_number}, 激活状态: {'已激活' if is_activated else '未激活'}"
+        )
 
     def has_serial_number(self) -> bool:
         """检查是否有序列号"""
@@ -90,11 +95,15 @@ class DeviceActivator:
         # 检查序列号
         if not self.has_serial_number():
             self.logger.error("设备没有序列号，无法进行激活")
-            print("\n错误: 设备没有序列号，无法进行激活。请确保efuse.json文件已正确创建")
+            print(
+                "\n错误: 设备没有序列号，无法进行激活。请确保efuse.json文件已正确创建"
+            )
             print("正在重新创建设备身份信息并重新尝试...")
 
             # 使用device_fingerprint生成序列号和HMAC密钥
-            serial_number, hmac_key, _ = self.device_fingerprint.ensure_device_identity()
+            serial_number, hmac_key, _ = (
+                self.device_fingerprint.ensure_device_identity()
+            )
 
             if serial_number and hmac_key:
                 self.logger.info("已自动创建设备序列号和HMAC密钥")
@@ -106,7 +115,7 @@ class DeviceActivator:
         # 显示激活信息给用户
         self.logger.info(f"激活提示: {message}")
         self.logger.info(f"验证码: {code}")
-        
+
         # 构建验证码提示文本并打印
         text = f"请登录到控制面板添加设备，输入验证码：{' '.join(code)}"
         print("\n==================")
@@ -154,20 +163,21 @@ class DeviceActivator:
                 "algorithm": "hmac-sha256",
                 "serial_number": serial_number,
                 "challenge": challenge,
-                "hmac": hmac_signature
+                "hmac": hmac_signature,
             }
         }
 
         # 获取激活URL
         ota_url = self.config_manager.get_config(
-            "SYSTEM_OPTIONS.NETWORK.OTA_VERSION_URL")
+            "SYSTEM_OPTIONS.NETWORK.OTA_VERSION_URL"
+        )
         if not ota_url:
             self.logger.error("未找到OTA URL配置")
             return False
 
         # 确保URL以斜杠结尾
-        if not ota_url.endswith('/'):
-            ota_url += '/'
+        if not ota_url.endswith("/"):
+            ota_url += "/"
 
         activate_url = f"{ota_url}activate"
 
@@ -176,7 +186,7 @@ class DeviceActivator:
             "Activation-Version": "2",
             "Device-Id": self.config_manager.get_config("SYSTEM_OPTIONS.DEVICE_ID"),
             "Client-Id": self.config_manager.get_config("SYSTEM_OPTIONS.CLIENT_ID"),
-            "Content-Type": "application/json"
+            "Content-Type": "application/json",
         }
 
         # 重试逻辑
@@ -192,10 +202,7 @@ class DeviceActivator:
 
                 # 发送激活请求
                 response = requests.post(
-                    activate_url,
-                    headers=headers,
-                    json=payload,
-                    timeout=10
+                    activate_url, headers=headers, json=payload, timeout=10
                 )
 
                 # 打印完整响应
@@ -224,8 +231,7 @@ class DeviceActivator:
                     try:
                         error_data = response.json()
                         error_msg = error_data.get(
-                            'error',
-                            f"未知错误 (状态码: {response.status_code})"
+                            "error", f"未知错误 (状态码: {response.status_code})"
                         )
                     except Exception:
                         error_msg = f"服务器返回错误 (状态码: {response.status_code})"
@@ -233,7 +239,9 @@ class DeviceActivator:
                     # 记录错误但不终止流程
                     if error_msg != last_error:
                         # 只在错误消息改变时记录，避免重复日志
-                        self.logger.warning(f"服务器返回: {error_msg}，继续等待验证码激活")
+                        self.logger.warning(
+                            f"服务器返回: {error_msg}，继续等待验证码激活"
+                        )
                         print(f"\n服务器返回: {error_msg}，继续等待验证码激活...\n")
                         last_error = error_msg
 
@@ -242,7 +250,9 @@ class DeviceActivator:
                         error_count += 1
                         if error_count >= 5 and error_count % 5 == 0:
                             # 每5次相同错误，提示用户可能需要重新获取验证码
-                            print("\n提示: 如果错误持续出现，可能需要在网站上刷新页面获取新验证码\n")
+                            print(
+                                "\n提示: 如果错误持续出现，可能需要在网站上刷新页面获取新验证码\n"
+                            )
 
                     time.sleep(retry_interval)
 
@@ -254,6 +264,8 @@ class DeviceActivator:
                 time.sleep(retry_interval)
 
         # 只有在达到最大重试次数后才真正失败
-        self.logger.error(f"激活失败，达到最大重试次数 ({max_retries})，最后错误: {last_error}")
+        self.logger.error(
+            f"激活失败，达到最大重试次数 ({max_retries})，最后错误: {last_error}"
+        )
         print("\n激活失败，达到最大等待时间，请重新获取验证码并尝试激活\n")
         return False
