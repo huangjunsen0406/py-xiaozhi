@@ -24,6 +24,15 @@ class ConfigManager:
 
     # 配置文件路径
     CONFIG_DIR = find_config_dir()
+    if not CONFIG_DIR:
+        # 如果找不到配置目录，则使用项目根目录下的 config 文件夹
+        CONFIG_DIR = Path(get_app_path()) / 'config'
+        CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    CONFIG_FILE = CONFIG_DIR / "config.json"
+
+    # 记录配置文件路径
+    logger.info(f"配置目录: {CONFIG_DIR.absolute()}")
+    logger.info(f"配置文件: {CONFIG_FILE.absolute()}")
     CONFIG_FILE = CONFIG_DIR / "config.json" if CONFIG_DIR else None
 
     # 记录配置文件路径
