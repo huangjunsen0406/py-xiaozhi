@@ -1,5 +1,5 @@
 import json
-from typing import Dict, List, Callable, Any, Optional, Union
+from typing import Any, Callable, Dict, List, Optional, Union
 
 
 class ValueType:
@@ -27,10 +27,7 @@ class Property:
             raise TypeError(f"不支持的属性类型: {type(test_value)}")
 
     def get_descriptor_json(self) -> Dict:
-        return {
-            "description": self.description,
-            "type": self.type
-        }
+        return {"description": self.description, "type": self.type}
 
     def get_state_value(self):
         return self.getter()
@@ -45,10 +42,7 @@ class Parameter:
         self.value = None
 
     def get_descriptor_json(self) -> Dict:
-        return {
-            "description": self.description,
-            "type": self.type
-        }
+        return {"description": self.description, "type": self.type}
 
     def set_value(self, value: Any):
         self.value = value
@@ -58,7 +52,13 @@ class Parameter:
 
 
 class Method:
-    def __init__(self, name: str, description: str, parameters: List[Parameter], callback: Callable):
+    def __init__(
+        self,
+        name: str,
+        description: str,
+        parameters: List[Parameter],
+        callback: Callable,
+    ):
         self.name = name
         self.description = description
         self.parameters = {param.name: param for param in parameters}
@@ -67,8 +67,10 @@ class Method:
     def get_descriptor_json(self) -> Dict:
         return {
             "description": self.description,
-            "parameters": {name: param.get_descriptor_json()
-                           for name, param in self.parameters.items()}
+            "parameters": {
+                name: param.get_descriptor_json()
+                for name, param in self.parameters.items()
+            },
         }
 
     def invoke(self, params: Dict[str, Any]) -> Any:
@@ -96,24 +98,35 @@ class Thing:
     def add_property(self, name: str, description: str, getter: Callable) -> None:
         self.properties[name] = Property(name, description, getter)
 
-    def add_method(self, name: str, description: str, parameters: List[Parameter], callback: Callable) -> None:
+    def add_method(
+        self,
+        name: str,
+        description: str,
+        parameters: List[Parameter],
+        callback: Callable,
+    ) -> None:
         self.methods[name] = Method(name, description, parameters, callback)
 
     def get_descriptor_json(self) -> Dict:
         return {
             "name": self.name,
             "description": self.description,
-            "properties": {name: prop.get_descriptor_json()
-                           for name, prop in self.properties.items()},
-            "methods": {name: method.get_descriptor_json()
-                        for name, method in self.methods.items()}
+            "properties": {
+                name: prop.get_descriptor_json()
+                for name, prop in self.properties.items()
+            },
+            "methods": {
+                name: method.get_descriptor_json()
+                for name, method in self.methods.items()
+            },
         }
 
     def get_state_json(self) -> Dict:
         return {
             "name": self.name,
-            "state": {name: prop.get_state_value()
-                      for name, prop in self.properties.items()}
+            "state": {
+                name: prop.get_state_value() for name, prop in self.properties.items()
+            },
         }
 
     def invoke(self, command: Dict) -> Any:

@@ -1,13 +1,15 @@
 import argparse
-import logging
-import sys
-import signal
 import io
+import logging
+import signal
+import sys
+
 from src.application import Application
-from src.utils.logging_config import setup_logging, get_logger
+from src.utils.logging_config import get_logger, setup_logging
 
 logger = get_logger(__name__)
 # 配置日志
+
 
 def parse_args():
     """解析命令行参数"""
@@ -16,26 +18,27 @@ def parse_args():
         sys.stdout = io.StringIO()
     if sys.stderr is None:
         sys.stderr = io.StringIO()
-        
-    parser = argparse.ArgumentParser(description='小智Ai客户端')
-    
+
+    parser = argparse.ArgumentParser(description="小智Ai客户端")
+
     # 添加界面模式参数
     parser.add_argument(
-        '--mode', 
-        choices=['gui', 'cli'],
-        default='gui',
-        help='运行模式：gui(图形界面) 或 cli(命令行)'
+        "--mode",
+        choices=["gui", "cli"],
+        default="gui",
+        help="运行模式：gui(图形界面) 或 cli(命令行)",
     )
-    
+
     # 添加协议选择参数
     parser.add_argument(
-        '--protocol', 
-        choices=['mqtt', 'websocket'], 
-        default='websocket',
-        help='通信协议：mqtt 或 websocket'
+        "--protocol",
+        choices=["mqtt", "websocket"],
+        default="websocket",
+        help="通信协议：mqtt 或 websocket",
     )
-    
+
     return parser.parse_args()
+
 
 def signal_handler(sig, frame):
     """处理Ctrl+C信号"""
@@ -60,16 +63,14 @@ def main():
         logger.info("应用程序已启动，按Ctrl+C退出")
 
         # 启动应用，传入参数
-        app.run(
-            mode=args.mode,
-            protocol=args.protocol
-        )
+        app.run(mode=args.mode, protocol=args.protocol)
 
         # 如果是GUI模式且使用了PyQt界面，启动Qt事件循环
-        if args.mode == 'gui':
+        if args.mode == "gui":
             # 获取QApplication实例并运行事件循环
             try:
                 from PyQt5.QtWidgets import QApplication
+
                 qt_app = QApplication.instance()
                 if qt_app:
                     logger.info("开始Qt事件循环")

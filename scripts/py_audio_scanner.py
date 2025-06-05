@@ -2,9 +2,10 @@
 # -*- coding: utf-8 -*-
 # 文件名: detect_audio_devices.py
 
-import pyaudio
-import numpy as np
 import time
+
+import numpy as np
+import pyaudio
 
 
 def detect_audio_devices():
@@ -28,17 +29,17 @@ def detect_audio_devices():
         print(f"  - 默认采样率: {dev_info['defaultSampleRate']}")
 
         # 识别输入设备（麦克风）
-        if dev_info['maxInputChannels'] > 0:
-            input_devices.append((i, dev_info['name']))
-            if "USB" in dev_info['name']:
+        if dev_info["maxInputChannels"] > 0:
+            input_devices.append((i, dev_info["name"]))
+            if "USB" in dev_info["name"]:
                 print("  - 可能是USB麦克风 ?")
 
         # 识别输出设备（扬声器）
-        if dev_info['maxOutputChannels'] > 0:
-            output_devices.append((i, dev_info['name']))
-            if "bcm2835 Headphones" in dev_info['name']:
+        if dev_info["maxOutputChannels"] > 0:
+            output_devices.append((i, dev_info["name"]))
+            if "bcm2835 Headphones" in dev_info["name"]:
                 print("  - 可能是内置耳机输出 ?")
-            elif "USB" in dev_info['name'] and dev_info['maxOutputChannels'] > 0:
+            elif "USB" in dev_info["name"] and dev_info["maxOutputChannels"] > 0:
                 print("  - 可能是USB扬声器 ?")
 
         print("")
@@ -100,7 +101,9 @@ def detect_audio_devices():
 
     if recommended_speaker:
         print(f"\n# 扬声器初始化代码")
-        print(f"output_device_index = {recommended_speaker[0]}  # {recommended_speaker[1]}")
+        print(
+            f"output_device_index = {recommended_speaker[0]}  # {recommended_speaker[1]}"
+        )
         print(f"output_stream = p.open(")
         print(f"    format=pyaudio.paInt16,")
         print(f"    channels=1,")

@@ -7,12 +7,9 @@ PyInstaller 钩子文件: hook-vosk.py
 import os
 import sys
 from pathlib import Path
-from PyInstaller.utils.hooks import (
-    collect_dynamic_libs, 
-    copy_metadata,
-    collect_submodules,
-    collect_data_files
-)
+
+from PyInstaller.utils.hooks import (collect_data_files, collect_dynamic_libs,
+                                     collect_submodules, copy_metadata)
 
 # 添加src目录到Python路径，以便导入资源查找器
 src_path = Path(__file__).parent.parent / "src"

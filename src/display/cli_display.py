@@ -1,17 +1,17 @@
 import asyncio
-import threading
-import time
 import os
 import platform
-from typing import Optional, Callable
+import threading
+import time
+from typing import Callable, Optional
 
 from src.display.base_display import BaseDisplay
 
 # 根据不同操作系统处理 pynput 导入
 try:
-    if platform.system() == 'Windows':
+    if platform.system() == "Windows":
         from pynput import keyboard as pynput_keyboard
-    elif os.environ.get('DISPLAY'):
+    elif os.environ.get("DISPLAY"):
         from pynput import keyboard as pynput_keyboard
     else:
         pynput_keyboard = None
@@ -54,20 +54,22 @@ class CliDisplay(BaseDisplay):
 
         # 键盘监听器
         self.keyboard_listener = None
-        
+
         # 为异步操作添加事件循环
         self.loop = asyncio.new_event_loop()
 
-    def set_callbacks(self,
-                      press_callback: Optional[Callable] = None,
-                      release_callback: Optional[Callable] = None,
-                      status_callback: Optional[Callable] = None,
-                      text_callback: Optional[Callable] = None,
-                      emotion_callback: Optional[Callable] = None,
-                      mode_callback: Optional[Callable] = None,
-                      auto_callback: Optional[Callable] = None,
-                      abort_callback: Optional[Callable] = None,
-                      send_text_callback: Optional[Callable] = None):
+    def set_callbacks(
+        self,
+        press_callback: Optional[Callable] = None,
+        release_callback: Optional[Callable] = None,
+        status_callback: Optional[Callable] = None,
+        text_callback: Optional[Callable] = None,
+        emotion_callback: Optional[Callable] = None,
+        mode_callback: Optional[Callable] = None,
+        auto_callback: Optional[Callable] = None,
+        abort_callback: Optional[Callable] = None,
+        send_text_callback: Optional[Callable] = None,
+    ):
         """设置回调函数"""
         self.status_callback = status_callback
         self.text_callback = text_callback
@@ -106,7 +108,7 @@ class CliDisplay(BaseDisplay):
             else:
                 # 如果不是gif路径，则直接使用
                 self.current_emotion = emotion_path
-            
+
             self._print_current_status()
 
     def is_combo(self, *keys):
@@ -117,53 +119,61 @@ class CliDisplay(BaseDisplay):
         """启动键盘监听"""
         # 如果 pynput 不可用，记录警告并返回
         if pynput_keyboard is None:
-            self.logger.warning("键盘监听不可用：pynput 库未能正确加载。将使用基本的命令行输入。")
+            self.logger.warning(
+                "键盘监听不可用：pynput 库未能正确加载。将使用基本的命令行输入。"
+            )
             return
-        
+
         try:
+
             def on_press(key):
                 try:
                     # 记录按下的键
-                    if (key == pynput_keyboard.Key.alt_l or 
-                            key == pynput_keyboard.Key.alt_r):
-                        self.pressed_keys.add('alt')
-                    elif (key == pynput_keyboard.Key.shift_l or 
-                          key == pynput_keyboard.Key.shift_r):
-                        self.pressed_keys.add('shift')
-                    elif hasattr(key, 'char') and key.char:
+                    if (
+                        key == pynput_keyboard.Key.alt_l
+                        or key == pynput_keyboard.Key.alt_r
+                    ):
+                        self.pressed_keys.add("alt")
+                    elif (
+                        key == pynput_keyboard.Key.shift_l
+                        or key == pynput_keyboard.Key.shift_r
+                    ):
+                        self.pressed_keys.add("shift")
+                    elif hasattr(key, "char") and key.char:
                         self.pressed_keys.add(key.char.lower())
-                    
+
                     # 自动对话模式 - Alt+Shift+A
-                    if (self.is_combo('alt', 'shift', 'a') and 
-                            self.auto_callback):
+                    if self.is_combo("alt", "shift", "a") and self.auto_callback:
                         self.auto_callback()
-                    
+
                     # 打断对话 - Alt+Shift+X
-                    if (self.is_combo('alt', 'shift', 'x') and 
-                            self.abort_callback):
+                    if self.is_combo("alt", "shift", "x") and self.abort_callback:
                         self.abort_callback()
-                        
+
                 except Exception as e:
                     self.logger.error(f"键盘事件处理错误: {e}")
-            
+
             def on_release(key):
                 try:
                     # 清除释放的键
-                    if (key == pynput_keyboard.Key.alt_l or 
-                            key == pynput_keyboard.Key.alt_r):
-                        self.pressed_keys.discard('alt')
-                    elif (key == pynput_keyboard.Key.shift_l or 
-                          key == pynput_keyboard.Key.shift_r):
-                        self.pressed_keys.discard('shift')
-                    elif hasattr(key, 'char') and key.char:
+                    if (
+                        key == pynput_keyboard.Key.alt_l
+                        or key == pynput_keyboard.Key.alt_r
+                    ):
+                        self.pressed_keys.discard("alt")
+                    elif (
+                        key == pynput_keyboard.Key.shift_l
+                        or key == pynput_keyboard.Key.shift_r
+                    ):
+                        self.pressed_keys.discard("shift")
+                    elif hasattr(key, "char") and key.char:
                         self.pressed_keys.discard(key.char.lower())
                 except Exception as e:
                     self.logger.error(f"键盘事件处理错误: {e}")
 
             # 创建并启动监听器
             self.keyboard_listener = pynput_keyboard.Listener(
-                on_press=on_press,
-                on_release=on_release
+                on_press=on_press, on_release=on_release
             )
             self.keyboard_listener.start()
             self.logger.info("键盘监听器初始化成功")
@@ -228,20 +238,20 @@ class CliDisplay(BaseDisplay):
         try:
             while self.running:
                 cmd = input().lower().strip()
-                if cmd == 'q':
+                if cmd == "q":
                     self.on_close()
                     break
-                elif cmd == 'h':
+                elif cmd == "h":
                     self._print_help()
-                elif cmd == 'r':
+                elif cmd == "r":
                     if self.auto_callback:
                         self.auto_callback()
-                elif cmd == 'x':
+                elif cmd == "x":
                     if self.abort_callback:
                         self.abort_callback()
-                elif cmd == 's':
+                elif cmd == "s":
                     self._print_current_status()
-                elif cmd.startswith('v '):  # 添加音量命令处理
+                elif cmd.startswith("v "):  # 添加音量命令处理
                     try:
                         volume = int(cmd.split()[1])  # 获取音量值
                         if 0 <= volume <= 100:
@@ -255,11 +265,11 @@ class CliDisplay(BaseDisplay):
                     if self.send_text_callback:
                         # 获取应用程序的事件循环并在其中运行协程
                         from src.application import Application
+
                         app = Application.get_instance()
                         if app and app.loop:
                             asyncio.run_coroutine_threadsafe(
-                                self.send_text_callback(cmd),
-                                app.loop
+                                self.send_text_callback(cmd), app.loop
                             )
                         else:
                             print("应用程序实例或事件循环不可用")
@@ -268,6 +278,7 @@ class CliDisplay(BaseDisplay):
 
     def start_update_threads(self):
         """启动更新线程"""
+
         def update_loop():
             while self.running:
                 try:
@@ -300,10 +311,10 @@ class CliDisplay(BaseDisplay):
         """打印当前状态"""
         # 检查是否有状态变化
         status_changed = (
-            self.current_status != self.last_status or
-            self.current_text != self.last_text or
-            self.current_emotion != self.last_emotion or
-            self.current_volume != self.last_volume
+            self.current_status != self.last_status
+            or self.current_text != self.last_text
+            or self.current_emotion != self.last_emotion
+            or self.current_volume != self.last_volume
         )
 
         if status_changed:

@@ -1,12 +1,14 @@
-from src.application import Application
-from src.constants.constants import DeviceState, AudioConfig
-from src.iot.thing import Thing, Parameter, ValueType
 import os
-import requests
-import pygame
-import time
 import threading
-from typing import Dict, Any, Tuple, List, Optional
+import time
+from typing import Any, Dict, List, Optional, Tuple
+
+import pygame
+import requests
+
+from src.application import Application
+from src.constants.constants import AudioConfig, DeviceState
+from src.iot.thing import Parameter, Thing, ValueType
 from src.utils.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -24,29 +26,30 @@ class MusicPlayer(Thing):
         """初始化音乐播放器组件"""
         super().__init__(
             "MusicPlayer",
-            "在线音乐播放器,播放音乐时优先使用iot的音乐播放器，支持本地缓存、暂停、进度跳转"
+            "在线音乐播放器,播放音乐时优先使用iot的音乐播放器，支持本地缓存、暂停、进度跳转",
         )
 
         # 初始化pygame mixer
-        pygame.mixer.init(frequency=AudioConfig.OUTPUT_SAMPLE_RATE,
-                          channels=AudioConfig.CHANNELS)
+        pygame.mixer.init(
+            frequency=AudioConfig.OUTPUT_SAMPLE_RATE, channels=AudioConfig.CHANNELS
+        )
 
         # 搜索结果相关属性
         self.current_song = ""  # 当前歌曲名称
-        self.current_url = ""   # 当前歌曲播放链接
-        self.song_id = ""       # 当前歌曲ID
+        self.current_url = ""  # 当前歌曲播放链接
+        self.song_id = ""  # 当前歌曲ID
         self.total_duration = 0  # 歌曲总时长（秒）
 
         # 播放控制相关属性
-        self.is_playing = False      # 是否正在播放
-        self.paused = False          # 是否暂停
-        self.current_position = 0    # 当前播放位置（秒）
-        self.start_play_time = 0     # 开始播放的时间点
-        
+        self.is_playing = False  # 是否正在播放
+        self.paused = False  # 是否暂停
+        self.current_position = 0  # 当前播放位置（秒）
+        self.start_play_time = 0  # 开始播放的时间点
+
         # TTS相关属性
         self.paused_for_tts = False  # 是否因为TTS而暂停
-        self.pause_start_time = 0    # 暂停开始时间
-        self.total_pause_time = 0    # 总暂停时间
+        self.pause_start_time = 0  # 暂停开始时间
+        self.total_pause_time = 0  # 总暂停时间
         self._last_tts_playing = None
 
         # 歌词相关
@@ -54,12 +57,13 @@ class MusicPlayer(Thing):
         self.current_lyric_index = -1  # 当前歌词索引
 
         # 线程控制
-        self.progress_thread = None   # 进度更新线程
+        self.progress_thread = None  # 进度更新线程
         self.stop_progress = threading.Event()  # 用于停止进度更新线程
 
         # 缓存相关
-        cache_root = os.path.dirname(os.path.dirname(os.path.dirname(
-                     os.path.dirname(__file__))))
+        cache_root = os.path.dirname(
+            os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+        )
         self.cache_dir = os.path.join(cache_root, "cache", "music")
         self._ensure_cache_dir()
 
@@ -89,12 +93,17 @@ class MusicPlayer(Thing):
         self.add_property("current_song", "当前歌曲", lambda: self.current_song)
         self.add_property("is_playing", "是否正在播放", lambda: self.is_playing)
         self.add_property("paused", "是否暂停", lambda: self.paused)
-        self.add_property("total_duration", "歌曲总时长（秒）",
-                          lambda: self.total_duration)
-        self.add_property("current_position", "当前播放位置（秒）",
-                          lambda: self._get_current_position())
-        self.add_property("progress", "播放进度（百分比）",
-                          lambda: self._get_progress())
+        self.add_property(
+            "total_duration", "歌曲总时长（秒）", lambda: self.total_duration
+        )
+        self.add_property(
+            "current_position",
+            "当前播放位置（秒）",
+            lambda: self._get_current_position(),
+        )
+        self.add_property(
+            "progress", "播放进度（百分比）", lambda: self._get_progress()
+        )
 
     def _register_methods(self):
         """注册播放器方法"""
@@ -102,56 +111,35 @@ class MusicPlayer(Thing):
             "SearchPlay",
             "搜索并播放指定歌曲",
             [Parameter("song_name", "输入歌曲名称", ValueType.STRING, True)],
-            lambda params: self.search_play(params["song_name"].get_value())
+            lambda params: self.search_play(params["song_name"].get_value()),
         )
 
         self.add_method(
             "SearchSong",
             "仅搜索歌曲不播放",
             [Parameter("song_name", "输入歌曲名称", ValueType.STRING, True)],
-            lambda params: self._search_song(params["song_name"].get_value())
+            lambda params: self._search_song(params["song_name"].get_value()),
         )
 
         self.add_method(
-            "PlayPause",
-            "播放/暂停切换",
-            [],
-            lambda params: self.play_pause()
+            "PlayPause", "播放/暂停切换", [], lambda params: self.play_pause()
         )
 
-        self.add_method(
-            "Play",
-            "开始播放",
-            [],
-            lambda params: self.play()
-        )
+        self.add_method("Play", "开始播放", [], lambda params: self.play())
 
-        self.add_method(
-            "Pause",
-            "暂停播放",
-            [],
-            lambda params: self.pause()
-        )
+        self.add_method("Pause", "暂停播放", [], lambda params: self.pause())
 
-        self.add_method(
-            "Stop",
-            "停止播放",
-            [],
-            lambda params: self.stop()
-        )
+        self.add_method("Stop", "停止播放", [], lambda params: self.stop())
 
         self.add_method(
             "Seek",
             "跳转到指定位置",
             [Parameter("position_seconds", "跳转位置（秒）", ValueType.NUMBER, True)],
-            lambda params: self.seek(params["position_seconds"].get_value())
+            lambda params: self.seek(params["position_seconds"].get_value()),
         )
 
         self.add_method(
-            "GetLyrics",
-            "获取当前歌曲歌词",
-            [],
-            lambda params: self._get_lyrics_text()
+            "GetLyrics", "获取当前歌曲歌词", [], lambda params: self._get_lyrics_text()
         )
 
     def _load_config(self) -> Dict[str, Any]:
@@ -165,18 +153,18 @@ class MusicPlayer(Thing):
             "API": {
                 "SEARCH_URL": "http://search.kuwo.cn/r.s",
                 "PLAY_URL": "http://api.xiaodaokg.com/kuwo.php",
-                "LYRIC_URL": "http://m.kuwo.cn/newh5/singles/songinfoandlrc"
+                "LYRIC_URL": "http://m.kuwo.cn/newh5/singles/songinfoandlrc",
             },
             "HEADERS": {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                             "AppleWebKit/537.36 (KHTML, like Gecko) "
-                             "Chrome/91.0.4472.124 Safari/537.36",
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/91.0.4472.124 Safari/537.36",
                 "Accept": "*/*",
                 "Accept-Encoding": "identity",
                 "Connection": "keep-alive",
                 "Referer": "https://y.kuwo.cn/",
-                "Cookie": ""
-            }
+                "Cookie": "",
+            },
         }
 
     def _search_song(self, song_name: str) -> Dict[str, Any]:
@@ -203,7 +191,7 @@ class MusicPlayer(Thing):
             if not song_id or not url:
                 return {
                     "status": "error",
-                    "message": f"未找到歌曲 '{song_name}' 或无法获取播放链接"
+                    "message": f"未找到歌曲 '{song_name}' 或无法获取播放链接",
                 }
 
             # 保存歌曲信息
@@ -219,7 +207,7 @@ class MusicPlayer(Thing):
                 "song_id": song_id,
                 "url": url,
                 "duration": self.total_duration,
-                "lyrics_count": len(self.lyrics)
+                "lyrics_count": len(self.lyrics),
             }
 
         except Exception as e:
@@ -239,9 +227,11 @@ class MusicPlayer(Thing):
         # 从配置中获取请求头和API URL
         headers = self.config.get("HEADERS", {})
         search_url = self.config.get("API", {}).get(
-            "SEARCH_URL", "http://search.kuwo.cn/r.s")
+            "SEARCH_URL", "http://search.kuwo.cn/r.s"
+        )
         play_url = self.config.get("API", {}).get(
-            "PLAY_URL", "http://api.xiaodaokg.com/kuwo.php")
+            "PLAY_URL", "http://api.xiaodaokg.com/kuwo.php"
+        )
 
         # 1. 搜索歌曲获取ID
         search_params = {
@@ -262,14 +252,15 @@ class MusicPlayer(Thing):
             "ver": "mbox",
             "vipver": "MUSIC_8.7.6.0.BCS31",
             "plat": "pc",
-            "devid": "0"
+            "devid": "0",
         }
 
         logger.info(f"搜索歌曲: {song_name}")
 
         try:
             response = requests.get(
-                search_url, params=search_params, headers=headers, timeout=10)
+                search_url, params=search_params, headers=headers, timeout=10
+            )
             response.raise_for_status()
 
             # 记录响应内容到日志（调试用）
@@ -306,7 +297,8 @@ class MusicPlayer(Thing):
                         logger.info(f"提取到歌曲时长: {duration}秒")
                     except ValueError:
                         logger.warning(
-                            f"歌曲时长解析失败: {response_text[start_pos:end_pos]}")
+                            f"歌曲时长解析失败: {response_text[start_pos:end_pos]}"
+                        )
 
             # 提取艺术家
             artist = ""
@@ -344,7 +336,8 @@ class MusicPlayer(Thing):
             self.current_song = display_name
 
             logger.info(
-                f"获取到歌曲: {self.current_song}, ID: {song_id}, 时长: {duration}秒")
+                f"获取到歌曲: {self.current_song}, ID: {song_id}, 时长: {duration}秒"
+            )
 
             # 2. 获取歌曲播放链接
             play_api_url = f"{play_url}?ID={song_id}"
@@ -353,7 +346,8 @@ class MusicPlayer(Thing):
             for attempt in range(3):
                 try:
                     url_response = requests.get(
-                        play_api_url, headers=headers, timeout=10)
+                        play_api_url, headers=headers, timeout=10
+                    )
                     url_response.raise_for_status()
 
                     # 获取播放链接（直接返回的文本）
@@ -369,7 +363,8 @@ class MusicPlayer(Thing):
                         return song_id, play_url_text
                     else:
                         logger.warning(
-                            f"返回的播放链接格式不正确: {play_url_text[:100]}")
+                            f"返回的播放链接格式不正确: {play_url_text[:100]}"
+                        )
                         if attempt < 2:
                             logger.info(f"尝试重新获取播放链接 ({attempt+1}/3)")
                             time.sleep(1)
@@ -399,7 +394,8 @@ class MusicPlayer(Thing):
             # 从配置中获取请求头和API URL
             headers = self.config.get("HEADERS", {})
             lyric_url = self.config.get("API", {}).get(
-                "LYRIC_URL", "http://m.kuwo.cn/newh5/singles/songinfoandlrc")
+                "LYRIC_URL", "http://m.kuwo.cn/newh5/singles/songinfoandlrc"
+            )
 
             # 构建歌词API请求
             lyric_api_url = f"{lyric_url}?musicId={song_id}"
@@ -414,8 +410,11 @@ class MusicPlayer(Thing):
                 data = response.json()
 
                 # 解析歌词
-                if (data.get("status") == 200 and data.get("data") and
-                        data["data"].get("lrclist")):
+                if (
+                    data.get("status") == 200
+                    and data.get("data")
+                    and data["data"].get("lrclist")
+                ):
                     lrc_list = data["data"]["lrclist"]
                     self.lyrics = []
 
@@ -424,21 +423,26 @@ class MusicPlayer(Thing):
                         text = lrc.get("lineLyric", "").strip()
 
                         # 跳过空歌词和元信息歌词
-                        if (text and not text.startswith("作词") and
-                                not text.startswith("作曲") and
-                                not text.startswith("编曲")):
+                        if (
+                            text
+                            and not text.startswith("作词")
+                            and not text.startswith("作曲")
+                            and not text.startswith("编曲")
+                        ):
                             self.lyrics.append((time_sec, text))
 
                     logger.info(f"成功获取歌词，共 {len(self.lyrics)} 行")
                 else:
-                    logger.warning(
-                        f"未获取到歌词或歌词格式错误: {data.get('msg', '')}")
+                    logger.warning(f"未获取到歌词或歌词格式错误: {data.get('msg', '')}")
             except ValueError as e:
                 logger.warning(f"歌词API返回非JSON格式数据: {str(e)}")
                 # 记录部分响应内容
-                if hasattr(response, 'text') and response.text:
-                    sample = (response.text[:100] + "..."
-                             if len(response.text) > 100 else response.text)
+                if hasattr(response, "text") and response.text:
+                    sample = (
+                        response.text[:100] + "..."
+                        if len(response.text) > 100
+                        else response.text
+                    )
                     logger.warning(f"歌词API响应内容: {sample}")
         except Exception as e:
             logger.error(f"获取歌词失败: {str(e)}")
@@ -512,8 +516,9 @@ class MusicPlayer(Thing):
 
             # 使用schedule方法安全地更新UI
             if self.app:
-                self.app.schedule(lambda: self.app.set_chat_message(
-                    "assistant", display_text))
+                self.app.schedule(
+                    lambda: self.app.set_chat_message("assistant", display_text)
+                )
             logger.debug(f"显示歌词: {lyric_text}")
 
     def _get_lyrics_text(self) -> Dict[str, Any]:
@@ -535,7 +540,7 @@ class MusicPlayer(Thing):
         return {
             "status": "success",
             "message": f"获取到 {len(self.lyrics)} 行歌词",
-            "lyrics": lyrics_text
+            "lyrics": lyrics_text,
         }
 
     def _download_file(self, url: str, file_path: str) -> bool:
@@ -552,29 +557,34 @@ class MusicPlayer(Thing):
         try:
             # 使用配置中的请求头
             headers = self.config.get("HEADERS", {}).copy()
-            headers.update({
-                'Accept-Encoding': 'gzip, deflate, br',
-                'Referer': 'https://music.163.com/'
-            })
+            headers.update(
+                {
+                    "Accept-Encoding": "gzip, deflate, br",
+                    "Referer": "https://music.163.com/",
+                }
+            )
 
             # 创建唯一的临时文件路径，避免冲突
             temp_path = f"{file_path}.{int(time.time())}.tmp"
 
             # 下载文件
-            with requests.get(url, stream=True, headers=headers,
-                              timeout=30) as response:
+            with requests.get(
+                url, stream=True, headers=headers, timeout=30
+            ) as response:
                 response.raise_for_status()
-                total_size = int(response.headers.get('content-length', 0))
+                total_size = int(response.headers.get("content-length", 0))
                 downloaded = 0
 
-                with open(temp_path, 'wb') as f:
+                with open(temp_path, "wb") as f:
                     for chunk in response.iter_content(chunk_size=32768):
                         if chunk:
                             f.write(chunk)
                             downloaded += len(chunk)
                             # 每下载25%更新一次日志
-                            if (total_size > 0 and
-                                    downloaded % (total_size // 4) < 32768):
+                            if (
+                                total_size > 0
+                                and downloaded % (total_size // 4) < 32768
+                            ):
                                 progress = downloaded * 100 // total_size
                                 logger.info(f"下载进度: {progress}%")
 
@@ -610,7 +620,7 @@ class MusicPlayer(Thing):
             logger.error(f"下载音乐文件失败: {str(e)}")
             # 清理临时文件
             try:
-                if 'temp_path' in locals() and os.path.exists(temp_path):
+                if "temp_path" in locals() and os.path.exists(temp_path):
                     os.remove(temp_path)
             except Exception:
                 pass
@@ -627,20 +637,24 @@ class MusicPlayer(Thing):
         try:
             # 使用配置中的请求头
             headers = self.config.get("HEADERS", {}).copy()
-            headers.update({
-                'Accept-Encoding': 'gzip, deflate, br',
-                'Referer': 'https://music.163.com/'
-            })
+            headers.update(
+                {
+                    "Accept-Encoding": "gzip, deflate, br",
+                    "Referer": "https://music.163.com/",
+                }
+            )
 
             # 创建唯一的临时文件路径，避免冲突
             temp_path = f"{cache_path}.{int(time.time())}.temp"
 
-            with requests.get(url, stream=True, headers=headers, timeout=30) as response:
+            with requests.get(
+                url, stream=True, headers=headers, timeout=30
+            ) as response:
                 response.raise_for_status()
-                total_size = int(response.headers.get('content-length', 0))
+                total_size = int(response.headers.get("content-length", 0))
                 downloaded = 0
 
-                with open(temp_path, 'wb') as f:
+                with open(temp_path, "wb") as f:
                     for chunk in response.iter_content(chunk_size=32768):
                         if not self.is_playing:
                             logger.info("缓存下载被中止")
@@ -649,7 +663,10 @@ class MusicPlayer(Thing):
                             f.write(chunk)
                             downloaded += len(chunk)
                             # 每下载10%更新一次日志
-                            if total_size > 0 and downloaded % (total_size // 10) < 32768:
+                            if (
+                                total_size > 0
+                                and downloaded % (total_size // 10) < 32768
+                            ):
                                 progress = downloaded * 100 // total_size
                                 logger.info(f"缓存下载进度: {progress}%")
 
@@ -663,7 +680,9 @@ class MusicPlayer(Thing):
                             os.replace(temp_path, cache_path)
                             logger.info("MP3文件已缓存到本地")
                         except Exception as e:
-                            logger.warning(f"替换缓存文件失败，可能正在使用中: {str(e)}")
+                            logger.warning(
+                                f"替换缓存文件失败，可能正在使用中: {str(e)}"
+                            )
                             # 保留临时文件，不删除
                             logger.info(f"保留临时缓存文件: {temp_path}")
                     else:
@@ -690,7 +709,7 @@ class MusicPlayer(Thing):
             logger.error(f"下载MP3文件失败: {str(e)}")
             # 清理临时文件
             try:
-                if 'temp_path' in locals() and os.path.exists(temp_path):
+                if "temp_path" in locals() and os.path.exists(temp_path):
                     os.remove(temp_path)
                     logger.info("已清理临时文件")
             except Exception as e:
@@ -761,7 +780,7 @@ class MusicPlayer(Thing):
             return {
                 "status": "success",
                 "message": f"正在播放: {self.current_song}",
-                "duration": self.total_duration
+                "duration": self.total_duration,
             }
 
         # 搜索失败直接返回搜索结果
@@ -835,7 +854,7 @@ class MusicPlayer(Thing):
         tts_playing = self.app.get_is_tts_playing()
 
         # 检查是否有打断请求
-        if hasattr(self.app, 'aborted') and self.app.aborted:
+        if hasattr(self.app, "aborted") and self.app.aborted:
             if not self.paused:
                 logger.info("检测到打断请求，暂停音乐播放")
                 pygame.mixer.music.pause()
@@ -858,7 +877,7 @@ class MusicPlayer(Thing):
                     pygame.mixer.music.unpause()
                     self.paused = False
                     self.paused_for_tts = False
-                    self.total_pause_time += (current_time - self.pause_start_time)
+                    self.total_pause_time += current_time - self.pause_start_time
                     self.start_play_time = time.time() - self.current_position
 
             elif not self._last_tts_playing and tts_playing:
@@ -925,7 +944,9 @@ class MusicPlayer(Thing):
                     except Exception as e:
                         logger.warning(f"清理临时播放文件失败: {str(e)}")
                         # 使用唯一文件名代替
-                        temp_file = os.path.join(temp_dir, f"playing_{int(time.time())}.mp3")
+                        temp_file = os.path.join(
+                            temp_dir, f"playing_{int(time.time())}.mp3"
+                        )
 
                 # 记录当前使用的临时文件
                 self.current_temp_file = temp_file
@@ -940,11 +961,14 @@ class MusicPlayer(Thing):
                         try:
                             # 创建从缓存到临时文件的副本
                             import shutil
+
                             shutil.copy2(cache_path, temp_file)
                             logger.info(f"从缓存创建临时播放文件: {temp_file}")
                             pygame.mixer.music.load(temp_file)
                         except Exception as e:
-                            logger.error(f"创建临时播放文件失败: {str(e)}，尝试直接使用缓存")
+                            logger.error(
+                                f"创建临时播放文件失败: {str(e)}，尝试直接使用缓存"
+                            )
                             try:
                                 pygame.mixer.music.load(cache_path)
                             except Exception as e2:
@@ -963,19 +987,22 @@ class MusicPlayer(Thing):
                     pygame.mixer.music.load(temp_file)
 
                     # 如果有缓存路径但缓存不存在，异步创建缓存（非必须，仅作为备份）
-                    if cache_path and not os.path.exists(cache_path) and os.path.exists(temp_file):
+                    if (
+                        cache_path
+                        and not os.path.exists(cache_path)
+                        and os.path.exists(temp_file)
+                    ):
+
                         def copy_to_cache():
                             try:
                                 import shutil
+
                                 shutil.copy2(temp_file, cache_path)
                                 logger.info(f"临时文件已复制到缓存: {cache_path}")
                             except Exception as e:
                                 logger.warning(f"复制到缓存失败: {str(e)}")
 
-                        threading.Thread(
-                            target=copy_to_cache,
-                            daemon=True
-                        ).start()
+                        threading.Thread(target=copy_to_cache, daemon=True).start()
 
             # 开始播放
             pygame.mixer.music.play()
@@ -986,8 +1013,11 @@ class MusicPlayer(Thing):
 
             # 更新UI显示
             if self.app:
-                self.app.schedule(lambda: self.app.set_chat_message(
-                    "assistant", f"正在播放: {self.current_song}"))
+                self.app.schedule(
+                    lambda: self.app.set_chat_message(
+                        "assistant", f"正在播放: {self.current_song}"
+                    )
+                )
 
             # 启动进度更新线程
             self._start_progress_thread()
@@ -1012,18 +1042,12 @@ class MusicPlayer(Thing):
                 if self._play_url(self.current_url):
                     return {
                         "status": "success",
-                        "message": f"开始播放: {self.current_song}"
+                        "message": f"开始播放: {self.current_song}",
                     }
                 else:
-                    return {
-                        "status": "error",
-                        "message": "播放失败"
-                    }
+                    return {"status": "error", "message": "播放失败"}
             else:
-                return {
-                    "status": "error",
-                    "message": "没有可播放的歌曲"
-                }
+                return {"status": "error", "message": "没有可播放的歌曲"}
         elif self.paused:
             # 恢复播放
             pygame.mixer.music.unpause()
@@ -1032,30 +1056,36 @@ class MusicPlayer(Thing):
             self.start_play_time = time.time() - self.current_position
 
             if self.app:
-                self.app.schedule(lambda: self.app.set_chat_message(
-                    "assistant", f"继续播放: {self.current_song}"))
+                self.app.schedule(
+                    lambda: self.app.set_chat_message(
+                        "assistant", f"继续播放: {self.current_song}"
+                    )
+                )
 
-            return {
-                "status": "success",
-                "message": f"继续播放: {self.current_song}"
-            }
+            return {"status": "success", "message": f"继续播放: {self.current_song}"}
         else:
             # 暂停播放
             pygame.mixer.music.pause()
             self.paused = True
-            self.paused_for_tts = False  # 重要：确保这不是因为TTS而暂停的，避免TTS结束后音乐自动恢复
+            self.paused_for_tts = (
+                False  # 重要：确保这不是因为TTS而暂停的，避免TTS结束后音乐自动恢复
+            )
             self.current_position = time.time() - self.start_play_time
 
             if self.app:
                 pos_str = self._format_time(self.current_position)
                 dur_str = self._format_time(self.total_duration)
-                self.app.schedule(lambda: self.app.set_chat_message(
-                    "assistant", f"已暂停: {self.current_song} [{pos_str}/{dur_str}]"))
+                self.app.schedule(
+                    lambda: self.app.set_chat_message(
+                        "assistant",
+                        f"已暂停: {self.current_song} [{pos_str}/{dur_str}]",
+                    )
+                )
 
             return {
                 "status": "success",
                 "message": f"已暂停: {self.current_song}",
-                "position": self.current_position
+                "position": self.current_position,
             }
 
     def stop(self) -> Dict[str, Any]:
@@ -1066,10 +1096,7 @@ class MusicPlayer(Thing):
             Dict[str, Any]: 操作结果
         """
         if not self.is_playing:
-            return {
-                "status": "info",
-                "message": "没有正在播放的歌曲"
-            }
+            return {"status": "info", "message": "没有正在播放的歌曲"}
 
         # 停止进度更新线程
         self.stop_progress.set()
@@ -1113,10 +1140,7 @@ class MusicPlayer(Thing):
         if self.app:
             self.app.schedule(lambda: self.app.set_chat_message("assistant", msg))
 
-        return {
-            "status": "success",
-            "message": msg
-        }
+        return {"status": "success", "message": msg}
 
     def seek(self, position: float) -> Dict[str, Any]:
         """
@@ -1129,10 +1153,7 @@ class MusicPlayer(Thing):
             Dict[str, Any]: 操作结果
         """
         if not self.is_playing:
-            return {
-                "status": "error",
-                "message": "没有正在播放的歌曲"
-            }
+            return {"status": "error", "message": "没有正在播放的歌曲"}
 
         # 确保位置在有效范围内
         position = max(0, min(position, self.total_duration))
@@ -1159,11 +1180,7 @@ class MusicPlayer(Thing):
         if self.app:
             self.app.schedule(lambda: self.app.set_chat_message("assistant", msg))
 
-        return {
-            "status": "success",
-            "message": msg,
-            "position": position
-        }
+        return {"status": "success", "message": msg, "position": position}
 
     def _start_progress_thread(self):
         """启动进度更新线程"""
@@ -1175,8 +1192,7 @@ class MusicPlayer(Thing):
 
         # 创建新线程
         self.progress_thread = threading.Thread(
-            target=self._update_progress_thread,
-            daemon=True
+            target=self._update_progress_thread, daemon=True
         )
         self.progress_thread.start()
 
@@ -1187,17 +1203,17 @@ class MusicPlayer(Thing):
 
         while not self.stop_progress.is_set() and self.is_playing:
             current_time = time.time()
-            
+
             # 如果暂停了，等待恢复
             if self.paused and not self.paused_for_tts:
                 time.sleep(0.2)
                 continue
-                
+
             # 每200ms检查一次TTS状态
             if current_time - last_tts_check > 0.2:
                 self._handle_tts_priority()
                 last_tts_check = current_time
-                
+
                 # 如果因为TTS而暂停，继续等待
                 if self.paused_for_tts:
                     time.sleep(0.1)
@@ -1220,12 +1236,17 @@ class MusicPlayer(Thing):
                 # 更新UI显示完成状态
                 if self.app:
                     dur_str = self._format_time(self.total_duration)
-                    self.app.schedule(lambda: self.app.set_chat_message(
-                        "assistant", f"播放完成: {self.current_song} [{dur_str}]"))
+                    self.app.schedule(
+                        lambda: self.app.set_chat_message(
+                            "assistant", f"播放完成: {self.current_song} [{dur_str}]"
+                        )
+                    )
 
                 # 根据自动模式设置应用状态
                 if self.app:
-                    self.app.schedule(lambda: self.app.set_device_state(DeviceState.IDLE))
+                    self.app.schedule(
+                        lambda: self.app.set_device_state(DeviceState.IDLE)
+                    )
                 break
 
             # 更新歌词显示（每0.5秒检查一次）
@@ -1265,18 +1286,12 @@ class MusicPlayer(Thing):
                 if self._play_url(self.current_url):
                     return {
                         "status": "success",
-                        "message": f"开始播放: {self.current_song}"
+                        "message": f"开始播放: {self.current_song}",
                     }
                 else:
-                    return {
-                        "status": "error",
-                        "message": "播放失败"
-                    }
+                    return {"status": "error", "message": "播放失败"}
             else:
-                return {
-                    "status": "error",
-                    "message": "没有可播放的歌曲"
-                }
+                return {"status": "error", "message": "没有可播放的歌曲"}
         # 如果已经在播放，检查是否暂停
         elif self.paused:
             # 恢复播放
@@ -1287,18 +1302,18 @@ class MusicPlayer(Thing):
             self.start_play_time = time.time() - self.current_position
 
             if self.app:
-                self.app.schedule(lambda: self.app.set_chat_message(
-                    "assistant", f"继续播放: {self.current_song}"))
+                self.app.schedule(
+                    lambda: self.app.set_chat_message(
+                        "assistant", f"继续播放: {self.current_song}"
+                    )
+                )
 
-            return {
-                "status": "success",
-                "message": f"继续播放: {self.current_song}"
-            }
+            return {"status": "success", "message": f"继续播放: {self.current_song}"}
         else:
             # 已经在播放了
             return {
                 "status": "info",
-                "message": f"音乐已经在播放中: {self.current_song}"
+                "message": f"音乐已经在播放中: {self.current_song}",
             }
 
     def pause(self) -> Dict[str, Any]:
@@ -1310,10 +1325,7 @@ class MusicPlayer(Thing):
         """
         # 如果没有正在播放的歌曲
         if not self.is_playing:
-            return {
-                "status": "info",
-                "message": "没有正在播放的歌曲"
-            }
+            return {"status": "info", "message": "没有正在播放的歌曲"}
         # 如果已经暂停
         elif self.paused:
             # 即使已经暂停，也确保重置TTS暂停标志，防止TTS结束后自动恢复
@@ -1321,7 +1333,7 @@ class MusicPlayer(Thing):
             logger.info("音乐已经暂停，确保不会自动恢复")
             return {
                 "status": "success",  # 改为success以确保用户收到正确反馈
-                "message": f"音乐已暂停: {self.current_song}"
+                "message": f"音乐已暂停: {self.current_song}",
             }
         else:
             # 暂停播放
@@ -1333,11 +1345,15 @@ class MusicPlayer(Thing):
             if self.app:
                 pos_str = self._format_time(self.current_position)
                 dur_str = self._format_time(self.total_duration)
-                self.app.schedule(lambda: self.app.set_chat_message(
-                    "assistant", f"已暂停: {self.current_song} [{pos_str}/{dur_str}]"))
+                self.app.schedule(
+                    lambda: self.app.set_chat_message(
+                        "assistant",
+                        f"已暂停: {self.current_song} [{pos_str}/{dur_str}]",
+                    )
+                )
 
             return {
                 "status": "success",
                 "message": f"已暂停: {self.current_song}",
-                "position": self.current_position
+                "position": self.current_position,
             }

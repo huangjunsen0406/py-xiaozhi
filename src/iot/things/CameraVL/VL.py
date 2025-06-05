@@ -1,11 +1,14 @@
-import os
 import base64
-from openai import OpenAI
+import os
 import threading
+
+from openai import OpenAI
+
+
 class ImageAnalyzer:
     _instance = None
     _lock = threading.Lock()
-    client=None
+    client = None
 
     def __init__(self):
         self.model = None
@@ -15,12 +18,18 @@ class ImageAnalyzer:
         if cls._instance is None:
             cls._instance = super().__new__(cls)
         return cls._instance
-    def init(self, api_key,base_url="https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",models="qwen-omni-turbo"):
+
+    def init(
+        self,
+        api_key,
+        base_url="https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
+        models="qwen-omni-turbo",
+    ):
         self.client = OpenAI(
             api_key=api_key,
             base_url=base_url,
         )
-        self.models=models
+        self.models = models
 
     @classmethod
     def get_instance(cls):
@@ -29,7 +38,10 @@ class ImageAnalyzer:
             if cls._instance is None:
                 cls._instance = cls()
         return cls._instance
-    def analyze_image(self, base64_image, prompt="图中描绘的是什么景象,请详细描述，因为用户可能是盲人")->str:
+
+    def analyze_image(
+        self, base64_image, prompt="图中描绘的是什么景象,请详细描述，因为用户可能是盲人"
+    ) -> str:
         """分析图片并返回结果"""
         completion = self.client.chat.completions.create(
             model=self.models,
@@ -43,7 +55,9 @@ class ImageAnalyzer:
                     "content": [
                         {
                             "type": "image_url",
-                            "image_url": {"url": f"data:image/png;base64,{base64_image}"},
+                            "image_url": {
+                                "url": f"data:image/png;base64,{base64_image}"
+                            },
                         },
                         {"type": "text", "text": prompt},
                     ],
@@ -53,10 +67,10 @@ class ImageAnalyzer:
             stream=True,
             stream_options={"include_usage": True},
         )
-        mesag=""
+        mesag = ""
         for chunk in completion:
             if chunk.choices:
-                mesag+=chunk.choices[0].delta.content
+                mesag += chunk.choices[0].delta.content
             else:
                 pass
-        return  mesag
+        return mesag

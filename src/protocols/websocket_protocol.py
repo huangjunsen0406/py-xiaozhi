@@ -1,7 +1,8 @@
-import ssl
 import asyncio
 import json
 import logging
+import ssl
+
 import websockets
 
 from src.constants.constants import AudioConfig
@@ -33,7 +34,7 @@ class WebsocketProtocol(Protocol):
             "Device-Id": self.config.get_config(
                 "SYSTEM_OPTIONS.DEVICE_ID"
             ),  # 获取设备MAC地址
-            "Client-Id": self.config.get_config("SYSTEM_OPTIONS.CLIENT_ID")
+            "Client-Id": self.config.get_config("SYSTEM_OPTIONS.CLIENT_ID"),
         }
 
     async def connect(self) -> bool:
@@ -44,7 +45,7 @@ class WebsocketProtocol(Protocol):
 
             # 判断是否应该使用 SSL
             current_ssl_context = None
-            if self.WEBSOCKET_URL.startswith('wss://'):
+            if self.WEBSOCKET_URL.startswith("wss://"):
                 current_ssl_context = ssl_context
 
             # 建立WebSocket连接 (兼容不同Python版本的写法)
@@ -53,14 +54,14 @@ class WebsocketProtocol(Protocol):
                 self.websocket = await websockets.connect(
                     uri=self.WEBSOCKET_URL,
                     ssl=current_ssl_context,
-                    additional_headers=self.HEADERS
+                    additional_headers=self.HEADERS,
                 )
             except TypeError:
                 # 旧的写法 (在较早的Python版本中)
                 self.websocket = await websockets.connect(
                     self.WEBSOCKET_URL,
                     ssl=current_ssl_context,
-                    extra_headers=self.HEADERS
+                    extra_headers=self.HEADERS,
                 )
 
             # 启动消息处理循环
@@ -76,16 +77,13 @@ class WebsocketProtocol(Protocol):
                     "sample_rate": AudioConfig.INPUT_SAMPLE_RATE,
                     "channels": AudioConfig.CHANNELS,
                     "frame_duration": AudioConfig.FRAME_DURATION,
-                }
+                },
             }
             await self.send_text(json.dumps(hello_message))
 
             # 等待服务器hello响应
             try:
-                await asyncio.wait_for(
-                    self.hello_received.wait(),
-                    timeout=10.0
-                )
+                await asyncio.wait_for(self.hello_received.wait(), timeout=10.0)
                 self.connected = True
                 logger.info("已连接到WebSocket服务器")
                 return True

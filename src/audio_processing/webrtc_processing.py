@@ -15,17 +15,20 @@ WebRTC音频处理模块
     processed_audio = processor.process_capture_stream(input_audio, reference_audio)
 """
 
+import ctypes
 import os
 import sys
-import ctypes
-from ctypes import (c_void_p, c_int, c_short, c_float, c_bool,
-                   POINTER, Structure, byref)
-import numpy as np
 import threading
+from ctypes import (POINTER, Structure, byref, c_bool, c_float, c_int, c_short,
+                    c_void_p)
+
+import numpy as np
+
 from src.utils.logging_config import get_logger
 from src.utils.path_resolver import find_resource
 
 logger = get_logger(__name__)
+
 
 # 获取DLL文件的绝对路径
 def get_webrtc_dll_path():
@@ -33,14 +36,16 @@ def get_webrtc_dll_path():
     dll_path = find_resource("libs/webrtc_apm/win/x86_64/libwebrtc_apm.dll")
     if dll_path:
         return str(dll_path)
-    
+
     # 备用方案：使用原有逻辑
     current_dir = os.path.dirname(os.path.abspath(__file__))
     project_root = os.path.dirname(os.path.dirname(current_dir))
-    fallback_path = os.path.join(project_root, "libs", "webrtc_apm", "win",
-                                "x86_64", "libwebrtc_apm.dll")
+    fallback_path = os.path.join(
+        project_root, "libs", "webrtc_apm", "win", "x86_64", "libwebrtc_apm.dll"
+    )
     logger.warning(f"未找到WebRTC库，使用备用路径: {fallback_path}")
     return fallback_path
+
 
 # 加载WebRTC APM库
 try:
@@ -83,22 +88,16 @@ class Pipeline(Structure):
         ("MaximumInternalProcessingRate", c_int),
         ("MultiChannelRender", c_bool),
         ("MultiChannelCapture", c_bool),
-        ("CaptureDownmixMethod", c_int)
+        ("CaptureDownmixMethod", c_int),
     ]
 
 
 class PreAmplifier(Structure):
-    _fields_ = [
-        ("Enabled", c_bool),
-        ("FixedGainFactor", c_float)
-    ]
+    _fields_ = [("Enabled", c_bool), ("FixedGainFactor", c_float)]
 
 
 class AnalogMicGainEmulation(Structure):
-    _fields_ = [
-        ("Enabled", c_bool),
-        ("InitialLevel", c_int)
-    ]
+    _fields_ = [("Enabled", c_bool), ("InitialLevel", c_int)]
 
 
 class CaptureLevelAdjustment(Structure):
@@ -106,15 +105,12 @@ class CaptureLevelAdjustment(Structure):
         ("Enabled", c_bool),
         ("PreGainFactor", c_float),
         ("PostGainFactor", c_float),
-        ("MicGainEmulation", AnalogMicGainEmulation)
+        ("MicGainEmulation", AnalogMicGainEmulation),
     ]
 
 
 class HighPassFilter(Structure):
-    _fields_ = [
-        ("Enabled", c_bool),
-        ("ApplyInFullBand", c_bool)
-    ]
+    _fields_ = [("Enabled", c_bool), ("ApplyInFullBand", c_bool)]
 
 
 class EchoCanceller(Structure):
@@ -122,7 +118,7 @@ class EchoCanceller(Structure):
         ("Enabled", c_bool),
         ("MobileMode", c_bool),
         ("ExportLinearAecOutput", c_bool),
-        ("EnforceHighPassFiltering", c_bool)
+        ("EnforceHighPassFiltering", c_bool),
     ]
 
 
@@ -130,14 +126,12 @@ class NoiseSuppression(Structure):
     _fields_ = [
         ("Enabled", c_bool),
         ("NoiseLevel", c_int),
-        ("AnalyzeLinearAecOutputWhenAvailable", c_bool)
+        ("AnalyzeLinearAecOutputWhenAvailable", c_bool),
     ]
 
 
 class TransientSuppression(Structure):
-    _fields_ = [
-        ("Enabled", c_bool)
-    ]
+    _fields_ = [("Enabled", c_bool)]
 
 
 class ClippingPredictor(Structure):
@@ -149,7 +143,7 @@ class ClippingPredictor(Structure):
         ("ReferenceWindowDelay", c_int),
         ("ClippingThreshold", c_float),
         ("CrestFactorMargin", c_float),
-        ("UsePredictedStep", c_bool)
+        ("UsePredictedStep", c_bool),
     ]
 
 
@@ -162,7 +156,7 @@ class AnalogGainController(Structure):
         ("ClippedLevelStep", c_int),
         ("ClippedRatioThreshold", c_float),
         ("ClippedWaitFrames", c_int),
-        ("Predictor", ClippingPredictor)
+        ("Predictor", ClippingPredictor),
     ]
 
 
@@ -173,14 +167,12 @@ class GainController1(Structure):
         ("TargetLevelDbfs", c_int),
         ("CompressionGainDb", c_int),
         ("EnableLimiter", c_bool),
-        ("AnalogController", AnalogGainController)
+        ("AnalogController", AnalogGainController),
     ]
 
 
 class InputVolumeController(Structure):
-    _fields_ = [
-        ("Enabled", c_bool)
-    ]
+    _fields_ = [("Enabled", c_bool)]
 
 
 class AdaptiveDigital(Structure):
@@ -190,14 +182,12 @@ class AdaptiveDigital(Structure):
         ("MaxGainDb", c_float),
         ("InitialGainDb", c_float),
         ("MaxGainChangeDbPerSecond", c_float),
-        ("MaxOutputNoiseLevelDbfs", c_float)
+        ("MaxOutputNoiseLevelDbfs", c_float),
     ]
 
 
 class FixedDigital(Structure):
-    _fields_ = [
-        ("GainDb", c_float)
-    ]
+    _fields_ = [("GainDb", c_float)]
 
 
 class GainController2(Structure):
@@ -205,7 +195,7 @@ class GainController2(Structure):
         ("Enabled", c_bool),
         ("VolumeController", InputVolumeController),
         ("AdaptiveController", AdaptiveDigital),
-        ("FixedController", FixedDigital)
+        ("FixedController", FixedDigital),
     ]
 
 
@@ -219,7 +209,7 @@ class Config(Structure):
         ("NoiseSuppress", NoiseSuppression),
         ("TransientSuppress", TransientSuppression),
         ("GainControl1", GainController1),
-        ("GainControl2", GainController2)
+        ("GainControl2", GainController2),
     ]
 
 
@@ -242,12 +232,20 @@ if apm_lib:
 
     apm_lib.WebRTC_APM_ProcessReverseStream.restype = c_int
     apm_lib.WebRTC_APM_ProcessReverseStream.argtypes = [
-        c_void_p, POINTER(c_short), c_void_p, c_void_p, POINTER(c_short)
+        c_void_p,
+        POINTER(c_short),
+        c_void_p,
+        c_void_p,
+        POINTER(c_short),
     ]
 
     apm_lib.WebRTC_APM_ProcessStream.restype = c_int
     apm_lib.WebRTC_APM_ProcessStream.argtypes = [
-        c_void_p, POINTER(c_short), c_void_p, c_void_p, POINTER(c_short)
+        c_void_p,
+        POINTER(c_short),
+        c_void_p,
+        c_void_p,
+        POINTER(c_short),
     ]
 
     apm_lib.WebRTC_APM_SetStreamDelayMs.restype = None
@@ -427,7 +425,9 @@ class WebRTCProcessor:
 
                 # 检查数据长度
                 if len(input_array) != self.frame_size:
-                    logger.warning(f"输入数据长度不匹配，期望{self.frame_size}，实际{len(input_array)}")
+                    logger.warning(
+                        f"输入数据长度不匹配，期望{self.frame_size}，实际{len(input_array)}"
+                    )
                     return input_data
 
                 # 创建输入指针
@@ -443,8 +443,11 @@ class WebRTCProcessor:
 
                 # 处理捕获流
                 result = apm_lib.WebRTC_APM_ProcessStream(
-                    self.apm, input_ptr, self.stream_config,
-                    self.stream_config, output_ptr
+                    self.apm,
+                    input_ptr,
+                    self.stream_config,
+                    self.stream_config,
+                    output_ptr,
                 )
 
                 if result != 0:
@@ -471,11 +474,11 @@ class WebRTCProcessor:
             if len(ref_array) != self.frame_size:
                 # 如果长度不匹配，调整到正确长度
                 if len(ref_array) > self.frame_size:
-                    ref_array = ref_array[:self.frame_size]
+                    ref_array = ref_array[: self.frame_size]
                 else:
                     # 补零
                     padded = np.zeros(self.frame_size, dtype=np.int16)
-                    padded[:len(ref_array)] = ref_array
+                    padded[: len(ref_array)] = ref_array
                     ref_array = padded
 
             # 创建参考信号指针
@@ -487,8 +490,11 @@ class WebRTCProcessor:
 
             # 处理参考流
             result = apm_lib.WebRTC_APM_ProcessReverseStream(
-                self.apm, ref_ptr, self.stream_config,
-                self.stream_config, ref_output_ptr
+                self.apm,
+                ref_ptr,
+                self.stream_config,
+                self.stream_config,
+                ref_output_ptr,
             )
 
             if result != 0:

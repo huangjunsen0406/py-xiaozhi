@@ -1,29 +1,38 @@
-from src.utils.config_manager import ConfigManager
 import platform
+
+from src.utils.config_manager import ConfigManager
+
 config = ConfigManager.get_instance()
 
 
 class ListeningMode:
     """监听模式"""
+
     ALWAYS_ON = "always_on"
     AUTO_STOP = "auto_stop"
     MANUAL = "manual"
 
+
 class AbortReason:
     """中止原因"""
+
     NONE = "none"
     WAKE_WORD_DETECTED = "wake_word_detected"
     USER_INTERRUPTION = "user_interruption"
 
+
 class DeviceState:
     """设备状态"""
+
     IDLE = "idle"
     CONNECTING = "connecting"
     LISTENING = "listening"
     SPEAKING = "speaking"
 
+
 class EventType:
     """事件类型"""
+
     SCHEDULE_EVENT = "schedule_event"
     AUDIO_INPUT_READY_EVENT = "audio_input_ready_event"
     AUDIO_OUTPUT_READY_EVENT = "audio_output_ready_event"
@@ -40,6 +49,7 @@ def is_official_server(ws_addr: str) -> bool:
     """
     return "api.tenclass.net" in ws_addr
 
+
 def get_frame_duration() -> int:
     """
     获取设备的帧长度（优化版：避免独立PyAudio实例创建）
@@ -54,6 +64,7 @@ def get_frame_duration() -> int:
             return 60
 
         import platform
+
         system = platform.system()
 
         if system == "Windows":
@@ -75,6 +86,7 @@ def get_frame_duration() -> int:
 
 class AudioConfig:
     """音频配置类"""
+
     # 固定配置
     INPUT_SAMPLE_RATE = 16000  # 输入采样率16kHz
     # 输出采样率：官方服务器使用24kHz，其他使用16kHz
@@ -89,7 +101,8 @@ class AudioConfig:
     INPUT_FRAME_SIZE = int(INPUT_SAMPLE_RATE * (FRAME_DURATION / 1000))
     # Linux系统使用固定帧大小以减少PCM打印，其他系统动态计算
     OUTPUT_FRAME_SIZE = (
-        4096 if platform.system() == 'Linux'
+        4096
+        if platform.system() == "Linux"
         else int(OUTPUT_SAMPLE_RATE * (FRAME_DURATION / 1000))
     )
 

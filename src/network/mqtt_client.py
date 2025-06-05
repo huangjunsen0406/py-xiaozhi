@@ -3,9 +3,18 @@ import paho.mqtt.client as mqtt
 
 class MqttClient:
     def __init__(
-        self, server, port, username, password, subscribe_topic, publish_topic=None,
-        client_id="PythonClient", on_connect=None, on_message=None, 
-        on_publish=None, on_disconnect=None
+        self,
+        server,
+        port,
+        username,
+        password,
+        subscribe_topic,
+        publish_topic=None,
+        client_id="PythonClient",
+        on_connect=None,
+        on_message=None,
+        on_publish=None,
+        on_disconnect=None,
     ):
         """
         初始化 MqttClient 实例。
@@ -31,9 +40,7 @@ class MqttClient:
         self.client_id = client_id
 
         # 创建 MQTT 客户端实例，使用最新的API版本
-        self.client = mqtt.Client(
-            client_id=self.client_id, protocol=mqtt.MQTTv5
-        )
+        self.client = mqtt.Client(client_id=self.client_id, protocol=mqtt.MQTTv5)
 
         # 设置用户名和密码
         self.client.username_pw_set(self.username, self.password)
@@ -43,10 +50,10 @@ class MqttClient:
             self.client.on_connect = on_connect
         else:
             self.client.on_connect = self._on_connect
-            
+
         self.client.on_message = on_message if on_message else self._on_message
         self.client.on_publish = on_publish if on_publish else self._on_publish
-        
+
         if on_disconnect:
             self.client.on_disconnect = on_disconnect
         else:
@@ -163,4 +170,3 @@ if __name__ == "__main__":
     # finally:
     #     # 停止并断开连接
     #     mqtt_client.stop()
-

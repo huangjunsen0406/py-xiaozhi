@@ -1,11 +1,11 @@
 from src.application import Application
-from src.iot.thing import Thing, Parameter, ValueType
+from src.iot.thing import Parameter, Thing, ValueType
 
 
 class Speaker(Thing):
     def __init__(self):
         super().__init__("Speaker", "当前 AI 机器人的扬声器")
-        
+
         # 获取当前显示实例的音量作为初始值
         try:
             app = Application.get_instance()
@@ -19,10 +19,10 @@ class Speaker(Thing):
 
         # 定义方法
         self.add_method(
-            "SetVolume", 
+            "SetVolume",
             "设置音量",
             [Parameter("volume", "0到100之间的整数", ValueType.NUMBER, True)],
-            lambda params: self._set_volume(params["volume"].get_value())
+            lambda params: self._set_volume(params["volume"].get_value()),
         )
 
     def _set_volume(self, volume):

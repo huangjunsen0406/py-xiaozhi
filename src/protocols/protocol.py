@@ -39,10 +39,7 @@ class Protocol:
 
     async def send_abort_speaking(self, reason):
         """发送中止语音的消息"""
-        message = {
-            "session_id": self.session_id,
-            "type": "abort"
-        }
+        message = {"session_id": self.session_id, "type": "abort"}
         if reason == AbortReason.WAKE_WORD_DETECTED:
             message["reason"] = "wake_word_detected"
         await self.send_text(json.dumps(message))
@@ -53,7 +50,7 @@ class Protocol:
             "session_id": self.session_id,
             "type": "listen",
             "state": "detect",
-            "text": wake_word
+            "text": wake_word,
         }
         await self.send_text(json.dumps(message))
 
@@ -62,23 +59,19 @@ class Protocol:
         mode_map = {
             ListeningMode.ALWAYS_ON: "realtime",
             ListeningMode.AUTO_STOP: "auto",
-            ListeningMode.MANUAL: "manual"
+            ListeningMode.MANUAL: "manual",
         }
         message = {
             "session_id": self.session_id,
             "type": "listen",
             "state": "start",
-            "mode": mode_map[mode]
+            "mode": mode_map[mode],
         }
         await self.send_text(json.dumps(message))
 
     async def send_stop_listening(self):
         """发送停止监听的消息"""
-        message = {
-            "session_id": self.session_id,
-            "type": "listen",
-            "state": "stop"
-        }
+        message = {"session_id": self.session_id, "type": "listen", "state": "stop"}
         await self.send_text(json.dumps(message))
 
     async def send_iot_descriptors(self, descriptors):
@@ -86,7 +79,9 @@ class Protocol:
         message = {
             "session_id": self.session_id,
             "type": "iot",
-            "descriptors": json.loads(descriptors) if isinstance(descriptors, str) else descriptors
+            "descriptors": (
+                json.loads(descriptors) if isinstance(descriptors, str) else descriptors
+            ),
         }
         await self.send_text(json.dumps(message))
 
@@ -95,6 +90,6 @@ class Protocol:
         message = {
             "session_id": self.session_id,
             "type": "iot",
-            "states": json.loads(states) if isinstance(states, str) else states
+            "states": json.loads(states) if isinstance(states, str) else states,
         }
         await self.send_text(json.dumps(message))

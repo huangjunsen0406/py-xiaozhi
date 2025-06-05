@@ -12,11 +12,9 @@ class Lamp(Thing):
         self.add_property("power", "灯是否打开", lambda: self.power)
 
         # 定义方法
-        self.add_method("TurnOn", "打开灯", [],
-                        lambda params: self._turn_on())
+        self.add_method("TurnOn", "打开灯", [], lambda params: self._turn_on())
 
-        self.add_method("TurnOff", "关闭灯", [],
-                        lambda params: self._turn_off())
+        self.add_method("TurnOff", "关闭灯", [], lambda params: self._turn_off())
 
     def _turn_on(self):
         self.power = True

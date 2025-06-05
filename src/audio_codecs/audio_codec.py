@@ -1,9 +1,10 @@
 import queue
-import numpy as np
-import pyaudio
-import opuslib
-import time
 import threading
+import time
+
+import numpy as np
+import opuslib
+import pyaudio
 
 from src.constants.constants import AudioConfig
 from src.utils.logging_config import get_logger
@@ -33,7 +34,7 @@ class AudioCodec:
         # 设备索引缓存已移除（未使用）
 
         self._initialize_audio()
-        
+
     def _initialize_audio(self):
         try:
             self.audio = pyaudio.PyAudio()
@@ -46,11 +47,10 @@ class AudioCodec:
             self.opus_encoder = opuslib.Encoder(
                 AudioConfig.INPUT_SAMPLE_RATE,
                 AudioConfig.CHANNELS,
-                AudioConfig.OPUS_APPLICATION
+                AudioConfig.OPUS_APPLICATION,
             )
             self.opus_decoder = opuslib.Decoder(
-                AudioConfig.OUTPUT_SAMPLE_RATE,
-                AudioConfig.CHANNELS
+                AudioConfig.OUTPUT_SAMPLE_RATE, AudioConfig.CHANNELS
             )
 
             logger.info("音频设备和编解码器初始化成功")
@@ -64,12 +64,20 @@ class AudioCodec:
         params = {
             "format": pyaudio.paInt16,
             "channels": AudioConfig.CHANNELS,
-            "rate": AudioConfig.INPUT_SAMPLE_RATE if is_input else AudioConfig.OUTPUT_SAMPLE_RATE,
+            "rate": (
+                AudioConfig.INPUT_SAMPLE_RATE
+                if is_input
+                else AudioConfig.OUTPUT_SAMPLE_RATE
+            ),
             "input" if is_input else "output": True,
-            "frames_per_buffer": AudioConfig.INPUT_FRAME_SIZE if is_input else AudioConfig.OUTPUT_FRAME_SIZE,
-            "start": False
+            "frames_per_buffer": (
+                AudioConfig.INPUT_FRAME_SIZE
+                if is_input
+                else AudioConfig.OUTPUT_FRAME_SIZE
+            ),
+            "start": False,
         }
-        
+
         return self.audio.open(**params)
 
     def _reinitialize_stream(self, is_input=True):
@@ -78,9 +86,9 @@ class AudioCodec:
             return False if is_input else None
 
         try:
-            stream_attr = 'input_stream' if is_input else 'output_stream'
+            stream_attr = "input_stream" if is_input else "output_stream"
             current_stream = getattr(self, stream_attr)
-            
+
             if current_stream:
                 try:
                     current_stream.stop_stream()
@@ -91,7 +99,7 @@ class AudioCodec:
             new_stream = self._create_stream(is_input=is_input)
             setattr(self, stream_attr, new_stream)
             new_stream.start_stream()
-            
+
             stream_type = "输入" if is_input else "输出"
             logger.info(f"音频{stream_type}流重新初始化成功")
             return True if is_input else None
@@ -132,18 +140,18 @@ class AudioCodec:
                 # 动态缓冲区调整 - 实时性能优化
                 available = self.input_stream.get_read_available()
                 if available > AudioConfig.INPUT_FRAME_SIZE * 2:  # 降低阈值从3倍到2倍
-                    skip_samples = available - (AudioConfig.INPUT_FRAME_SIZE * 1.5)  # 减少保留量
+                    skip_samples = available - (
+                        AudioConfig.INPUT_FRAME_SIZE * 1.5
+                    )  # 减少保留量
                     if skip_samples > 0:  # 增加安全检查
                         self.input_stream.read(
-                            int(skip_samples),  # 确保整数
-                            exception_on_overflow=False
+                            int(skip_samples), exception_on_overflow=False  # 确保整数
                         )
                         logger.debug(f"跳过{skip_samples}个样本减少延迟")
 
                 # 读取数据
                 data = self.input_stream.read(
-                    AudioConfig.INPUT_FRAME_SIZE,
-                    exception_on_overflow=False
+                    AudioConfig.INPUT_FRAME_SIZE, exception_on_overflow=False
                 )
 
                 # 数据验证
@@ -168,40 +176,45 @@ class AudioCodec:
             # 逐个处理音频数据，失败直接丢弃
             processed_count = 0
             max_process_per_call = 5  # 限制单次处理数量，避免阻塞
-            
-            while not self.audio_decode_queue.empty() and processed_count < max_process_per_call:
+
+            while (
+                not self.audio_decode_queue.empty()
+                and processed_count < max_process_per_call
+            ):
                 try:
                     opus_data = self.audio_decode_queue.get_nowait()
-                    
+
                     # 解码音频数据，失败直接跳过
                     try:
-                        pcm = self.opus_decoder.decode(opus_data, AudioConfig.OUTPUT_FRAME_SIZE)
+                        pcm = self.opus_decoder.decode(
+                            opus_data, AudioConfig.OUTPUT_FRAME_SIZE
+                        )
                     except opuslib.OpusError as e:
                         logger.warning(f"音频解码失败，丢弃此帧: {e}")
                         processed_count += 1
                         continue
-                    
+
                     # 播放音频数据，失败直接丢弃
                     try:
                         with self._stream_lock:
                             if self.output_stream and self.output_stream.is_active():
-                                self.output_stream.write(np.frombuffer(pcm, dtype=np.int16).tobytes())
+                                self.output_stream.write(
+                                    np.frombuffer(pcm, dtype=np.int16).tobytes()
+                                )
                             else:
                                 logger.warning("输出流未激活，丢弃此帧")
                     except OSError as e:
                         logger.warning(f"音频播放失败，丢弃此帧: {e}")
                         if "Stream closed" in str(e):
                             self._reinitialize_stream(is_input=False)
-                    
+
                     processed_count += 1
-                    
+
                 except queue.Empty:
                     break
-                    
+
         except Exception as e:
             logger.error(f"播放音频时发生未预期错误: {e}")
-            
-
 
     def close(self):
         """（优化资源释放顺序和线程安全性）"""
@@ -214,31 +227,37 @@ class AudioCodec:
         try:
             # 清空队列先行处理
             self.clear_audio_queue()
-            
+
             # 安全停止和关闭流
             with self._stream_lock:
                 # 先关闭输入流
                 if self.input_stream:
                     try:
-                        if hasattr(self.input_stream, 'is_active') and self.input_stream.is_active():
+                        if (
+                            hasattr(self.input_stream, "is_active")
+                            and self.input_stream.is_active()
+                        ):
                             self.input_stream.stop_stream()
                         self.input_stream.close()
                     except Exception as e:
                         logger.warning(f"关闭输入流失败: {e}")
                     finally:
                         self.input_stream = None
-                        
-                # 再关闭输出流        
+
+                # 再关闭输出流
                 if self.output_stream:
                     try:
-                        if hasattr(self.output_stream, 'is_active') and self.output_stream.is_active():
+                        if (
+                            hasattr(self.output_stream, "is_active")
+                            and self.output_stream.is_active()
+                        ):
                             self.output_stream.stop_stream()
                         self.output_stream.close()
                     except Exception as e:
                         logger.warning(f"关闭输出流失败: {e}")
                     finally:
                         self.output_stream = None
-                
+
                 # 最后释放PyAudio
                 if self.audio:
                     try:
@@ -251,7 +270,7 @@ class AudioCodec:
             # 清理编解码器
             self.opus_encoder = None
             self.opus_decoder = None
-            
+
             logger.info("音频资源已完全释放")
         except Exception as e:
             logger.error(f"关闭音频编解码器过程中发生错误: {e}")
@@ -279,9 +298,9 @@ class AudioCodec:
         queue_size = self.audio_decode_queue.qsize()
         max_size = self.audio_decode_queue.maxsize
         return {
-            'current_size': queue_size,
-            'max_size': max_size,
-            'is_empty': queue_size == 0
+            "current_size": queue_size,
+            "max_size": max_size,
+            "is_empty": queue_size == 0,
         }
 
     def wait_for_audio_complete(self, timeout=5.0):
@@ -289,7 +308,7 @@ class AudioCodec:
         start = time.time()
         while not self.audio_decode_queue.empty() and time.time() - start < timeout:
             time.sleep(0.1)
-        
+
         if not self.audio_decode_queue.empty():
             remaining = self.audio_decode_queue.qsize()
             logger.warning(f"音频播放超时，剩余队列: {remaining} 帧")
@@ -311,11 +330,14 @@ class AudioCodec:
     def stop_streams(self):
         """安全停止流（优化错误处理）"""
         with self._stream_lock:
-            for name, stream in [("输入", self.input_stream), ("输出", self.output_stream)]:
+            for name, stream in [
+                ("输入", self.input_stream),
+                ("输出", self.output_stream),
+            ]:
                 if stream:
                     try:
                         # 使用hasattr避免在流已关闭情况下调用is_active
-                        if hasattr(stream, 'is_active') and stream.is_active():
+                        if hasattr(stream, "is_active") and stream.is_active():
                             stream.stop_stream()
                     except Exception as e:
                         # 使用warning级别，因为这不是严重错误
