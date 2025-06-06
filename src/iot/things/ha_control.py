@@ -92,9 +92,11 @@ class HomeAssistantDevice(Thing):
             payload: 请求参数
         """
         try:
-            url = f"{self.ha_config['url']}/api/services/{service_domain}/{
-                service_action
-            }"
+            url = (
+                f"{self.ha_config['url']}/api/services/"
+                f"{service_domain}/{service_action}"
+            )
+
             response = requests.post(url, headers=self.headers, json=payload, timeout=5)
 
             if response.status_code in [200, 201]:
@@ -117,10 +119,10 @@ class HomeAssistantDevice(Thing):
                 }
             else:
                 logger.error(
-                    f"发送{service_action}命令失败, 状态码: {response.status_code}, 响应: {
-                        response.text
-                    }"
+                    f"发送{service_action}命令失败, 状态码: {response.status_code}, "
+                    f"响应: {response.text}"
                 )
+
                 return {
                     "status": "error",
                     "message": f"发送命令失败, HTTP状态码: {response.status_code}",

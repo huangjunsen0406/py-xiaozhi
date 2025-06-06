@@ -453,10 +453,10 @@ class WakeWordDetector:
         # 触发检测
         if best_match:
             logger.info(
-                f"检测到唤醒词 '{best_match}' (相似度: {best_similarity:.3f}, 匹配类型: {
-                    best_match_info
-                })"
+                f"检测到唤醒词 '{best_match}' "
+                f"(相似度: {best_similarity:.3f}, 匹配类型: {best_match_info})"
             )
+
             logger.debug(f"原始文本: '{text}', 拼音变体: {text_variants}")
             self._trigger_callbacks(best_match, text)
             self.recognizer.Reset()
