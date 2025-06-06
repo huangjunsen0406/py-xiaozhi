@@ -62,8 +62,6 @@ def get_frame_duration() -> int:
         if not is_official_server(ota_url):
             return 60
 
-        import platform
-
         system = platform.system()
 
         if system == "Windows":
@@ -71,7 +69,7 @@ def get_frame_duration() -> int:
             return 20
         elif system == "Linux":
             # Linux可能需要稍大的缓冲区以减少延迟(如果发现不行改为60)
-            return 25
+            return 60
         elif system == "Darwin":  # macOS
             # macOS通常有良好的音频性能
             return 20
@@ -85,7 +83,6 @@ def get_frame_duration() -> int:
 
 class AudioConfig:
     """音频配置类."""
-
     # 固定配置
     INPUT_SAMPLE_RATE = 16000  # 输入采样率16kHz
     # 输出采样率：官方服务器使用24kHz，其他使用16kHz
@@ -99,12 +96,4 @@ class AudioConfig:
     # 根据不同采样率计算帧大小
     INPUT_FRAME_SIZE = int(INPUT_SAMPLE_RATE * (FRAME_DURATION / 1000))
     # Linux系统使用固定帧大小以减少PCM打印，其他系统动态计算
-    OUTPUT_FRAME_SIZE = (
-        4096
-        if platform.system() == "Linux"
-        else int(OUTPUT_SAMPLE_RATE * (FRAME_DURATION / 1000))
-    )
-
-    # Opus编码配置
-    OPUS_APPLICATION = 2049  # OPUS_APPLICATION_AUDIO
-    OPUS_FRAME_SIZE = INPUT_FRAME_SIZE  # 使用输入采样率的帧大小
+    OUTPUT_FRAME_SIZE = int(OUTPUT_SAMPLE_RATE * (FRAME_DURATION / 1000))

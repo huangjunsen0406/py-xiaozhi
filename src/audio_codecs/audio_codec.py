@@ -47,7 +47,7 @@ class AudioCodec:
             self.opus_encoder = opuslib.Encoder(
                 AudioConfig.INPUT_SAMPLE_RATE,
                 AudioConfig.CHANNELS,
-                AudioConfig.OPUS_APPLICATION,
+                opuslib.APPLICATION_AUDIO,
             )
             self.opus_decoder = opuslib.Decoder(
                 AudioConfig.OUTPUT_SAMPLE_RATE, AudioConfig.CHANNELS
