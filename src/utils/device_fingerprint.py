@@ -1,13 +1,10 @@
 import hashlib
 import hmac
 import json
-import logging
 import os
 import platform
 import re
 import subprocess
-import sys
-import uuid
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -22,7 +19,7 @@ class DeviceFingerprint:
     """设备指纹收集器 - 用于生成唯一的设备标识"""
 
     def __init__(self):
-        """初始化设备指纹收集器"""
+        """初始化设备指纹收集器."""
         self.system = platform.system()
         config_dir = find_config_dir()
         if config_dir:
@@ -36,11 +33,11 @@ class DeviceFingerprint:
             logger.warning("未找到配置目录，使用相对路径作为备用方案")
 
     def get_hostname(self) -> str:
-        """获取计算机主机名"""
+        """获取计算机主机名."""
         return platform.node()
 
     def get_all_mac_addresses(self) -> List[Dict[str, str]]:
-        """获取所有网络适配器的MAC地址"""
+        """获取所有网络适配器的MAC地址."""
         mac_addresses = []
 
         try:
@@ -290,8 +287,7 @@ class DeviceFingerprint:
         return mac_addresses
 
     def get_mac_address(self) -> Optional[Tuple[str, str]]:
-        """
-        智能选择最适合的物理网卡MAC地址
+        """智能选择最适合的物理网卡MAC地址.
 
         Returns:
             Tuple[str, str]: (MAC地址, 网卡类型描述)
@@ -354,7 +350,7 @@ class DeviceFingerprint:
         return all_macs[0]["mac"], "未知类型"
 
     def get_bluetooth_mac_address(self) -> Optional[str]:
-        """获取蓝牙适配器的MAC地址"""
+        """获取蓝牙适配器的MAC地址."""
         try:
             all_macs = self.get_all_mac_addresses()
             for mac_info in all_macs:
@@ -367,7 +363,7 @@ class DeviceFingerprint:
             return None
 
     def get_cpu_info(self) -> Dict:
-        """获取CPU信息"""
+        """获取CPU信息."""
         cpu_info = {"processor": platform.processor(), "machine": platform.machine()}
 
         try:
@@ -436,7 +432,7 @@ class DeviceFingerprint:
         return cpu_info
 
     def get_disk_info(self) -> List[Dict]:
-        """获取硬盘信息"""
+        """获取硬盘信息."""
         disks = []
 
         try:
@@ -523,7 +519,7 @@ class DeviceFingerprint:
         return disks
 
     def get_motherboard_info(self) -> Dict:
-        """获取主板信息"""
+        """获取主板信息."""
         mb_info = {}
 
         try:
@@ -576,7 +572,11 @@ class DeviceFingerprint:
             elif self.system == "Darwin":  # macOS
                 # macOS使用ioreg命令获取主板或系统信息
                 try:
-                    cmd = "ioreg -l | grep -E '(board-id|IOPlatformSerialNumber|IOPlatformUUID)'"
+                    cmd = (
+                        "ioreg -l | grep -E '(board-id|IOPlatformSerialNumber|"
+                        "IOPlatformUUID)'"
+                    )
+
                     result = subprocess.check_output(cmd, shell=True).decode()
 
                     board_id = re.search(r'board-id" = <"([^"]+)">', result)
@@ -598,7 +598,7 @@ class DeviceFingerprint:
         return mb_info
 
     def generate_fingerprint(self) -> Dict:
-        """生成完整的设备指纹"""
+        """生成完整的设备指纹."""
         # 检查是否有缓存的指纹
         cached_fingerprint = self._load_cached_fingerprint()
         if cached_fingerprint:
@@ -625,7 +625,7 @@ class DeviceFingerprint:
         return fingerprint
 
     def _load_cached_fingerprint(self) -> Optional[Dict]:
-        """从缓存文件加载指纹"""
+        """从缓存文件加载指纹."""
         if not self.fingerprint_cache_file.exists():
             return None
 
@@ -637,7 +637,7 @@ class DeviceFingerprint:
             return None
 
     def _cache_fingerprint(self, fingerprint: Dict):
-        """缓存指纹到文件"""
+        """缓存指纹到文件."""
         try:
             # 确保目录存在
             self.fingerprint_cache_file.parent.mkdir(parents=True, exist_ok=True)
@@ -650,7 +650,7 @@ class DeviceFingerprint:
             logger.error(f"缓存设备指纹时出错: {e}")
 
     def generate_hardware_hash(self) -> str:
-        """根据硬件信息生成唯一的哈希值"""
+        """根据硬件信息生成唯一的哈希值."""
         fingerprint = self.generate_fingerprint()
 
         # 提取最不可变的硬件标识符
@@ -695,8 +695,7 @@ class DeviceFingerprint:
         return hashlib.sha256(fingerprint_str.encode("utf-8")).hexdigest()
 
     def generate_serial_number(self) -> Tuple[str, str]:
-        """
-        生成设备序列号
+        """生成设备序列号.
 
         Returns:
             Tuple[str, str]: (序列号, 生成方法说明)
@@ -704,8 +703,8 @@ class DeviceFingerprint:
         fingerprint = self.generate_fingerprint()
 
         # 获取主机名，用于序列号生成
-        hostname = fingerprint.get("hostname", "")
-        short_hostname = "".join(c for c in hostname if c.isalnum())[:8]
+        # hostname = fingerprint.get("hostname", "")
+        # short_hostname = "".join(c for c in hostname if c.isalnum())[:8]
 
         # 优先使用主网卡MAC地址生成序列号
         mac_address = fingerprint.get("mac_address")
@@ -742,7 +741,7 @@ class DeviceFingerprint:
         return serial_number, "硬件哈希值"
 
     def _ensure_efuse_file(self):
-        """确保efuse文件存在，如果不存在则创建"""
+        """确保efuse文件存在，如果不存在则创建."""
 
         serial_number, source = self.generate_serial_number()
         hmac_key = self.generate_hardware_hash()
@@ -763,7 +762,7 @@ class DeviceFingerprint:
                 json.dump(default_data, f, indent=2, ensure_ascii=False)
 
             logger.info(f"已创建efuse配置文件: {self.efuse_file}")
-            print(f"新设备：已创建efuse配置文件")
+            print("新设备：已创建efuse配置文件")
         else:
             logger.info(f"efuse配置文件已存在: {self.efuse_file}")
             # 验证文件内容是否完整
@@ -791,7 +790,7 @@ class DeviceFingerprint:
                 logger.error(f"验证efuse配置文件时出错: {e}")
 
     def _load_efuse_data(self) -> dict:
-        """加载efuse数据"""
+        """加载efuse数据."""
         try:
             with open(self.efuse_file, "r", encoding="utf-8") as f:
                 return json.load(f)
@@ -800,7 +799,7 @@ class DeviceFingerprint:
             return {"serial_number": None, "hmac_key": None, "activation_status": False}
 
     def _save_efuse_data(self, data: dict) -> bool:
-        """保存efuse数据"""
+        """保存efuse数据."""
         try:
             with open(self.efuse_file, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2, ensure_ascii=False)
@@ -835,33 +834,33 @@ class DeviceFingerprint:
         return serial_number, hmac_key, is_activated
 
     def has_serial_number(self) -> bool:
-        """检查是否有序列号"""
+        """检查是否有序列号."""
         efuse_data = self._load_efuse_data()
         return efuse_data.get("serial_number") is not None
 
     def get_serial_number(self) -> str:
-        """获取序列号"""
+        """获取序列号."""
         efuse_data = self._load_efuse_data()
         return efuse_data.get("serial_number")
 
     def get_hmac_key(self) -> str:
-        """获取HMAC密钥"""
+        """获取HMAC密钥."""
         efuse_data = self._load_efuse_data()
         return efuse_data.get("hmac_key")
 
     def set_activation_status(self, status: bool) -> bool:
-        """设置激活状态"""
+        """设置激活状态."""
         efuse_data = self._load_efuse_data()
         efuse_data["activation_status"] = status
         return self._save_efuse_data(efuse_data)
 
     def is_activated(self) -> bool:
-        """检查设备是否已激活"""
+        """检查设备是否已激活."""
         efuse_data = self._load_efuse_data()
         return efuse_data.get("activation_status", False)
 
     def generate_hmac(self, challenge: str) -> str:
-        """使用HMAC密钥生成签名"""
+        """使用HMAC密钥生成签名."""
         hmac_key = self.get_hmac_key()
 
         if not hmac_key:

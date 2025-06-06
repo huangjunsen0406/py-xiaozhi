@@ -17,7 +17,7 @@ class Camera(Thing):
     def __init__(self):
         super().__init__("Camera", "摄像头管理")
         self.app = None
-        """初始化摄像头管理器"""
+        """初始化摄像头管理器."""
         if hasattr(self, "_initialized"):
             return
         self._initialized = True
@@ -36,7 +36,6 @@ class Camera(Thing):
             self.config.get_config("CAMERA.models"),
         )
         self.VL = VL.ImageAnalyzer.get_instance()
-        print(f"[虚拟设备] 摄像头设备初始化完成")
 
         self.add_property_and_method()  # 定义设备方法与状态属性
 
@@ -61,7 +60,7 @@ class Camera(Thing):
         )
 
     def _camera_loop(self):
-        """摄像头线程的主循环"""
+        """摄像头线程的主循环."""
         camera_index = self.config.get_config("CAMERA.camera_index")
         self.cap = cv2.VideoCapture(camera_index)
 
@@ -97,7 +96,7 @@ class Camera(Thing):
         cv2.destroyAllWindows()
 
     def start_camera(self):
-        """启动摄像头线程"""
+        """启动摄像头线程."""
         if self.camera_thread is not None and self.camera_thread.is_alive():
             logger.warning("摄像头线程已在运行")
             return
@@ -105,11 +104,10 @@ class Camera(Thing):
         self.camera_thread = threading.Thread(target=self._camera_loop, daemon=True)
         self.camera_thread.start()
         logger.info("摄像头线程已启动")
-        print(f"[虚拟设备] 摄像头线程已启动")
         return {"status": "success", "message": "摄像头线程已打开"}
 
     def capture_frame_to_base64(self):
-        """截取当前画面并转换为 Base64 编码"""
+        """截取当前画面并转换为 Base64 编码."""
         if not self.cap or not self.cap.isOpened():
             logger.error("摄像头未打开")
             return None
@@ -125,21 +123,18 @@ class Camera(Thing):
         # 将 JPEG 图像转换为 Base64 编码
         frame_base64 = base64.b64encode(buffer).decode("utf-8")
         self.result = str(self.VL.analyze_image(frame_base64))
-        print(self.result)
         # 获取应用程序实例
         self.app = Application.get_instance()
         logger.info("画面已经识别到啦")
-        print(f"[虚拟设备] 画面已经识别完成")
         self.app.set_device_state(DeviceState.LISTENING)
         asyncio.create_task(self.app.protocol.send_wake_word_detected("播报识别结果"))
         return {"status": "success", "message": "识别成功", "result": self.result}
 
     def stop_camera(self):
-        """停止摄像头线程"""
+        """停止摄像头线程."""
         self.is_running = False
         if self.camera_thread is not None:
             self.camera_thread.join()  # 等待线程结束
             self.camera_thread = None
             logger.info("摄像头线程已停止")
-            print(f"[虚拟设备] 摄像头线程已停止")
             return {"status": "success", "message": "摄像头线程已停止"}

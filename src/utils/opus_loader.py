@@ -39,7 +39,7 @@ DIR_STRUCTURE = {
 
 
 def get_system_info():
-    """获取当前系统信息"""
+    """获取当前系统信息."""
     system = platform.system().lower()
     architecture = platform.machine().lower()
 
@@ -108,7 +108,7 @@ def get_search_paths(system, arch_name):
 
 
 def find_system_opus():
-    """从系统路径查找opus库"""
+    """从系统路径查找opus库."""
     system, _ = get_system_info()
     lib_path = None
 
@@ -147,7 +147,7 @@ def find_system_opus():
 
 
 def copy_opus_to_project(system_lib_path):
-    """将系统库复制到项目目录"""
+    """将系统库复制到项目目录."""
     from .resource_finder import get_project_root
 
     system, arch_name = get_system_info()
@@ -189,7 +189,7 @@ def copy_opus_to_project(system_lib_path):
 
 
 def setup_opus():
-    """设置opus动态库"""
+    """设置opus动态库."""
     # 检查是否已经由runtime_hook加载
     if hasattr(sys, "_opus_loaded"):
         logger.info("opus库已由运行时钩子加载")
@@ -269,7 +269,7 @@ def setup_opus():
 
 
 def _patch_find_library(lib_name, lib_path):
-    """修补ctypes.util.find_library函数"""
+    """修补ctypes.util.find_library函数."""
     import ctypes.util
 
     original_find_library = ctypes.util.find_library

@@ -1,4 +1,3 @@
-import json
 import time
 
 import requests
@@ -11,15 +10,13 @@ logger = get_logger(__name__)
 
 
 class HomeAssistantDevice(Thing):
-    """
-    Home Assistant设备基类
+    """Home Assistant设备基类.
 
     提供所有Home Assistant设备的通用功能
     """
 
     def __init__(self, entity_id, friendly_name=None, device_type="设备"):
-        """
-        初始化Home Assistant设备
+        """初始化Home Assistant设备.
 
         参数:
             entity_id: Home Assistant中的实体ID
@@ -59,7 +56,7 @@ class HomeAssistantDevice(Thing):
         self.add_method("TurnOff", "关闭设备", [], lambda params: self._turn_off())
 
     def _update_state(self):
-        """获取设备当前状态"""
+        """获取设备当前状态."""
         try:
             url = f"{self.ha_config['url']}/api/states/{self.entity_id}"
             response = requests.get(url, headers=self.headers, timeout=5)
@@ -84,12 +81,10 @@ class HomeAssistantDevice(Thing):
             return False
 
     def _process_attributes(self, attributes):
-        """处理设备属性，由子类覆盖以处理特定属性"""
-        pass
+        """处理设备属性，由子类覆盖以处理特定属性."""
 
     def _call_service(self, service_domain, service_action, payload):
-        """
-        调用Home Assistant服务
+        """调用Home Assistant服务.
 
         参数:
             service_domain: 服务域，例如 'light'、'switch'
@@ -97,7 +92,9 @@ class HomeAssistantDevice(Thing):
             payload: 请求参数
         """
         try:
-            url = f"{self.ha_config['url']}/api/services/{service_domain}/{service_action}"
+            url = f"{self.ha_config['url']}/api/services/{service_domain}/{
+                service_action
+            }"
             response = requests.post(url, headers=self.headers, json=payload, timeout=5)
 
             if response.status_code in [200, 201]:
@@ -120,7 +117,9 @@ class HomeAssistantDevice(Thing):
                 }
             else:
                 logger.error(
-                    f"发送{service_action}命令失败, 状态码: {response.status_code}, 响应: {response.text}"
+                    f"发送{service_action}命令失败, 状态码: {response.status_code}, 响应: {
+                        response.text
+                    }"
                 )
                 return {
                     "status": "error",
@@ -131,24 +130,22 @@ class HomeAssistantDevice(Thing):
             return {"status": "error", "message": f"发送命令失败: {e}"}
 
     def _turn_on(self):
-        """打开设备，子类需要实现此方法"""
+        """打开设备，子类需要实现此方法."""
         raise NotImplementedError("子类必须实现_turn_on方法")
 
     def _turn_off(self):
-        """关闭设备，子类需要实现此方法"""
+        """关闭设备，子类需要实现此方法."""
         raise NotImplementedError("子类必须实现_turn_off方法")
 
 
 class HomeAssistantLight(HomeAssistantDevice):
-    """
-    通过HTTP API控制Home Assistant中的灯设备
+    """通过HTTP API控制Home Assistant中的灯设备.
 
     支持开关和亮度调节功能
     """
 
     def __init__(self, entity_id, friendly_name=None):
-        """
-        初始化Home Assistant灯设备
+        """初始化Home Assistant灯设备.
 
         参数:
             entity_id: Home Assistant中的实体ID，例如 'light.living_room'
@@ -179,7 +176,7 @@ class HomeAssistantLight(HomeAssistantDevice):
         logger.info(f"Home Assistant灯设备初始化完成: {self.entity_id}")
 
     def _process_attributes(self, attributes):
-        """处理灯特有的属性"""
+        """处理灯特有的属性."""
         if "brightness" in attributes and attributes["brightness"] is not None:
             self.brightness = min(int(attributes["brightness"] * 100 / 255), 100)
         else:
@@ -187,16 +184,15 @@ class HomeAssistantLight(HomeAssistantDevice):
             self.brightness = 100 if self.state == "on" else 0
 
     def _turn_on(self):
-        """打开灯"""
+        """打开灯."""
         return self._call_service("light", "turn_on", {"entity_id": self.entity_id})
 
     def _turn_off(self):
-        """关闭灯"""
+        """关闭灯."""
         return self._call_service("light", "turn_off", {"entity_id": self.entity_id})
 
     def _set_brightness(self, brightness_percent):
-        """
-        设置灯的亮度
+        """设置灯的亮度.
 
         参数:
             brightness_percent: 亮度百分比 (0-100)
@@ -229,15 +225,13 @@ class HomeAssistantLight(HomeAssistantDevice):
 
 
 class HomeAssistantSwitch(HomeAssistantDevice):
-    """
-    通过HTTP API控制Home Assistant中的开关设备
+    """通过HTTP API控制Home Assistant中的开关设备.
 
     支持开关功能
     """
 
     def __init__(self, entity_id, friendly_name=None):
-        """
-        初始化Home Assistant开关设备
+        """初始化Home Assistant开关设备.
 
         参数:
             entity_id: Home Assistant中的实体ID，例如 'switch.bedroom_switch'
@@ -254,11 +248,11 @@ class HomeAssistantSwitch(HomeAssistantDevice):
         logger.info(f"Home Assistant开关设备初始化完成: {self.entity_id}")
 
     def _turn_on(self):
-        """打开开关"""
+        """打开开关."""
         return self._call_service("switch", "turn_on", {"entity_id": self.entity_id})
 
     def _turn_off(self):
-        """关闭开关"""
+        """关闭开关."""
         return self._call_service("switch", "turn_off", {"entity_id": self.entity_id})
 
 
@@ -300,15 +294,15 @@ class HomeAssistantNumber(HomeAssistantDevice):
             self.value = attributes["value"]
 
     def _turn_on(self):
-        """数值设备不支持直接开关"""
+        """数值设备不支持直接开关."""
         return {"status": "error", "message": "数值设备不支持直接开关操作"}
 
     def _turn_off(self):
-        """数值设备不支持直接开关"""
+        """数值设备不支持直接开关."""
         return {"status": "error", "message": "数值设备不支持直接开关操作"}
 
     def _set_value(self, value):
-        """设置数值"""
+        """设置数值."""
         try:
             # 值校验
             if value < self.min or value > self.max:
@@ -337,7 +331,7 @@ class HomeAssistantNumber(HomeAssistantDevice):
 
 
 class HomeAssistantButton(HomeAssistantDevice):
-    """通过HTTP API控制Home Assistant中的按钮设备"""
+    """通过HTTP API控制Home Assistant中的按钮设备."""
 
     def __init__(self, entity_id, friendly_name=None):
         super().__init__(entity_id, friendly_name, device_type="按钮设备")
@@ -359,15 +353,15 @@ class HomeAssistantButton(HomeAssistantDevice):
         logger.info(f"Home Assistant按钮设备初始化完成: {self.entity_id}")
 
     def _turn_on(self):
-        """按钮设备使用Press替代TurnOn"""
+        """按钮设备使用Press替代TurnOn."""
         return self._press()
 
     def _turn_off(self):
-        """按钮设备不支持关闭操作"""
+        """按钮设备不支持关闭操作."""
         return {"status": "error", "message": "按钮设备不支持关闭操作"}
 
     def _press(self):
-        """按下按钮"""
+        """按下按钮."""
         try:
             # 在Home Assistant中，按下按钮是调用press服务
             payload = {"entity_id": self.entity_id}

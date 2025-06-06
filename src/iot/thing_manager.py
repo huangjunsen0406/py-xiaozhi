@@ -26,8 +26,7 @@ class ThingManager:
         return json.dumps(descriptors)
 
     def get_states_json(self, delta=False) -> Tuple[bool, str]:
-        """
-        获取所有设备的状态JSON
+        """获取所有设备的状态JSON.
 
         Args:
             delta: 是否只返回变化的部分，True表示只返回变化的部分
@@ -64,15 +63,12 @@ class ThingManager:
         return changed, json.dumps(states)
 
     def get_states_json_str(self) -> str:
-        """
-        为了兼容旧代码，保留原来的方法名和返回值类型
-        """
+        """为了兼容旧代码，保留原来的方法名和返回值类型."""
         _, json_str = self.get_states_json(delta=False)
         return json_str
 
     def invoke(self, command: Dict) -> Optional[Any]:
-        """
-        调用设备方法
+        """调用设备方法.
 
         Args:
             command: 包含name和method等信息的命令字典

@@ -2,8 +2,7 @@ from src.iot.thing import Parameter, Thing, ValueType
 
 
 def get_rag_result(qurey):
-    """
-    介绍莱斯城市治理系统
+    """介绍莱斯城市治理系统.
 
     返回:
         str: 介绍信息
@@ -44,8 +43,7 @@ class QueryBridgeRAG(Thing):
         )
 
     def _query_info(self, query):
-        """
-        查询信息
+        """查询信息.
 
         参数:
             query (str): 查询内容
@@ -66,8 +64,7 @@ class QueryBridgeRAG(Thing):
             return f"很抱歉，查询'{query}'时出现了错误。"
 
     def _query_info_and_store(self, query):
-        """
-        查询信息并存储
+        """查询信息并存储.
 
         参数:
             query (str): 查询内容

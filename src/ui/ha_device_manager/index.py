@@ -8,25 +8,30 @@ import json
 import logging
 import os
 import sys
-import threading
-import time
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
+
+# 导入项目配置管理器
+from src.utils.config_manager import ConfigManager
 
 # 添加项目根目录到系统路径
 current_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(current_dir)))
 sys.path.append(project_root)
 
-# 导入项目配置管理器
-from src.utils.config_manager import ConfigManager
 
 try:
     from PyQt5 import uic
     from PyQt5.QtCore import Qt, QThread, pyqtSignal
     from PyQt5.QtGui import QColor
     from PyQt5.QtWidgets import QTabBar  # 添加 QFrame
-    from PyQt5.QtWidgets import (QApplication, QHeaderView, QMainWindow,
-                                 QMessageBox, QPushButton, QTableWidgetItem)
+    from PyQt5.QtWidgets import (
+        QApplication,
+        QHeaderView,
+        QMainWindow,
+        QMessageBox,
+        QPushButton,
+        QTableWidgetItem,
+    )
 
 
 except ImportError:
@@ -61,7 +66,7 @@ DOMAIN_ICONS = {
 
 
 class DeviceLoadThread(QThread):
-    """加载设备的线程"""
+    """加载设备的线程."""
 
     devices_loaded = pyqtSignal(list)
     error_occurred = pyqtSignal(str)
@@ -91,14 +96,14 @@ class DeviceLoadThread(QThread):
                 self.error_occurred.emit(str(e))
 
     def terminate(self):
-        """安全终止线程"""
+        """安全终止线程."""
         self._is_running = False
         super().terminate()  # 调用QThread的terminate方法
 
     def get_device_list(
         self, url: str, token: str, domain: str = "all"
     ) -> List[Dict[str, Any]]:
-        """从Home Assistant API获取设备列表"""
+        """从Home Assistant API获取设备列表."""
         headers = {
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json",
@@ -109,7 +114,9 @@ class DeviceLoadThread(QThread):
             response = requests.get(f"{url}/api/states", headers=headers, timeout=10)
 
             if response.status_code != 200:
-                error_msg = f"错误: 无法获取设备列表 (HTTP {response.status_code}): {response.text}"
+                error_msg = f"错误: 无法获取设备列表 (HTTP {response.status_code}): {
+                    response.text
+                }"
                 self.error_occurred.emit(error_msg)
                 return []
 
@@ -153,7 +160,7 @@ class DeviceLoadThread(QThread):
 
 
 class HomeAssistantDeviceManager(QMainWindow):
-    """Home Assistant设备管理器GUI"""
+    """Home Assistant设备管理器GUI."""
 
     def __init__(self):
         super().__init__()
@@ -167,7 +174,8 @@ class HomeAssistantDeviceManager(QMainWindow):
             QMessageBox.critical(
                 self,
                 "配置错误",
-                "未找到Home Assistant配置，请确保config/config.json中包含有效的HOME_ASSISTANT.URL和HOME_ASSISTANT.TOKEN",
+                "未找到Home Assistant配置，请确保config/config.json中包含有效的\n"
+                "HOME_ASSISTANT.URL和HOME_ASSISTANT.TOKEN",
             )
             sys.exit(1)
 
@@ -203,13 +211,13 @@ class HomeAssistantDeviceManager(QMainWindow):
         self.load_devices("all")
 
     def closeEvent(self, event):
-        """窗口关闭事件处理"""
+        """窗口关闭事件处理."""
         # 停止所有线程
         self.stop_all_threads()
         super().closeEvent(event)
 
     def stop_all_threads(self):
-        """停止所有线程"""
+        """停止所有线程."""
         # 先停止当前加载线程
         if self.load_thread and self.load_thread.isRunning():
             self.logger.info("停止当前加载线程...")
@@ -237,7 +245,7 @@ class HomeAssistantDeviceManager(QMainWindow):
         self.load_thread = None
 
     def apply_stylesheet(self):
-        """应用自定义样式表美化界面"""
+        """应用自定义样式表美化界面."""
         stylesheet = """
             QMainWindow {
                 background-color: #f0f0f0; /* 窗口背景色 */
@@ -291,7 +299,6 @@ class HomeAssistantDeviceManager(QMainWindow):
             QLineEdit, QComboBox {
                 background-color: white;
             }
-            
             /* 按钮样式 */
             QPushButton {
                 background-color: #0078d4; /* 蓝色背景 */
@@ -307,7 +314,7 @@ class HomeAssistantDeviceManager(QMainWindow):
             QPushButton:pressed {
                 background-color: #003f6e;
             }
-            
+
             QPushButton#delete_button { /* 可以为特定按钮设置样式，如果需要 */
                 background-color: #e74c3c; /* 红色删除按钮 */
             }
@@ -321,7 +328,9 @@ class HomeAssistantDeviceManager(QMainWindow):
                 padding-right: 5px;
             }
             QComboBox::down-arrow {
-                 image: url(:/qt-project.org/styles/commonstyle/images/standardbutton-down-arrow-16.png); /* 使用系统箭头 */
+                 image: url(
+                    :/qt-project.org/styles/commonstyle/images/standardbutton-down-arrow-16.png
+                 );
                  width: 12px;
                  height: 12px;
             }
@@ -393,12 +402,12 @@ class HomeAssistantDeviceManager(QMainWindow):
         self.logger.info("已应用自定义样式表")
 
     def load_ui(self):
-        """加载UI文件"""
+        """加载UI文件."""
         ui_path = os.path.join(current_dir, "index.ui")
         uic.loadUi(ui_path, self)
 
     def init_ui(self):
-        """初始化UI组件"""
+        """初始化UI组件."""
         try:
             # 加载UI文件
             ui_path = os.path.join(current_dir, "index.ui")
@@ -478,7 +487,8 @@ class HomeAssistantDeviceManager(QMainWindow):
             # self.nav_tab_bar = self.findChild(QTabBar, "nav_tab_bar")
             # 如果 uic.loadUi 已经加载了正确的对象名 nav_segment (即使它是 QTabBar)，则可以直接使用
             if not isinstance(self.nav_segment, QTabBar):
-                # Fallback or error handling if it's not a QTabBar as expected after UI update
+                # Fallback or error handling if it's
+                # not a QTabBar as expected after UI update
                 self.logger.error("导航控件 'nav_segment' 不是 QTabBar 类型！")
                 # 可以在这里尝试查找，或者抛出错误
                 tab_bar = self.findChild(QTabBar)
@@ -518,7 +528,7 @@ class HomeAssistantDeviceManager(QMainWindow):
             QMessageBox.warning(self, "警告", f"导航栏设置失败: {e}")
 
     def connect_signals(self):
-        """连接信号槽"""
+        """连接信号槽."""
         # 域选择变化
         self.domain_combo.currentTextChanged.connect(self.domain_changed)
 
@@ -538,7 +548,7 @@ class HomeAssistantDeviceManager(QMainWindow):
         self.device_table.cellChanged.connect(self.on_available_device_prompt_edited)
 
     def on_page_changed_by_index(self, index: int):
-        """当 QTabBar 切换时调用"""
+        """当 QTabBar 切换时调用."""
         try:
             routeKey = self._nav_keys[index]
             self.logger.info(f"切换到页面索引 {index}, key: {routeKey}")
@@ -558,7 +568,7 @@ class HomeAssistantDeviceManager(QMainWindow):
             self.logger.error(f"页面切换处理失败: {e}")
 
     def reload_config(self):
-        """重新从磁盘加载配置文件"""
+        """重新从磁盘加载配置文件."""
         try:
             # 获取配置文件路径
             config_path = os.path.join(project_root, "config", "config.json")
@@ -590,13 +600,13 @@ class HomeAssistantDeviceManager(QMainWindow):
             QMessageBox.warning(self, "警告", f"重新加载配置文件失败: {e}")
 
     def domain_changed(self):
-        """当域选择变化时调用"""
+        """当域选择变化时调用."""
         current_text = self.domain_combo.currentText()
         domain = self.domain_mapping.get(current_text, "all")
         self.load_devices(domain)
 
     def load_devices(self, domain):
-        """加载设备列表"""
+        """加载设备列表."""
         # 清空搜索框
         self.search_input.clear()
 
@@ -630,7 +640,7 @@ class HomeAssistantDeviceManager(QMainWindow):
         self.threads.append(self.load_thread)
 
     def update_device_table(self, devices):
-        """更新设备表格"""
+        """更新设备表格."""
         # 线程完成后从线程列表中移除
         sender = self.sender()
         if sender in self.threads:
@@ -694,13 +704,13 @@ class HomeAssistantDeviceManager(QMainWindow):
                         item.setBackground(QColor(Qt.lightGray))  # 使用 QColor
 
     def refresh_devices(self):
-        """刷新设备列表"""
+        """刷新设备列表."""
         current_text = self.domain_combo.currentText()
         domain = self.domain_mapping.get(current_text, "all")
         self.load_devices(domain)
 
     def filter_devices(self):
-        """根据搜索框过滤设备"""
+        """根据搜索框过滤设备."""
         search_text = self.search_input.text().lower()
 
         for row in range(self.device_table.rowCount()):
@@ -719,7 +729,7 @@ class HomeAssistantDeviceManager(QMainWindow):
             self.device_table.setRowHidden(row, not show_row)
 
     def add_selected_device(self):
-        """添加选中的设备"""
+        """添加选中的设备."""
         # QTableWidget 获取选中行的方式不同
         selected_indexes = self.device_table.selectedIndexes()
         if not selected_indexes:
@@ -777,13 +787,14 @@ class HomeAssistantDeviceManager(QMainWindow):
         self.custom_name_input.clear()
 
     def refresh_added_devices(self):
-        """刷新已添加设备表格"""
+        """刷新已添加设备表格."""
         # 已在on_page_changed_by_index中调用了reload_config，这里直接使用self.added_devices
 
         # 暂时断开单元格变化信号，避免在填充数据时触发更新
         try:
             self.added_device_table.cellChanged.disconnect(self.on_prompt_edited)
-        except:
+        except Exception as e:
+            self.logger.warning(f"重新加载配置时出错: {e}")
             pass  # 如果信号未连接，忽略错误
 
         # 清空表格
@@ -829,7 +840,7 @@ class HomeAssistantDeviceManager(QMainWindow):
         self.added_device_table.cellChanged.connect(self.on_prompt_edited)
 
     def delete_device(self, row):
-        """删除指定行的设备"""
+        """删除指定行的设备."""
         entity_id = self.added_device_table.item(row, 1).text()  # 设备ID现在在第1列
 
         # 询问确认
@@ -856,7 +867,7 @@ class HomeAssistantDeviceManager(QMainWindow):
     def save_device_to_config(
         self, entity_id: str, friendly_name: Optional[str] = None
     ) -> bool:
-        """将设备添加到配置文件中"""
+        """将设备添加到配置文件中."""
         try:
             # 获取配置文件路径
             config_path = os.path.join(project_root, "config", "config.json")
@@ -921,7 +932,7 @@ class HomeAssistantDeviceManager(QMainWindow):
             return False
 
     def delete_device_from_config(self, entity_id: str) -> bool:
-        """从配置文件中删除设备"""
+        """从配置文件中删除设备."""
         try:
             # 获取配置文件路径
             config_path = os.path.join(project_root, "config", "config.json")
@@ -962,7 +973,7 @@ class HomeAssistantDeviceManager(QMainWindow):
             return False
 
     def show_error(self, error_message):
-        """显示错误消息"""
+        """显示错误消息."""
         # 线程完成后从线程列表中移除
         sender = self.sender()
         if sender in self.threads:
@@ -979,7 +990,7 @@ class HomeAssistantDeviceManager(QMainWindow):
         QMessageBox.critical(self, "错误", f"加载设备失败: {error_message}")
 
     def on_prompt_edited(self, row, column):
-        """处理已添加设备Prompt编辑完成事件"""
+        """处理已添加设备Prompt编辑完成事件."""
         # 只处理Prompt列(现在是列索引为0)的编辑
         if column != 0:
             return
@@ -991,7 +1002,7 @@ class HomeAssistantDeviceManager(QMainWindow):
         self.save_device_to_config(entity_id, new_prompt)
 
     def on_available_device_prompt_edited(self, row, column):
-        """处理可用设备Prompt编辑完成事件"""
+        """处理可用设备Prompt编辑完成事件."""
         # 只处理Prompt列(现在是列索引为0)的编辑
         if column != 0:
             return
@@ -1005,7 +1016,7 @@ class HomeAssistantDeviceManager(QMainWindow):
 
 
 def main():
-    """主函数"""
+    """主函数."""
     app = QApplication(sys.argv)
 
     # 创建并显示主窗口

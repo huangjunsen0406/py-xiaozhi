@@ -1,7 +1,4 @@
-"""
-通用工具函数集合模块
-包含文本转语音、浏览器操作、剪贴板等通用工具函数
-"""
+"""通用工具函数集合模块 包含文本转语音、浏览器操作、剪贴板等通用工具函数."""
 
 import shutil
 import webbrowser
@@ -13,8 +10,7 @@ logger = get_logger(__name__)
 
 
 def open_url(url: str) -> bool:
-    """
-    打开指定URL的网页
+    """打开指定URL的网页.
 
     Args:
         url: 要打开的URL
@@ -35,8 +31,7 @@ def open_url(url: str) -> bool:
 
 
 def copy_to_clipboard(text: str) -> bool:
-    """
-    复制文本到剪贴板
+    """复制文本到剪贴板.
 
     Args:
         text: 要复制的文本
@@ -175,8 +170,7 @@ def play_audio_nonblocking(text: str) -> None:
 
 
 def extract_verification_code(text: str) -> Optional[str]:
-    """
-    从文本中提取6位验证码，支持中间带空格的形式
+    """从文本中提取6位验证码，支持中间带空格的形式.
 
     Args:
         text: 包含验证码的文本
@@ -203,8 +197,7 @@ def extract_verification_code(text: str) -> Optional[str]:
 
 
 def handle_verification_code(text: str) -> None:
-    """
-    处理验证码文本：提取验证码，复制到剪贴板，打开网站
+    """处理验证码文本：提取验证码，复制到剪贴板，打开网站.
 
     Args:
         text: 包含验证码的文本

@@ -1,5 +1,4 @@
 import logging
-import os
 import sys
 from pathlib import Path
 from typing import List, Optional, Union
@@ -8,10 +7,7 @@ logger = logging.getLogger(__name__)
 
 
 class ResourceFinder:
-    """
-    统一的资源查找器
-    支持开发环境、PyInstaller目录模式和单文件模式下的资源查找
-    """
+    """统一的资源查找器 支持开发环境、PyInstaller目录模式和单文件模式下的资源查找."""
 
     _instance = None
     _base_paths = None
@@ -22,6 +18,7 @@ class ResourceFinder:
         return cls._instance
 
     def __init__(self):
+        """初始化资源查找器."""
         if self._base_paths is None:
             self._base_paths = self._get_base_paths()
             logger.debug(
@@ -29,10 +26,7 @@ class ResourceFinder:
             )
 
     def _get_base_paths(self) -> List[Path]:
-        """
-        获取所有可能的基础路径
-        按优先级排序：项目根目录 > 当前工作目录 > 可执行文件目录 > _MEIPASS
-        """
+        """获取所有可能的基础路径 按优先级排序：项目根目录 > 当前工作目录 > 可执行文件目录 > _MEIPASS."""
         base_paths = []
 
         # 1. 项目根目录（开发环境）
@@ -77,8 +71,7 @@ class ResourceFinder:
     def find_resource(
         self, resource_path: Union[str, Path], resource_type: str = "file"
     ) -> Optional[Path]:
-        """
-        查找资源文件或目录
+        """查找资源文件或目录.
 
         Args:
             resource_path: 相对于项目根目录的资源路径
@@ -113,8 +106,7 @@ class ResourceFinder:
         return None
 
     def find_file(self, file_path: Union[str, Path]) -> Optional[Path]:
-        """
-        查找文件
+        """查找文件.
 
         Args:
             file_path: 相对于项目根目录的文件路径
@@ -125,8 +117,7 @@ class ResourceFinder:
         return self.find_resource(file_path, "file")
 
     def find_directory(self, dir_path: Union[str, Path]) -> Optional[Path]:
-        """
-        查找目录
+        """查找目录.
 
         Args:
             dir_path: 相对于项目根目录的目录路径
@@ -137,8 +128,7 @@ class ResourceFinder:
         return self.find_resource(dir_path, "dir")
 
     def find_models_dir(self) -> Optional[Path]:
-        """
-        查找models目录
+        """查找models目录.
 
         Returns:
             找到的models目录绝对路径，未找到返回None
@@ -146,8 +136,7 @@ class ResourceFinder:
         return self.find_directory("models")
 
     def find_config_dir(self) -> Optional[Path]:
-        """
-        查找config目录
+        """查找config目录.
 
         Returns:
             找到的config目录绝对路径，未找到返回None
@@ -155,8 +144,7 @@ class ResourceFinder:
         return self.find_directory("config")
 
     def find_assets_dir(self) -> Optional[Path]:
-        """
-        查找assets目录
+        """查找assets目录.
 
         Returns:
             找到的assets目录绝对路径，未找到返回None
@@ -164,8 +152,7 @@ class ResourceFinder:
         return self.find_directory("assets")
 
     def find_libs_dir(self, system: str = None, arch: str = None) -> Optional[Path]:
-        """
-        查找libs目录（用于动态库）
+        """查找libs目录（用于动态库）
 
         Args:
             system: 系统名称（如Windows、Linux、Darwin）
@@ -192,8 +179,7 @@ class ResourceFinder:
         return libs_dir
 
     def get_project_root(self) -> Path:
-        """
-        获取项目根目录
+        """获取项目根目录.
 
         Returns:
             项目根目录路径
@@ -201,8 +187,7 @@ class ResourceFinder:
         return self._base_paths[0]
 
     def get_app_path(self) -> Path:
-        """
-        获取应用程序的基础路径（兼容ConfigManager的方法）
+        """获取应用程序的基础路径（兼容ConfigManager的方法）
 
         Returns:
             应用程序基础路径
@@ -217,8 +202,7 @@ class ResourceFinder:
     def list_files_in_directory(
         self, dir_path: Union[str, Path], pattern: str = "*"
     ) -> List[Path]:
-        """
-        列出目录中的文件
+        """列出目录中的文件.
 
         Args:
             dir_path: 目录路径
@@ -244,40 +228,40 @@ resource_finder = ResourceFinder()
 
 # 便捷函数
 def find_file(file_path: Union[str, Path]) -> Optional[Path]:
-    """查找文件的便捷函数"""
+    """查找文件的便捷函数."""
     return resource_finder.find_file(file_path)
 
 
 def find_directory(dir_path: Union[str, Path]) -> Optional[Path]:
-    """查找目录的便捷函数"""
+    """查找目录的便捷函数."""
     return resource_finder.find_directory(dir_path)
 
 
 def find_models_dir() -> Optional[Path]:
-    """查找models目录的便捷函数"""
+    """查找models目录的便捷函数."""
     return resource_finder.find_models_dir()
 
 
 def find_config_dir() -> Optional[Path]:
-    """查找config目录的便捷函数"""
+    """查找config目录的便捷函数."""
     return resource_finder.find_config_dir()
 
 
 def find_assets_dir() -> Optional[Path]:
-    """查找assets目录的便捷函数"""
+    """查找assets目录的便捷函数."""
     return resource_finder.find_assets_dir()
 
 
 def find_libs_dir(system: str = None, arch: str = None) -> Optional[Path]:
-    """查找libs目录的便捷函数"""
+    """查找libs目录的便捷函数."""
     return resource_finder.find_libs_dir(system, arch)
 
 
 def get_project_root() -> Path:
-    """获取项目根目录的便捷函数"""
+    """获取项目根目录的便捷函数."""
     return resource_finder.get_project_root()
 
 
 def get_app_path() -> Path:
-    """获取应用程序基础路径的便捷函数"""
+    """获取应用程序基础路径的便捷函数."""
     return resource_finder.get_app_path()

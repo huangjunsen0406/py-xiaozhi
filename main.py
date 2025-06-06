@@ -1,6 +1,5 @@
 import argparse
 import io
-import logging
 import signal
 import sys
 
@@ -12,7 +11,7 @@ logger = get_logger(__name__)
 
 
 def parse_args():
-    """解析命令行参数"""
+    """解析命令行参数."""
     # 确保sys.stdout和sys.stderr不为None
     if sys.stdout is None:
         sys.stdout = io.StringIO()
@@ -41,7 +40,7 @@ def parse_args():
 
 
 def signal_handler(sig, frame):
-    """处理Ctrl+C信号"""
+    """处理Ctrl+C信号."""
     logger.info("接收到中断信号，正在关闭...")
     app = Application.get_instance()
     app.shutdown()
@@ -49,7 +48,7 @@ def signal_handler(sig, frame):
 
 
 def main():
-    """程序入口点"""
+    """程序入口点."""
     # 注册信号处理器
     signal.signal(signal.SIGINT, signal_handler)
     # 解析命令行参数

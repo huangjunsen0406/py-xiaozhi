@@ -1,5 +1,3 @@
-import base64
-import os
 import threading
 
 from openai import OpenAI
@@ -14,7 +12,7 @@ class ImageAnalyzer:
         self.model = None
 
     def __new__(cls):
-        """确保单例模式"""
+        """确保单例模式."""
         if cls._instance is None:
             cls._instance = super().__new__(cls)
         return cls._instance
@@ -42,7 +40,7 @@ class ImageAnalyzer:
     def analyze_image(
         self, base64_image, prompt="图中描绘的是什么景象,请详细描述，因为用户可能是盲人"
     ) -> str:
-        """分析图片并返回结果"""
+        """分析图片并返回结果."""
         completion = self.client.chat.completions.create(
             model=self.models,
             messages=[

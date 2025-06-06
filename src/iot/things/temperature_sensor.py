@@ -3,11 +3,10 @@ import json
 import threading
 import time
 from datetime import datetime
-from typing import Dict
 
 from src.application import Application
 from src.constants.constants import DeviceState
-from src.iot.thing import Parameter, Thing, ValueType
+from src.iot.thing import Thing
 from src.network.mqtt_client import MqttClient
 
 
@@ -38,7 +37,7 @@ class TemperatureSensor(Thing):
         self._init_mqtt()
 
     def _init_mqtt(self):
-        """初始化MQTT客户端"""
+        """初始化MQTT客户端."""
         from src.utils.config_manager import ConfigManager
 
         config = ConfigManager.get_instance()
@@ -65,7 +64,7 @@ class TemperatureSensor(Thing):
             print(f"[温度传感器] MQTT连接失败: {e}")
 
     def _on_mqtt_message(self, client, userdata, msg):
-        """处理MQTT消息"""
+        """处理MQTT消息."""
         try:
             topic = msg.topic
             payload = msg.payload.decode("utf-8")
@@ -120,7 +119,7 @@ class TemperatureSensor(Thing):
             print(f"[温度传感器] 处理MQTT消息时出错: {e}")
 
     def handle_temperature_update(self):
-        """处理温度更新后的操作"""
+        """处理温度更新后的操作."""
         try:
             if self.app is None:
                 self.app = Application.get_instance()
@@ -135,7 +134,7 @@ class TemperatureSensor(Thing):
             print(f"[温度传感器] 处理温度更新时出错: {e}")
 
     def _delayed_send_wake_word(self):
-        """延迟发送唤醒词消息，确保连接稳定"""
+        """延迟发送唤醒词消息，确保连接稳定."""
         try:
             # 检查音频通道是否已打开
             channel_opened = False
@@ -174,7 +173,7 @@ class TemperatureSensor(Thing):
             print(f"[温度传感器] 延迟发送唤醒词时出错: {e}")
 
     def _request_sensor_data(self):
-        """请求所有传感器报告当前状态"""
+        """请求所有传感器报告当前状态."""
         if self.mqtt_client:
             # 兼容两种命令格式
             command = {
@@ -186,7 +185,7 @@ class TemperatureSensor(Thing):
             print("[温度传感器] 已发送数据请求命令")
 
     def send_command(self, action_name, **kwargs):
-        """发送命令到传感器"""
+        """发送命令到传感器."""
         if self.mqtt_client:
             command = {
                 "command": action_name,
@@ -209,7 +208,7 @@ class TemperatureSensor(Thing):
         }
 
     def __del__(self):
-        """析构函数，确保资源被正确释放"""
+        """析构函数，确保资源被正确释放."""
         if self.mqtt_client:
             try:
                 self.mqtt_client.stop()

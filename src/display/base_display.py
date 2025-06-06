@@ -4,7 +4,7 @@ from typing import Callable, Optional
 
 
 class BaseDisplay(ABC):
-    """显示接口的抽象基类"""
+    """显示接口的抽象基类."""
 
     def __init__(self):
         self.logger = logging.getLogger(self.__class__.__name__)
@@ -44,31 +44,26 @@ class BaseDisplay(ABC):
         abort_callback: Optional[Callable] = None,
         send_text_callback: Optional[Callable] = None,
     ):  # 添加打断回调参数
-        """设置回调函数"""
-        pass
+        """设置回调函数."""
 
     @abstractmethod
     def update_button_status(self, text: str):
-        """更新按钮状态"""
-        pass
+        """更新按钮状态."""
 
     @abstractmethod
     def update_status(self, status: str):
-        """更新状态文本"""
-        pass
+        """更新状态文本."""
 
     @abstractmethod
     def update_text(self, text: str):
-        """更新TTS文本"""
-        pass
+        """更新TTS文本."""
 
     @abstractmethod
     def update_emotion(self, emotion: str):
-        """更新表情"""
-        pass
+        """更新表情."""
 
     def get_current_volume(self):
-        """获取当前音量"""
+        """获取当前音量."""
         if self.volume_controller:
             try:
                 # 从系统获取最新音量
@@ -83,7 +78,7 @@ class BaseDisplay(ABC):
         return self.current_volume
 
     def update_volume(self, volume: int):
-        """更新系统音量"""
+        """更新系统音量."""
         # 确保音量在有效范围内
         volume = max(0, min(100, volume))
 
@@ -101,20 +96,16 @@ class BaseDisplay(ABC):
 
     @abstractmethod
     def start(self):
-        """启动显示"""
-        pass
+        """启动显示."""
 
     @abstractmethod
     def on_close(self):
-        """关闭显示"""
-        pass
+        """关闭显示."""
 
     @abstractmethod
     def start_keyboard_listener(self):
-        """启动键盘监听"""
-        pass
+        """启动键盘监听."""
 
     @abstractmethod
     def stop_keyboard_listener(self):
-        """停止键盘监听"""
-        pass
+        """停止键盘监听."""

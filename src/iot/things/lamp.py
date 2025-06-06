@@ -6,7 +6,7 @@ class Lamp(Thing):
         super().__init__("Lamp", "一个测试用的灯")
         self.power = False
 
-        print(f"[虚拟设备] 灯设备初始化完成")
+        print("[虚拟设备] 灯设备初始化完成")
 
         # 定义属性
         self.add_property("power", "灯是否打开", lambda: self.power)
@@ -18,10 +18,10 @@ class Lamp(Thing):
 
     def _turn_on(self):
         self.power = True
-        print(f"[虚拟设备] 灯已打开")
+        print("[虚拟设备] 灯已打开")
         return {"status": "success", "message": "灯已打开"}
 
     def _turn_off(self):
         self.power = False
-        print(f"[虚拟设备] 灯已关闭")
+        print("[虚拟设备] 灯已关闭")
         return {"status": "success", "message": "灯已关闭"}

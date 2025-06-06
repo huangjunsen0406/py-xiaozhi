@@ -18,10 +18,10 @@ logger = get_logger(__name__)
 
 
 class WakeWordDetector:
-    """唤醒词检测类"""
+    """唤醒词检测类."""
 
     def __init__(self):
-        """初始化唤醒词检测器"""
+        """初始化唤醒词检测器."""
         # 初始化基本属性
         self.audio_codec = None
         self.on_detected_callbacks = []
@@ -73,7 +73,7 @@ class WakeWordDetector:
         self._validate_config()
 
     def _init_model(self, config):
-        """初始化语音识别模型"""
+        """初始化语音识别模型."""
         try:
             model_path = self._get_model_path(config)
             if not os.path.exists(model_path):
@@ -91,7 +91,7 @@ class WakeWordDetector:
             self.enabled = False
 
     def _get_model_path(self, config):
-        """获取模型路径"""
+        """获取模型路径."""
         from src.utils.resource_finder import resource_finder
 
         model_name = config.get_config(
@@ -135,7 +135,7 @@ class WakeWordDetector:
         return str(default_path)
 
     def start(self, audio_codec_or_stream=None):
-        """启动检测"""
+        """启动检测."""
         if not self.enabled:
             logger.warning("唤醒词功能未启用")
             return False
@@ -161,7 +161,7 @@ class WakeWordDetector:
         return False
 
     def _start_with_audio_codec(self):
-        """使用AudioCodec启动"""
+        """使用AudioCodec启动."""
         if not self.audio_codec or not hasattr(self.audio_codec, "input_stream"):
             logger.error("AudioCodec无效或输入流不可用")
             return False
@@ -171,7 +171,7 @@ class WakeWordDetector:
         return self._start_detection_thread("AudioCodec")
 
     def _start_detection_thread(self, mode_name):
-        """启动检测线程"""
+        """启动检测线程."""
         try:
             self.running = True
             self.paused = False
@@ -188,7 +188,7 @@ class WakeWordDetector:
             return False
 
     def _detection_loop(self):
-        """统一的检测循环"""
+        """统一的检测循环."""
         error_count = 0
         MAX_ERRORS = 5
 
@@ -221,7 +221,7 @@ class WakeWordDetector:
                 time.sleep(0.5)
 
     def _get_active_stream(self):
-        """获取活跃的音频流"""
+        """获取活跃的音频流."""
         if self.audio_codec:
             if not hasattr(self.audio_codec, "input_stream"):
                 return None
@@ -240,7 +240,7 @@ class WakeWordDetector:
         return self.stream if self.stream and self.stream.is_active() else None
 
     def _read_audio_data(self, stream):
-        """读取音频数据"""
+        """读取音频数据."""
         try:
             with self.stream_lock:
                 # 检查可用数据
@@ -267,7 +267,7 @@ class WakeWordDetector:
             return None
 
     def _process_audio_data(self, data):
-        """优化的音频数据处理"""
+        """优化的音频数据处理."""
         try:
             # 处理完整识别结果
             if self.recognizer.AcceptWaveform(data):
@@ -299,7 +299,7 @@ class WakeWordDetector:
             logger.error(f"音频数据处理错误: {e}")
 
     def _build_wake_word_patterns(self):
-        """构建唤醒词的拼音模式，包括多种变体"""
+        """构建唤醒词的拼音模式，包括多种变体."""
         patterns = {}
         for word in self.wake_words:
             # 标准拼音（无音调）
@@ -346,7 +346,7 @@ class WakeWordDetector:
         }
 
     def _calculate_similarity(self, text_variants, pattern):
-        """计算文本与唤醒词模式的相似度"""
+        """计算文本与唤醒词模式的相似度."""
         max_similarity = 0.0
         best_match_type = None
 
@@ -391,7 +391,7 @@ class WakeWordDetector:
         return max_similarity, best_match_type
 
     def _levenshtein_distance(self, s1, s2):
-        """计算编辑距离"""
+        """计算编辑距离."""
         if len(s1) < len(s2):
             return self._levenshtein_distance(s2, s1)
 
@@ -411,7 +411,7 @@ class WakeWordDetector:
         return previous_row[-1]
 
     def _is_subsequence(self, pattern, text):
-        """检查pattern是否为text的子序列"""
+        """检查pattern是否为text的子序列."""
         i = 0
         for char in text:
             if i < len(pattern) and char == pattern[i]:
@@ -419,7 +419,7 @@ class WakeWordDetector:
         return i == len(pattern)
 
     def _check_wake_word(self, text):
-        """优化的唤醒词检查"""
+        """优化的唤醒词检查."""
         if not text or not text.strip():
             return
 
@@ -453,7 +453,9 @@ class WakeWordDetector:
         # 触发检测
         if best_match:
             logger.info(
-                f"检测到唤醒词 '{best_match}' (相似度: {best_similarity:.3f}, 匹配类型: {best_match_info})"
+                f"检测到唤醒词 '{best_match}' (相似度: {best_similarity:.3f}, 匹配类型: {
+                    best_match_info
+                })"
             )
             logger.debug(f"原始文本: '{text}', 拼音变体: {text_variants}")
             self._trigger_callbacks(best_match, text)
@@ -462,7 +464,7 @@ class WakeWordDetector:
             self._recent_texts.clear()
 
     def stop(self):
-        """停止检测"""
+        """停止检测."""
         if self.running:
             self.running = False
             if self.detection_thread and self.detection_thread.is_alive():
@@ -472,11 +474,11 @@ class WakeWordDetector:
             logger.info("唤醒词检测已停止")
 
     def is_running(self):
-        """检查是否正在运行"""
+        """检查是否正在运行."""
         return self.running and not self.paused
 
     def update_stream(self, new_stream):
-        """更新音频流"""
+        """更新音频流."""
         if not self.running:
             return False
         with self.stream_lock:
@@ -485,21 +487,21 @@ class WakeWordDetector:
         return True
 
     def pause(self):
-        """暂停检测"""
+        """暂停检测."""
         if self.running and not self.paused:
             self.paused = True
 
     def resume(self):
-        """恢复检测"""
+        """恢复检测."""
         if self.running and self.paused:
             self.paused = False
 
     def on_detected(self, callback):
-        """注册回调"""
+        """注册回调."""
         self.on_detected_callbacks.append(callback)
 
     def _trigger_callbacks(self, wake_word, text):
-        """触发回调"""
+        """触发回调."""
         for cb in self.on_detected_callbacks:
             try:
                 cb(wake_word, text)
@@ -507,7 +509,7 @@ class WakeWordDetector:
                 logger.error(f"回调执行失败: {e}")
 
     def _validate_config(self):
-        """验证配置参数"""
+        """验证配置参数."""
         if not self.enabled:
             return
 
@@ -543,7 +545,7 @@ class WakeWordDetector:
         )
 
     def get_performance_stats(self):
-        """获取性能统计信息"""
+        """获取性能统计信息."""
         cache_info = self._get_text_pinyin_variants.cache_info()
         return {
             "enabled": self.enabled,
@@ -557,13 +559,13 @@ class WakeWordDetector:
         }
 
     def clear_cache(self):
-        """清空缓存"""
+        """清空缓存."""
         self._get_text_pinyin_variants.cache_clear()
         self._recent_texts.clear()
         logger.info("缓存已清空")
 
     def update_config(self, **kwargs):
-        """动态更新配置"""
+        """动态更新配置."""
         updated = False
 
         if "similarity_threshold" in kwargs:

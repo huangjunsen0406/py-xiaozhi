@@ -13,10 +13,10 @@ logger = logging.getLogger("VADDetector")
 
 
 class VADDetector:
-    """基于WebRTC VAD的语音活动检测器，用于检测用户打断"""
+    """基于WebRTC VAD的语音活动检测器，用于检测用户打断."""
 
     def __init__(self, audio_codec, protocol, app_instance, loop):
-        """初始化VAD检测器
+        """初始化VAD检测器.
 
         参数:
             audio_codec: 音频编解码器实例
@@ -53,7 +53,7 @@ class VADDetector:
         self.stream = None
 
     def start(self):
-        """启动VAD检测器"""
+        """启动VAD检测器."""
         if self.thread and self.thread.is_alive():
             logger.warning("VAD检测器已经在运行")
             return
@@ -70,7 +70,7 @@ class VADDetector:
         logger.info("VAD检测器已启动")
 
     def stop(self):
-        """停止VAD检测器"""
+        """停止VAD检测器."""
         self.running = False
 
         # 关闭音频流
@@ -82,12 +82,12 @@ class VADDetector:
         logger.info("VAD检测器已停止")
 
     def pause(self):
-        """暂停VAD检测"""
+        """暂停VAD检测."""
         self.paused = True
         logger.info("VAD检测器已暂停")
 
     def resume(self):
-        """恢复VAD检测"""
+        """恢复VAD检测."""
         self.paused = False
         # 重置状态
         self.speech_count = 0
@@ -96,11 +96,11 @@ class VADDetector:
         logger.info("VAD检测器已恢复")
 
     def is_running(self):
-        """检查VAD检测器是否正在运行"""
+        """检查VAD检测器是否正在运行."""
         return self.running and not self.paused
 
     def _initialize_audio_stream(self):
-        """初始化独立的音频流"""
+        """初始化独立的音频流."""
         try:
             # 创建PyAudio实例
             self.pa = pyaudio.PyAudio()
@@ -136,7 +136,7 @@ class VADDetector:
             return False
 
     def _close_audio_stream(self):
-        """关闭音频流"""
+        """关闭音频流."""
         try:
             if self.stream:
                 self.stream.stop_stream()
@@ -152,7 +152,7 @@ class VADDetector:
             logger.error(f"关闭VAD音频流失败: {e}")
 
     def _detection_loop(self):
-        """VAD检测主循环"""
+        """VAD检测主循环."""
         logger.info("VAD检测循环已启动")
 
         while self.running:
@@ -190,7 +190,7 @@ class VADDetector:
         logger.info("VAD检测循环已结束")
 
     def _read_audio_frame(self):
-        """读取一帧音频数据"""
+        """读取一帧音频数据."""
         try:
             if not self.stream or not self.stream.is_active():
                 return None
@@ -203,7 +203,7 @@ class VADDetector:
             return None
 
     def _detect_speech(self, frame):
-        """检测是否是语音"""
+        """检测是否是语音."""
         try:
             # 确保帧长度正确
             if len(frame) != self.frame_size * 2:  # 16位音频，每个样本2字节
@@ -230,7 +230,7 @@ class VADDetector:
             return False
 
     def _handle_speech_frame(self, frame):
-        """处理语音帧"""
+        """处理语音帧."""
         self.speech_count += 1
         self.silence_count = 0
 
@@ -250,18 +250,18 @@ class VADDetector:
             self.triggered = False
 
     def _handle_silence_frame(self, frame):
-        """处理静音帧"""
+        """处理静音帧."""
         self.silence_count += 1
         self.speech_count = 0
 
     def _reset_state(self):
-        """重置状态"""
+        """重置状态."""
         self.speech_count = 0
         self.silence_count = 0
         self.triggered = False
 
     def _trigger_interrupt(self):
-        """触发打断"""
+        """触发打断."""
         # 通知应用程序中止当前语音输出
         self.app.schedule(
             lambda: self.app.abort_speaking(AbortReason.WAKE_WORD_DETECTED)

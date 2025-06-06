@@ -9,22 +9,54 @@ from pathlib import Path
 from typing import Callable, Optional
 from urllib.parse import urlparse
 
-from PyQt5.QtCore import (Q_ARG, QEvent, QMetaObject, QObject,
-                          QPropertyAnimation, QRect, Qt, QThread, QTimer,
-                          pyqtSlot)
-from PyQt5.QtGui import (QBrush, QColor, QFont, QIcon, QLinearGradient,
-                         QMouseEvent, QMovie, QPainter, QPainterPath, QPen,
-                         QPixmap, QTransform)
-from PyQt5.QtWidgets import (QAction, QApplication, QCheckBox, QComboBox,
-                             QFrame, QGraphicsOpacityEffect, QGridLayout,
-                             QHBoxLayout, QLabel, QLineEdit, QMenu,
-                             QMessageBox, QPushButton, QScrollArea,
-                             QSizePolicy, QSlider, QStackedWidget, QStyle,
-                             QStyleOptionSlider, QSystemTrayIcon, QTabBar,
-                             QVBoxLayout, QWidget)
+from PyQt5.QtCore import (
+    Q_ARG,
+    QEvent,
+    QMetaObject,
+    QObject,
+    QPropertyAnimation,
+    Qt,
+    QThread,
+    QTimer,
+    pyqtSlot,
+)
+from PyQt5.QtGui import (
+    QBrush,
+    QColor,
+    QFont,
+    QIcon,
+    QMouseEvent,
+    QMovie,
+    QPainter,
+    QPixmap,
+)
+from PyQt5.QtWidgets import (
+    QAction,
+    QApplication,
+    QCheckBox,
+    QComboBox,
+    QFrame,
+    QGraphicsOpacityEffect,
+    QGridLayout,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QMenu,
+    QMessageBox,
+    QPushButton,
+    QScrollArea,
+    QSizePolicy,
+    QSlider,
+    QStackedWidget,
+    QStyle,
+    QStyleOptionSlider,
+    QSystemTrayIcon,
+    QTabBar,
+    QVBoxLayout,
+    QWidget,
+)
 
 from src.utils.config_manager import ConfigManager
-from src.utils.resource_finder import find_assets_dir, find_config_dir
 
 # 根据不同操作系统处理 pynput 导入
 try:
@@ -37,12 +69,9 @@ try:
 except ImportError:
     pynput_keyboard = None
 
-import json
 from abc import ABCMeta
 
 from src.display.base_display import BaseDisplay
-
-# ConfigManager 将在需要时动态获取
 
 
 def restart_program():
@@ -295,9 +324,7 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         if target_index == self.stackedWidget.currentIndex():
             return
 
-        current_widget = self.stackedWidget.currentWidget()
         self.stackedWidget.setCurrentIndex(target_index)
-        new_widget = self.stackedWidget.currentWidget()
 
         # 如果切换到设置页面，加载设置
         if routeKey == "settingInterface":
@@ -319,7 +346,7 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         abort_callback: Optional[Callable] = None,
         send_text_callback: Optional[Callable] = None,
     ):
-        """设置回调函数"""
+        """设置回调函数."""
         self.button_press_callback = press_callback
         self.button_release_callback = release_callback
         self.status_update_callback = status_callback
@@ -339,7 +366,7 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             app.on_state_changed_callbacks.append(self._on_state_changed)
 
     def _on_state_changed(self, state):
-        """监听设备状态变化"""
+        """监听设备状态变化."""
         # 设置连接状态标志
         from src.constants.constants import DeviceState
 
@@ -363,7 +390,7 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         # 更新状态的处理已经在 update_status 方法中完成
 
     def _process_updates(self):
-        """处理更新队列"""
+        """处理更新队列."""
         if not self._running:
             return
 
@@ -380,7 +407,7 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             self.logger.error(f"处理更新队列时发生错误: {e}")
 
     def _on_manual_button_press(self):
-        """手动模式按钮按下事件处理"""
+        """手动模式按钮按下事件处理."""
         try:
             # 更新按钮文本为"松开以停止"
             if self.manual_btn and self.manual_btn.isVisible():
@@ -393,7 +420,7 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             self.logger.error(f"按钮按下回调执行失败: {e}")
 
     def _on_manual_button_release(self):
-        """手动模式按钮释放事件处理"""
+        """手动模式按钮释放事件处理."""
         try:
             # 更新按钮文本为"按住后说话"
             if self.manual_btn and self.manual_btn.isVisible():
@@ -406,7 +433,7 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             self.logger.error(f"按钮释放回调执行失败: {e}")
 
     def _on_auto_button_click(self):
-        """自动模式按钮点击事件处理"""
+        """自动模式按钮点击事件处理."""
         try:
             if self.auto_callback:
                 self.auto_callback()
@@ -414,12 +441,12 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             self.logger.error(f"自动模式按钮回调执行失败: {e}")
 
     def _on_abort_button_click(self):
-        """处理中止按钮点击事件"""
+        """处理中止按钮点击事件."""
         if self.abort_callback:
             self.abort_callback()
 
     def _on_mode_button_click(self):
-        """对话模式切换按钮点击事件"""
+        """对话模式切换按钮点击事件."""
         try:
             # 检查是否可以切换模式（通过回调函数询问应用程序当前状态）
             if self.mode_callback:
@@ -448,13 +475,13 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             self.logger.error(f"模式切换按钮回调执行失败: {e}")
 
     def _switch_to_auto_mode(self):
-        """切换到自动模式的UI更新"""
+        """切换到自动模式的UI更新."""
         if self.manual_btn and self.auto_btn:
             self.manual_btn.hide()
             self.auto_btn.show()
 
     def _switch_to_manual_mode(self):
-        """切换到手动模式的UI更新"""
+        """切换到手动模式的UI更新."""
         if self.manual_btn and self.auto_btn:
             self.auto_btn.hide()
             self.manual_btn.show()
@@ -472,13 +499,13 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             self.update_queue.put(lambda: self._update_tray_icon(status))
 
     def update_text(self, text: str):
-        """更新TTS文本"""
+        """更新TTS文本."""
         self.update_queue.put(
             lambda: self._safe_update_label(self.tts_text_label, text)
         )
 
     def update_emotion(self, emotion_path: str):
-        """更新表情动画"""
+        """更新表情动画."""
         # 如果路径相同，不重复设置表情
         if (
             hasattr(self, "_last_emotion_path")
@@ -505,7 +532,7 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
     # 新增一个槽函数，用于在主线程中安全地更新表情
     @pyqtSlot(str)
     def _update_emotion_safely(self, emotion_path: str):
-        """在主线程中安全地更新表情，避免线程问题"""
+        """在主线程中安全地更新表情，避免线程问题."""
         if self.emotion_label:
             self.logger.info(f"设置表情GIF: {emotion_path}")
             try:
@@ -514,7 +541,7 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
                 self.logger.error(f"设置表情GIF时发生错误: {str(e)}")
 
     def _set_emotion_gif(self, label, gif_path):
-        """设置表情GIF动画，带渐变效果"""
+        """设置表情GIF动画，带渐变效果."""
         # 基础检查
         if not label or self.root.isHidden():
             return
@@ -591,7 +618,7 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             self.is_emotion_animating = False
 
     def _set_new_emotion_gif(self, label, gif_path):
-        """设置新的GIF动画并执行淡入效果"""
+        """设置新的GIF动画并执行淡入效果."""
         try:
             # 维护GIF缓存
             if not hasattr(self, "_gif_cache"):
@@ -678,7 +705,7 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
                 pass
 
     def _safe_update_label(self, label, text):
-        """安全地更新标签文本"""
+        """安全地更新标签文本."""
         if label and not self.root.isHidden():
             try:
                 label.setText(text)
@@ -686,7 +713,7 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
                 self.logger.error(f"更新标签失败: {e}")
 
     def start_update_threads(self):
-        """启动更新线程"""
+        """启动更新线程."""
         # 初始化表情缓存
         self.last_emotion_path = None
 
@@ -719,7 +746,7 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         threading.Thread(target=update_loop, daemon=True).start()
 
     def on_close(self):
-        """关闭窗口处理"""
+        """关闭窗口处理."""
         self._running = False
 
         # 确保在主线程中停止定时器
@@ -747,7 +774,7 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         self.stop_keyboard_listener()
 
     def start(self):
-        """启动GUI"""
+        """启动GUI."""
         try:
             # 确保QApplication实例在主线程中创建
             self.app = QApplication.instance()
@@ -787,8 +814,10 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
                     if main_layout:
                         # 创建快捷键提示标签
                         shortcut_label = QLabel(
-                            "快捷键：Alt+Shift+V (按住说话) | Alt+Shift+A (自动对话) | Alt+Shift+X (打断) | Alt+Shift+M (切换模式)"
+                            "快捷键：Alt+Shift+V (按住说话) | Alt+Shift+A (自动对话) | "
+                            "Alt+Shift+X (打断) | Alt+Shift+M (切换模式)"
                         )
+
                         shortcut_label.setStyleSheet(
                             """
                             font-size: 10px;
@@ -995,7 +1024,7 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             raise
 
     def _setup_tray_icon(self):
-        """设置系统托盘图标"""
+        """设置系统托盘图标."""
         try:
             # 检查系统是否支持系统托盘
             if not QSystemTrayIcon.isSystemTrayAvailable():
@@ -1036,7 +1065,7 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             self.logger.error(f"初始化系统托盘图标失败: {e}", exc_info=True)
 
     def _update_tray_icon(self, status):
-        """根据不同状态更新托盘图标颜色
+        """根据不同状态更新托盘图标颜色.
 
         绿色：已启动/待命状态
         黄色：聆听中状态
@@ -1072,7 +1101,7 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             self.logger.error(f"更新系统托盘图标失败: {e}")
 
     def _get_status_color(self, status):
-        """根据状态返回对应的颜色"""
+        """根据状态返回对应的颜色."""
         if not self.is_connected:
             return QColor(128, 128, 128)  # 灰色 - 未连接
 
@@ -1089,12 +1118,12 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             return QColor(0, 180, 0)  # 绿色 - 待命/已启动状态
 
     def _tray_icon_activated(self, reason):
-        """处理托盘图标点击事件"""
+        """处理托盘图标点击事件."""
         if reason == QSystemTrayIcon.Trigger:  # 单击
             self._show_main_window()
 
     def _show_main_window(self):
-        """显示主窗口"""
+        """显示主窗口."""
         if self.root:
             if self.root.isMinimized():
                 self.root.showNormal()
@@ -1104,7 +1133,7 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             self.root.raise_()
 
     def _quit_application(self):
-        """退出应用程序"""
+        """退出应用程序."""
         self._running = False
         # 停止所有线程和计时器
         if self.update_timer:
@@ -1124,7 +1153,7 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         QApplication.quit()
 
     def _closeEvent(self, event):
-        """处理窗口关闭事件"""
+        """处理窗口关闭事件."""
         # 最小化到系统托盘而不是退出
         if self.tray_icon and self.tray_icon.isVisible():
             self.root.hide()
@@ -1141,7 +1170,7 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             event.accept()
 
     def update_mode_button_status(self, text: str):
-        """更新模式按钮状态"""
+        """更新模式按钮状态."""
         self.update_queue.put(lambda: self._safe_update_button(self.mode_btn, text))
 
     def update_button_status(self, text: str):
@@ -1155,7 +1184,7 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             pass
 
     def _safe_update_button(self, button, text):
-        """安全地更新按钮文本"""
+        """安全地更新按钮文本."""
         if button and not self.root.isHidden():
             try:
                 button.setText(text)
@@ -1163,7 +1192,7 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
                 self.logger.error(f"更新按钮失败: {e}")
 
     def _on_volume_change(self, value):
-        """处理音量滑块变化，使用节流"""
+        """处理音量滑块变化，使用节流."""
 
         def update_volume():
             self.update_volume(value)
@@ -1183,7 +1212,7 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         self.volume_update_timer.start(300)
 
     def update_volume(self, volume: int):
-        """重写父类的update_volume方法，确保UI同步更新"""
+        """重写父类的update_volume方法，确保UI同步更新."""
         # 检查音量控制是否可用
         if not self.volume_control_available or self.volume_controller_failed:
             return
@@ -1202,11 +1231,11 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
                 self.logger.error(f"更新音量UI失败: {e}")
 
     def is_combo(self, *keys):
-        """判断是否同时按下了一组按键"""
+        """判断是否同时按下了一组按键."""
         return all(k in self.pressed_keys for k in keys)
 
     def start_keyboard_listener(self):
-        """启动键盘监听"""
+        """启动键盘监听."""
         # 如果 pynput 不可用，记录警告并返回
         if pynput_keyboard is None:
             self.logger.warning(
@@ -1299,7 +1328,7 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             self.logger.error(f"键盘监听器初始化失败: {e}")
 
     def stop_keyboard_listener(self):
-        """停止键盘监听"""
+        """停止键盘监听."""
         if self.keyboard_listener:
             try:
                 self.keyboard_listener.stop()
@@ -1309,7 +1338,7 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
                 self.logger.error(f"停止键盘监听器失败: {e}")
 
     def mousePressEvent(self, event: QMouseEvent):
-        """鼠标按下事件处理"""
+        """鼠标按下事件处理."""
         if event.button() == Qt.LeftButton:
             self.last_mouse_pos = event.pos()
 
@@ -1653,7 +1682,7 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             QMessageBox.critical(self.root, "错误", f"保存设置失败: {e}")
 
     def _on_add_ha_devices_click(self):
-        """处理添加Home Assistant设备按钮点击事件"""
+        """处理添加Home Assistant设备按钮点击事件."""
         try:
             self.logger.info("启动Home Assistant设备管理器...")
 
@@ -1681,7 +1710,7 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             QMessageBox.critical(self.root, "错误", f"启动设备管理器失败: {e}")
 
     def _on_send_button_click(self):
-        """处理发送文本按钮点击事件"""
+        """处理发送文本按钮点击事件."""
         if not self.text_input or not self.send_text_callback:
             return
 
@@ -1704,7 +1733,7 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             self.logger.error("应用程序实例或事件循环不可用")
 
     def _load_iot_devices(self):
-        """加载并显示Home Assistant设备列表"""
+        """加载并显示Home Assistant设备列表."""
         try:
             # 先清空现有设备列表
             if hasattr(self, "devices_list") and self.devices_list:
@@ -1980,7 +2009,7 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
                 self.logger.error(f"恢复界面失败: {e2}", exc_info=True)
 
     def _update_device_states(self):
-        """更新Home Assistant设备状态"""
+        """更新Home Assistant设备状态."""
         # 检查当前是否在IOT界面
         if not self.stackedWidget or self.stackedWidget.currentIndex() != 1:
             return
@@ -2007,7 +2036,7 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             self.logger.error(f"更新Home Assistant设备状态失败: {e}", exc_info=True)
 
     def _fetch_device_state(self, ha_url, ha_token, entity_id, label):
-        """获取单个设备的状态"""
+        """获取单个设备的状态."""
         import requests
 
         try:
@@ -2041,14 +2070,14 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             self.logger.error(f"处理设备状态时出错: {e}")
 
     def _update_device_ui(self, entity_id, state, label):
-        """更新设备UI显示"""
+        """更新设备UI显示."""
         # 在主线程中执行UI更新
         self.update_queue.put(
             lambda: self._safe_update_device_label(entity_id, state, label)
         )
 
     def _safe_update_device_label(self, entity_id, state, label):
-        """安全地更新设备状态标签"""
+        """安全地更新设备状态标签."""
         if not label or self.root.isHidden():
             return
 

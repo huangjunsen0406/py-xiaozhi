@@ -1,15 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-# 文件名: detect_audio_devices.py
-
-import time
-
-import numpy as np
 import pyaudio
 
 
 def detect_audio_devices():
-    """检测并列出所有音频设备"""
+    """检测并列出所有音频设备."""
     p = pyaudio.PyAudio()
 
     print("\n===== 音频设备检测 =====\n")
@@ -89,27 +84,28 @@ def detect_audio_devices():
     print("\n===== PyAudio配置示例 =====\n")
 
     if recommended_mic:
-        print(f"# 麦克风初始化代码")
+        print("# 麦克风初始化代码")
         print(f"input_device_index = {recommended_mic[0]}  # {recommended_mic[1]}")
-        print(f"input_stream = p.open(")
-        print(f"    format=pyaudio.paInt16,")
-        print(f"    channels=1,")
-        print(f"    rate=16000,")
-        print(f"    input=True,")
-        print(f"    frames_per_buffer=1024,")
-        print(f"    input_device_index={recommended_mic[0]})")
+        print("input_stream = p.open(")
+        print("    format=pyaudio.paInt16,")
+        print("    channels=1,")
+        print("    rate=16000,")
+        print("    input=True,")
+        print("    frames_per_buffer=1024,")
+        print("    input_device_index={recommended_mic[0]})")
 
     if recommended_speaker:
-        print(f"\n# 扬声器初始化代码")
+        print("\n# 扬声器初始化代码")
         print(
-            f"output_device_index = {recommended_speaker[0]}  # {recommended_speaker[1]}"
+            f"output_device_index = {recommended_speaker[0]}  # "
+            f"{recommended_speaker[1]}"
         )
-        print(f"output_stream = p.open(")
-        print(f"    format=pyaudio.paInt16,")
-        print(f"    channels=1,")
-        print(f"    rate=44100,")
-        print(f"    output=True,")
-        print(f"    frames_per_buffer=1024,")
+        print("output_stream = p.open(")
+        print("    format=pyaudio.paInt16,")
+        print("    channels=1,")
+        print("    rate=44100,")
+        print("    output=True,")
+        print("    frames_per_buffer=1024,")
         print(f"    output_device_index={recommended_speaker[0]})")
 
     p.terminate()

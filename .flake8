@@ -1,0 +1,6 @@
+[flake8]
+max-line-length = 88
+extend-ignore = D100,D104,D401,E203,W503,D400,I001
+exclude = .git,__pycache__,.venv,build,dist
+import-order-style = google
+application-import-names = py_xiaozhi

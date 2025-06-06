@@ -1,7 +1,6 @@
 import json
 import logging
 import threading
-import time
 
 from src.iot.thing import Parameter, Thing
 from src.iot.thing_manager import ThingManager
@@ -10,9 +9,7 @@ logger = logging.getLogger(__name__)
 
 
 class CountdownTimer(Thing):
-    """
-    一个用于延迟执行命令的倒计时器设备。
-    """
+    """一个用于延迟执行命令的倒计时器设备。"""
 
     DEFAULT_DELAY = 5  # seconds
 
@@ -24,7 +21,7 @@ class CountdownTimer(Thing):
         # 使用锁来保护对 _timers 和 _next_timer_id 的访问，确保线程安全
         self._lock = threading.Lock()
 
-        print(f"[虚拟设备] 倒计时器设备初始化完成")
+        print("[虚拟设备] 倒计时器设备初始化完成")
 
         # 定义方法 - 使用 Parameter 对象
         self.add_method(
@@ -81,7 +78,7 @@ class CountdownTimer(Thing):
             # 同上
 
     def _start_countdown(self, params_dict):
-        """处理 StartCountdown 方法调用。注意: params 现在是 Parameter 对象的字典"""
+        """处理 StartCountdown 方法调用。注意: params 现在是 Parameter 对象的字典."""
         # 从 Parameter 对象字典中获取值
         command_param = params_dict.get("command")
         delay_param = params_dict.get("delay")
@@ -142,7 +139,7 @@ class CountdownTimer(Thing):
         }
 
     def _cancel_countdown(self, params_dict):
-        """处理 CancelCountdown 方法调用。注意: params 现在是 Parameter 对象的字典"""
+        """处理 CancelCountdown 方法调用。注意: params 现在是 Parameter 对象的字典."""
         timer_id_param = params_dict.get("timer_id")
         timer_id = timer_id_param.get_value() if timer_id_param else None
 

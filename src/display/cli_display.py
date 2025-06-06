@@ -24,7 +24,7 @@ from src.utils.logging_config import get_logger
 class CliDisplay(BaseDisplay):
     def __init__(self):
         super().__init__()  # 调用父类初始化
-        """初始化CLI显示"""
+        """初始化CLI显示."""
         self.logger = get_logger(__name__)
         self.running = True
 
@@ -70,7 +70,7 @@ class CliDisplay(BaseDisplay):
         abort_callback: Optional[Callable] = None,
         send_text_callback: Optional[Callable] = None,
     ):
-        """设置回调函数"""
+        """设置回调函数."""
         self.status_callback = status_callback
         self.text_callback = text_callback
         self.emotion_callback = emotion_callback
@@ -79,17 +79,17 @@ class CliDisplay(BaseDisplay):
         self.send_text_callback = send_text_callback
 
     def update_button_status(self, text: str):
-        """更新按钮状态"""
+        """更新按钮状态."""
         print(f"按钮状态: {text}")
 
     def update_status(self, status: str):
-        """更新状态文本"""
+        """更新状态文本."""
         if status != self.current_status:
             self.current_status = status
             self._print_current_status()
 
     def update_text(self, text: str):
-        """更新TTS文本"""
+        """更新TTS文本."""
         if text != self.current_text:
             self.current_text = text
             self._print_current_status()
@@ -112,11 +112,11 @@ class CliDisplay(BaseDisplay):
             self._print_current_status()
 
     def is_combo(self, *keys):
-        """判断是否同时按下了一组按键"""
+        """判断是否同时按下了一组按键."""
         return all(k in self.pressed_keys for k in keys)
 
     def start_keyboard_listener(self):
-        """启动键盘监听"""
+        """启动键盘监听."""
         # 如果 pynput 不可用，记录警告并返回
         if pynput_keyboard is None:
             self.logger.warning(
@@ -181,7 +181,7 @@ class CliDisplay(BaseDisplay):
             self.logger.error(f"键盘监听器初始化失败: {e}")
 
     def stop_keyboard_listener(self):
-        """停止键盘监听"""
+        """停止键盘监听."""
         if self.keyboard_listener:
             try:
                 self.keyboard_listener.stop()
@@ -191,7 +191,7 @@ class CliDisplay(BaseDisplay):
                 self.logger.error(f"停止键盘监听器失败: {e}")
 
     def start(self):
-        """启动CLI显示"""
+        """启动CLI显示."""
         self._print_help()
 
         # 启动状态更新线程
@@ -213,13 +213,13 @@ class CliDisplay(BaseDisplay):
             self.on_close()
 
     def on_close(self):
-        """关闭CLI显示"""
+        """关闭CLI显示."""
         self.running = False
         print("\n正在关闭应用...")
         self.stop_keyboard_listener()
 
     def _print_help(self):
-        """打印帮助信息"""
+        """打印帮助信息."""
         print("\n=== 小智Ai命令行控制 ===")
         print("可用命令：")
         print("  r     - 开始/停止对话")
@@ -234,7 +234,7 @@ class CliDisplay(BaseDisplay):
         print("=====================\n")
 
     def _keyboard_listener(self):
-        """键盘监听线程"""
+        """键盘监听线程."""
         try:
             while self.running:
                 cmd = input().lower().strip()
@@ -277,7 +277,7 @@ class CliDisplay(BaseDisplay):
             self.logger.error(f"键盘监听错误: {e}")
 
     def start_update_threads(self):
-        """启动更新线程"""
+        """启动更新线程."""
 
         def update_loop():
             while self.running:
@@ -308,7 +308,7 @@ class CliDisplay(BaseDisplay):
         threading.Thread(target=update_loop, daemon=True).start()
 
     def _print_current_status(self):
-        """打印当前状态"""
+        """打印当前状态."""
         # 检查是否有状态变化
         status_changed = (
             self.current_status != self.last_status

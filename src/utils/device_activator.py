@@ -1,11 +1,5 @@
-import asyncio
-import hashlib
-import hmac
 import json
-import threading
 import time
-import uuid
-from pathlib import Path
 
 import requests
 
@@ -20,7 +14,7 @@ class DeviceActivator:
     """设备激活管理器 - 与ConfigManager配合使用"""
 
     def __init__(self, config_manager):
-        """初始化设备激活器"""
+        """初始化设备激活器."""
         self.logger = get_logger(__name__)
         self.config_manager = config_manager
         # 使用device_fingerprint实例来管理设备身份
@@ -29,7 +23,7 @@ class DeviceActivator:
         self._ensure_device_identity()
 
     def _ensure_device_identity(self):
-        """确保设备身份信息已创建"""
+        """确保设备身份信息已创建."""
         serial_number, hmac_key, is_activated = (
             self.device_fingerprint.ensure_device_identity()
         )
@@ -38,40 +32,39 @@ class DeviceActivator:
         )
 
     def has_serial_number(self) -> bool:
-        """检查是否有序列号"""
+        """检查是否有序列号."""
         return self.device_fingerprint.has_serial_number()
 
     def get_serial_number(self) -> str:
-        """获取序列号"""
+        """获取序列号."""
         return self.device_fingerprint.get_serial_number()
 
     def burn_serial_number(self, serial_number: str) -> bool:
-        """烧录序列号到模拟efuse"""
+        """烧录序列号到模拟efuse."""
         return self.device_fingerprint.burn_serial_number(serial_number)
 
     def burn_hmac_key(self, hmac_key: str) -> bool:
-        """烧录HMAC密钥到模拟efuse"""
+        """烧录HMAC密钥到模拟efuse."""
         return self.device_fingerprint.burn_hmac_key(hmac_key)
 
     def get_hmac_key(self) -> str:
-        """获取HMAC密钥"""
+        """获取HMAC密钥."""
         return self.device_fingerprint.get_hmac_key()
 
     def set_activation_status(self, status: bool) -> bool:
-        """设置激活状态"""
+        """设置激活状态."""
         return self.device_fingerprint.set_activation_status(status)
 
     def is_activated(self) -> bool:
-        """检查设备是否已激活"""
+        """检查设备是否已激活."""
         return self.device_fingerprint.is_activated()
 
     def generate_hmac(self, challenge: str) -> str:
-        """使用HMAC密钥生成签名"""
+        """使用HMAC密钥生成签名."""
         return self.device_fingerprint.generate_hmac(challenge)
 
     def process_activation(self, activation_data: dict) -> bool:
-        """
-        处理激活流程
+        """处理激活流程.
 
         Args:
             activation_data: 包含激活信息的字典，至少应该包含challenge和code
@@ -136,8 +129,7 @@ class DeviceActivator:
         return self.activate(challenge)
 
     def activate(self, challenge: str) -> bool:
-        """
-        执行激活流程
+        """执行激活流程.
 
         Args:
             challenge: 服务器发送的挑战字符串

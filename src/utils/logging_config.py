@@ -1,13 +1,11 @@
 import logging
-import os
 from logging.handlers import TimedRotatingFileHandler
-from pathlib import Path
 
 from colorlog import ColoredFormatter
 
 
 def setup_logging():
-    """配置日志系统"""
+    """配置日志系统."""
     from .resource_finder import get_project_root
 
     # 使用resource_finder获取项目根目录并创建logs目录
@@ -74,8 +72,7 @@ def setup_logging():
 
 
 def get_logger(name):
-    """
-    获取统一配置的日志记录器
+    """获取统一配置的日志记录器.
 
     Args:
         name: 日志记录器名称，通常是模块名
@@ -92,7 +89,7 @@ def get_logger(name):
 
     # 添加一些辅助方法
     def log_error_with_exc(msg, *args, **kwargs):
-        """记录错误并自动包含异常堆栈"""
+        """记录错误并自动包含异常堆栈."""
         kwargs["exc_info"] = True
         logger.error(msg, *args, **kwargs)
 

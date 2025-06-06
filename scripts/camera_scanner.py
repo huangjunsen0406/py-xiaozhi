@@ -10,12 +10,12 @@ from pathlib import Path
 
 import cv2
 
+# 导入ConfigManager类
+from src.utils.config_manager import ConfigManager
+
 # 添加项目根目录到系统路径，以便导入src中的模块
 project_root = Path(__file__).parent.parent
 sys.path.append(str(project_root))
-
-# 导入ConfigManager类
-from src.utils.config_manager import ConfigManager
 
 # 设置日志记录
 logging.basicConfig(
@@ -25,7 +25,7 @@ logger = logging.getLogger("CameraScanner")
 
 
 def get_camera_capabilities(cam):
-    """获取摄像头的参数和能力"""
+    """获取摄像头的参数和能力."""
     capabilities = {}
 
     # 获取可用的分辨率
@@ -76,7 +76,7 @@ def get_camera_capabilities(cam):
 
 
 def detect_cameras():
-    """检测并列出所有可用摄像头"""
+    """检测并列出所有可用摄像头."""
     print("\n===== 摄像头设备检测 =====\n")
 
     # 获取ConfigManager实例
@@ -105,7 +105,6 @@ def detect_cameras():
                     device_name = cap.getBackendName() + f" Camera {i}"
                 except Exception as e:
                     logger.warning(f"获取设备{i}名称失败: {e}")
-                    pass
 
                 # 读取一帧以确保摄像头正常工作
                 ret, frame = cap.read()

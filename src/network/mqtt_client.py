@@ -16,8 +16,7 @@ class MqttClient:
         on_publish=None,
         on_disconnect=None,
     ):
-        """
-        初始化 MqttClient 实例。
+        """初始化 MqttClient 实例。
 
         :param server: MQTT 服务器地址
         :param port: MQTT 服务器端口

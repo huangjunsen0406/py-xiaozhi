@@ -60,7 +60,7 @@ class AudioCodec:
             raise
 
     def _create_stream(self, is_input=True):
-        """流创建逻辑"""
+        """流创建逻辑."""
         params = {
             "format": pyaudio.paInt16,
             "channels": AudioConfig.CHANNELS,
@@ -81,7 +81,7 @@ class AudioCodec:
         return self.audio.open(**params)
 
     def _reinitialize_stream(self, is_input=True):
-        """通用流重建方法"""
+        """通用流重建方法."""
         if self._is_closing:
             return False if is_input else None
 
@@ -277,7 +277,7 @@ class AudioCodec:
         # 移除冗余的状态重置
 
     def write_audio(self, opus_data):
-        """将Opus数据写入播放队列，处理队列满的情况"""
+        """将Opus数据写入播放队列，处理队列满的情况."""
         try:
             # 非阻塞方式放入队列
             self.audio_decode_queue.put_nowait(opus_data)

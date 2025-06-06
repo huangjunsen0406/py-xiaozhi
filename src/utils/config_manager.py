@@ -1,7 +1,5 @@
 import json
-import logging
 import socket
-import sys
 import threading
 import time
 import uuid
@@ -84,13 +82,13 @@ class ConfigManager:
     }
 
     def __new__(cls):
-        """确保单例模式"""
+        """确保单例模式."""
         if cls._instance is None:
             cls._instance = super().__new__(cls)
         return cls._instance
 
     def __init__(self):
-        """初始化配置管理器"""
+        """初始化配置管理器."""
         self.logger = logger
         if hasattr(self, "_initialized"):
             return
@@ -105,7 +103,7 @@ class ConfigManager:
         # self._initialize_mqtt_info()
 
     def _load_config(self) -> Dict[str, Any]:
-        """加载配置文件，如果不存在则创建"""
+        """加载配置文件，如果不存在则创建."""
         try:
             # 使用 resource_finder 查找配置文件
             config_file_path = find_file("config/config.json")
@@ -128,7 +126,7 @@ class ConfigManager:
             return self.DEFAULT_CONFIG.copy()
 
     def _save_config(self, config: dict) -> bool:
-        """保存配置到文件"""
+        """保存配置到文件."""
         try:
             if self.CONFIG_DIR and self.CONFIG_FILE:
                 self.CONFIG_DIR.mkdir(parents=True, exist_ok=True)
@@ -145,7 +143,7 @@ class ConfigManager:
 
     @staticmethod
     def _merge_configs(default: dict, custom: dict) -> dict:
-        """递归合并配置字典"""
+        """递归合并配置字典."""
         result = default.copy()
         for key, value in custom.items():
             if (
@@ -196,9 +194,7 @@ class ConfigManager:
         return cls._instance
 
     def generate_uuid(self) -> str:
-        """
-        生成 UUID v4
-        """
+        """生成 UUID v4."""
         # 方法1：使用 Python 的 uuid 模块
         return str(uuid.uuid4())
 
@@ -214,7 +210,7 @@ class ConfigManager:
             return "127.0.0.1"
 
     def _initialize_client_id(self):
-        """确保存在客户端ID"""
+        """确保存在客户端ID."""
         if not self.get_config("SYSTEM_OPTIONS.CLIENT_ID"):
             client_id = self.generate_uuid()
             success = self.update_config("SYSTEM_OPTIONS.CLIENT_ID", client_id)
@@ -224,7 +220,7 @@ class ConfigManager:
                 logger.error("Failed to save new CLIENT_ID")
 
     def _initialize_device_id(self):
-        """确保存在设备ID"""
+        """确保存在设备ID."""
         if not self.get_config("SYSTEM_OPTIONS.DEVICE_ID"):
             try:
                 device_hash = self.device_fingerprint.generate_fingerprint().get(
@@ -239,9 +235,7 @@ class ConfigManager:
                 logger.error(f"Error generating DEVICE_ID: {e}")
 
     def _initialize_mqtt_info(self):
-        """
-        初始化MQTT信息
-        每次启动都重新获取最新的MQTT配置信息
+        """初始化MQTT信息 每次启动都重新获取最新的MQTT配置信息.
 
         Returns:
             dict: MQTT配置信息，获取失败则返回已保存的配置
@@ -278,12 +272,6 @@ class ConfigManager:
                     "SYSTEM_OPTIONS.NETWORK.WEBSOCKET_ACCESS_TOKEN", token_value
                 )
                 self.logger.info("WebSocket Token已更新")
-
-                print("\nWebSocket配置信息:")
-                print(f"URL: {self.get_config('SYSTEM_OPTIONS.NETWORK.WEBSOCKET_URL')}")
-                print(
-                    f"Token: {self.get_config('SYSTEM_OPTIONS.NETWORK.WEBSOCKET_ACCESS_TOKEN')[:10]}..."
-                )
 
             # 确定使用哪个版本的激活协议
             if activation_version_setting in ["v1", "1"]:
@@ -343,7 +331,7 @@ class ConfigManager:
                 return self.get_config("SYSTEM_OPTIONS.NETWORK.MQTT_INFO")
 
     def _get_ota_version(self):
-        """获取OTA服务器的MQTT信息"""
+        """获取OTA服务器的MQTT信息."""
         MAC_ADDR = self.get_config("SYSTEM_OPTIONS.DEVICE_ID")
         OTA_VERSION_URL = self.get_config("SYSTEM_OPTIONS.NETWORK.OTA_VERSION_URL")
 

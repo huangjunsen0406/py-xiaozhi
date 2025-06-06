@@ -1,5 +1,4 @@
-"""
-WebRTC回声消除(AEC)演示脚本
+"""WebRTC回声消除(AEC)演示脚本.
 
 该脚本用于演示WebRTC APM库的回声消除功能:
 1. 播放指定的音频文件(作为参考信号)
@@ -20,8 +19,7 @@ import sys
 import threading
 import time
 import wave
-from ctypes import (POINTER, Structure, byref, c_bool, c_float, c_int, c_short,
-                    c_void_p)
+from ctypes import POINTER, Structure, byref, c_bool, c_float, c_int, c_short, c_void_p
 
 import numpy as np
 import pyaudio
@@ -386,7 +384,7 @@ def record_playback_audio(chunk_size, sample_rate, channels):
 
 
 def aec_demo(audio_file):
-    """WebRTC回声消除演示主函数"""
+    """WebRTC回声消除演示主函数."""
     # 检查音频文件是否存在
     if not os.path.exists(audio_file):
         print(f"错误: 找不到音频文件 {audio_file}")
@@ -621,7 +619,7 @@ def aec_demo(audio_file):
 
 
 def save_wav(file_path, frames, sample_rate, channels):
-    """将音频帧保存为WAV文件"""
+    """将音频帧保存为WAV文件."""
     with wave.open(file_path, "wb") as wf:
         wf.setnchannels(channels)
         wf.setsampwidth(2)  # 2字节(16位)
