@@ -4,7 +4,6 @@ import platform
 import sys
 import threading
 import time
-from pathlib import Path
 
 from src.constants.constants import (
     AbortReason,
@@ -22,6 +21,7 @@ from src.utils.logging_config import get_logger
 
 # 在导入 opuslib 之前处理 opus 动态库
 from src.utils.opus_loader import setup_opus
+from src.utils.resource_finder import find_assets_dir
 
 setup_opus()
 
@@ -639,52 +639,55 @@ class Application:
         # 根据状态执行相应操作
         if state == DeviceState.IDLE:
             self.display.update_status("待命")
-            # self.display.update_emotion("😶")
             self.set_emotion("neutral")
-            # 恢复唤醒词检测（添加安全检查）
-            if (
-                self.wake_word_detector
-                and hasattr(self.wake_word_detector, "paused")
-                and self.wake_word_detector.paused
-            ):
-                self.wake_word_detector.resume()
-                logger.info("唤醒词检测已恢复")
-            # 恢复音频输入流
-            if self.audio_codec and self.audio_codec.is_input_paused():
-                self.audio_codec.resume_input()
+            self._manage_wake_word_detector("resume")
+            self._manage_audio_input("resume")
         elif state == DeviceState.CONNECTING:
             self.display.update_status("连接中...")
         elif state == DeviceState.LISTENING:
             self.display.update_status("聆听中...")
             self.set_emotion("neutral")
             self._update_iot_states(True)
-            # 暂停唤醒词检测（添加安全检查）
-            if (
-                self.wake_word_detector
-                and hasattr(self.wake_word_detector, "is_running")
-                and self.wake_word_detector.is_running()
-            ):
-                self.wake_word_detector.pause()
-                logger.info("唤醒词检测已暂停")
-            # 确保音频输入流活跃
-            if self.audio_codec:
-                if self.audio_codec.is_input_paused():
-                    self.audio_codec.resume_input()
+            self._manage_wake_word_detector("pause")
+            self._manage_audio_input("resume")
         elif state == DeviceState.SPEAKING:
             self.display.update_status("说话中...")
-            if (
-                self.wake_word_detector
-                and hasattr(self.wake_word_detector, "paused")
-                and self.wake_word_detector.paused
-            ):
-                self.wake_word_detector.resume()
+            self._manage_wake_word_detector("resume")
 
         # 通知状态变化
-        for callback in self.on_state_changed_callbacks:
+        for i, callback in enumerate(self.on_state_changed_callbacks):
             try:
                 callback(state)
             except Exception as e:
-                logger.error(f"执行状态变化回调时出错: {e}")
+                logger.error(
+                    f"执行状态变化回调时出错 [回调{i+1}/{len(self.on_state_changed_callbacks)}] "
+                    f"状态: {state} -> 错误: {e}",
+                    exc_info=True
+                )
+
+    def _manage_wake_word_detector(self, action):
+        """管理唤醒词检测器的暂停/恢复状态."""
+        if not self.wake_word_detector:
+            return
+            
+        if (action == "pause" 
+                and hasattr(self.wake_word_detector, "is_running") 
+                and self.wake_word_detector.is_running()):
+            self.wake_word_detector.pause()
+            logger.info("唤醒词检测已暂停")
+        elif (action == "resume" 
+                and hasattr(self.wake_word_detector, "paused") 
+                and self.wake_word_detector.paused):
+            self.wake_word_detector.resume()
+            logger.info("唤醒词检测已恢复")
+
+    def _manage_audio_input(self, action):
+        """管理音频输入流的状态."""
+        if not self.audio_codec:
+            return
+            
+        if action == "resume" and self.audio_codec.is_input_paused():
+            self.audio_codec.resume_input()
 
     def _get_status_text(self):
         """获取当前状态文本."""
@@ -702,58 +705,35 @@ class Application:
 
     def _get_current_emotion(self):
         """获取当前表情."""
-        # 如果表情没有变化，直接返回缓存的路径
-        if (
-            hasattr(self, "_last_emotion")
-            and self._last_emotion == self.current_emotion
-        ):
+        # 简化缓存逻辑
+        if getattr(self, '_last_emotion', None) == self.current_emotion:
+            return getattr(self, '_last_emotion_path', None)
+    
+        assets_dir = find_assets_dir()
+        if not assets_dir:
+            logger.error("无法找到assets目录")
+            # 降级到默认表情符号
+            self._last_emotion = self.current_emotion
+            self._last_emotion_path = "😊"
             return self._last_emotion_path
-
-        # 获取基础路径
-        if getattr(sys, "frozen", False):
-            # 打包环境
-            if hasattr(sys, "_MEIPASS"):
-                base_path = Path(sys._MEIPASS)
-            else:
-                base_path = Path(sys.executable).parent
-        else:
-            # 开发环境
-            base_path = Path(__file__).parent.parent
-
-        emotion_dir = base_path / "assets" / "emojis"
-
-        emotions = {
-            "neutral": str(emotion_dir / "neutral.gif"),
-            "happy": str(emotion_dir / "happy.gif"),
-            "laughing": str(emotion_dir / "laughing.gif"),
-            "funny": str(emotion_dir / "funny.gif"),
-            "sad": str(emotion_dir / "sad.gif"),
-            "angry": str(emotion_dir / "angry.gif"),
-            "crying": str(emotion_dir / "crying.gif"),
-            "loving": str(emotion_dir / "loving.gif"),
-            "embarrassed": str(emotion_dir / "embarrassed.gif"),
-            "surprised": str(emotion_dir / "surprised.gif"),
-            "shocked": str(emotion_dir / "shocked.gif"),
-            "thinking": str(emotion_dir / "thinking.gif"),
-            "winking": str(emotion_dir / "winking.gif"),
-            "cool": str(emotion_dir / "cool.gif"),
-            "relaxed": str(emotion_dir / "relaxed.gif"),
-            "delicious": str(emotion_dir / "delicious.gif"),
-            "kissy": str(emotion_dir / "kissy.gif"),
-            "confident": str(emotion_dir / "confident.gif"),
-            "sleepy": str(emotion_dir / "sleepy.gif"),
-            "silly": str(emotion_dir / "silly.gif"),
-            "confused": str(emotion_dir / "confused.gif"),
-        }
-
-        # 保存当前表情和对应的路径
+                
+        emotion_dir = assets_dir / "emojis"
+        emotion_path = str(emotion_dir / f"{self.current_emotion}.gif")
+        
+        # 如果表情文件不存在，使用默认表情
+        if not (emotion_dir / f"{self.current_emotion}.gif").exists():
+            emotion_path = str(emotion_dir / "neutral.gif")
+            # 如果连默认表情也不存在，降级到表情符号
+            if not (emotion_dir / "neutral.gif").exists():
+                logger.warning(f"表情文件不存在: {emotion_dir}")
+                emotion_path = "😊"
+    
+        # 更新缓存
         self._last_emotion = self.current_emotion
-        self._last_emotion_path = emotions.get(
-            self.current_emotion, str(emotion_dir / "neutral.gif")
-        )
-
-        logger.debug(f"表情路径: {self._last_emotion_path}")
-        return self._last_emotion_path
+        self._last_emotion_path = emotion_path
+        
+        logger.debug(f"表情路径: {emotion_path}")
+        return emotion_path
 
     def set_chat_message(self, role, message):
         """设置聊天消息."""
