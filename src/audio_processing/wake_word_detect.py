@@ -142,13 +142,14 @@ class WakeWordDetector:
 
         # 设置音频源
         if audio_codec_or_stream:
+            # 检查是否是SoundDevice流对象
             if hasattr(audio_codec_or_stream, "read") and hasattr(
-                audio_codec_or_stream, "is_active"
+                audio_codec_or_stream, "active"
             ):
-                # 外部流
+                # SoundDevice流对象
                 self.stream = audio_codec_or_stream
                 self.external_stream = True
-                return self._start_detection_thread("ExternalStream")
+                return self._start_detection_thread("SoundDeviceStream")
             else:
                 # AudioCodec对象
                 self.audio_codec = audio_codec_or_stream
@@ -157,18 +158,28 @@ class WakeWordDetector:
         if self.audio_codec:
             return self._start_with_audio_codec()
 
-        logger.error("需要AudioCodec实例或外部音频流")
+        logger.error("需要AudioCodec实例或SoundDevice音频流")
         return False
 
     def _start_with_audio_codec(self):
         """使用AudioCodec启动."""
-        if not self.audio_codec or not hasattr(self.audio_codec, "input_stream"):
-            logger.error("AudioCodec无效或输入流不可用")
+        if not self.audio_codec:
+            logger.error("AudioCodec无效")
             return False
 
-        self.stream = self.audio_codec.input_stream
-        self.external_stream = True
-        return self._start_detection_thread("AudioCodec")
+        # SoundDevice AudioCodec优先使用缓冲区模式
+        if hasattr(self.audio_codec, "_input_buffer"):
+            logger.info("使用SoundDevice AudioCodec缓冲区模式")
+            return self._start_detection_thread("AudioCodecBuffer")
+        elif hasattr(self.audio_codec, "input_stream"):
+            # 后备模式：直接访问SoundDevice流
+            self.stream = self.audio_codec.input_stream
+            self.external_stream = True
+            logger.info("使用SoundDevice AudioCodec流模式")
+            return self._start_detection_thread("AudioCodecStream")
+        else:
+            logger.error("AudioCodec不支持，需要SoundDevice版本")
+            return False
 
     def _start_detection_thread(self, mode_name):
         """启动检测线程."""
@@ -223,33 +234,41 @@ class WakeWordDetector:
     def _get_active_stream(self):
         """获取活跃的音频流."""
         if self.audio_codec:
-            if not hasattr(self.audio_codec, "input_stream"):
-                return None
-            stream = self.audio_codec.input_stream
-            if stream and stream.is_active():
-                return stream
-            # 尝试重新激活
-            if stream and hasattr(stream, "start_stream"):
-                try:
-                    stream.start_stream()
-                    return stream if stream.is_active() else None
-                except Exception:
-                    pass
+            # 优先使用SoundDevice AudioCodec缓冲区模式
+            if hasattr(self.audio_codec, "_input_buffer"):
+                return "buffer_mode"
+            
+            # 后备：检查SoundDevice流
+            if hasattr(self.audio_codec, "input_stream"):
+                stream = self.audio_codec.input_stream
+                if stream and hasattr(stream, "active") and stream.active:
+                    return stream
             return None
 
-        return self.stream if self.stream and self.stream.is_active() else None
+        # 外部SoundDevice流
+        if self.stream and hasattr(self.stream, "active") and self.stream.active:
+            return self.stream
+        return None
 
     def _read_audio_data(self, stream):
         """读取音频数据."""
         try:
-            with self.stream_lock:
-                # 检查可用数据
-                if hasattr(stream, "get_read_available"):
-                    if stream.get_read_available() < self.buffer_size:
-                        return None
-                return stream.read(self.buffer_size, exception_on_overflow=False)
+            # 缓冲区模式（推荐模式）
+            if stream == "buffer_mode":
+                return self._read_from_audio_codec_buffer()
+            
+            # SoundDevice流直接读取模式
+            if hasattr(stream, "active"):
+                with self.stream_lock:
+                    return stream.read(
+                        self.buffer_size, 
+                        exception_on_overflow=False
+                    )
+            
+            return None
+                    
         except OSError as e:
-            # 处理关键错误
+            # 处理音频设备错误
             error_msg = str(e)
             if (
                 any(
@@ -257,6 +276,7 @@ class WakeWordDetector:
                     for msg in ["Input overflowed", "Device unavailable"]
                 )
                 and self.audio_codec
+                and hasattr(self.audio_codec, "_reinitialize_stream")
             ):
                 try:
                     self.audio_codec._reinitialize_stream(is_input=True)
@@ -264,6 +284,32 @@ class WakeWordDetector:
                     pass
             return None
         except Exception:
+            return None
+
+    def _read_from_audio_codec_buffer(self):
+        """从AudioCodec的输入缓冲区读取数据."""
+        try:
+            if not self.audio_codec or not hasattr(self.audio_codec, "_input_buffer"):
+                return None
+            
+            # 检查缓冲区是否有数据
+            if self.audio_codec._input_buffer.empty():
+                return None
+            
+            # 从缓冲区获取音频数据
+            audio_data = self.audio_codec._input_buffer.get_nowait()
+            
+            # 转换为bytes格式（与流读取保持一致）
+            if hasattr(audio_data, "tobytes"):
+                return audio_data.tobytes()
+            elif hasattr(audio_data, "astype"):
+                return audio_data.astype("int16").tobytes()
+            else:
+                # 假设已经是bytes
+                return audio_data
+                
+        except Exception as e:
+            logger.debug(f"从缓冲区读取音频数据失败: {e}")
             return None
 
     def _process_audio_data(self, data):
