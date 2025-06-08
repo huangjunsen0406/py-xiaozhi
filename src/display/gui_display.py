@@ -796,7 +796,7 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             self.tray_icon.hide()
         if self.root:
             self.root.close()
-        self.stop_keyboard_listener()
+        # 注意：键盘监听由Application的ShortcutManager管理，这里不需要停止
 
     def start(self):
         """启动GUI."""
@@ -1027,8 +1027,8 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             # 初始化系统托盘
             self._setup_tray_icon()
 
-            # 启动键盘监听
-            self.start_keyboard_listener()
+            # 注意：键盘监听现在由Application的ShortcutManager统一管理
+            # 不再在GUI中启动独立的键盘监听器
 
             # 启动更新线程
             self.start_update_threads()
@@ -1168,8 +1168,7 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         if self.ha_update_timer:
             self.ha_update_timer.stop()
 
-        # 停止键盘监听
-        self.stop_keyboard_listener()
+        # 注意：键盘监听由Application的ShortcutManager管理，这里不需要停止
 
         # 隐藏托盘图标
         if self.tray_icon:
@@ -1248,148 +1247,85 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         self.volume_update_timer.timeout.connect(update_volume)
         self.volume_update_timer.start(300)
 
-    def update_volume(self, volume: int):
-        """重写父类的update_volume方法，确保UI同步更新."""
-        # 检查音量控制是否可用
-        if not self.volume_control_available or self.volume_controller_failed:
-            return
+        def update_volume(self, volume: int):
+            """重写父类的update_volume方法，确保UI同步更新."""
+            # 检查音量控制是否可用
+            if not self.volume_control_available or self.volume_controller_failed:
+                return
 
-        # 调用父类的update_volume方法更新系统音量
-        super().update_volume(volume)
+            # 调用父类的update_volume方法更新系统音量
+            super().update_volume(volume)
 
-        # 更新UI音量滑块和标签
-        if not self.root.isHidden():
+            # 更新UI音量滑块和标签
+            if not self.root.isHidden():
+                try:
+                    if self.volume_scale:
+                        self.volume_scale.setValue(volume)
+                    if self.volume_label:
+                        self.volume_label.setText(f"{volume}%")
+                except RuntimeError as e:
+                    self.logger.error(f"更新音量UI失败: {e}")
+
+    def _safe_call_async(self, coroutine_func, *args, **kwargs):
+        """线程安全地调用异步函数"""
+        import asyncio
+        import threading
+
+        # 检查当前是否在主线程
+        main_thread = threading.main_thread()
+        current_thread = threading.current_thread()
+        
+        if current_thread == main_thread:
+            # 在主线程中，直接执行
+            self._execute_async_in_main_thread(coroutine_func, *args, **kwargs)
+        else:
+            # 在其他线程中，尝试线程安全调用
             try:
-                if self.volume_scale:
-                    self.volume_scale.setValue(volume)
-                if self.volume_label:
-                    self.volume_label.setText(f"{volume}%")
-            except RuntimeError as e:
-                self.logger.error(f"更新音量UI失败: {e}")
+                loop = asyncio.get_running_loop()
+                # 获取协程对象
+                coro = coroutine_func(*args, **kwargs)
+                future = asyncio.run_coroutine_threadsafe(coro, loop)
+                return future
+            except RuntimeError:
+                # 如果无法获取事件循环，使用更新队列
+                self.update_queue.put(
+                    lambda: self._execute_async_in_main_thread(
+                        coroutine_func, *args, **kwargs
+                    )
+                )
+            except Exception as e:
+                self.logger.error(f"线程安全调用异步函数失败: {e}")
 
-    def is_combo(self, *keys):
-        """判断是否同时按下了一组按键."""
-        return all(k in self.pressed_keys for k in keys)
+    def _execute_async_in_main_thread(self, coroutine_func, *args, **kwargs):
+        """在主线程中执行异步函数"""
+        import asyncio
+        try:
+            # 检查是否是协程函数
+            if asyncio.iscoroutinefunction(coroutine_func):
+                # 是协程函数，创建协程并转为任务
+                coro = coroutine_func(*args, **kwargs)
+                task = asyncio.create_task(coro)
+                return task
+            else:
+                # 不是协程函数，直接调用
+                result = coroutine_func(*args, **kwargs)
+                # 如果返回的是协程对象，则创建任务
+                if asyncio.iscoroutine(result):
+                    task = asyncio.create_task(result)
+                    return task
+                return result
+        except Exception as e:
+            self.logger.error(f"在主线程执行函数失败: {e}")
+            import traceback
+            self.logger.error(f"详细错误: {traceback.format_exc()}")
 
     def start_keyboard_listener(self):
-        """启动键盘监听."""
-        # 如果 pynput 不可用，记录警告并返回
-        if pynput_keyboard is None:
-            self.logger.warning(
-                "键盘监听不可用：pynput 库未能正确加载。快捷键功能将不可用。"
-            )
-            return
-
-        try:
-
-            def on_press(key):
-                try:
-                    # 记录按下的键
-                    if (
-                        key == pynput_keyboard.Key.alt_l
-                        or key == pynput_keyboard.Key.alt_r
-                    ):
-                        self.pressed_keys.add("alt")
-                    elif (
-                        key == pynput_keyboard.Key.shift_l
-                        or key == pynput_keyboard.Key.shift_r
-                    ):
-                        self.pressed_keys.add("shift")
-                    elif hasattr(key, "char") and key.char:
-                        self.pressed_keys.add(key.char.lower())
-
-                    # 长按说话 - 在手动模式下处理
-                    if not self.auto_mode and self.is_combo("alt", "shift", "v"):
-                        if self.button_press_callback:
-                            # 在qasync环境中安全调用异步回调
-                            try:
-                                import asyncio
-                                asyncio.create_task(self.button_press_callback())
-                            except Exception as e:
-                                self.logger.error(f"执行按键回调失败: {e}")
-                            if self.manual_btn:
-                                self.update_queue.put(
-                                    lambda: self._safe_update_button(
-                                        self.manual_btn, "松开以停止"
-                                    )
-                                )
-
-                    # 自动对话模式
-                    if self.is_combo("alt", "shift", "a"):
-                        if self.auto_callback:
-                            try:
-                                import asyncio
-                                asyncio.create_task(self.auto_callback())
-                            except Exception as e:
-                                self.logger.error(f"执行自动对话回调失败: {e}")
-
-                    # 打断
-                    if self.is_combo("alt", "shift", "x"):
-                        if self.abort_callback:
-                            try:
-                                import asyncio
-                                asyncio.create_task(self.abort_callback())
-                            except Exception as e:
-                                self.logger.error(f"执行打断回调失败: {e}")
-
-                    # 模式切换
-                    if self.is_combo("alt", "shift", "m"):
-                        self._on_mode_button_click()
-
-                except Exception as e:
-                    self.logger.error(f"键盘事件处理错误: {e}")
-
-            def on_release(key):
-                try:
-                    # 清除释放的键
-                    if (
-                        key == pynput_keyboard.Key.alt_l
-                        or key == pynput_keyboard.Key.alt_r
-                    ):
-                        self.pressed_keys.discard("alt")
-                    elif (
-                        key == pynput_keyboard.Key.shift_l
-                        or key == pynput_keyboard.Key.shift_r
-                    ):
-                        self.pressed_keys.discard("shift")
-                    elif hasattr(key, "char") and key.char:
-                        self.pressed_keys.discard(key.char.lower())
-
-                    # 松开按键，停止语音输入（仅在手动模式下）
-                    if not self.auto_mode and not self.is_combo("alt", "shift", "v"):
-                        if self.button_release_callback:
-                            try:
-                                import asyncio
-                                asyncio.create_task(self.button_release_callback())
-                            except Exception as e:
-                                self.logger.error(f"执行按键释放回调失败: {e}")
-                            if self.manual_btn:
-                                self.update_queue.put(
-                                    lambda: self._safe_update_button(
-                                        self.manual_btn, "按住后说话"
-                                    )
-                                )
-                except Exception as e:
-                    self.logger.error(f"键盘事件处理错误: {e}")
-
-            # 创建并启动监听器
-            self.keyboard_listener = pynput_keyboard.Listener(
-                on_press=on_press, on_release=on_release
-            )
-            self.keyboard_listener.start()
-            self.logger.info("键盘监听器初始化成功")
-        except Exception as e:
-            self.logger.error(f"键盘监听器初始化失败: {e}")
+        """启动键盘监听 - 已被ShortcutManager替代."""
+        self.logger.info("键盘监听现在由Application的ShortcutManager统一管理")
 
     def stop_keyboard_listener(self):
-        """停止键盘监听."""
-        if self.keyboard_listener:
-            try:
-                self.keyboard_listener.stop()
-                self.keyboard_listener = None
-                self.logger.info("键盘监听器已停止")
-            except Exception as e:
-                self.logger.error(f"停止键盘监听器失败: {e}")
+        """停止键盘监听 - 已被ShortcutManager替代."""
+        self.logger.info("键盘监听停止现在由Application的ShortcutManager统一管理")
 
     def mousePressEvent(self, event: QMouseEvent):
         """鼠标按下事件处理."""
@@ -1775,16 +1711,8 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         # 清空输入框
         self.text_input.clear()
 
-        # 获取应用程序的事件循环并在其中运行协程
-        from src.application import Application
-
-        app = Application.get_instance()
-        if app and app.loop:
-            import asyncio
-
-            asyncio.run_coroutine_threadsafe(self.send_text_callback(text), app.loop)
-        else:
-            self.logger.error("应用程序实例或事件循环不可用")
+        # 使用线程安全的方式调用异步函数
+        self._safe_call_async(self.send_text_callback, text)
 
     def _load_iot_devices(self):
         """加载并显示Home Assistant设备列表."""

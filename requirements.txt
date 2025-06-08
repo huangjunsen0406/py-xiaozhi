@@ -21,3 +21,4 @@ colorlog==6.9.0
 soundfile>=0.12.1
 pygame==2.6.1
 scipy
+qasync==0.27.1

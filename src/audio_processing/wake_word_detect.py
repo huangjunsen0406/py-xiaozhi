@@ -470,12 +470,10 @@ class WakeWordDetector:
     async def pause(self):
         """暂停检测"""
         self.paused = True
-        logger.info("异步唤醒词检测器已暂停")
-
+        
     async def resume(self):
         """恢复检测"""
         self.paused = False
-        logger.info("异步唤醒词检测器已恢复")
 
     def is_running(self) -> bool:
         """检查是否正在运行"""

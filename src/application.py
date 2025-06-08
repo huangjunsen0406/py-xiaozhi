@@ -7,6 +7,7 @@ from typing import Set
 
 from src.constants.constants import AbortReason, DeviceState, ListeningMode
 from src.display import gui_display
+from src.input.shortcut_manager import ShortcutManager
 from src.protocols.mqtt_protocol import MqttProtocol
 from src.protocols.websocket_protocol import WebsocketProtocol
 from src.utils.common_utils import handle_verification_code
@@ -85,6 +86,20 @@ class Application:
         
         # 任务取消事件
         self._shutdown_event = asyncio.Event()
+        
+        # 保存主线程的事件循环（稍后在run方法中设置）
+        self._main_loop = None
+
+        # 初始化快捷键管理器
+        self.shortcut_manager = ShortcutManager(
+            logger=logger,
+            manual_press_callback=self._shortcut_start_listening,
+            manual_release_callback=self._shortcut_stop_listening,
+            auto_toggle_callback=self._shortcut_toggle_chat_state,
+            abort_callback=self._shortcut_abort_speaking_sync,
+            mode_toggle_callback=self._shortcut_toggle_mode,
+            window_toggle_callback=self._shortcut_toggle_window_visibility,
+        )
 
         logger.debug("Application实例初始化完成")
 
@@ -97,6 +112,9 @@ class Application:
         
         try:
             self.running = True
+            
+            # 保存主线程的事件循环
+            self._main_loop = asyncio.get_running_loop()
             
             # 设置信号处理
             self._setup_signal_handlers()
@@ -113,6 +131,9 @@ class Application:
             else:
                 await self._start_cli_display()
                 
+            # 启动快捷键监听
+            self.shortcut_manager.start_listener()
+            
         except Exception as e:
             logger.error(f"启动应用程序失败: {e}", exc_info=True)
             await self.shutdown()
@@ -986,6 +1007,123 @@ class Application:
         """注册状态变化回调"""
         self.on_state_changed_callbacks.append(callback)
 
+    def _toggle_mode(self):
+        """切换对话模式(手动↔自动)"""
+        try:
+            # 检查当前状态是否允许切换
+            if self.device_state != DeviceState.IDLE:
+                logger.warning("只有在待命状态下才能切换对话模式")
+                return
+            
+            # 切换keep_listening状态
+            self.keep_listening = not self.keep_listening
+            
+            mode_name = "自动对话" if self.keep_listening else "手动对话"
+            logger.info(f"对话模式已切换为: {mode_name}")
+            
+            # 通知显示层更新
+            if self.display and hasattr(self.display, 'auto_mode'):
+                self.display.auto_mode = self.keep_listening
+                # 更新UI显示
+                asyncio.create_task(self.schedule_command(
+                    lambda: self.display.update_mode_button_status(mode_name)
+                ))
+                
+        except Exception as e:
+            logger.error(f"切换对话模式失败: {e}", exc_info=True)
+
+    def _toggle_window_visibility(self):
+        """显示/隐藏主窗口 (仅GUI模式)"""
+        try:
+            if not self.display:
+                logger.warning("显示组件未初始化")
+                return
+                
+            # 检查是否为GUI模式
+            if not hasattr(self.display, 'root'):
+                logger.info("当前为CLI模式，窗口切换功能不可用")
+                return
+                
+            # 切换窗口显示状态
+            if hasattr(self.display, 'root') and self.display.root:
+                if self.display.root.isVisible():
+                    self.display.root.hide()
+                    logger.info("主窗口已隐藏")
+                else:
+                    self.display.root.show()
+                    self.display.root.activateWindow()
+                    self.display.root.raise_()
+                    logger.info("主窗口已显示")
+            else:
+                logger.warning("GUI窗口不可用")
+                
+        except Exception as e:
+            logger.error(f"切换窗口显示状态失败: {e}", exc_info=True)
+
+    def _shortcut_start_listening(self):
+        """快捷键回调：开始监听（同步）"""
+        try:
+            if self._main_loop and not self._main_loop.is_closed():
+                asyncio.run_coroutine_threadsafe(
+                    self.start_listening(), self._main_loop
+                )
+            else:
+                logger.warning("主事件循环不可用，无法执行快捷键操作")
+        except Exception as e:
+            logger.error(f"快捷键开始监听失败: {e}", exc_info=True)
+
+    def _shortcut_stop_listening(self):
+        """快捷键回调：停止监听（同步）"""
+        try:
+            if self._main_loop and not self._main_loop.is_closed():
+                asyncio.run_coroutine_threadsafe(self.stop_listening(), self._main_loop)
+            else:
+                logger.warning("主事件循环不可用，无法执行快捷键操作")
+        except Exception as e:
+            logger.error(f"快捷键停止监听失败: {e}", exc_info=True)
+
+    def _shortcut_toggle_chat_state(self):
+        """快捷键回调：切换聊天状态（同步）"""
+        try:
+            if self._main_loop and not self._main_loop.is_closed():
+                asyncio.run_coroutine_threadsafe(
+                    self.toggle_chat_state(), self._main_loop
+                )
+            else:
+                logger.warning("主事件循环不可用，无法执行快捷键操作")
+        except Exception as e:
+            logger.error(f"快捷键切换聊天状态失败: {e}", exc_info=True)
+
+    def _shortcut_abort_speaking_sync(self):
+        """快捷键回调：中止语音输出（同步）"""
+        try:
+            if self._main_loop and not self._main_loop.is_closed():
+                from src.constants.constants import AbortReason
+                asyncio.run_coroutine_threadsafe(
+                    self.abort_speaking(AbortReason.WAKE_WORD_DETECTED), 
+                    self._main_loop
+                )
+            else:
+                logger.warning("主事件循环不可用，无法执行快捷键操作")
+        except Exception as e:
+            logger.error(f"快捷键中止语音输出失败: {e}", exc_info=True)
+
+    def _shortcut_toggle_mode(self):
+        """快捷键回调：切换对话模式（同步）"""
+        try:
+            # 这是一个同步操作，直接调用
+            self._toggle_mode()
+        except Exception as e:
+            logger.error(f"快捷键切换对话模式失败: {e}", exc_info=True)
+
+    def _shortcut_toggle_window_visibility(self):
+        """快捷键回调：切换窗口显示（同步）"""
+        try:
+            # 这是一个同步操作，直接调用
+            self._toggle_window_visibility()
+        except Exception as e:
+            logger.error(f"快捷键切换窗口显示失败: {e}", exc_info=True)
+
     async def shutdown(self):
         """关闭应用程序"""
         if not self.running:
@@ -1017,6 +1155,10 @@ class Application:
             
             if self.wake_word_detector:
                 await self.wake_word_detector.stop()
+            
+            # 停止快捷键监听
+            if self.shortcut_manager:
+                self.shortcut_manager.stop_listener()
             
             logger.info("异步应用程序已关闭")
             

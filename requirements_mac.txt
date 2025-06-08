@@ -19,3 +19,4 @@ websockets==11.0.3
 colorlog==6.9.0
 pygame==2.6.1
 scipy
+qasync==0.27.1
