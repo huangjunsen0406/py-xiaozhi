@@ -1,24 +1,23 @@
 import argparse
+import asyncio
 import io
-import signal
 import sys
 
 from src.application import Application
 from src.utils.logging_config import get_logger, setup_logging
 
 logger = get_logger(__name__)
-# 配置日志
 
 
 def parse_args():
-    """解析命令行参数."""
+    """解析命令行参数"""
     # 确保sys.stdout和sys.stderr不为None
     if sys.stdout is None:
         sys.stdout = io.StringIO()
     if sys.stderr is None:
         sys.stderr = io.StringIO()
 
-    parser = argparse.ArgumentParser(description="小智Ai客户端")
+    parser = argparse.ArgumentParser(description="小智Ai客户端 (异步版本)")
 
     # 添加界面模式参数
     parser.add_argument(
@@ -39,52 +38,54 @@ def parse_args():
     return parser.parse_args()
 
 
-def signal_handler(sig, frame):
-    """处理Ctrl+C信号."""
-    logger.info("接收到中断信号，正在关闭...")
-    app = Application.get_instance()
-    app.shutdown()
-    sys.exit(0)
-
-
-def main():
-    """程序入口点."""
-    # 注册信号处理器
-    signal.signal(signal.SIGINT, signal_handler)
+async def main_async():
+    """异步主函数"""
     # 解析命令行参数
     args = parse_args()
+    
     try:
-        # 日志
+        # 配置日志
         setup_logging()
+        
         # 创建并运行应用程序
         app = Application.get_instance()
-
-        logger.info("应用程序已启动，按Ctrl+C退出")
-
+        
+        logger.info("异步应用程序已启动，按Ctrl+C退出")
+        
         # 启动应用，传入参数
-        app.run(mode=args.mode, protocol=args.protocol)
-
-        # 如果是GUI模式且使用了PyQt界面，启动Qt事件循环
-        if args.mode == "gui":
-            # 获取QApplication实例并运行事件循环
-            try:
-                from PyQt5.QtWidgets import QApplication
-
-                qt_app = QApplication.instance()
-                if qt_app:
-                    logger.info("开始Qt事件循环")
-                    qt_app.exec_()
-                    logger.info("Qt事件循环结束")
-            except ImportError:
-                logger.warning("PyQt5未安装，无法启动Qt事件循环")
-            except Exception as e:
-                logger.error(f"Qt事件循环出错: {e}", exc_info=True)
-
+        await app.run(mode=args.mode, protocol=args.protocol)
+        
+        # 等待应用程序运行
+        while app.running:
+            await asyncio.sleep(1)
+            
+    except KeyboardInterrupt:
+        logger.info("接收到中断信号")
     except Exception as e:
         logger.error(f"程序发生错误: {e}", exc_info=True)
         return 1
+    finally:
+        # 确保应用程序正确关闭
+        try:
+            app = Application.get_instance()
+            await app.shutdown()
+        except Exception as e:
+            logger.error(f"关闭应用程序时出错: {e}")
 
     return 0
+
+
+def main():
+    """同步主函数入口"""
+    try:
+        # 运行异步主函数
+        return asyncio.run(main_async())
+    except KeyboardInterrupt:
+        logger.info("程序被用户中断")
+        return 0
+    except Exception as e:
+        logger.error(f"程序异常退出: {e}", exc_info=True)
+        return 1
 
 
 if __name__ == "__main__":
