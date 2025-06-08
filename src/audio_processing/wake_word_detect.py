@@ -1,11 +1,12 @@
+import asyncio
 import difflib
 import json
 import os
 import re
-import threading
 import time
 from functools import lru_cache
 from pathlib import Path
+from typing import Callable, Optional
 
 from pypinyin import Style, lazy_pinyin
 from vosk import KaldiRecognizer, Model, SetLogLevel
@@ -18,19 +19,23 @@ logger = get_logger(__name__)
 
 
 class WakeWordDetector:
-    """唤醒词检测类."""
+    """异步唤醒词检测器 - 完整实现"""
 
     def __init__(self):
-        """初始化唤醒词检测器."""
+        """初始化唤醒词检测器"""
         # 初始化基本属性
         self.audio_codec = None
-        self.on_detected_callbacks = []
-        self.running = False
-        self.detection_thread = None
+        self.is_running_flag = False
         self.paused = False
-        self.stream = None
-        self.external_stream = False
-        self.stream_lock = threading.Lock()
+        self.detection_task = None
+        
+        # 防重复触发机制
+        self.last_detection_time = 0
+        self.detection_cooldown = 3.0  # 3秒冷却时间
+        
+        # 回调函数
+        self.on_detected_callback: Optional[Callable] = None
+        self.on_error: Optional[Callable] = None
 
         # 配置检查
         config = ConfigManager.get_instance()
@@ -39,7 +44,7 @@ class WakeWordDetector:
             self.enabled = False
             return
 
-        # 基本参数初始化（直接从配置获取）
+        # 基本参数初始化
         self.enabled = True
         self.sample_rate = AudioConfig.INPUT_SAMPLE_RATE
         self.buffer_size = AudioConfig.INPUT_FRAME_SIZE
@@ -56,10 +61,10 @@ class WakeWordDetector:
 
         # 匹配参数
         self.similarity_threshold = config.get_config(
-            "WAKE_WORD_OPTIONS.SIMILARITY_THRESHOLD", 0.8
+            "WAKE_WORD_OPTIONS.SIMILARITY_THRESHOLD", 0.85
         )
         self.max_edit_distance = config.get_config(
-            "WAKE_WORD_OPTIONS.MAX_EDIT_DISTANCE", 2
+            "WAKE_WORD_OPTIONS.MAX_EDIT_DISTANCE", 1
         )
 
         # 性能优化：缓存最近的识别结果
@@ -73,7 +78,7 @@ class WakeWordDetector:
         self._validate_config()
 
     def _init_model(self, config):
-        """初始化语音识别模型."""
+        """初始化语音识别模型"""
         try:
             model_path = self._get_model_path(config)
             if not os.path.exists(model_path):
@@ -91,7 +96,7 @@ class WakeWordDetector:
             self.enabled = False
 
     def _get_model_path(self, config):
-        """获取模型路径."""
+        """获取模型路径"""
         from src.utils.resource_finder import resource_finder
 
         model_name = config.get_config(
@@ -134,218 +139,8 @@ class WakeWordDetector:
         logger.warning(f"未找到模型，将使用默认路径: {default_path}")
         return str(default_path)
 
-    def start(self, audio_codec_or_stream=None):
-        """启动检测."""
-        if not self.enabled:
-            logger.warning("唤醒词功能未启用")
-            return False
-
-        # 设置音频源
-        if audio_codec_or_stream:
-            # 检查是否是SoundDevice流对象
-            if hasattr(audio_codec_or_stream, "read") and hasattr(
-                audio_codec_or_stream, "active"
-            ):
-                # SoundDevice流对象
-                self.stream = audio_codec_or_stream
-                self.external_stream = True
-                return self._start_detection_thread("SoundDeviceStream")
-            else:
-                # AudioCodec对象
-                self.audio_codec = audio_codec_or_stream
-                return self._start_with_audio_codec()
-
-        if self.audio_codec:
-            return self._start_with_audio_codec()
-
-        logger.error("需要AudioCodec实例或SoundDevice音频流")
-        return False
-
-    def _start_with_audio_codec(self):
-        """使用AudioCodec启动."""
-        if not self.audio_codec:
-            logger.error("AudioCodec无效")
-            return False
-
-        # SoundDevice AudioCodec优先使用缓冲区模式
-        if hasattr(self.audio_codec, "_input_buffer"):
-            logger.info("使用SoundDevice AudioCodec缓冲区模式")
-            return self._start_detection_thread("AudioCodecBuffer")
-        elif hasattr(self.audio_codec, "input_stream"):
-            # 后备模式：直接访问SoundDevice流
-            self.stream = self.audio_codec.input_stream
-            self.external_stream = True
-            logger.info("使用SoundDevice AudioCodec流模式")
-            return self._start_detection_thread("AudioCodecStream")
-        else:
-            logger.error("AudioCodec不支持，需要SoundDevice版本")
-            return False
-
-    def _start_detection_thread(self, mode_name):
-        """启动检测线程."""
-        try:
-            self.running = True
-            self.paused = False
-            self.detection_thread = threading.Thread(
-                target=self._detection_loop,
-                daemon=True,
-                name=f"WakeWordDetector-{mode_name}",
-            )
-            self.detection_thread.start()
-            logger.info(f"唤醒词检测已启动（{mode_name}模式）")
-            return True
-        except Exception as e:
-            logger.error(f"启动失败: {e}")
-            return False
-
-    def _detection_loop(self):
-        """统一的检测循环."""
-        error_count = 0
-        MAX_ERRORS = 5
-
-        while self.running:
-            try:
-                if self.paused:
-                    time.sleep(0.1)
-                    continue
-
-                # 获取音频流
-                stream = self._get_active_stream()
-                if not stream:
-                    time.sleep(0.5)
-                    continue
-
-                # 读取音频数据
-                data = self._read_audio_data(stream)
-                if data:
-                    self._process_audio_data(data)
-                    error_count = 0
-
-            except Exception as e:
-                error_count += 1
-                logger.error(f"检测循环错误({error_count}/{MAX_ERRORS}): {e}")
-
-                if error_count >= MAX_ERRORS:
-                    logger.critical("达到最大错误次数，停止检测")
-                    self.stop()
-                    break
-                time.sleep(0.5)
-
-    def _get_active_stream(self):
-        """获取活跃的音频流."""
-        if self.audio_codec:
-            # 优先使用SoundDevice AudioCodec缓冲区模式
-            if hasattr(self.audio_codec, "_input_buffer"):
-                return "buffer_mode"
-            
-            # 后备：检查SoundDevice流
-            if hasattr(self.audio_codec, "input_stream"):
-                stream = self.audio_codec.input_stream
-                if stream and hasattr(stream, "active") and stream.active:
-                    return stream
-            return None
-
-        # 外部SoundDevice流
-        if self.stream and hasattr(self.stream, "active") and self.stream.active:
-            return self.stream
-        return None
-
-    def _read_audio_data(self, stream):
-        """读取音频数据."""
-        try:
-            # 缓冲区模式（推荐模式）
-            if stream == "buffer_mode":
-                return self._read_from_audio_codec_buffer()
-            
-            # SoundDevice流直接读取模式
-            if hasattr(stream, "active"):
-                with self.stream_lock:
-                    return stream.read(
-                        self.buffer_size, 
-                        exception_on_overflow=False
-                    )
-            
-            return None
-                    
-        except OSError as e:
-            # 处理音频设备错误
-            error_msg = str(e)
-            if (
-                any(
-                    msg in error_msg
-                    for msg in ["Input overflowed", "Device unavailable"]
-                )
-                and self.audio_codec
-                and hasattr(self.audio_codec, "_reinitialize_stream")
-            ):
-                try:
-                    self.audio_codec._reinitialize_stream(is_input=True)
-                except Exception:
-                    pass
-            return None
-        except Exception:
-            return None
-
-    def _read_from_audio_codec_buffer(self):
-        """从AudioCodec的输入缓冲区读取数据."""
-        try:
-            if not self.audio_codec or not hasattr(self.audio_codec, "_input_buffer"):
-                return None
-            
-            # 检查缓冲区是否有数据
-            if self.audio_codec._input_buffer.empty():
-                return None
-            
-            # 从缓冲区获取音频数据
-            audio_data = self.audio_codec._input_buffer.get_nowait()
-            
-            # 转换为bytes格式（与流读取保持一致）
-            if hasattr(audio_data, "tobytes"):
-                return audio_data.tobytes()
-            elif hasattr(audio_data, "astype"):
-                return audio_data.astype("int16").tobytes()
-            else:
-                # 假设已经是bytes
-                return audio_data
-                
-        except Exception as e:
-            logger.debug(f"从缓冲区读取音频数据失败: {e}")
-            return None
-
-    def _process_audio_data(self, data):
-        """优化的音频数据处理."""
-        try:
-            # 处理完整识别结果
-            if self.recognizer.AcceptWaveform(data):
-                result = json.loads(self.recognizer.Result())
-                if text := result.get("text", "").strip():
-                    # 过滤过短的文本以减少误触发
-                    if len(text) >= 2:
-                        self._check_wake_word(text)
-
-            # 处理部分识别结果（降低频率以提升性能）
-            if hasattr(self, "_partial_check_counter"):
-                self._partial_check_counter += 1
-            else:
-                self._partial_check_counter = 0
-
-            # 每3次才检查一次部分结果，减少计算负担
-            if self._partial_check_counter % 3 == 0:
-                partial = (
-                    json.loads(self.recognizer.PartialResult())
-                    .get("partial", "")
-                    .strip()
-                )
-                if partial and len(partial) >= 2:
-                    self._check_wake_word(partial)
-
-        except json.JSONDecodeError as e:
-            logger.warning(f"JSON解析错误: {e}")
-        except Exception as e:
-            logger.error(f"音频数据处理错误: {e}")
-
     def _build_wake_word_patterns(self):
-        """构建唤醒词的拼音模式，包括多种变体."""
+        """构建唤醒词的拼音模式，包括多种变体"""
         patterns = {}
         for word in self.wake_words:
             # 标准拼音（无音调）
@@ -392,7 +187,7 @@ class WakeWordDetector:
         }
 
     def _calculate_similarity(self, text_variants, pattern):
-        """计算文本与唤醒词模式的相似度."""
+        """计算文本与唤醒词模式的相似度"""
         max_similarity = 0.0
         best_match_type = None
 
@@ -428,7 +223,7 @@ class WakeWordDetector:
             # 4. 子序列匹配（对于首字母缩写）
             if variant_type == "initials" and len(pattern_variant) >= 2:
                 if self._is_subsequence(pattern_variant, text_variant):
-                    similarity = max(similarity, 0.85)
+                    similarity = max(similarity, 0.80)
 
             if similarity > max_similarity:
                 max_similarity = similarity
@@ -437,7 +232,7 @@ class WakeWordDetector:
         return max_similarity, best_match_type
 
     def _levenshtein_distance(self, s1, s2):
-        """计算编辑距离."""
+        """计算编辑距离"""
         if len(s1) < len(s2):
             return self._levenshtein_distance(s2, s1)
 
@@ -457,16 +252,156 @@ class WakeWordDetector:
         return previous_row[-1]
 
     def _is_subsequence(self, pattern, text):
-        """检查pattern是否为text的子序列."""
+        """检查pattern是否为text的子序列"""
         i = 0
         for char in text:
             if i < len(pattern) and char == pattern[i]:
                 i += 1
         return i == len(pattern)
 
-    def _check_wake_word(self, text):
-        """优化的唤醒词检查."""
+    def on_detected(self, callback: Callable):
+        """设置检测到唤醒词的回调函数"""
+        self.on_detected_callback = callback
+
+    async def start(self, audio_codec) -> bool:
+        """启动唤醒词检测器"""
+        if not self.enabled:
+            logger.warning("唤醒词功能未启用")
+            return False
+
+        try:
+            self.audio_codec = audio_codec
+            self.is_running_flag = True
+            self.paused = False
+            
+            # 启动检测任务
+            self.detection_task = asyncio.create_task(self._detection_loop())
+            
+            logger.info("异步唤醒词检测器启动成功")
+            return True
+        except Exception as e:
+            logger.error(f"启动异步唤醒词检测器失败: {e}")
+            self.enabled = False
+            return False
+
+    async def _detection_loop(self):
+        """检测循环"""
+        error_count = 0
+        MAX_ERRORS = 5
+        
+        while self.is_running_flag:
+            try:
+                if self.paused:
+                    await asyncio.sleep(0.1)
+                    continue
+
+                if not self.audio_codec:
+                    await asyncio.sleep(0.5)
+                    continue
+
+                # 从音频编解码器获取数据并处理
+                await self._check_wake_word()
+                
+                # 短暂延迟避免过度占用CPU
+                await asyncio.sleep(0.02)
+                error_count = 0
+                
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                error_count += 1
+                logger.error(f"唤醒词检测循环错误({error_count}/{MAX_ERRORS}): {e}")
+                if self.on_error:
+                    await self._call_error_callback(e)
+                
+                if error_count >= MAX_ERRORS:
+                    logger.critical("达到最大错误次数，停止检测")
+                    break
+                    
+                await asyncio.sleep(1)  # 错误后延迟重试
+
+    async def _check_wake_word(self):
+        """检查唤醒词（异步实现）"""
+        try:
+            if not self.audio_codec:
+                return
+
+            # 优先使用专门的唤醒词缓冲区
+            if hasattr(self.audio_codec, "_wake_word_buffer"):
+                if self.audio_codec._wake_word_buffer.empty():
+                    return
+                try:
+                    audio_data = self.audio_codec._wake_word_buffer.get_nowait()
+                except Exception:
+                    return
+            # 后备选择：使用普通输入缓冲区
+            elif hasattr(self.audio_codec, "_input_buffer"):
+                if self.audio_codec._input_buffer.empty():
+                    return
+                try:
+                    audio_data = self.audio_codec._input_buffer.get_nowait()
+                except Exception:
+                    return
+            else:
+                return
+
+            # 转换为bytes格式
+            if hasattr(audio_data, "tobytes"):
+                data = audio_data.tobytes()
+            elif hasattr(audio_data, "astype"):
+                data = audio_data.astype("int16").tobytes()
+            else:
+                data = audio_data
+
+            if not data:
+                return
+
+            # 处理音频数据
+            await self._process_audio_data(data)
+
+        except Exception as e:
+            logger.debug(f"检查唤醒词时出错: {e}")
+
+    async def _process_audio_data(self, data):
+        """异步处理音频数据"""
+        try:
+            # 处理完整识别结果
+            if self.recognizer.AcceptWaveform(data):
+                result = json.loads(self.recognizer.Result())
+                if text := result.get("text", "").strip():
+                    # 过滤过短的文本以减少误触发
+                    if len(text) >= 3:
+                        await self._check_wake_word_text(text)
+
+            # 处理部分识别结果（降低频率）
+            if hasattr(self, "_partial_check_counter"):
+                self._partial_check_counter += 1
+            else:
+                self._partial_check_counter = 0
+
+            # 每3次才检查一次部分结果
+            if self._partial_check_counter % 3 == 0:
+                partial = (
+                    json.loads(self.recognizer.PartialResult())
+                    .get("partial", "")
+                    .strip()
+                )
+                if partial and len(partial) >= 3:
+                    await self._check_wake_word_text(partial)
+
+        except json.JSONDecodeError as e:
+            logger.warning(f"JSON解析错误: {e}")
+        except Exception as e:
+            logger.error(f"音频数据处理错误: {e}")
+
+    async def _check_wake_word_text(self, text):
+        """检查文本中的唤醒词"""
         if not text or not text.strip():
+            return
+
+        # 防重复触发检查
+        current_time = time.time()
+        if current_time - self.last_detection_time < self.detection_cooldown:
             return
 
         # 避免重复处理相同文本
@@ -498,80 +433,85 @@ class WakeWordDetector:
 
         # 触发检测
         if best_match:
+            self.last_detection_time = current_time
             logger.info(
                 f"检测到唤醒词 '{best_match}' "
                 f"(相似度: {best_similarity:.3f}, 匹配类型: {best_match_info})"
             )
 
             logger.debug(f"原始文本: '{text}', 拼音变体: {text_variants}")
-            self._trigger_callbacks(best_match, text)
+            await self._trigger_callbacks(best_match, text)
             self.recognizer.Reset()
             # 清空缓存避免重复触发
             self._recent_texts.clear()
 
-    def stop(self):
-        """停止检测."""
-        if self.running:
-            self.running = False
-            if self.detection_thread and self.detection_thread.is_alive():
-                self.detection_thread.join(timeout=1.0)
-            self.stream = None
-            self.external_stream = False
-            logger.info("唤醒词检测已停止")
-
-    def is_running(self):
-        """检查是否正在运行."""
-        return self.running and not self.paused
-
-    def update_stream(self, new_stream):
-        """更新音频流."""
-        if not self.running:
-            return False
-        with self.stream_lock:
-            self.stream = new_stream
-            self.external_stream = True
-        return True
-
-    def pause(self):
-        """暂停检测."""
-        if self.running and not self.paused:
-            self.paused = True
-
-    def resume(self):
-        """恢复检测."""
-        if self.running and self.paused:
-            self.paused = False
-
-    def on_detected(self, callback):
-        """注册回调."""
-        self.on_detected_callbacks.append(callback)
-
-    def _trigger_callbacks(self, wake_word, text):
-        """触发回调."""
-        for cb in self.on_detected_callbacks:
+    async def _trigger_callbacks(self, wake_word, text):
+        """触发回调函数"""
+        if self.on_detected_callback:
             try:
-                cb(wake_word, text)
+                if asyncio.iscoroutinefunction(self.on_detected_callback):
+                    await self.on_detected_callback(wake_word, text)
+                else:
+                    self.on_detected_callback(wake_word, text)
             except Exception as e:
-                logger.error(f"回调执行失败: {e}")
+                logger.error(f"唤醒词回调执行失败: {e}")
+
+    async def _call_error_callback(self, error):
+        """调用错误回调"""
+        try:
+            if self.on_error:
+                if asyncio.iscoroutinefunction(self.on_error):
+                    await self.on_error(error)
+                else:
+                    self.on_error(error)
+        except Exception as e:
+            logger.error(f"执行错误回调时失败: {e}")
+
+    async def pause(self):
+        """暂停检测"""
+        self.paused = True
+        logger.info("异步唤醒词检测器已暂停")
+
+    async def resume(self):
+        """恢复检测"""
+        self.paused = False
+        logger.info("异步唤醒词检测器已恢复")
+
+    def is_running(self) -> bool:
+        """检查是否正在运行"""
+        return self.is_running_flag and not self.paused
+
+    async def stop(self):
+        """停止检测器"""
+        self.is_running_flag = False
+        
+        if self.detection_task:
+            self.detection_task.cancel()
+            try:
+                await self.detection_task
+            except asyncio.CancelledError:
+                pass
+        
+        logger.info("异步唤醒词检测器已停止")
 
     def _validate_config(self):
-        """验证配置参数."""
+        """验证配置参数"""
         if not self.enabled:
             return
 
         # 验证相似度阈值
         if not 0.1 <= self.similarity_threshold <= 1.0:
             logger.warning(
-                f"相似度阈值 {self.similarity_threshold} 超出合理范围，重置为0.8"
+                f"相似度阈值 {self.similarity_threshold} 超出合理范围，重置为0.85"
             )
-            self.similarity_threshold = 0.8
+            self.similarity_threshold = 0.85
 
         # 验证编辑距离
         if self.max_edit_distance < 0 or self.max_edit_distance > 5:
             logger.warning(
-                f"最大编辑距离 {self.max_edit_distance} 超出合理范围，重置为2"
+                f"最大编辑距离 {self.max_edit_distance} 超出合理范围，重置为1"
             )
-            self.max_edit_distance = 2
+            self.max_edit_distance = 1
 
         # 验证唤醒词
         if not self.wake_words:
@@ -591,13 +531,21 @@ class WakeWordDetector:
         )
 
     def get_performance_stats(self):
-        """获取性能统计信息."""
+        """获取性能统计信息"""
         cache_info = self._get_text_pinyin_variants.cache_info()
         return {
             "enabled": self.enabled,
-            "wake_words_count": len(self.wake_words),
-            "similarity_threshold": self.similarity_threshold,
-            "max_edit_distance": self.max_edit_distance,
+            "wake_words_count": (
+                len(self.wake_words) if hasattr(self, 'wake_words') else 0
+            ),
+            "similarity_threshold": (
+                self.similarity_threshold 
+                if hasattr(self, 'similarity_threshold') else 0
+            ),
+            "max_edit_distance": (
+                self.max_edit_distance 
+                if hasattr(self, 'max_edit_distance') else 0
+            ),
             "cache_hits": cache_info.hits,
             "cache_misses": cache_info.misses,
             "cache_size": cache_info.currsize,
@@ -605,38 +553,12 @@ class WakeWordDetector:
         }
 
     def clear_cache(self):
-        """清空缓存."""
+        """清空缓存"""
         self._get_text_pinyin_variants.cache_clear()
         self._recent_texts.clear()
         logger.info("缓存已清空")
 
-    def update_config(self, **kwargs):
-        """动态更新配置."""
-        updated = False
-
-        if "similarity_threshold" in kwargs:
-            new_threshold = kwargs["similarity_threshold"]
-            if 0.1 <= new_threshold <= 1.0:
-                self.similarity_threshold = new_threshold
-                updated = True
-                logger.info(f"相似度阈值更新为: {new_threshold}")
-            else:
-                logger.warning(f"无效的相似度阈值: {new_threshold}")
-
-        if "max_edit_distance" in kwargs:
-            new_distance = kwargs["max_edit_distance"]
-            if 0 <= new_distance <= 5:
-                self.max_edit_distance = new_distance
-                updated = True
-                logger.info(f"最大编辑距离更新为: {new_distance}")
-            else:
-                logger.warning(f"无效的编辑距离: {new_distance}")
-
-        if updated:
-            # 清空缓存以应用新配置
-            self.clear_cache()
-
-        return updated
-
     def __del__(self):
-        self.stop()
+        """析构函数"""
+        if hasattr(self, 'is_running_flag') and self.is_running_flag:
+            asyncio.create_task(self.stop()) 

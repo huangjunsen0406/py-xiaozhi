@@ -1,5 +1,3 @@
-import platform
-
 from src.utils.config_manager import ConfigManager
 
 config = ConfigManager.get_instance()

@@ -794,11 +794,9 @@ class Application:
             return
 
         try:
-            from src.audio_processing.wake_word_detect_async import (
-                AsyncWakeWordDetector,
-            )
+            from src.audio_processing.wake_word_detect import WakeWordDetector
             
-            self.wake_word_detector = AsyncWakeWordDetector()
+            self.wake_word_detector = WakeWordDetector()
             
             if not getattr(self.wake_word_detector, "enabled", True):
                 logger.warning("唤醒词检测器被禁用")
@@ -858,7 +856,7 @@ class Application:
                     await self.wake_word_detector.resume()
                 return
 
-            await self.protocol.send_wake_word_detected(wake_word)
+            await self.protocol.send_wake_word_detected("唤醒")
             self.keep_listening = True
             await self.protocol.send_start_listening(ListeningMode.AUTO_STOP)
             await self._set_device_state(DeviceState.LISTENING)
