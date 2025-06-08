@@ -345,7 +345,18 @@ class Application:
                     command = await asyncio.wait_for(
                         self.command_queue.get(), timeout=1.0
                     )
-                    await command()
+                    # 检查命令是否有效
+                    if command is None:
+                        logger.warning("收到空命令，跳过执行")
+                        continue
+                    if not callable(command):
+                        logger.warning(f"收到非可调用命令: {type(command)}, 跳过执行")
+                        continue
+                    
+                    # 执行命令
+                    result = command()
+                    if asyncio.iscoroutine(result):
+                        await result
                 except asyncio.TimeoutError:
                     continue
                     
@@ -927,6 +938,13 @@ class Application:
         thing_manager.add_thing(MusicPlayer())
         thing_manager.add_thing(Camera())
         thing_manager.add_thing(CountdownTimer())
+        
+        # 添加异步设备示例
+        try:
+            from src.iot.things.robot_arm import RobotArm
+            thing_manager.add_thing(RobotArm())
+        except ImportError:
+            logger.info("机械臂模块未找到，跳过注册")
 
         # Home Assistant设备
         if self.config.get_config("HOME_ASSISTANT.TOKEN"):
@@ -974,7 +992,12 @@ class Application:
         
         for command in commands:
             try:
-                result = await asyncio.to_thread(thing_manager.invoke, command)
+                # 优先使用异步调用
+                if hasattr(thing_manager, 'invoke_async'):
+                    result = await thing_manager.invoke_async(command)
+                else:
+                    # 兼容原有同步调用
+                    result = await asyncio.to_thread(thing_manager.invoke, command)
                 logger.info(f"执行物联网命令结果: {result}")
             except Exception as e:
                 logger.error(f"执行物联网命令失败: {e}")

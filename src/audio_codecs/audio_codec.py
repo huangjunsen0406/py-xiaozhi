@@ -5,6 +5,7 @@ from typing import Optional
 import numpy as np
 import opuslib
 import sounddevice as sd
+import soxr
 
 from src.constants.constants import AudioConfig
 from src.utils.logging_config import get_logger
@@ -18,6 +19,17 @@ class AudioCodec:
     def __init__(self):
         self.opus_encoder = None
         self.opus_decoder = None
+        
+        # 设备默认采样率
+        self.device_input_sample_rate = None
+        self.device_output_sample_rate = None
+        
+        # 重采样器
+        self.input_resampler = None
+        self.output_resampler = None
+        
+        # 重采样缓冲区 - 用于处理不定长的重采样输出
+        self._resample_input_buffer = []
         
         # 异步队列
         max_queue_size = int(10 * 1000 / AudioConfig.FRAME_DURATION)
@@ -41,22 +53,67 @@ class AudioCodec:
     async def initialize(self):
         """初始化音频设备和编解码器"""
         try:
-            # 设置SoundDevice默认参数
-            sd.default.samplerate = AudioConfig.INPUT_SAMPLE_RATE
+            # 获取设备默认采样率
+            input_device_info = sd.query_devices(sd.default.device[0])
+            output_device_info = sd.query_devices(sd.default.device[1])
+            
+            self.device_input_sample_rate = int(
+                input_device_info['default_samplerate']
+            )
+            self.device_output_sample_rate = int(
+                output_device_info['default_samplerate']
+            )
+            
+            logger.info(f"设备输入采样率: {self.device_input_sample_rate}Hz")
+            logger.info(f"设备输出采样率: {self.device_output_sample_rate}Hz")
+            
+            # 创建重采样器
+            if self.device_input_sample_rate != AudioConfig.INPUT_SAMPLE_RATE:
+                self.input_resampler = soxr.ResampleStream(
+                    self.device_input_sample_rate,
+                    AudioConfig.INPUT_SAMPLE_RATE,
+                    AudioConfig.CHANNELS,
+                    dtype='int16',
+                    quality='QQ'
+                )
+                logger.info(
+                    f"创建输入重采样器: {self.device_input_sample_rate}Hz -> "
+                    f"{AudioConfig.INPUT_SAMPLE_RATE}Hz"
+                )
+            
+            # 输出重采样器：从Opus解码的24kHz重采样到设备采样率
+            if self.device_output_sample_rate != AudioConfig.OUTPUT_SAMPLE_RATE:
+                self.output_resampler = soxr.ResampleStream(
+                    AudioConfig.OUTPUT_SAMPLE_RATE,  # Opus输出24kHz
+                    self.device_output_sample_rate,
+                    AudioConfig.CHANNELS,
+                    dtype='int16',
+                    quality='QQ'
+                )
+                logger.info(
+                    f"创建输出重采样器: {AudioConfig.OUTPUT_SAMPLE_RATE}Hz -> "
+                    f"{self.device_output_sample_rate}Hz"
+                )
+
+            # 设置SoundDevice使用设备默认采样率
+            sd.default.samplerate = None  # 让设备使用默认采样率
             sd.default.channels = AudioConfig.CHANNELS
             sd.default.dtype = np.int16
 
             # 初始化流
             await self._create_streams()
 
-            # 编解码器初始化
+            # 编解码器初始化 - 客户端-服务器架构
+            # 编码器：16kHz发送给服务器
+            # 解码器：24kHz从服务器接收
             self.opus_encoder = opuslib.Encoder(
-                AudioConfig.INPUT_SAMPLE_RATE,
+                AudioConfig.INPUT_SAMPLE_RATE,  # 16kHz
                 AudioConfig.CHANNELS,
                 opuslib.APPLICATION_AUDIO,
             )
             self.opus_decoder = opuslib.Decoder(
-                AudioConfig.OUTPUT_SAMPLE_RATE, AudioConfig.CHANNELS
+                AudioConfig.OUTPUT_SAMPLE_RATE,  # 24kHz
+                AudioConfig.CHANNELS
             )
 
             logger.info("异步音频设备和编解码器初始化成功")
@@ -68,15 +125,16 @@ class AudioCodec:
     async def _create_streams(self):
         """创建输入和输出流"""
         try:
-            input_blocksize = AudioConfig.INPUT_FRAME_SIZE
-            output_blocksize = AudioConfig.OUTPUT_FRAME_SIZE
+            # 计算设备采样率下的帧大小
+            device_input_frame_size = int(self.device_input_sample_rate * (AudioConfig.FRAME_DURATION / 1000))
+            device_output_frame_size = int(self.device_output_sample_rate * (AudioConfig.FRAME_DURATION / 1000))
 
             # 创建输入流（录音）
             self.input_stream = sd.InputStream(
-                samplerate=AudioConfig.INPUT_SAMPLE_RATE,
+                samplerate=self.device_input_sample_rate,
                 channels=AudioConfig.CHANNELS,
                 dtype=np.int16,
-                blocksize=input_blocksize,
+                blocksize=device_input_frame_size,
                 callback=self._input_callback,
                 finished_callback=self._input_finished_callback,
                 latency='low'
@@ -84,10 +142,10 @@ class AudioCodec:
 
             # 创建输出流（播放）
             self.output_stream = sd.OutputStream(
-                samplerate=AudioConfig.OUTPUT_SAMPLE_RATE,
+                samplerate=self.device_output_sample_rate,
                 channels=AudioConfig.CHANNELS,
                 dtype=np.int16,
-                blocksize=output_blocksize,
+                blocksize=device_output_frame_size,
                 callback=self._output_callback,
                 finished_callback=self._output_finished_callback,
                 latency='low'
@@ -111,6 +169,27 @@ class AudioCodec:
         
         try:
             audio_data = indata.copy().flatten()
+            
+            # 如果需要重采样，先进行重采样
+            if self.input_resampler is not None:
+                try:
+                    resampled_data = self.input_resampler.resample_chunk(audio_data, last=False)
+                    if len(resampled_data) > 0:
+                        # 添加重采样数据到缓冲区
+                        self._resample_input_buffer.extend(resampled_data.astype(np.int16))
+                    
+                    # 检查缓冲区是否有足够的数据组成完整帧
+                    expected_frame_size = AudioConfig.INPUT_FRAME_SIZE
+                    if len(self._resample_input_buffer) < expected_frame_size:
+                        return  # 数据不足，等待更多数据
+                    
+                    # 取出一帧数据
+                    audio_data = np.array(self._resample_input_buffer[:expected_frame_size])
+                    self._resample_input_buffer = self._resample_input_buffer[expected_frame_size:]
+                    
+                except Exception as e:
+                    logger.error(f"输入重采样失败: {e}")
+                    return
             
             # 始终填充唤醒词缓冲区（不受暂停状态影响）
             try:
@@ -148,6 +227,20 @@ class AudioCodec:
             try:
                 audio_data = self._output_buffer.get_nowait()
                 
+                # 如果需要重采样到设备采样率
+                if self.output_resampler is not None and len(audio_data) > 0:
+                    try:
+                        resampled_data = self.output_resampler.resample_chunk(audio_data, last=False)
+                        if len(resampled_data) > 0:
+                            audio_data = resampled_data.astype(np.int16)
+                        else:
+                            outdata.fill(0)
+                            return
+                    except Exception as e:
+                        logger.error(f"输出重采样失败: {e}")
+                        outdata.fill(0)
+                        return
+                
                 if len(audio_data) >= frames:
                     outdata[:] = audio_data[:frames].reshape(-1, 1)
                 else:
@@ -181,12 +274,12 @@ class AudioCodec:
                     self.input_stream.stop()
                     self.input_stream.close()
                 
-                input_blocksize = AudioConfig.INPUT_FRAME_SIZE
+                device_input_frame_size = int(self.device_input_sample_rate * (AudioConfig.FRAME_DURATION / 1000))
                 self.input_stream = sd.InputStream(
-                    samplerate=AudioConfig.INPUT_SAMPLE_RATE,
+                    samplerate=self.device_input_sample_rate,
                     channels=AudioConfig.CHANNELS,
                     dtype=np.int16,
-                    blocksize=input_blocksize,
+                    blocksize=device_input_frame_size,
                     callback=self._input_callback,
                     finished_callback=self._input_finished_callback,
                     latency='low'
@@ -200,12 +293,12 @@ class AudioCodec:
                     self.output_stream.stop()
                     self.output_stream.close()
                 
-                output_blocksize = AudioConfig.OUTPUT_FRAME_SIZE
+                device_output_frame_size = int(self.device_output_sample_rate * (AudioConfig.FRAME_DURATION / 1000))
                 self.output_stream = sd.OutputStream(
-                    samplerate=AudioConfig.OUTPUT_SAMPLE_RATE,
+                    samplerate=self.device_output_sample_rate,
                     channels=AudioConfig.CHANNELS,
                     dtype=np.int16,
-                    blocksize=output_blocksize,
+                    blocksize=device_output_frame_size,
                     callback=self._output_callback,
                     finished_callback=self._output_finished_callback,
                     latency='low'
@@ -287,6 +380,7 @@ class AudioCodec:
                     opus_data = self.audio_decode_queue.get_nowait()
 
                     try:
+                        # Opus解码输出24kHz
                         pcm_data = self.opus_decoder.decode(
                             opus_data, AudioConfig.OUTPUT_FRAME_SIZE
                         )
@@ -462,6 +556,32 @@ class AudioCodec:
                     logger.warning(f"关闭输出流失败: {e}")
                 finally:
                     self.output_stream = None
+
+            # 清理重采样器
+            if self.input_resampler:
+                try:
+                    # 让重采样器处理完剩余数据
+                    if hasattr(self.input_resampler, 'resample_chunk'):
+                        empty_array = np.array([], dtype=np.int16)
+                        self.input_resampler.resample_chunk(empty_array, last=True)
+                except Exception as e:
+                    logger.warning(f"清理输入重采样器失败: {e}")
+                finally:
+                    self.input_resampler = None
+
+            if self.output_resampler:
+                try:
+                    # 让重采样器处理完剩余数据
+                    if hasattr(self.output_resampler, 'resample_chunk'):
+                        empty_array = np.array([], dtype=np.int16)
+                        self.output_resampler.resample_chunk(empty_array, last=True)
+                except Exception as e:
+                    logger.warning(f"清理输出重采样器失败: {e}")
+                finally:
+                    self.output_resampler = None
+
+            # 清理重采样缓冲区
+            self._resample_input_buffer.clear()
 
             # 清理编解码器
             self.opus_encoder = None

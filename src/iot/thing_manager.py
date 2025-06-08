@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 from typing import Any, Dict, Optional, Tuple
@@ -81,6 +82,29 @@ class ThingManager:
             if thing.name == thing_name:
                 return thing.invoke(command)
 
+        # 记录错误日志
+        logging.error(f"设备不存在: {thing_name}")
+        raise ValueError(f"设备不存在: {thing_name}")
+    
+    async def invoke_async(self, command: Dict) -> Optional[Any]:
+        """异步调用设备方法
+        
+        Args:
+            command: 包含name和method等信息的命令字典
+            
+        Returns:
+            Optional[Any]: 如果找到设备并调用成功，返回调用结果；否则抛出异常
+        """
+        thing_name = command.get("name")
+        for thing in self.things:
+            if thing.name == thing_name:
+                # 检查是否为异步Thing
+                if hasattr(thing, 'invoke_async'):
+                    return await thing.invoke_async(command)
+                else:
+                    # 兼容同步Thing，在线程池中执行
+                    return await asyncio.to_thread(thing.invoke, command)
+        
         # 记录错误日志
         logging.error(f"设备不存在: {thing_name}")
         raise ValueError(f"设备不存在: {thing_name}")

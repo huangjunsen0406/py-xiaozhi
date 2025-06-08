@@ -1,3 +1,4 @@
+import asyncio
 import os
 import threading
 import time
@@ -6,7 +7,6 @@ from typing import Any, Dict, Tuple
 import pygame
 import requests
 
-from src.application import Application
 from src.constants.constants import AudioConfig, DeviceState
 from src.iot.thing import Parameter, Thing, ValueType
 from src.utils.logging_config import get_logger
@@ -69,7 +69,8 @@ class MusicPlayer(Thing):
         self.current_temp_file = None
 
         # 获取应用程序实例
-        self.app = Application.get_instance()
+        self.app = None
+        self._initialize_app_reference()
 
         # 加载配置文件
         self.config = self._load_config()
@@ -85,6 +86,62 @@ class MusicPlayer(Thing):
         # 注册属性和方法
         self._register_properties()
         self._register_methods()
+
+    def _initialize_app_reference(self):
+        """初始化应用程序引用"""
+        try:
+            from src.application import Application
+            self.app = Application.get_instance()
+        except Exception as e:
+            logger.warning(f"获取Application实例失败: {e}")
+            self.app = None
+
+    def _safe_schedule_ui_update(self, update_func):
+        """安全地调度UI更新到Application的事件循环"""
+        if not self.app or not hasattr(self.app, '_main_loop'):
+            logger.debug("Application或事件循环不可用，跳过UI更新")
+            return
+            
+        if not callable(update_func):
+            logger.warning(f"传入的更新函数不可调用: {type(update_func)}")
+            return
+            
+        try:
+            if self.app._main_loop and not self.app._main_loop.is_closed():
+                # 使用asyncio.run_coroutine_threadsafe来从线程中调度到主事件循环
+                async def update_wrapper():
+                    try:
+                        # 包装同步函数为异步函数
+                        async def async_update_func():
+                            try:
+                                result = update_func()
+                                # 如果返回了协程，等待它
+                                if asyncio.iscoroutine(result):
+                                    await result
+                                return result
+                            except Exception as e:
+                                logger.error(f"UI更新函数执行失败: {e}")
+                                return None
+                        
+                        await self.app.schedule_command(async_update_func)
+                    except Exception as e:
+                        logger.error(f"UI更新执行失败: {e}")
+                
+                asyncio.run_coroutine_threadsafe(
+                    update_wrapper(), self.app._main_loop
+                )
+                # 不等待结果，避免阻塞
+                logger.debug("已调度UI更新到主事件循环")
+            else:
+                logger.debug("主事件循环不可用，跳过UI更新")
+        except Exception as e:
+            logger.error(f"调度UI更新失败: {e}")
+
+    def _get_tts_playing_status(self) -> bool:
+        """获取TTS播放状态"""
+        if not self.app:
+            return False
+        return getattr(self.app, 'is_tts_playing', False)
 
     def _register_properties(self):
         """注册播放器属性."""
@@ -443,7 +500,7 @@ class MusicPlayer(Thing):
     def _update_lyrics(self):
         """根据当前播放位置更新歌词显示."""
         # 如果没有歌词或应用程序正在说话，不更新歌词
-        if not self.lyrics or self.app.get_is_tts_playing():
+        if not self.lyrics or self._get_tts_playing_status():
             return
 
         current_time = self.current_position
@@ -503,11 +560,12 @@ class MusicPlayer(Thing):
             duration_str = self._format_time(self.total_duration)
             display_text = f"[{position_str}/{duration_str}] {lyric_text}"
 
-            # 使用schedule方法安全地更新UI
-            if self.app:
-                self.app.schedule(
-                    lambda: self.app.set_chat_message("assistant", display_text)
-                )
+            # 使用安全的方式更新UI
+            def update_ui():
+                if self.app:
+                    self.app.set_chat_message("assistant", display_text)
+            
+            self._safe_schedule_ui_update(update_ui)
             logger.debug(f"显示歌词: {lyric_text}")
 
     def _get_lyrics_text(self) -> Dict[str, Any]:
@@ -830,7 +888,7 @@ class MusicPlayer(Thing):
         if not self.app:
             return
 
-        tts_playing = self.app.get_is_tts_playing()
+        tts_playing = self._get_tts_playing_status()
 
         # 检查是否有打断请求
         if hasattr(self.app, "aborted") and self.app.aborted:
@@ -990,12 +1048,11 @@ class MusicPlayer(Thing):
             self.start_play_time = time.time()
 
             # 更新UI显示
-            if self.app:
-                self.app.schedule(
-                    lambda: self.app.set_chat_message(
-                        "assistant", f"正在播放: {self.current_song}"
-                    )
-                )
+            def update_ui():
+                if self.app:
+                    self.app.set_chat_message("assistant", f"正在播放: {self.current_song}")
+            
+            self._safe_schedule_ui_update(update_ui)
 
             # 启动进度更新线程
             self._start_progress_thread()
@@ -1031,12 +1088,11 @@ class MusicPlayer(Thing):
             # 更新开始时间，考虑已经暂停的时间
             self.start_play_time = time.time() - self.current_position
 
-            if self.app:
-                self.app.schedule(
-                    lambda: self.app.set_chat_message(
-                        "assistant", f"继续播放: {self.current_song}"
-                    )
-                )
+            def update_ui():
+                if self.app:
+                    self.app.set_chat_message("assistant", f"继续播放: {self.current_song}")
+            
+            self._safe_schedule_ui_update(update_ui)
 
             return {"status": "success", "message": f"继续播放: {self.current_song}"}
         else:
@@ -1048,15 +1104,16 @@ class MusicPlayer(Thing):
             )
             self.current_position = time.time() - self.start_play_time
 
-            if self.app:
-                pos_str = self._format_time(self.current_position)
-                dur_str = self._format_time(self.total_duration)
-                self.app.schedule(
-                    lambda: self.app.set_chat_message(
+            def update_ui():
+                if self.app:
+                    pos_str = self._format_time(self.current_position)
+                    dur_str = self._format_time(self.total_duration)
+                    self.app.set_chat_message(
                         "assistant",
                         f"已暂停: {self.current_song} [{pos_str}/{dur_str}]",
                     )
-                )
+            
+            self._safe_schedule_ui_update(update_ui)
 
             return {
                 "status": "success",
@@ -1111,8 +1168,12 @@ class MusicPlayer(Thing):
 
         # 返回结果
         msg = f"已停止播放: {current_song}"
-        if self.app:
-            self.app.schedule(lambda: self.app.set_chat_message("assistant", msg))
+        
+        def update_ui():
+            if self.app:
+                self.app.set_chat_message("assistant", msg)
+        
+        self._safe_schedule_ui_update(update_ui)
 
         return {"status": "success", "message": msg}
 
@@ -1150,8 +1211,11 @@ class MusicPlayer(Thing):
         dur_str = self._format_time(self.total_duration)
         msg = f"已跳转到: {pos_str}/{dur_str}"
 
-        if self.app:
-            self.app.schedule(lambda: self.app.set_chat_message("assistant", msg))
+        def update_ui():
+            if self.app:
+                self.app.set_chat_message("assistant", msg)
+        
+        self._safe_schedule_ui_update(update_ui)
 
         return {"status": "success", "message": msg, "position": position}
 
@@ -1207,19 +1271,22 @@ class MusicPlayer(Thing):
                 self.paused_for_tts = False  # 重置TTS暂停状态
 
                 # 更新UI显示完成状态
-                if self.app:
-                    dur_str = self._format_time(self.total_duration)
-                    self.app.schedule(
-                        lambda: self.app.set_chat_message(
+                def update_ui():
+                    if self.app:
+                        dur_str = self._format_time(self.total_duration)
+                        self.app.set_chat_message(
                             "assistant", f"播放完成: {self.current_song} [{dur_str}]"
                         )
-                    )
+                
+                self._safe_schedule_ui_update(update_ui)
 
                 # 根据自动模式设置应用状态
-                if self.app:
-                    self.app.schedule(
-                        lambda: self.app.set_device_state(DeviceState.IDLE)
-                    )
+                async def update_device_state():
+                    if self.app and hasattr(self.app, '_set_device_state'):
+                        # 使用异步调用设置设备状态
+                        await self.app._set_device_state(DeviceState.IDLE)
+                
+                self._safe_schedule_ui_update(update_device_state)
                 break
 
             # 更新歌词显示（每0.5秒检查一次）
@@ -1271,12 +1338,11 @@ class MusicPlayer(Thing):
             # 更新开始时间，考虑已经暂停的时间
             self.start_play_time = time.time() - self.current_position
 
-            if self.app:
-                self.app.schedule(
-                    lambda: self.app.set_chat_message(
-                        "assistant", f"继续播放: {self.current_song}"
-                    )
-                )
+            def update_ui():
+                if self.app:
+                    self.app.set_chat_message("assistant", f"继续播放: {self.current_song}")
+            
+            self._safe_schedule_ui_update(update_ui)
 
             return {"status": "success", "message": f"继续播放: {self.current_song}"}
         else:
@@ -1310,15 +1376,16 @@ class MusicPlayer(Thing):
             self.paused_for_tts = False  # 明确设置：这不是因为TTS而暂停的
             self.current_position = time.time() - self.start_play_time
 
-            if self.app:
-                pos_str = self._format_time(self.current_position)
-                dur_str = self._format_time(self.total_duration)
-                self.app.schedule(
-                    lambda: self.app.set_chat_message(
+            def update_ui():
+                if self.app:
+                    pos_str = self._format_time(self.current_position)
+                    dur_str = self._format_time(self.total_duration)
+                    self.app.set_chat_message(
                         "assistant",
                         f"已暂停: {self.current_song} [{pos_str}/{dur_str}]",
                     )
-                )
+            
+            self._safe_schedule_ui_update(update_ui)
 
             return {
                 "status": "success",
