@@ -50,37 +50,6 @@ def is_official_server(ws_addr: str) -> bool:
     return "api.tenclass.net" in ws_addr
 
 
-def get_frame_duration() -> int:
-    """获取设备的帧长度（优化版：避免独立PyAudio实例创建）
-
-    返回:
-        int: 帧长度(毫秒)
-    """
-    try:
-        # 检查是否为官方服务器
-        ota_url = config.get_config("SYSTEM_OPTIONS.NETWORK.OTA_VERSION_URL")
-        if not is_official_server(ota_url):
-            return 60
-
-        system = platform.system()
-
-        if system == "Windows":
-            # Windows通常支持较小的缓冲区
-            return 20
-        elif system == "Linux":
-            # Linux可能需要稍大的缓冲区以减少延迟(如果发现不行改为60)
-            return 60
-        elif system == "Darwin":  # macOS
-            # macOS通常有良好的音频性能
-            return 20
-        else:
-            # 其他系统使用保守值
-            return 60
-
-    except Exception:
-        return 20  # 如果获取失败，返回默认值20ms
-
-
 class AudioConfig:
     """音频配置类."""
     # 固定配置
@@ -91,7 +60,7 @@ class AudioConfig:
     CHANNELS = 1
 
     # 动态获取帧长度
-    FRAME_DURATION = get_frame_duration()
+    FRAME_DURATION = 60
 
     # 根据不同采样率计算帧大小
     INPUT_FRAME_SIZE = int(INPUT_SAMPLE_RATE * (FRAME_DURATION / 1000))

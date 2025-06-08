@@ -7,7 +7,7 @@ numpy
 openai
 opuslib==3.0.1
 paho-mqtt==2.1.0
-PyAudio==0.2.14
+sounddevice>=0.4.4
 pycaw==20240210
 pynput
 pyperclip==1.9.0

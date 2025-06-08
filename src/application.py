@@ -505,10 +505,10 @@ class Application:
             # 不再关闭和重新打开流，只确保它们处于活跃状态
             if (
                 self.audio_codec.input_stream
-                and not self.audio_codec.input_stream.is_active()
+                and not self.audio_codec.input_stream.active
             ):
                 try:
-                    self.audio_codec.input_stream.start_stream()
+                    self.audio_codec.input_stream.start()
                 except Exception as e:
                     logger.warning(f"启动输入流时出错: {e}")
                     # 只有在出错时才重新初始化
@@ -516,10 +516,10 @@ class Application:
 
             if (
                 self.audio_codec.output_stream
-                and not self.audio_codec.output_stream.is_active()
+                and not self.audio_codec.output_stream.active
             ):
                 try:
-                    self.audio_codec.output_stream.start_stream()
+                    self.audio_codec.output_stream.start()
                 except Exception as e:
                     logger.warning(f"启动输出流时出错: {e}")
                     # 只有在出错时才重新初始化
@@ -586,9 +586,9 @@ class Application:
                 ):
 
                     # 如果输出流不活跃，尝试重新激活
-                    if not self.audio_codec.output_stream.is_active():
+                    if not self.audio_codec.output_stream.active:
                         try:
-                            self.audio_codec.output_stream.start_stream()
+                            self.audio_codec.output_stream.start()
                         except Exception as e:
                             logger.warning(f"启动输出流失败，尝试重新初始化: {e}")
                             self.audio_codec._reinitialize_stream(is_input=False)
@@ -1363,7 +1363,7 @@ class Application:
             # 直接引用AudioCodec实例中的输入流
             if (
                 self.audio_codec.input_stream
-                and self.audio_codec.input_stream.is_active()
+                and self.audio_codec.input_stream.active
             ):
                 self.wake_word_detector.stream = self.audio_codec.input_stream
                 self.wake_word_detector.external_stream = True
