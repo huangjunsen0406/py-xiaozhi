@@ -34,6 +34,9 @@ class AudioCodec:
         # 音频缓冲区
         self._input_buffer = asyncio.Queue(maxsize=300)
         self._output_buffer = asyncio.Queue(maxsize=200)
+        
+        # 专门为唤醒词检测器提供的缓冲区（不受暂停影响）
+        self._wake_word_buffer = asyncio.Queue(maxsize=100)
 
     async def initialize(self):
         """初始化音频设备和编解码器"""
@@ -103,22 +106,34 @@ class AudioCodec:
         if status and 'overflow' not in str(status).lower():
             logger.warning(f"输入流状态: {status}")
         
-        if self._is_closing or self._is_input_paused:
+        if self._is_closing:
             return
         
         try:
             audio_data = indata.copy().flatten()
             
-            # 使用asyncio.Queue的非阻塞put
+            # 始终填充唤醒词缓冲区（不受暂停状态影响）
             try:
-                self._input_buffer.put_nowait(audio_data)
+                self._wake_word_buffer.put_nowait(audio_data)
             except asyncio.QueueFull:
                 # 移除最旧的数据
                 try:
-                    self._input_buffer.get_nowait()
-                    self._input_buffer.put_nowait(audio_data)
+                    self._wake_word_buffer.get_nowait()
+                    self._wake_word_buffer.put_nowait(audio_data)
                 except asyncio.QueueEmpty:
+                    self._wake_word_buffer.put_nowait(audio_data)
+            
+            # 只有在未暂停时才填充正常的输入缓冲区
+            if not self._is_input_paused:
+                try:
                     self._input_buffer.put_nowait(audio_data)
+                except asyncio.QueueFull:
+                    # 移除最旧的数据
+                    try:
+                        self._input_buffer.get_nowait()
+                        self._input_buffer.put_nowait(audio_data)
+                    except asyncio.QueueEmpty:
+                        self._input_buffer.put_nowait(audio_data)
                     
         except Exception as e:
             logger.error(f"输入回调错误: {e}")
@@ -349,6 +364,14 @@ class AudioCodec:
             except asyncio.QueueEmpty:
                 break
         
+        # 清空唤醒词缓冲区
+        while not self._wake_word_buffer.empty():
+            try:
+                self._wake_word_buffer.get_nowait()
+                cleared_count += 1
+            except asyncio.QueueEmpty:
+                break
+        
         # 额外等待一小段时间，确保正在处理的音频数据完成
         await asyncio.sleep(0.01)
         
@@ -357,6 +380,14 @@ class AudioCodec:
         while not self._input_buffer.empty():
             try:
                 self._input_buffer.get_nowait()
+                extra_cleared += 1
+            except asyncio.QueueEmpty:
+                break
+        
+        # 再次清空唤醒词缓冲区
+        while not self._wake_word_buffer.empty():
+            try:
+                self._wake_word_buffer.get_nowait()
                 extra_cleared += 1
             except asyncio.QueueEmpty:
                 break

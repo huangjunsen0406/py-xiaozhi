@@ -571,6 +571,7 @@ class Application:
         if not self.audio_codec:
             return
             
+        # 现在只需要确保音频输入始终活跃，不再暂停
         if action == "resume":
             await self.audio_codec.resume_input()
 
@@ -715,9 +716,8 @@ class Application:
         self.aborted = False
         self.is_tts_playing = True
         
-        # 暂停麦克风输入避免录制TTS声音
+        # 清空音频队列避免录制TTS声音，但不暂停输入（保持唤醒词检测工作）
         if self.audio_codec:
-            await self.audio_codec.pause_input()
             await self.audio_codec.clear_audio_queue()
 
         if self.device_state in [DeviceState.IDLE, DeviceState.LISTENING]:
@@ -732,18 +732,16 @@ class Application:
             
             self.is_tts_playing = False
             
-            # 清空输入缓冲区并恢复麦克风输入
+            # 清空输入缓冲区确保干净的状态
             if self.audio_codec:
                 try:
-                    # 先清空可能录制的TTS声音和环境音
+                    # 清空可能录制的TTS声音和环境音
                     await self.audio_codec.clear_audio_queue()
-                    # 恢复麦克风输入
-                    await self.audio_codec.resume_input()
-                    # 再次清空缓冲区确保干净的状态
-                    await asyncio.sleep(0.1)  # 等待一小段时间让缓冲区稳定
+                    # 等待一小段时间让缓冲区稳定
+                    await asyncio.sleep(0.1)
                     await self.audio_codec.clear_audio_queue()
                 except Exception as e:
-                    logger.warning(f"恢复音频输入失败，尝试重新初始化: {e}")
+                    logger.warning(f"清空音频缓冲区失败: {e}")
                     await self.audio_codec.reinitialize_stream(is_input=True)
             
             # 状态转换
@@ -809,7 +807,7 @@ class Application:
                 return
 
             # 设置回调
-            self.wake_word_detector.on_detected = self._on_wake_word_detected
+            self.wake_word_detector.on_detected(self._on_wake_word_detected)
             self.wake_word_detector.on_error = self._handle_wake_word_error
             
             await self._start_wake_word_detector()
