@@ -406,8 +406,9 @@ class Application:
                         await self._set_device_state(DeviceState.IDLE)
                         return
 
-                # 重新初始化音频流
+                # 清空缓冲区并重新初始化音频流
                 if self.audio_codec:
+                    await self.audio_codec.clear_audio_queue()
                     await self.audio_codec.reinitialize_stream(is_input=True)
 
                 await self.protocol.send_start_listening(ListeningMode.MANUAL)
@@ -455,6 +456,10 @@ class Application:
                         await self._alert("错误", "打开音频通道失败")
                         await self._set_device_state(DeviceState.IDLE)
                         return
+
+                # 清空缓冲区确保干净的开始
+                if self.audio_codec:
+                    await self.audio_codec.clear_audio_queue()
 
                 self.keep_listening = True
                 await self.protocol.send_start_listening(ListeningMode.AUTO_STOP)
@@ -547,6 +552,9 @@ class Application:
         asyncio.create_task(self._update_iot_states(True))
         asyncio.create_task(self._manage_wake_word_detector("pause"))
         asyncio.create_task(self._manage_audio_input("resume"))
+        # 确保进入监听状态时缓冲区是干净的
+        if self.audio_codec:
+            asyncio.create_task(self.audio_codec.clear_audio_queue())
 
     async def _manage_wake_word_detector(self, action):
         """管理唤醒词检测器"""
@@ -707,7 +715,9 @@ class Application:
         self.aborted = False
         self.is_tts_playing = True
         
+        # 暂停麦克风输入避免录制TTS声音
         if self.audio_codec:
+            await self.audio_codec.pause_input()
             await self.audio_codec.clear_audio_queue()
 
         if self.device_state in [DeviceState.IDLE, DeviceState.LISTENING]:
@@ -722,10 +732,16 @@ class Application:
             
             self.is_tts_playing = False
             
-            # 重新初始化输入流（减少频率）
+            # 清空输入缓冲区并恢复麦克风输入
             if self.audio_codec:
                 try:
+                    # 先清空可能录制的TTS声音和环境音
+                    await self.audio_codec.clear_audio_queue()
+                    # 恢复麦克风输入
                     await self.audio_codec.resume_input()
+                    # 再次清空缓冲区确保干净的状态
+                    await asyncio.sleep(0.1)  # 等待一小段时间让缓冲区稳定
+                    await self.audio_codec.clear_audio_queue()
                 except Exception as e:
                     logger.warning(f"恢复音频输入失败，尝试重新初始化: {e}")
                     await self.audio_codec.reinitialize_stream(is_input=True)

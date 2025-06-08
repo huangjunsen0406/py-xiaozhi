@@ -209,7 +209,13 @@ class AudioCodec:
     async def pause_input(self):
         """暂停音频输入"""
         self._is_input_paused = True
-        logger.info("音频输入已暂停")
+        # 暂停输入的同时清空输入缓冲区
+        while not self._input_buffer.empty():
+            try:
+                self._input_buffer.get_nowait()
+            except asyncio.QueueEmpty:
+                break
+        logger.info("音频输入已暂停并清空缓冲区")
 
     async def resume_input(self):
         """恢复音频输入"""
@@ -342,6 +348,20 @@ class AudioCodec:
                 cleared_count += 1
             except asyncio.QueueEmpty:
                 break
+        
+        # 额外等待一小段时间，确保正在处理的音频数据完成
+        await asyncio.sleep(0.01)
+        
+        # 再次清空可能新产生的数据
+        extra_cleared = 0
+        while not self._input_buffer.empty():
+            try:
+                self._input_buffer.get_nowait()
+                extra_cleared += 1
+            except asyncio.QueueEmpty:
+                break
+        
+        cleared_count += extra_cleared
                 
         if cleared_count > 0:
             logger.info(f"清空音频队列，丢弃 {cleared_count} 帧音频数据")
