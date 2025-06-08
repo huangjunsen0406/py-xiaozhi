@@ -669,12 +669,12 @@ class Application:
             self.display.update_text(f"{title}: {message}")
 
     # 协议回调方法
-    def _on_network_error(self, error_message=None):
+    async def _on_network_error(self, error_message=None):
         """网络错误回调"""
         if error_message:
             logger.error(error_message)
         
-        asyncio.create_task(self._handle_network_error())
+        await self._handle_network_error()
 
     async def _handle_network_error(self):
         """处理网络错误"""
@@ -687,14 +687,14 @@ class Application:
         if self.protocol:
             await self.protocol.close_audio_channel()
 
-    def _on_incoming_audio(self, data):
+    async def _on_incoming_audio(self, data):
         """接收音频数据回调"""
         if self.device_state == DeviceState.SPEAKING and self.audio_codec:
-            asyncio.create_task(self.audio_codec.write_audio(data))
+            await self.audio_codec.write_audio(data)
 
-    def _on_incoming_json(self, json_data):
+    async def _on_incoming_json(self, json_data):
         """接收JSON数据回调"""
-        asyncio.create_task(self._handle_incoming_json(json_data))
+        await self._handle_incoming_json(json_data)
 
     async def _handle_incoming_json(self, json_data):
         """处理JSON消息"""
