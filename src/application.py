@@ -361,14 +361,11 @@ class Application:
 
     async def _start_gui_display(self):
         """启动GUI显示"""
-        # GUI显示通常需要在主线程中运行，这里创建一个任务来管理
-        self._create_task(self._run_gui_display(), "GUI显示")
-
-    async def _run_gui_display(self):
-        """运行GUI显示循环"""
+        # 在qasync环境中，GUI可以直接在主线程启动
         try:
-            # 启动GUI（通常是阻塞的）
-            await asyncio.to_thread(self.display.start)
+            # 直接调用start方法，不使用asyncio.to_thread
+            # 因为现在我们在正确的线程中（主线程+qasync）
+            self.display.start()
         except Exception as e:
             logger.error(f"GUI显示错误: {e}", exc_info=True)
 

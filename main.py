@@ -3,6 +3,14 @@ import asyncio
 import io
 import sys
 
+# 添加qasync支持
+try:
+    import qasync
+    from PyQt5.QtWidgets import QApplication
+    QASYNC_AVAILABLE = True
+except ImportError:
+    QASYNC_AVAILABLE = False
+
 from src.application import Application
 from src.utils.logging_config import get_logger, setup_logging
 
@@ -55,7 +63,7 @@ async def main_async():
         # 启动应用，传入参数
         await app.run(mode=args.mode, protocol=args.protocol)
         
-        # 等待应用程序运行
+        # 等待应用程序运行（GUI和CLI都需要）
         while app.running:
             await asyncio.sleep(1)
             
@@ -78,8 +86,45 @@ async def main_async():
 def main():
     """同步主函数入口"""
     try:
-        # 运行异步主函数
-        return asyncio.run(main_async())
+        args = parse_args()
+        
+        if args.mode == "gui":
+            # GUI模式：使用qasync集成Qt和asyncio
+            if not QASYNC_AVAILABLE:
+                logger.error("GUI模式需要qasync库，请安装: pip install qasync")
+                return 1
+                
+            # 创建QApplication
+            app = QApplication(sys.argv)
+            
+            # 创建qasync事件循环
+            loop = qasync.QEventLoop(app)
+            asyncio.set_event_loop(loop)
+            
+            try:
+                # 运行异步主函数
+                with loop:
+                    task = loop.create_task(main_async())
+                    
+                    # 启动Qt事件循环，这会运行直到应用关闭
+                    loop.run_until_complete(task)
+                    
+            except KeyboardInterrupt:
+                logger.info("程序被用户中断")
+                return 0
+            except Exception as e:
+                logger.error(f"GUI程序异常退出: {e}", exc_info=True)
+                return 1
+            finally:
+                # 确保事件循环正确关闭
+                try:
+                    loop.close()
+                except Exception:
+                    pass
+        else:
+            # CLI模式：使用标准asyncio
+            return asyncio.run(main_async())
+            
     except KeyboardInterrupt:
         logger.info("程序被用户中断")
         return 0

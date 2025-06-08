@@ -4,13 +4,11 @@ import platform
 import queue
 import sys
 import threading
-import time
 from pathlib import Path
 from typing import Callable, Optional
 from urllib.parse import urlparse
 
 from PyQt5.QtCore import (
-    Q_ARG,
     QEvent,
     QMetaObject,
     QObject,
@@ -516,18 +514,15 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         # 记录当前设置的路径
         self._last_emotion_path = emotion_path
 
-        # 确保在主线程中处理UI更新
-        if QApplication.instance().thread() != QThread.currentThread():
-            # 如果不在主线程，使用信号-槽方式或QMetaObject调用在主线程执行
-            QMetaObject.invokeMethod(
-                self,
-                "_update_emotion_safely",
-                Qt.QueuedConnection,
-                Q_ARG(str, emotion_path),
-            )
-        else:
-            # 已经在主线程，直接执行
-            self._update_emotion_safely(emotion_path)
+        # 在qasync环境中，我们总是在主线程中
+        # 但为了安全起见，仍然检查QApplication实例
+        app = QApplication.instance()
+        if app is None:
+            self.logger.warning("QApplication实例未找到，跳过表情更新")
+            return
+            
+        # 直接更新表情，因为在qasync环境中我们已经在主线程
+        self._update_emotion_safely(emotion_path)
 
     # 新增一个槽函数，用于在主线程中安全地更新表情
     @pyqtSlot(str)
@@ -713,11 +708,12 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
                 self.logger.error(f"更新标签失败: {e}")
 
     def start_update_threads(self):
-        """启动更新线程."""
+        """启动更新任务（在qasync环境中使用异步任务而不是线程）."""
         # 初始化表情缓存
         self.last_emotion_path = None
 
-        def update_loop():
+        async def update_loop():
+            """异步更新循环"""
             while self._running:
                 try:
                     # 更新状态
@@ -741,9 +737,38 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
 
                 except Exception as e:
                     self.logger.error(f"更新失败: {e}")
-                time.sleep(0.1)
+                
+                await asyncio.sleep(0.1)
 
-        threading.Thread(target=update_loop, daemon=True).start()
+        # 在qasync环境中创建异步任务
+        try:
+            import asyncio
+            asyncio.create_task(update_loop())
+        except Exception as e:
+            self.logger.error(f"启动更新任务失败: {e}")
+            # 如果异步任务创建失败，回退到原来的线程方式
+            import threading
+            import time
+
+            def sync_update_loop():
+                while self._running:
+                    try:
+                        if self.status_update_callback:
+                            status = self.status_update_callback()
+                            if status:
+                                self.update_status(status)
+                        if self.text_update_callback:
+                            text = self.text_update_callback()
+                            if text:
+                                self.update_text(text)
+                        if self.emotion_update_callback:
+                            emotion = self.emotion_update_callback()
+                            if emotion:
+                                self.update_emotion(emotion)
+                    except Exception as e:
+                        self.logger.error(f"更新失败: {e}")
+                    time.sleep(0.1)
+            threading.Thread(target=sync_update_loop, daemon=True).start()
 
     def on_close(self):
         """关闭窗口处理."""
@@ -776,10 +801,11 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
     def start(self):
         """启动GUI."""
         try:
-            # 确保QApplication实例在主线程中创建
+            # 在qasync环境中，QApplication已经在main.py中创建
             self.app = QApplication.instance()
             if self.app is None:
-                self.app = QApplication(sys.argv)
+                # 这种情况不应该发生，因为main.py已经创建了QApplication
+                raise RuntimeError("QApplication未找到，请确保在qasync环境中运行")
 
             # 设置UI默认字体
             default_font = QFont("ASLantTermuxFont Mono", 12)
@@ -1012,8 +1038,8 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             self.update_timer.timeout.connect(self._process_updates)
             self.update_timer.start(100)
 
-            # 在主线程中运行主循环
-            self.logger.info("开始启动GUI主循环")
+            # 显示主窗口（不要调用app.exec_()，因为qasync会管理事件循环）
+            self.logger.info("显示GUI窗口")
             self.root.show()
             # self.root.showFullScreen() # 全屏显示
 
@@ -1149,6 +1175,17 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         if self.tray_icon:
             self.tray_icon.hide()
 
+        # 关闭Application实例
+        from src.application import Application
+        app = Application.get_instance()
+        if app:
+            # 在qasync环境中创建异步任务关闭应用
+            try:
+                import asyncio
+                asyncio.create_task(app.shutdown())
+            except Exception as e:
+                self.logger.error(f"关闭应用程序失败: {e}")
+
         # 退出应用程序
         QApplication.quit()
 
@@ -1264,7 +1301,12 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
                     # 长按说话 - 在手动模式下处理
                     if not self.auto_mode and self.is_combo("alt", "shift", "v"):
                         if self.button_press_callback:
-                            self.button_press_callback()
+                            # 在qasync环境中安全调用异步回调
+                            try:
+                                import asyncio
+                                asyncio.create_task(self.button_press_callback())
+                            except Exception as e:
+                                self.logger.error(f"执行按键回调失败: {e}")
                             if self.manual_btn:
                                 self.update_queue.put(
                                     lambda: self._safe_update_button(
@@ -1275,12 +1317,20 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
                     # 自动对话模式
                     if self.is_combo("alt", "shift", "a"):
                         if self.auto_callback:
-                            self.auto_callback()
+                            try:
+                                import asyncio
+                                asyncio.create_task(self.auto_callback())
+                            except Exception as e:
+                                self.logger.error(f"执行自动对话回调失败: {e}")
 
                     # 打断
                     if self.is_combo("alt", "shift", "x"):
                         if self.abort_callback:
-                            self.abort_callback()
+                            try:
+                                import asyncio
+                                asyncio.create_task(self.abort_callback())
+                            except Exception as e:
+                                self.logger.error(f"执行打断回调失败: {e}")
 
                     # 模式切换
                     if self.is_combo("alt", "shift", "m"):
@@ -1308,7 +1358,11 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
                     # 松开按键，停止语音输入（仅在手动模式下）
                     if not self.auto_mode and not self.is_combo("alt", "shift", "v"):
                         if self.button_release_callback:
-                            self.button_release_callback()
+                            try:
+                                import asyncio
+                                asyncio.create_task(self.button_release_callback())
+                            except Exception as e:
+                                self.logger.error(f"执行按键释放回调失败: {e}")
                             if self.manual_btn:
                                 self.update_queue.put(
                                     lambda: self._safe_update_button(
