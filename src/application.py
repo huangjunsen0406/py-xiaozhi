@@ -143,7 +143,13 @@ class Application:
         """设置信号处理器"""
         def signal_handler():
             logger.info("接收到中断信号，开始关闭...")
-            asyncio.create_task(self.shutdown())
+            # 确保在正确的事件循环中执行shutdown
+            if self._main_loop and not self._main_loop.is_closed():
+                asyncio.run_coroutine_threadsafe(self.shutdown(), self._main_loop)
+            else:
+                # 如果事件循环不可用，强制退出
+                import os
+                os._exit(0)
         
         # 设置信号处理
         try:
@@ -927,7 +933,8 @@ class Application:
         from src.iot.things.CameraVL.Camera import Camera
         from src.iot.things.countdown_timer import CountdownTimer
         from src.iot.things.lamp import Lamp
-        from src.iot.things.music_player import MusicPlayer
+
+        # from src.iot.things.music_player import MusicPlayer
         from src.iot.things.speaker import Speaker
 
         thing_manager = ThingManager.get_instance()
@@ -935,7 +942,7 @@ class Application:
         # 添加设备
         thing_manager.add_thing(Lamp())
         thing_manager.add_thing(Speaker())
-        thing_manager.add_thing(MusicPlayer())
+        # thing_manager.add_thing(MusicPlayer())
         thing_manager.add_thing(Camera())
         thing_manager.add_thing(CountdownTimer())
         
@@ -1186,4 +1193,4 @@ class Application:
             logger.info("异步应用程序已关闭")
             
         except Exception as e:
-            logger.error(f"关闭应用程序时出错: {e}", exc_info=True) 
+            logger.error(f"关闭应用程序时出错: {e}", exc_info=True)

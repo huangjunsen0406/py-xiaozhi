@@ -144,10 +144,25 @@ class CliDisplay(BaseDisplay):
         """键盘输入循环"""
         try:
             while self.running:
-                cmd = await asyncio.to_thread(input)
-                await self._handle_command(cmd.lower().strip())
+                try:
+                    # 使用超时机制，避免无限阻塞
+                    cmd = await asyncio.wait_for(
+                        asyncio.to_thread(input), 
+                        timeout=1.0
+                    )
+                    await self._handle_command(cmd.lower().strip())
+                except asyncio.TimeoutError:
+                    # 超时后继续循环，检查running状态
+                    continue
+                except EOFError:
+                    # 处理Ctrl+D或输入流关闭
+                    await self.on_close()
+                    break
         except asyncio.CancelledError:
             pass
+        except KeyboardInterrupt:
+            # 处理Ctrl+C
+            await self.on_close()
 
     async def _handle_command(self, cmd: str):
         """处理命令"""
@@ -209,4 +224,4 @@ class CliDisplay(BaseDisplay):
 
     def stop_keyboard_listener(self):
         """停止键盘监听"""
-        pass 
+        pass

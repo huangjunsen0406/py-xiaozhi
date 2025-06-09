@@ -20,3 +20,4 @@ colorlog==6.9.0
 pygame==2.6.1
 scipy
 qasync==0.27.1
+soxr==0.5.0.post1
