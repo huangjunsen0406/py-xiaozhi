@@ -7,7 +7,6 @@ numpy
 openai
 opuslib==3.0.1
 paho-mqtt==2.1.0
-asyncio-mqtt==0.16.2
 sounddevice>=0.4.4
 pycaw==20240210
 pynput
