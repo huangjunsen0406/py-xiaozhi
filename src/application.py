@@ -170,8 +170,8 @@ class Application:
         # 初始化音频编解码器
         await self._initialize_audio()
         
-        # 设置协议
-        self._set_protocol_type(protocol)
+        # 设置协议（改为异步）
+        await self._set_protocol_type(protocol)
         
         # 设置显示类型
         self._set_display_type(mode)
@@ -201,13 +201,26 @@ class Application:
             logger.error("初始化音频设备失败: %s", e, exc_info=True)
             await self._alert("错误", f"初始化音频设备失败: {e}")
 
-    def _set_protocol_type(self, protocol_type: str):
+    async def _set_protocol_type(self, protocol_type: str):
         """设置协议类型"""
         logger.debug("设置协议类型: %s", protocol_type)
+        
+        # 如果已有协议，先清理
+        if self.protocol:
+            try:
+                await self.protocol.close_audio_channel()
+                if hasattr(self.protocol, '_cleanup_connections'):
+                    await self.protocol._cleanup_connections()
+            except Exception as e:
+                logger.warning(f"清理旧协议时出错: {e}")
+        
+        # 创建新协议
         if protocol_type == "mqtt":
             self.protocol = MqttProtocol(asyncio.get_running_loop())
         else:
             self.protocol = WebsocketProtocol()
+        
+        logger.info(f"协议 {protocol_type} 初始化完成")
 
     def _set_display_type(self, mode: str):
         """设置显示界面类型"""
@@ -780,7 +793,7 @@ class Application:
                     await self.audio_codec.reinitialize_stream(is_input=True)
             
             # 状态转换
-            if self.keep_listening:
+            if self.keep_listening and self.protocol.is_audio_channel_opened():
                 await self.protocol.send_start_listening(ListeningMode.AUTO_STOP)
                 await self._set_device_state(DeviceState.LISTENING)
             else:
@@ -1181,7 +1194,13 @@ class Application:
                 await self.audio_codec.close()
             
             if self.protocol:
-                await self.protocol.close_audio_channel()
+                try:
+                    await self.protocol.close_audio_channel()
+                    # 使用异步上下文管理器清理
+                    if hasattr(self.protocol, '_cleanup_connections'):
+                        await self.protocol._cleanup_connections()
+                except Exception as e:
+                    logger.warning(f"关闭协议时出错: {e}")
             
             if self.wake_word_detector:
                 await self.wake_word_detector.stop()

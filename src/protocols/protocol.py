@@ -33,10 +33,32 @@ class Protocol:
         """设置网络错误回调函数."""
         self.on_network_error = callback
 
+    # 抽象方法 - 需要在子类中实现
+    async def connect(self):
+        """连接到服务器的抽象方法，需要在子类中实现."""
+        raise NotImplementedError("connect方法必须由子类实现")
+
     async def send_text(self, message):
         """发送文本消息的抽象方法，需要在子类中实现."""
         raise NotImplementedError("send_text方法必须由子类实现")
 
+    async def send_audio(self, audio_data):
+        """发送音频数据的抽象方法，需要在子类中实现."""
+        raise NotImplementedError("send_audio方法必须由子类实现")
+
+    async def open_audio_channel(self):
+        """打开音频通道的抽象方法，需要在子类中实现."""
+        raise NotImplementedError("open_audio_channel方法必须由子类实现")
+
+    async def close_audio_channel(self):
+        """关闭音频通道的抽象方法，需要在子类中实现."""
+        raise NotImplementedError("close_audio_channel方法必须由子类实现")
+
+    def is_audio_channel_opened(self) -> bool:
+        """检查音频通道是否打开的抽象方法，需要在子类中实现."""
+        raise NotImplementedError("is_audio_channel_opened方法必须由子类实现")
+
+    # 基于抽象方法的通用实现
     async def send_abort_speaking(self, reason):
         """发送中止语音的消息."""
         message = {"session_id": self.session_id, "type": "abort"}
