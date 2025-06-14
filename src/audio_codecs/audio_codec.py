@@ -122,42 +122,52 @@ class AudioCodec:
             await self.close()
             raise
 
+    async def __aenter__(self):
+        """异步上下文管理器入口"""
+        await self.initialize()
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """异步上下文管理器出口"""
+        await self.close()
+
+    def _create_single_stream(self, is_input: bool):
+        """创建并启动单个音频流"""
+        stream_type = "输入" if is_input else "输出"
+        try:
+            if is_input:
+                sample_rate = self.device_input_sample_rate
+                callback = self._input_callback
+                finished_callback = self._input_finished_callback
+                StreamClass = sd.InputStream
+            else:
+                sample_rate = self.device_output_sample_rate
+                callback = self._output_callback
+                finished_callback = self._output_finished_callback
+                StreamClass = sd.OutputStream
+
+            frame_size = int(sample_rate * (AudioConfig.FRAME_DURATION / 1000))
+
+            stream = StreamClass(
+                samplerate=sample_rate,
+                channels=AudioConfig.CHANNELS,
+                dtype=np.int16,
+                blocksize=frame_size,
+                callback=callback,
+                finished_callback=finished_callback,
+                latency='low'
+            )
+            stream.start()
+            logger.info(f"{stream_type}流创建并启动成功")
+            return stream
+        except Exception as e:
+            logger.error(f"创建{stream_type}流失败: {e}")
+            raise
+
     async def _create_streams(self):
         """创建输入和输出流"""
-        try:
-            # 计算设备采样率下的帧大小
-            device_input_frame_size = int(self.device_input_sample_rate * (AudioConfig.FRAME_DURATION / 1000))
-            device_output_frame_size = int(self.device_output_sample_rate * (AudioConfig.FRAME_DURATION / 1000))
-
-            # 创建输入流（录音）
-            self.input_stream = sd.InputStream(
-                samplerate=self.device_input_sample_rate,
-                channels=AudioConfig.CHANNELS,
-                dtype=np.int16,
-                blocksize=device_input_frame_size,
-                callback=self._input_callback,
-                finished_callback=self._input_finished_callback,
-                latency='low'
-            )
-
-            # 创建输出流（播放）
-            self.output_stream = sd.OutputStream(
-                samplerate=self.device_output_sample_rate,
-                channels=AudioConfig.CHANNELS,
-                dtype=np.int16,
-                blocksize=device_output_frame_size,
-                callback=self._output_callback,
-                finished_callback=self._output_finished_callback,
-                latency='low'
-            )
-
-            # 启动流
-            self.input_stream.start()
-            self.output_stream.start()
-
-        except Exception as e:
-            logger.error(f"创建音频流失败: {e}")
-            raise
+        self.input_stream = self._create_single_stream(is_input=True)
+        self.output_stream = self._create_single_stream(is_input=False)
 
     def _input_callback(self, indata, frames, time_info, status):
         """输入流回调函数"""
@@ -173,10 +183,14 @@ class AudioCodec:
             # 如果需要重采样，先进行重采样
             if self.input_resampler is not None:
                 try:
-                    resampled_data = self.input_resampler.resample_chunk(audio_data, last=False)
+                    resampled_data = self.input_resampler.resample_chunk(
+                        audio_data, last=False
+                    )
                     if len(resampled_data) > 0:
                         # 添加重采样数据到缓冲区
-                        self._resample_input_buffer.extend(resampled_data.astype(np.int16))
+                        self._resample_input_buffer.extend(
+                            resampled_data.astype(np.int16)
+                        )
                     
                     # 检查缓冲区是否有足够的数据组成完整帧
                     expected_frame_size = AudioConfig.INPUT_FRAME_SIZE
@@ -184,35 +198,23 @@ class AudioCodec:
                         return  # 数据不足，等待更多数据
                     
                     # 取出一帧数据
-                    audio_data = np.array(self._resample_input_buffer[:expected_frame_size])
-                    self._resample_input_buffer = self._resample_input_buffer[expected_frame_size:]
+                    audio_data = np.array(
+                        self._resample_input_buffer[:expected_frame_size]
+                    )
+                    self._resample_input_buffer = self._resample_input_buffer[
+                        expected_frame_size:
+                    ]
                     
                 except Exception as e:
                     logger.error(f"输入重采样失败: {e}")
                     return
             
             # 始终填充唤醒词缓冲区（不受暂停状态影响）
-            try:
-                self._wake_word_buffer.put_nowait(audio_data)
-            except asyncio.QueueFull:
-                # 移除最旧的数据
-                try:
-                    self._wake_word_buffer.get_nowait()
-                    self._wake_word_buffer.put_nowait(audio_data)
-                except asyncio.QueueEmpty:
-                    self._wake_word_buffer.put_nowait(audio_data)
+            self._put_or_overwrite(self._wake_word_buffer, audio_data)
             
             # 只有在未暂停时才填充正常的输入缓冲区
             if not self._is_input_paused:
-                try:
-                    self._input_buffer.put_nowait(audio_data)
-                except asyncio.QueueFull:
-                    # 移除最旧的数据
-                    try:
-                        self._input_buffer.get_nowait()
-                        self._input_buffer.put_nowait(audio_data)
-                    except asyncio.QueueEmpty:
-                        self._input_buffer.put_nowait(audio_data)
+                self._put_or_overwrite(self._input_buffer, audio_data)
                     
         except Exception as e:
             logger.error(f"输入回调错误: {e}")
@@ -230,7 +232,9 @@ class AudioCodec:
                 # 如果需要重采样到设备采样率
                 if self.output_resampler is not None and len(audio_data) > 0:
                     try:
-                        resampled_data = self.output_resampler.resample_chunk(audio_data, last=False)
+                        resampled_data = self.output_resampler.resample_chunk(
+                            audio_data, last=False
+                        )
                         if len(resampled_data) > 0:
                             audio_data = resampled_data.astype(np.int16)
                         else:
@@ -262,52 +266,42 @@ class AudioCodec:
         """输出流结束回调"""
         logger.info("输出流已结束")
 
+    def _put_or_overwrite(self, queue: asyncio.Queue, item: np.ndarray):
+        """将项目放入队列，如果队列已满则覆盖最旧的项目。"""
+        try:
+            queue.put_nowait(item)
+        except asyncio.QueueFull:
+            try:
+                # 丢弃最旧的以腾出空间
+                queue.get_nowait()
+                queue.put_nowait(item)
+            except asyncio.QueueEmpty:
+                # 队列在两次调用之间被清空，现在可以直接放入
+                queue.put_nowait(item)
+            except asyncio.QueueFull:
+                # 另一个生产者再次填满了它，记录并丢弃
+                logger.warning("音频帧被丢弃，因为在腾出空间后队列仍然已满")
+
     async def reinitialize_stream(self, is_input=True):
         """重新初始化流"""
         if self._is_closing:
             return False if is_input else None
 
+        stream_type = "输入" if is_input else "输出"
         try:
             if is_input:
-                # 重建输入流
                 if self.input_stream:
                     self.input_stream.stop()
                     self.input_stream.close()
-                
-                device_input_frame_size = int(self.device_input_sample_rate * (AudioConfig.FRAME_DURATION / 1000))
-                self.input_stream = sd.InputStream(
-                    samplerate=self.device_input_sample_rate,
-                    channels=AudioConfig.CHANNELS,
-                    dtype=np.int16,
-                    blocksize=device_input_frame_size,
-                    callback=self._input_callback,
-                    finished_callback=self._input_finished_callback,
-                    latency='low'
-                )
-                self.input_stream.start()
-                logger.info("输入流重新初始化成功")
+                self.input_stream = self._create_single_stream(is_input=True)
                 return True
             else:
-                # 重建输出流
                 if self.output_stream:
                     self.output_stream.stop()
                     self.output_stream.close()
-                
-                device_output_frame_size = int(self.device_output_sample_rate * (AudioConfig.FRAME_DURATION / 1000))
-                self.output_stream = sd.OutputStream(
-                    samplerate=self.device_output_sample_rate,
-                    channels=AudioConfig.CHANNELS,
-                    dtype=np.int16,
-                    blocksize=device_output_frame_size,
-                    callback=self._output_callback,
-                    finished_callback=self._output_finished_callback,
-                    latency='low'
-                )
-                self.output_stream.start()
-                logger.info("输出流重新初始化成功")
+                self.output_stream = self._create_single_stream(is_input=False)
                 return None
         except Exception as e:
-            stream_type = "输入" if is_input else "输出"
             logger.error(f"{stream_type}流重建失败: {e}")
             if is_input:
                 return False
@@ -387,14 +381,7 @@ class AudioCodec:
                         
                         audio_array = np.frombuffer(pcm_data, dtype=np.int16)
                         
-                        try:
-                            self._output_buffer.put_nowait(audio_array)
-                        except asyncio.QueueFull:
-                            try:
-                                self._output_buffer.get_nowait()
-                                self._output_buffer.put_nowait(audio_array)
-                            except asyncio.QueueEmpty:
-                                self._output_buffer.put_nowait(audio_array)
+                        self._put_or_overwrite(self._output_buffer, audio_array)
                             
                     except opuslib.OpusError as e:
                         logger.warning(f"音频解码失败，丢弃此帧: {e}")
@@ -411,14 +398,7 @@ class AudioCodec:
 
     async def write_audio(self, opus_data: bytes):
         """将Opus数据写入播放队列"""
-        try:
-            self.audio_decode_queue.put_nowait(opus_data)
-        except asyncio.QueueFull:
-            try:
-                self.audio_decode_queue.get_nowait()
-                self.audio_decode_queue.put_nowait(opus_data)
-            except asyncio.QueueEmpty:
-                self.audio_decode_queue.put_nowait(opus_data)
+        self._put_or_overwrite(self.audio_decode_queue, opus_data)
 
     async def wait_for_audio_complete(self, timeout=5.0):
         """等待音频播放完成"""
@@ -432,60 +412,36 @@ class AudioCodec:
 
     async def clear_audio_queue(self):
         """清空音频队列"""
+        queues_to_clear = [
+            self.audio_decode_queue,
+            self._input_buffer,
+            self._output_buffer,
+            self._wake_word_buffer,
+        ]
+        
         cleared_count = 0
-        
-        # 清空解码队列
-        while not self.audio_decode_queue.empty():
-            try:
-                self.audio_decode_queue.get_nowait()
-                cleared_count += 1
-            except asyncio.QueueEmpty:
-                break
-        
-        # 清空输入缓冲区
-        while not self._input_buffer.empty():
-            try:
-                self._input_buffer.get_nowait()
-                cleared_count += 1
-            except asyncio.QueueEmpty:
-                break
-        
-        # 清空输出缓冲区
-        while not self._output_buffer.empty():
-            try:
-                self._output_buffer.get_nowait()
-                cleared_count += 1
-            except asyncio.QueueEmpty:
-                break
-        
-        # 清空唤醒词缓冲区
-        while not self._wake_word_buffer.empty():
-            try:
-                self._wake_word_buffer.get_nowait()
-                cleared_count += 1
-            except asyncio.QueueEmpty:
-                break
-        
+        for q in queues_to_clear:
+            while not q.empty():
+                try:
+                    q.get_nowait()
+                    cleared_count += 1
+                except asyncio.QueueEmpty:
+                    break
+
         # 额外等待一小段时间，确保正在处理的音频数据完成
         await asyncio.sleep(0.01)
         
         # 再次清空可能新产生的数据
         extra_cleared = 0
-        while not self._input_buffer.empty():
-            try:
-                self._input_buffer.get_nowait()
-                extra_cleared += 1
-            except asyncio.QueueEmpty:
-                break
-        
-        # 再次清空唤醒词缓冲区
-        while not self._wake_word_buffer.empty():
-            try:
-                self._wake_word_buffer.get_nowait()
-                extra_cleared += 1
-            except asyncio.QueueEmpty:
-                break
-        
+        queues_to_reclear = [self._input_buffer, self._wake_word_buffer]
+        for q in queues_to_reclear:
+            while not q.empty():
+                try:
+                    q.get_nowait()
+                    extra_cleared += 1
+                except asyncio.QueueEmpty:
+                    break
+
         cleared_count += extra_cleared
                 
         if cleared_count > 0:
@@ -594,4 +550,8 @@ class AudioCodec:
     def __del__(self):
         """析构函数"""
         if not self._is_closing:
-            asyncio.create_task(self.close()) 
+            # 在__del__中调用异步代码是危险的，这里只做提醒
+            logger.warning(
+                "AudioCodec instance was not closed properly. "
+                "Please use 'async with' or call await codec.close()."
+            ) 
