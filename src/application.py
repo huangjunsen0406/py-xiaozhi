@@ -414,9 +414,35 @@ class Application:
         """启动GUI显示"""
         # 在qasync环境中，GUI可以直接在主线程启动
         try:
+            logger.info("开始启动GUI显示界面...")
+            
             # 直接调用start方法，不使用asyncio.to_thread
             # 因为现在我们在正确的线程中（主线程+qasync）
             self.display.start()
+            
+            # 等待一小段时间确保GUI完全初始化
+            await asyncio.sleep(0.1)
+            
+            # 检查窗口是否正确显示
+            if hasattr(self.display, 'root') and self.display.root:
+                logger.info("GUI窗口已创建，正在确保窗口显示...")
+                
+                # 强制显示窗口并获得焦点
+                self.display.root.show()
+                self.display.root.raise_()
+                self.display.root.activateWindow()
+                
+                # 检查窗口状态
+                if self.display.root.isVisible():
+                    logger.info("GUI窗口已成功显示")
+                else:
+                    logger.warning("GUI窗口创建但未显示，尝试强制显示")
+                    self.display.root.showNormal()
+                    self.display.root.raise_()
+                    self.display.root.activateWindow()
+            else:
+                logger.error("GUI窗口创建失败")
+                
         except Exception as e:
             logger.error(f"GUI显示错误: {e}", exc_info=True)
 
@@ -942,64 +968,64 @@ class Application:
 
     def _initialize_iot_devices(self):
         """初始化物联网设备"""
-        from src.iot.thing_manager import ThingManager
-        from src.iot.things.CameraVL.Camera import Camera
-        from src.iot.things.countdown_timer import CountdownTimer
-        from src.iot.things.lamp import Lamp
+        # from src.iot.thing_manager import ThingManager
+        # from src.iot.things.CameraVL.Camera import Camera
+        # from src.iot.things.countdown_timer import CountdownTimer
+        # from src.iot.things.lamp import Lamp
 
-        # from src.iot.things.music_player import MusicPlayer
-        from src.iot.things.speaker import Speaker
+        # # from src.iot.things.music_player import MusicPlayer
+        # from src.iot.things.speaker import Speaker
 
-        thing_manager = ThingManager.get_instance()
+        # thing_manager = ThingManager.get_instance()
 
-        # 添加设备
-        thing_manager.add_thing(Lamp())
-        thing_manager.add_thing(Speaker())
-        # thing_manager.add_thing(MusicPlayer())
-        thing_manager.add_thing(Camera())
-        thing_manager.add_thing(CountdownTimer())
+        # # 添加设备
+        # thing_manager.add_thing(Lamp())
+        # thing_manager.add_thing(Speaker())
+        # # thing_manager.add_thing(MusicPlayer())
+        # thing_manager.add_thing(Camera())
+        # thing_manager.add_thing(CountdownTimer())
         
         # 添加异步设备示例
-        try:
-            from src.iot.things.robot_arm import RobotArm
-            thing_manager.add_thing(RobotArm())
-        except ImportError:
-            logger.info("机械臂模块未找到，跳过注册")
+        # try:
+        #     from src.iot.things.robot_arm import RobotArm
+        #     thing_manager.add_thing(RobotArm())
+        # except ImportError:
+        #     logger.info("机械臂模块未找到，跳过注册")
 
-        # Home Assistant设备
-        if self.config.get_config("HOME_ASSISTANT.TOKEN"):
-            from src.iot.things.ha_control import (
-                HomeAssistantButton,
-                HomeAssistantLight,
-                HomeAssistantNumber,
-                HomeAssistantSwitch,
-            )
+        # # Home Assistant设备
+        # if self.config.get_config("HOME_ASSISTANT.TOKEN"):
+        #     from src.iot.things.ha_control import (
+        #         HomeAssistantButton,
+        #         HomeAssistantLight,
+        #         HomeAssistantNumber,
+        #         HomeAssistantSwitch,
+        #     )
 
-            ha_devices = self.config.get_config("HOME_ASSISTANT.DEVICES", [])
-            for device in ha_devices:
-                entity_id = device.get("entity_id")
-                friendly_name = device.get("friendly_name")
-                if entity_id:
-                    if entity_id.startswith("light."):
-                        thing_manager.add_thing(
-                            HomeAssistantLight(entity_id, friendly_name)
-                        )
-                    elif entity_id.startswith("switch."):
-                        thing_manager.add_thing(
-                            HomeAssistantSwitch(entity_id, friendly_name)
-                        )
-                    elif entity_id.startswith("number."):
-                        thing_manager.add_thing(
-                            HomeAssistantNumber(entity_id, friendly_name)
-                        )
-                    elif entity_id.startswith("button."):
-                        thing_manager.add_thing(
-                            HomeAssistantButton(entity_id, friendly_name)
-                        )
-                    else:
-                        thing_manager.add_thing(
-                            HomeAssistantLight(entity_id, friendly_name)
-                        )
+        #     ha_devices = self.config.get_config("HOME_ASSISTANT.DEVICES", [])
+        #     for device in ha_devices:
+        #         entity_id = device.get("entity_id")
+        #         friendly_name = device.get("friendly_name")
+        #         if entity_id:
+        #             if entity_id.startswith("light."):
+        #                 thing_manager.add_thing(
+        #                     HomeAssistantLight(entity_id, friendly_name)
+        #                 )
+        #             elif entity_id.startswith("switch."):
+        #                 thing_manager.add_thing(
+        #                     HomeAssistantSwitch(entity_id, friendly_name)
+        #                 )
+        #             elif entity_id.startswith("number."):
+        #                 thing_manager.add_thing(
+        #                     HomeAssistantNumber(entity_id, friendly_name)
+        #                 )
+        #             elif entity_id.startswith("button."):
+        #                 thing_manager.add_thing(
+        #                     HomeAssistantButton(entity_id, friendly_name)
+        #                 )
+        #             else:
+        #                 thing_manager.add_thing(
+        #                     HomeAssistantLight(entity_id, friendly_name)
+        #                 )
 
         logger.info("物联网设备初始化完成")
 

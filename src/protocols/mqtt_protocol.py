@@ -3,8 +3,6 @@ import json
 import socket
 import threading
 import time
-import weakref
-from typing import Set
 
 import paho.mqtt.client as mqtt
 from cryptography.hazmat.backends import default_backend
@@ -30,10 +28,6 @@ class MqttProtocol(Protocol):
         self.udp_running = False
         self.connected = False
 
-        # 添加任务管理，参考WebSocket实现
-        self._tasks: Set[asyncio.Task] = set()
-        self._shutdown_event = asyncio.Event()
-
         # MQTT配置
         self.endpoint = None
         self.client_id = None
@@ -53,26 +47,6 @@ class MqttProtocol(Protocol):
         # 事件
         self.server_hello_event = asyncio.Event()
 
-    def _create_task(self, coro, name: str) -> asyncio.Task:
-        """创建并管理任务，参考WebSocket实现"""
-        task = asyncio.create_task(coro, name=name)
-        self._tasks.add(task)
-        
-        # 使用弱引用避免循环引用
-        weak_tasks = weakref.ref(self._tasks)
-        
-        def done_callback(t):
-            tasks = weak_tasks()
-            if tasks is not None:
-                tasks.discard(t)
-            
-            if not t.cancelled() and t.exception():
-                msg = f"MQTT任务 {name} 异常结束: {t.exception()}"
-                logger.error(msg, exc_info=True)
-        
-        task.add_done_callback(done_callback)
-        return task
-
     async def connect(self):
         """连接到MQTT服务器."""
         try:
@@ -81,7 +55,7 @@ class MqttProtocol(Protocol):
             
             # 重置hello事件和关闭事件
             self.server_hello_event = asyncio.Event()
-            self._shutdown_event = asyncio.Event()
+            self._shutdown_event.clear()
 
             # 首先尝试获取MQTT配置
             try:
@@ -475,7 +449,6 @@ class MqttProtocol(Protocol):
                     f"{self.udp_server}:{self.udp_port}"
                 )
 
-            self.local_sequence += 1
             return True
         except Exception as e:
             logger.error(f"发送音频数据失败: {e}")
@@ -669,14 +642,6 @@ class MqttProtocol(Protocol):
                     self.mqtt_client.disconnect()
             except Exception as e:
                 logger.error(f"断开MQTT连接失败: {e}")
-
-    async def __aenter__(self):
-        """异步上下文管理器入口"""
-        return self
-
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        """异步上下文管理器出口"""
-        await self._cleanup_connections()
 
     async def _cleanup_connections(self):
         """清理所有连接和任务，参考WebSocket实现."""

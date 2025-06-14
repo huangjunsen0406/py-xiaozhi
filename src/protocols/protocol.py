@@ -1,9 +1,13 @@
+import abc
+import asyncio
 import json
+import weakref
+from typing import Set
 
 from src.constants.constants import AbortReason, ListeningMode
 
 
-class Protocol:
+class Protocol(abc.ABC):
     def __init__(self):
         self.session_id = ""
         # 初始化回调函数为None
@@ -13,47 +17,58 @@ class Protocol:
         self.on_audio_channel_closed = None
         self.on_network_error = None
 
-    def on_incoming_json(self, callback):
-        """设置JSON消息接收回调函数."""
-        self.on_incoming_json = callback
+        # 通用任务管理
+        self._tasks: Set[asyncio.Task] = set()
+        self._shutdown_event = asyncio.Event()
 
-    def on_incoming_audio(self, callback):
-        """设置音频数据接收回调函数."""
-        self.on_incoming_audio = callback
+    def _create_task(self, coro, name: str) -> asyncio.Task:
+        """创建并管理任务"""
+        task = asyncio.create_task(coro, name=name)
+        self._tasks.add(task)
 
-    def on_audio_channel_opened(self, callback):
-        """设置音频通道打开回调函数."""
-        self.on_audio_channel_opened = callback
+        # 使用弱引用避免循环引用
+        weak_tasks = weakref.ref(self._tasks)
 
-    def on_audio_channel_closed(self, callback):
-        """设置音频通道关闭回调函数."""
-        self.on_audio_channel_closed = callback
+        def done_callback(t):
+            tasks = weak_tasks()
+            if tasks is not None:
+                tasks.discard(t)
 
-    def on_network_error(self, callback):
-        """设置网络错误回调函数."""
-        self.on_network_error = callback
+            if not t.cancelled() and t.exception():
+                msg = f"协议任务 {name} 异常结束: {t.exception()}"
+                # 使用 get_logger() 可能会引入循环依赖，暂时用print
+                print(msg)
+
+        task.add_done_callback(done_callback)
+        return task
 
     # 抽象方法 - 需要在子类中实现
+    @abc.abstractmethod
     async def connect(self):
         """连接到服务器的抽象方法，需要在子类中实现."""
         raise NotImplementedError("connect方法必须由子类实现")
 
+    @abc.abstractmethod
     async def send_text(self, message):
         """发送文本消息的抽象方法，需要在子类中实现."""
         raise NotImplementedError("send_text方法必须由子类实现")
 
+    @abc.abstractmethod
     async def send_audio(self, audio_data):
         """发送音频数据的抽象方法，需要在子类中实现."""
         raise NotImplementedError("send_audio方法必须由子类实现")
 
+    @abc.abstractmethod
     async def open_audio_channel(self):
         """打开音频通道的抽象方法，需要在子类中实现."""
         raise NotImplementedError("open_audio_channel方法必须由子类实现")
 
+    @abc.abstractmethod
     async def close_audio_channel(self):
         """关闭音频通道的抽象方法，需要在子类中实现."""
         raise NotImplementedError("close_audio_channel方法必须由子类实现")
 
+    @abc.abstractmethod
     def is_audio_channel_opened(self) -> bool:
         """检查音频通道是否打开的抽象方法，需要在子类中实现."""
         raise NotImplementedError("is_audio_channel_opened方法必须由子类实现")
@@ -115,3 +130,11 @@ class Protocol:
             "states": json.loads(states) if isinstance(states, str) else states,
         }
         await self.send_text(json.dumps(message))
+
+    async def __aenter__(self):
+        """异步上下文管理器入口"""
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """异步上下文管理器出口"""
+        await self.close_audio_channel()

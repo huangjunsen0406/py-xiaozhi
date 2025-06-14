@@ -801,17 +801,22 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
     def start(self):
         """启动GUI."""
         try:
+            self.logger.info("开始初始化GUI组件...")
+            
             # 在qasync环境中，QApplication已经在main.py中创建
             self.app = QApplication.instance()
             if self.app is None:
                 # 这种情况不应该发生，因为main.py已经创建了QApplication
                 raise RuntimeError("QApplication未找到，请确保在qasync环境中运行")
+            
+            self.logger.info("QApplication实例获取成功")
 
             # 设置UI默认字体
             default_font = QFont("ASLantTermuxFont Mono", 12)
             self.app.setFont(default_font)
 
             # 加载UI文件
+            self.logger.info("开始加载UI文件...")
             from PyQt5 import uic
 
             self.root = QWidget()
@@ -820,7 +825,9 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
                 self.logger.error(f"UI文件不存在: {ui_path}")
                 raise FileNotFoundError(f"UI文件不存在: {ui_path}")
 
+            self.logger.info(f"加载UI文件: {ui_path}")
             uic.loadUi(str(ui_path), self.root)
+            self.logger.info("UI文件加载成功")
 
             # 获取UI中的控件
             self.status_label = self.root.findChild(QLabel, "status_label")
@@ -1024,23 +1031,50 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             # 设置窗口关闭事件
             self.root.closeEvent = self._closeEvent
 
-            # 初始化系统托盘
+            # 初始化系统托盘（在窗口显示后）
+            self.logger.info("初始化系统托盘...")
             self._setup_tray_icon()
 
             # 注意：键盘监听现在由Application的ShortcutManager统一管理
             # 不再在GUI中启动独立的键盘监听器
 
             # 启动更新线程
+            self.logger.info("启动GUI更新线程...")
             self.start_update_threads()
 
             # 定时器处理更新队列
             self.update_timer = QTimer()
             self.update_timer.timeout.connect(self._process_updates)
             self.update_timer.start(100)
+            self.logger.info("GUI更新定时器已启动")
 
             # 显示主窗口（不要调用app.exec_()，因为qasync会管理事件循环）
             self.logger.info("显示GUI窗口")
+            
+            # 确保窗口正确显示并获得焦点
             self.root.show()
+            self.root.raise_()
+            self.root.activateWindow()
+            
+            # 检查窗口是否可见
+            if self.root.isVisible():
+                self.logger.info("GUI窗口显示成功")
+                # 输出窗口几何信息用于调试
+                geometry = self.root.geometry()
+                self.logger.info(f"窗口位置和大小: x={geometry.x()}, y={geometry.y()}, "
+                                f"width={geometry.width()}, height={geometry.height()}")
+            else:
+                self.logger.warning("GUI窗口显示可能失败，尝试其他显示方法")
+                self.root.showNormal()
+                self.root.raise_()
+                self.root.activateWindow()
+                
+                # 再次检查
+                if self.root.isVisible():
+                    self.logger.info("GUI窗口通过showNormal()成功显示")
+                else:
+                    self.logger.error("GUI窗口显示失败，可能存在系统兼容性问题")
+            
             # self.root.showFullScreen() # 全屏显示
 
         except Exception as e:

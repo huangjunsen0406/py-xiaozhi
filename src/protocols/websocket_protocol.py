@@ -1,8 +1,7 @@
 import asyncio
 import json
 import ssl
-import weakref
-from typing import Optional, Set
+from typing import Optional
 
 import websockets
 
@@ -26,10 +25,6 @@ class WebsocketProtocol(Protocol):
         self.hello_received: Optional[asyncio.Event] = None
         self.message_task: Optional[asyncio.Task] = None
         
-        # 添加任务管理
-        self._tasks: Set[asyncio.Task] = set()
-        self._shutdown_event = asyncio.Event()
-        
         # WebSocket配置
         self.WEBSOCKET_URL = self.config.get_config(
             "SYSTEM_OPTIONS.NETWORK.WEBSOCKET_URL"
@@ -47,26 +42,6 @@ class WebsocketProtocol(Protocol):
             "Client-Id": client_id,
         }
 
-    def _create_task(self, coro, name: str) -> asyncio.Task:
-        """创建并管理任务"""
-        task = asyncio.create_task(coro, name=name)
-        self._tasks.add(task)
-        
-        # 使用弱引用避免循环引用
-        weak_tasks = weakref.ref(self._tasks)
-        
-        def done_callback(t):
-            tasks = weak_tasks()
-            if tasks is not None:
-                tasks.discard(t)
-            
-            if not t.cancelled() and t.exception():
-                msg = f"WebSocket任务 {name} 异常结束: {t.exception()}"
-                logger.error(msg, exc_info=True)
-        
-        task.add_done_callback(done_callback)
-        return task
-
     async def connect(self) -> bool:
         """连接到WebSocket服务器."""
         try:
@@ -75,7 +50,7 @@ class WebsocketProtocol(Protocol):
             
             # 在连接时创建Event，确保在正确的事件循环中
             self.hello_received = asyncio.Event()
-            self._shutdown_event = asyncio.Event()
+            self._shutdown_event.clear()
 
             # 判断是否应该使用SSL
             current_ssl_context = None
@@ -384,14 +359,6 @@ class WebsocketProtocol(Protocol):
             
         except Exception as e:
             logger.error(f"清理WebSocket连接时出错: {e}", exc_info=True)
-
-    async def __aenter__(self):
-        """异步上下文管理器入口"""
-        return self
-
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        """异步上下文管理器出口"""
-        await self._cleanup_connections()
 
     def __del__(self):
         """析构函数"""
