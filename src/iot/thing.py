@@ -6,9 +6,6 @@ class ValueType:
     NUMBER = "number"
     STRING = "string"
     FLOAT = "float"
-    ARRAY = "array"
-    OBJECT = "object"
-    LIST = "list"
 
 
 class Property:
@@ -21,16 +18,10 @@ class Property:
         test_value = getter()
         if isinstance(test_value, bool):
             self.type = ValueType.BOOLEAN
-        elif isinstance(test_value, int):
+        elif isinstance(test_value, (int, float)):
             self.type = ValueType.NUMBER
-        elif isinstance(test_value, float):
-            self.type = ValueType.FLOAT
         elif isinstance(test_value, str):
             self.type = ValueType.STRING
-        elif isinstance(test_value, (list, tuple)):
-            self.type = ValueType.ARRAY
-        elif isinstance(test_value, dict):
-            self.type = ValueType.OBJECT
         else:
             raise TypeError(f"不支持的属性类型: {type(test_value)}")
 

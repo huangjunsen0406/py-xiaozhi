@@ -1,4 +1,3 @@
-import asyncio
 import json
 import logging
 from typing import Any, Dict, Optional, Tuple
@@ -18,6 +17,57 @@ class ThingManager:
     def __init__(self):
         self.things = []
         self.last_states = {}  # 添加状态缓存字典，存储上一次的状态
+
+    def initialize_iot_devices(self, config):
+        """初始化物联网设备"""
+        from src.iot.things.CameraVL.Camera import Camera
+        from src.iot.things.countdown_timer import CountdownTimer
+        from src.iot.things.lamp import Lamp
+
+        # from src.iot.things.music_player import MusicPlayer
+        from src.iot.things.speaker import Speaker
+
+        # 添加设备
+        self.add_thing(Lamp())
+        self.add_thing(Speaker())
+        # self.add_thing(MusicPlayer())
+        self.add_thing(Camera())
+        self.add_thing(CountdownTimer())
+
+        # Home Assistant设备
+        if config.get_config("HOME_ASSISTANT.TOKEN"):
+            from src.iot.things.ha_control import (
+                HomeAssistantButton,
+                HomeAssistantLight,
+                HomeAssistantNumber,
+                HomeAssistantSwitch,
+            )
+
+            ha_devices = config.get_config("HOME_ASSISTANT.DEVICES", [])
+            for device in ha_devices:
+                entity_id = device.get("entity_id")
+                friendly_name = device.get("friendly_name")
+                if entity_id:
+                    if entity_id.startswith("light."):
+                        self.add_thing(
+                            HomeAssistantLight(entity_id, friendly_name)
+                        )
+                    elif entity_id.startswith("switch."):
+                        self.add_thing(
+                            HomeAssistantSwitch(entity_id, friendly_name)
+                        )
+                    elif entity_id.startswith("number."):
+                        self.add_thing(
+                            HomeAssistantNumber(entity_id, friendly_name)
+                        )
+                    elif entity_id.startswith("button."):
+                        self.add_thing(
+                            HomeAssistantButton(entity_id, friendly_name)
+                        )
+                    else:
+                        self.add_thing(
+                            HomeAssistantLight(entity_id, friendly_name)
+                        )
 
     def add_thing(self, thing: Thing) -> None:
         self.things.append(thing)
@@ -82,29 +132,6 @@ class ThingManager:
             if thing.name == thing_name:
                 return thing.invoke(command)
 
-        # 记录错误日志
-        logging.error(f"设备不存在: {thing_name}")
-        raise ValueError(f"设备不存在: {thing_name}")
-    
-    async def invoke_async(self, command: Dict) -> Optional[Any]:
-        """异步调用设备方法
-        
-        Args:
-            command: 包含name和method等信息的命令字典
-            
-        Returns:
-            Optional[Any]: 如果找到设备并调用成功，返回调用结果；否则抛出异常
-        """
-        thing_name = command.get("name")
-        for thing in self.things:
-            if thing.name == thing_name:
-                # 检查是否为异步Thing
-                if hasattr(thing, 'invoke_async'):
-                    return await thing.invoke_async(command)
-                else:
-                    # 兼容同步Thing，在线程池中执行
-                    return await asyncio.to_thread(thing.invoke, command)
-        
         # 记录错误日志
         logging.error(f"设备不存在: {thing_name}")
         raise ValueError(f"设备不存在: {thing_name}")
