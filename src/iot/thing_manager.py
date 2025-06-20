@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 from typing import Any, Dict, Optional, Tuple
@@ -18,21 +19,21 @@ class ThingManager:
         self.things = []
         self.last_states = {}  # 添加状态缓存字典，存储上一次的状态
 
-    def initialize_iot_devices(self, config):
+    async def initialize_iot_devices(self, config):
         """初始化物联网设备"""
-        from src.iot.things.CameraVL.Camera import Camera
+        # from src.iot.things.CameraVL.Camera import Camera
         from src.iot.things.countdown_timer import CountdownTimer
         from src.iot.things.lamp import Lamp
-
-        # from src.iot.things.music_player import MusicPlayer
+        from src.iot.things.music_player import MusicPlayer
         from src.iot.things.speaker import Speaker
 
         # 添加设备
+        self.add_thing(CountdownTimer())
         self.add_thing(Lamp())
         self.add_thing(Speaker())
-        # self.add_thing(MusicPlayer())
-        self.add_thing(Camera())
-        self.add_thing(CountdownTimer())
+        self.add_thing(MusicPlayer())
+        # self.add_thing(Camera())
+        
 
         # Home Assistant设备
         if config.get_config("HOME_ASSISTANT.TOKEN"):
@@ -72,27 +73,33 @@ class ThingManager:
     def add_thing(self, thing: Thing) -> None:
         self.things.append(thing)
 
-    def get_descriptors_json(self) -> str:
+    async def get_descriptors_json(self) -> str:
+        """异步获取所有设备的描述符JSON"""
+        # 由于get_descriptor_json()是同步方法（返回静态数据），
+        # 这里保持简单的同步调用即可
         descriptors = [thing.get_descriptor_json() for thing in self.things]
         return json.dumps(descriptors)
 
-    def get_states_json(self, delta=False) -> Tuple[bool, str]:
-        """获取所有设备的状态JSON.
+    async def get_states_json(self, delta=False) -> Tuple[bool, str]:
+        """异步获取所有设备的状态JSON.
 
         Args:
             delta: 是否只返回变化的部分，True表示只返回变化的部分
 
         Returns:
-            Tuple[str, bool]: 返回JSON字符串和是否有状态变化的布尔值
+            Tuple[bool, str]: 返回是否有状态变化的布尔值和JSON字符串
         """
         if not delta:
             self.last_states.clear()
 
         changed = False
-        states = []
+        
+        tasks = [thing.get_state_json() for thing in self.things]
+        states_results = await asyncio.gather(*tasks)
 
-        for thing in self.things:
-            state_json = thing.get_state_json()
+        states = []
+        for i, thing in enumerate(self.things):
+            state_json = states_results[i]
 
             if delta:
                 # 检查状态是否变化
@@ -113,13 +120,13 @@ class ThingManager:
 
         return changed, json.dumps(states)
 
-    def get_states_json_str(self) -> str:
-        """为了兼容旧代码，保留原来的方法名和返回值类型."""
-        _, json_str = self.get_states_json(delta=False)
+    async def get_states_json_str(self) -> str:
+        """异步版本：为了兼容旧代码，保留原来的方法名和返回值类型."""
+        _, json_str = await self.get_states_json(delta=False)
         return json_str
 
-    def invoke(self, command: Dict) -> Optional[Any]:
-        """调用设备方法.
+    async def invoke(self, command: Dict) -> Optional[Any]:
+        """异步调用设备方法.
 
         Args:
             command: 包含name和method等信息的命令字典
@@ -130,7 +137,7 @@ class ThingManager:
         thing_name = command.get("name")
         for thing in self.things:
             if thing.name == thing_name:
-                return thing.invoke(command)
+                return await thing.invoke(command)
 
         # 记录错误日志
         logging.error(f"设备不存在: {thing_name}")

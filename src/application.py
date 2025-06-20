@@ -162,6 +162,9 @@ class Application:
         # 设置设备状态
         await self._set_device_state(DeviceState.IDLE)
 
+        # 初始化物联网设备
+        await self._initialize_iot_devices()
+
         # 初始化音频编解码器
         await self._initialize_audio()
 
@@ -173,9 +176,6 @@ class Application:
 
         # 初始化唤醒词检测
         await self._initialize_wake_word_detector()
-
-        # 初始化物联网设备
-        self._initialize_iot_devices()
 
         # 设置协议回调
         self._setup_protocol_callbacks()
@@ -803,7 +803,9 @@ class Application:
         # 发送物联网设备描述符
         from src.iot.thing_manager import ThingManager
         thing_manager = ThingManager.get_instance()
-        await self.protocol.send_iot_descriptors(thing_manager.get_descriptors_json())
+        descriptors_json = await thing_manager.get_descriptors_json()
+        print(json.dumps(descriptors_json, indent=4))
+        await self.protocol.send_iot_descriptors(descriptors_json)
         await self._update_iot_states(False)
 
     async def _on_audio_channel_closed(self):
@@ -921,11 +923,13 @@ class Application:
             self.config.update_config("WAKE_WORD_OPTIONS.USE_WAKE_WORD", False)
             self.wake_word_detector = None
 
-    def _initialize_iot_devices(self):
+    async def _initialize_iot_devices(self):
         """初始化物联网设备"""
         from src.iot.thing_manager import ThingManager
+
         thing_manager = ThingManager.get_instance()
-        thing_manager.initialize_iot_devices(self.config)
+
+        await thing_manager.initialize_iot_devices(self.config)
         logger.info("物联网设备初始化完成")
 
     async def _handle_iot_message(self, data):
@@ -934,15 +938,10 @@ class Application:
 
         thing_manager = ThingManager.get_instance()
         commands = data.get("commands", [])
-
+        print(f"物联网消息: {commands}")
         for command in commands:
             try:
-                # 优先使用异步调用
-                if hasattr(thing_manager, 'invoke_async'):
-                    result = await thing_manager.invoke_async(command)
-                else:
-                    # 兼容原有同步调用
-                    result = await asyncio.to_thread(thing_manager.invoke, command)
+                result = await thing_manager.invoke(command)
                 logger.info(f"执行物联网命令结果: {result}")
             except Exception as e:
                 logger.error(f"执行物联网命令失败: {e}")
@@ -953,13 +952,18 @@ class Application:
 
         thing_manager = ThingManager.get_instance()
 
-        if delta is None:
-            states_json = thing_manager.get_states_json_str()
-            await self.protocol.send_iot_states(states_json)
-        else:
-            changed, states_json = thing_manager.get_states_json(delta=delta)
-            if not delta or changed:
+        try:
+            if delta is None:
+                # 直接使用异步方法获取状态
+                states_json = await thing_manager.get_states_json_str()
                 await self.protocol.send_iot_states(states_json)
+            else:
+                # 直接使用异步方法获取状态变化
+                changed, states_json = await thing_manager.get_states_json(delta=delta)
+                if not delta or changed:
+                    await self.protocol.send_iot_states(states_json)
+        except Exception as e:
+            logger.error(f"更新IoT状态失败: {e}")
 
     def _on_mode_changed(self, auto_mode):
         """处理对话模式变更"""

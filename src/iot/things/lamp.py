@@ -8,20 +8,23 @@ class Lamp(Thing):
 
         print("[虚拟设备] 灯设备初始化完成")
 
-        # 定义属性
-        self.add_property("power", "灯是否打开", lambda: self.power)
+        # 定义属性 - 使用异步 getter
+        self.add_property("power", "灯是否打开", self.get_power)
 
-        # 定义方法
-        self.add_method("TurnOn", "打开灯", [], lambda params: self._turn_on())
+        # 定义方法 - 使用异步方法处理器
+        self.add_method("TurnOn", "打开灯", [], self._turn_on)
 
-        self.add_method("TurnOff", "关闭灯", [], lambda params: self._turn_off())
+        self.add_method("TurnOff", "关闭灯", [], self._turn_off)
 
-    def _turn_on(self):
+    async def get_power(self):
+        return self.power
+
+    async def _turn_on(self, params):
         self.power = True
         print("[虚拟设备] 灯已打开")
         return {"status": "success", "message": "灯已打开"}
 
-    def _turn_off(self):
+    async def _turn_off(self, params):
         self.power = False
         print("[虚拟设备] 灯已关闭")
         return {"status": "success", "message": "灯已关闭"}

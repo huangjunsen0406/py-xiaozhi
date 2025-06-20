@@ -1,3 +1,5 @@
+import asyncio
+
 from src.application import Application
 from src.iot.thing import Parameter, Thing, ValueType
 
@@ -15,22 +17,27 @@ class Speaker(Thing):
             self.volume = 100  # 默认音量
 
         # 定义属性
-        self.add_property("volume", "当前音量值", lambda: self.volume)
+        self.add_property("volume", "当前音量值", self.get_volume)
 
         # 定义方法
         self.add_method(
             "SetVolume",
             "设置音量",
             [Parameter("volume", "0到100之间的整数", ValueType.NUMBER, True)],
-            lambda params: self._set_volume(params["volume"].get_value()),
+            self._set_volume,
         )
 
-    def _set_volume(self, volume):
+    async def get_volume(self):
+        return self.volume
+
+    async def _set_volume(self, params):
+        volume = params["volume"].get_value()
         if 0 <= volume <= 100:
             self.volume = volume
             try:
                 app = Application.get_instance()
-                app.display.update_volume(volume)
+                # 在单独的线程中运行同步的 update_volume 函数
+                await asyncio.to_thread(app.display.update_volume, volume)
                 return {"success": True, "message": f"音量已设置为: {volume}"}
             except Exception as e:
                 print(f"设置音量失败: {e}")
