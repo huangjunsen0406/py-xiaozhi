@@ -3,21 +3,22 @@
 Home Assistant设备管理器 - 图形界面
 用于查询Home Assistant设备并将其添加到配置文件中
 """
-
-import json
-import logging
 import os
 import sys
-from typing import Any, Dict, List, Optional
-
-# 导入项目配置管理器
-from src.utils.config_manager import ConfigManager
 
 # 添加项目根目录到系统路径
 current_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(current_dir)))
 sys.path.append(project_root)
 
+
+import json
+import logging
+from typing import Any, Dict, List, Optional
+
+from src.utils.config_manager import ConfigManager
+
+# 导入项目配置管理器
 
 try:
     from PyQt5 import uic
@@ -114,9 +115,7 @@ class DeviceLoadThread(QThread):
             response = requests.get(f"{url}/api/states", headers=headers, timeout=10)
 
             if response.status_code != 200:
-                error_msg = f"错误: 无法获取设备列表 (HTTP {response.status_code}): {
-                    response.text
-                }"
+                error_msg = f"错误: 无法获取设备列表(HTTP {response.status_code}): {response.text}"
                 self.error_occurred.emit(error_msg)
                 return []
 
