@@ -6,7 +6,7 @@ config = ConfigManager.get_instance()
 class ListeningMode:
     """监听模式."""
 
-    ALWAYS_ON = "always_on"
+    REALTIME = "realtime"
     AUTO_STOP = "auto_stop"
     MANUAL = "manual"
 

@@ -247,11 +247,11 @@ class Application:
 
     def _setup_protocol_callbacks(self):
         """设置协议回调函数"""
-        self.protocol.on_network_error = self._on_network_error
-        self.protocol.on_incoming_audio = self._on_incoming_audio
-        self.protocol.on_incoming_json = self._on_incoming_json
-        self.protocol.on_audio_channel_opened = self._on_audio_channel_opened
-        self.protocol.on_audio_channel_closed = self._on_audio_channel_closed
+        self.protocol.on_network_error(self._on_network_error)
+        self.protocol.on_incoming_audio(self._on_incoming_audio)
+        self.protocol.on_incoming_json(self._on_incoming_json)
+        self.protocol.on_audio_channel_opened(self._on_audio_channel_opened)
+        self.protocol.on_audio_channel_closed(self._on_audio_channel_closed)
 
     async def _start_core_tasks(self):
         """启动核心任务"""

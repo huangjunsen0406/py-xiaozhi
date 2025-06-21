@@ -1,37 +1,40 @@
 import json
 
 from src.constants.constants import AbortReason, ListeningMode
+from src.utils.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
 class Protocol:
     def __init__(self):
         self.session_id = ""
         # 初始化回调函数为None
-        self.on_incoming_json = None
-        self.on_incoming_audio = None
-        self.on_audio_channel_opened = None
-        self.on_audio_channel_closed = None
-        self.on_network_error = None
+        self._on_incoming_json = None
+        self._on_incoming_audio = None
+        self._on_audio_channel_opened = None
+        self._on_audio_channel_closed = None
+        self._on_network_error = None
 
     def on_incoming_json(self, callback):
         """设置JSON消息接收回调函数."""
-        self.on_incoming_json = callback
+        self._on_incoming_json = callback
 
     def on_incoming_audio(self, callback):
         """设置音频数据接收回调函数."""
-        self.on_incoming_audio = callback
+        self._on_incoming_audio = callback
 
     def on_audio_channel_opened(self, callback):
         """设置音频通道打开回调函数."""
-        self.on_audio_channel_opened = callback
+        self._on_audio_channel_opened = callback
 
     def on_audio_channel_closed(self, callback):
         """设置音频通道关闭回调函数."""
-        self.on_audio_channel_closed = callback
+        self._on_audio_channel_closed = callback
 
     def on_network_error(self, callback):
         """设置网络错误回调函数."""
-        self.on_network_error = callback
+        self._on_network_error = callback
 
     async def send_text(self, message):
         """发送文本消息的抽象方法，需要在子类中实现."""
@@ -57,7 +60,7 @@ class Protocol:
     async def send_start_listening(self, mode):
         """发送开始监听的消息."""
         mode_map = {
-            ListeningMode.ALWAYS_ON: "realtime",
+            ListeningMode.REALTIME: "realtime",
             ListeningMode.AUTO_STOP: "auto",
             ListeningMode.MANUAL: "manual",
         }
@@ -76,20 +79,59 @@ class Protocol:
 
     async def send_iot_descriptors(self, descriptors):
         """发送物联网设备描述信息."""
-        message = {
-            "session_id": self.session_id,
-            "type": "iot",
-            "descriptors": (
-                json.loads(descriptors) if isinstance(descriptors, str) else descriptors
-            ),
-        }
-        await self.send_text(json.dumps(message))
+        try:
+            # 解析描述符数据
+            if isinstance(descriptors, str):
+                descriptors_data = json.loads(descriptors)
+            else:
+                descriptors_data = descriptors
+
+            # 检查是否为数组
+            if not isinstance(descriptors_data, list):
+                logger.error("IoT descriptors should be an array")
+                return
+
+            # 为每个描述符发送单独的消息
+            for i, descriptor in enumerate(descriptors_data):
+                if descriptor is None:
+                    logger.error(f"Failed to get IoT descriptor at index {i}")
+                    continue
+
+                message = {
+                    "session_id": self.session_id,
+                    "type": "iot",
+                    "update": True,
+                    "descriptors": [descriptor]
+                }
+
+                try:
+                    await self.send_text(json.dumps(message))
+                except Exception as e:
+                    logger.error(
+                        f"Failed to send JSON message for IoT descriptor "
+                        f"at index {i}: {e}"
+                    )
+                    continue
+
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse IoT descriptors: {e}")
+            return
 
     async def send_iot_states(self, states):
         """发送物联网设备状态信息."""
         message = {
             "session_id": self.session_id,
             "type": "iot",
+            "update": True,
             "states": json.loads(states) if isinstance(states, str) else states,
+        }
+        await self.send_text(json.dumps(message))
+
+    async def send_mcp_message(self, payload):
+        """发送MCP消息."""
+        message = {
+            "session_id": self.session_id,
+            "type": "mcp",
+            "payload": json.loads(payload) if isinstance(payload, str) else payload,
         }
         await self.send_text(json.dumps(message))

@@ -72,6 +72,9 @@ class WebsocketProtocol(Protocol):
             hello_message = {
                 "type": "hello",
                 "version": 1,
+                "features": {
+                    "mcp": True,
+                },
                 "transport": "websocket",
                 "audio_params": {
                     "format": "opus",
@@ -90,14 +93,14 @@ class WebsocketProtocol(Protocol):
                 return True
             except asyncio.TimeoutError:
                 logger.error("等待服务器hello响应超时")
-                if self.on_network_error:
-                    self.on_network_error("等待响应超时")
+                if self._on_network_error:
+                    self._on_network_error("等待响应超时")
                 return False
 
         except Exception as e:
             logger.error(f"WebSocket连接失败: {e}")
-            if self.on_network_error:
-                self.on_network_error(f"无法连接服务: {str(e)}")
+            if self._on_network_error:
+                self._on_network_error(f"无法连接服务: {str(e)}")
             return False
 
     async def _message_handler(self):
@@ -112,25 +115,25 @@ class WebsocketProtocol(Protocol):
                             # 处理服务器 hello 消息
                             await self._handle_server_hello(data)
                         else:
-                            if self.on_incoming_json:
-                                self.on_incoming_json(data)
+                            if self._on_incoming_json:
+                                self._on_incoming_json(data)
                     except json.JSONDecodeError as e:
                         logger.error(f"无效的JSON消息: {message}, 错误: {e}")
-                elif self.on_incoming_audio:  # 使用 elif 更清晰
-                    self.on_incoming_audio(message)
+                elif self._on_incoming_audio:  # 使用 elif 更清晰
+                    self._on_incoming_audio(message)
 
         except websockets.ConnectionClosed:
             logger.info("WebSocket连接已关闭")
             self.connected = False
-            if self.on_audio_channel_closed:
+            if self._on_audio_channel_closed:
                 # 使用 schedule 确保回调在主线程中执行
-                await self.on_audio_channel_closed()
+                await self._on_audio_channel_closed()
         except Exception as e:
             logger.error(f"消息处理错误: {e}")
             self.connected = False
-            if self.on_network_error:
+            if self._on_network_error:
                 # 使用 schedule 确保错误处理在主线程中执行
-                self.on_network_error(f"连接错误: {str(e)}")
+                self._on_network_error(f"连接错误: {str(e)}")
 
     async def send_audio(self, data: bytes):
         """发送音频数据."""
@@ -140,8 +143,8 @@ class WebsocketProtocol(Protocol):
         try:
             await self.websocket.send(data)
         except Exception as e:
-            if self.on_network_error:
-                self.on_network_error(f"发送音频数据失败: {str(e)}")
+            if self._on_network_error:
+                self._on_network_error(f"发送音频数据失败: {str(e)}")
 
     async def send_text(self, message: str):
         """发送文本消息."""
@@ -151,8 +154,8 @@ class WebsocketProtocol(Protocol):
             except Exception as e:
                 logger.error(f"发送文本消息失败: {e}")
                 await self.close_audio_channel()
-                if self.on_network_error:
-                    self.on_network_error("客户端已关闭")
+                if self._on_network_error:
+                    self._on_network_error("客户端已关闭")
 
     def is_audio_channel_opened(self) -> bool:
         """检查音频通道是否打开."""
@@ -183,15 +186,15 @@ class WebsocketProtocol(Protocol):
             self.hello_received.set()
 
             # 通知音频通道已打开
-            if self.on_audio_channel_opened:
-                await self.on_audio_channel_opened()
+            if self._on_audio_channel_opened:
+                await self._on_audio_channel_opened()
 
             logger.info("成功处理服务器 hello 消息")
 
         except Exception as e:
             logger.error(f"处理服务器 hello 消息时出错: {e}")
-            if self.on_network_error:
-                self.on_network_error(f"处理服务器响应失败: {str(e)}")
+            if self._on_network_error:
+                self._on_network_error(f"处理服务器响应失败: {str(e)}")
 
     async def close_audio_channel(self):
         """关闭音频通道."""
@@ -200,7 +203,7 @@ class WebsocketProtocol(Protocol):
                 await self.websocket.close()
                 self.websocket = None
                 self.connected = False
-                if self.on_audio_channel_closed:
-                    await self.on_audio_channel_closed()
+                if self._on_audio_channel_closed:
+                    await self._on_audio_channel_closed()
             except Exception as e:
                 logger.error(f"关闭WebSocket连接失败: {e}")
