@@ -21,11 +21,12 @@ class MqttProtocol(Protocol):
     def __init__(self, loop):
         super().__init__()
         self.loop = loop
-        self.config = ConfigManager.get_instance()  # 在这里实例化
+        self.config = ConfigManager.get_instance()
         self.mqtt_client = None
         self.udp_socket = None
         self.udp_thread = None
         self.udp_running = False
+        self.connected = False
 
         # MQTT配置
         self.endpoint = None
@@ -79,8 +80,8 @@ class MqttProtocol(Protocol):
             or not self.subscribe_topic
         ):
             logger.error("MQTT配置不完整")
-            if self.on_network_error:
-                await self.on_network_error("MQTT配置不完整")
+            if self._on_network_error:
+                await self._on_network_error("MQTT配置不完整")
             return False
 
         # 如果已有MQTT客户端，先断开连接
@@ -106,8 +107,8 @@ class MqttProtocol(Protocol):
             )
         except Exception as e:
             logger.error(f"TLS配置失败，无法安全连接到MQTT服务器: {e}")
-            if self.on_network_error:
-                await self.on_network_error(f"TLS配置失败: {str(e)}")
+            if self._on_network_error:
+                await self._on_network_error(f"TLS配置失败: {str(e)}")
             return False
 
         # 创建连接Future
@@ -128,7 +129,6 @@ class MqttProtocol(Protocol):
         def on_message_callback(client, userdata, msg):
             try:
                 payload = msg.payload.decode("utf-8")
-
                 self._handle_mqtt_message(payload)
             except Exception as e:
                 logger.error(f"处理MQTT消息时出错: {e}")
@@ -149,9 +149,9 @@ class MqttProtocol(Protocol):
                 self._stop_udp_receiver()
 
                 # 通知音频通道关闭
-                if self.on_audio_channel_closed:
+                if self._on_audio_channel_closed:
                     asyncio.run_coroutine_threadsafe(
-                        self.on_audio_channel_closed(), self.loop
+                        self._on_audio_channel_closed(), self.loop
                     )
             except Exception as e:
                 logger.error(f"断开MQTT连接失败: {e}")
@@ -174,6 +174,9 @@ class MqttProtocol(Protocol):
             hello_message = {
                 "type": "hello",
                 "version": 3,
+                "features": {
+                    "mcp": True,
+                },
                 "transport": "udp",
                 "audio_params": {
                     "format": "opus",
@@ -192,8 +195,8 @@ class MqttProtocol(Protocol):
                 await asyncio.wait_for(self.server_hello_event.wait(), timeout=10.0)
             except asyncio.TimeoutError:
                 logger.error("等待服务器hello消息超时")
-                if self.on_network_error:
-                    await self.on_network_error("等待响应超时")
+                if self._on_network_error:
+                    await self._on_network_error("等待响应超时")
                 return False
 
             # 创建UDP套接字
@@ -214,17 +217,18 @@ class MqttProtocol(Protocol):
                 self.udp_thread.daemon = True
                 self.udp_thread.start()
 
+                self.connected = True
                 return True
             except Exception as e:
                 logger.error(f"创建UDP套接字失败: {e}")
-                if self.on_network_error:
-                    await self.on_network_error(f"创建UDP连接失败: {e}")
+                if self._on_network_error:
+                    await self._on_network_error(f"创建UDP连接失败: {e}")
                 return False
 
         except Exception as e:
             logger.error(f"连接MQTT服务器失败: {e}")
-            if self.on_network_error:
-                await self.on_network_error(f"连接MQTT服务器失败: {e}")
+            if self._on_network_error:
+                await self._on_network_error(f"连接MQTT服务器失败: {e}")
             return False
 
     def _handle_mqtt_message(self, payload):
@@ -275,22 +279,22 @@ class MqttProtocol(Protocol):
                 self.loop.call_soon_threadsafe(self.server_hello_event.set)
 
                 # 触发音频通道打开回调
-                if self.on_audio_channel_opened:
+                if self._on_audio_channel_opened:
                     self.loop.call_soon_threadsafe(
-                        lambda: asyncio.create_task(self.on_audio_channel_opened())
+                        lambda: asyncio.create_task(self._on_audio_channel_opened())
                     )
 
             else:
                 # 处理其他JSON消息
-                if self.on_incoming_json:
+                if self._on_incoming_json:
 
                     def process_json(json_data=data):
-                        if asyncio.iscoroutinefunction(self.on_incoming_json):
-                            coro = self.on_incoming_json(json_data)
+                        if asyncio.iscoroutinefunction(self._on_incoming_json):
+                            coro = self._on_incoming_json(json_data)
                             if coro is not None:
                                 asyncio.create_task(coro)
                         else:
-                            self.on_incoming_json(json_data)
+                            self._on_incoming_json(json_data)
 
                     self.loop.call_soon_threadsafe(process_json)
         except json.JSONDecodeError:
@@ -337,16 +341,16 @@ class MqttProtocol(Protocol):
                         )
 
                     # 处理解密后的音频数据
-                    if self.on_incoming_audio:
+                    if self._on_incoming_audio:
 
                         def process_audio(audio_data=decrypted):
 
-                            if asyncio.iscoroutinefunction(self.on_incoming_audio):
-                                coro = self.on_incoming_audio(audio_data)
+                            if asyncio.iscoroutinefunction(self._on_incoming_audio):
+                                coro = self._on_incoming_audio(audio_data)
                                 if coro is not None:
                                     asyncio.create_task(coro)
                             else:
-                                self.on_incoming_audio(audio_data)
+                                self._on_incoming_audio(audio_data)
 
                         self.loop.call_soon_threadsafe(process_audio)
 
@@ -377,8 +381,8 @@ class MqttProtocol(Protocol):
             return True
         except Exception as e:
             logger.error(f"发送MQTT消息失败: {e}")
-            if self.on_network_error:
-                await self.on_network_error(f"发送MQTT消息失败: {e}")
+            if self._on_network_error:
+                await self._on_network_error(f"发送MQTT消息失败: {e}")
             return False
 
     async def send_audio(self, audio_data):
@@ -422,13 +426,13 @@ class MqttProtocol(Protocol):
             return True
         except Exception as e:
             logger.error(f"发送音频数据失败: {e}")
-            if self.on_network_error:
-                asyncio.create_task(self.on_network_error(f"发送音频数据失败: {e}"))
+            if self._on_network_error:
+                asyncio.create_task(self._on_network_error(f"发送音频数据失败: {e}"))
             return False
 
     async def open_audio_channel(self):
         """打开音频通道."""
-        if not self.mqtt_client:
+        if not self.connected:
             return await self.connect()
         return True
 
@@ -446,12 +450,12 @@ class MqttProtocol(Protocol):
         except Exception as e:
             logger.error(f"关闭音频通道时出错: {e}")
             # 确保即使出错也调用回调
-            if self.on_audio_channel_closed:
-                await self.on_audio_channel_closed()
+            if self._on_audio_channel_closed:
+                await self._on_audio_channel_closed()
 
     def is_audio_channel_opened(self):
         """检查音频通道是否已打开."""
-        return self.udp_socket is not None
+        return self.udp_socket is not None and self.connected
 
     def aes_ctr_encrypt(self, key, nonce, plaintext):
         """AES-CTR模式加密函数
@@ -523,8 +527,8 @@ class MqttProtocol(Protocol):
             self.aes_nonce = None
 
             # 调用音频通道关闭回调
-            if self.on_audio_channel_closed:
-                await self.on_audio_channel_closed()
+            if self._on_audio_channel_closed:
+                await self._on_audio_channel_closed()
 
         except Exception as e:
             logger.error(f"处理goodbye消息时出错: {e}")
