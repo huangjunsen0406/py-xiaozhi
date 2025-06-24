@@ -7,7 +7,6 @@ from typing import Set
 
 from src.constants.constants import AbortReason, DeviceState, ListeningMode
 from src.display import gui_display
-from src.input.shortcut_manager import ShortcutManager
 from src.protocols.mqtt_protocol import MqttProtocol
 from src.protocols.websocket_protocol import WebsocketProtocol
 from src.utils.common_utils import handle_verification_code
@@ -17,6 +16,9 @@ from src.utils.logging_config import get_logger
 # 处理opus动态库
 from src.utils.opus_loader import setup_opus
 from src.utils.resource_finder import find_assets_dir
+
+# MCP服务器
+from src.mcp import McpServer
 
 setup_opus()
 
@@ -90,16 +92,8 @@ class Application:
         # 保存主线程的事件循环（稍后在run方法中设置）
         self._main_loop = None
 
-        # 初始化快捷键管理器
-        self.shortcut_manager = ShortcutManager(
-            logger=logger,
-            manual_press_callback=self._shortcut_start_listening,
-            manual_release_callback=self._shortcut_stop_listening,
-            auto_toggle_callback=self._shortcut_toggle_chat_state,
-            abort_callback=self._shortcut_abort_speaking_sync,
-            mode_toggle_callback=self._shortcut_toggle_mode,
-            window_toggle_callback=self._shortcut_toggle_window_visibility,
-        )
+        # MCP服务器
+        self.mcp_server = McpServer.get_instance()
 
         logger.debug("Application实例初始化完成")
 
@@ -131,9 +125,6 @@ class Application:
             else:
                 await self._start_cli_display()
 
-            # 启动快捷键监听
-            self.shortcut_manager.start_listener()
-
         except Exception as e:
             logger.error(f"启动应用程序失败: {e}", exc_info=True)
             await self.shutdown()
@@ -163,10 +154,13 @@ class Application:
         await self._set_device_state(DeviceState.IDLE)
 
         # 初始化物联网设备
-        await self._initialize_iot_devices()
+        # await self._initialize_iot_devices()
 
         # 初始化音频编解码器
         await self._initialize_audio()
+
+        # 初始化MCP服务器
+        self._initialize_mcp_server()
 
         # 设置协议
         self._set_protocol_type(protocol)
@@ -706,7 +700,7 @@ class Application:
                 data = json.loads(json_data)
             else:
                 data = json_data
-
+            print(f"收到JSON消息: {json.dumps(data, indent=4)}")
             msg_type = data.get("type", "")
             if msg_type == "tts":
                 await self._handle_tts_message(data)
@@ -716,6 +710,8 @@ class Application:
                 await self._handle_llm_message(data)
             elif msg_type == "iot":
                 await self._handle_iot_message(data)
+            elif msg_type == "mcp":
+                await self._handle_mcp_message(data)
             else:
                 logger.warning(f"收到未知类型的消息: {msg_type}")
 
@@ -804,7 +800,6 @@ class Application:
         from src.iot.thing_manager import ThingManager
         thing_manager = ThingManager.get_instance()
         descriptors_json = await thing_manager.get_descriptors_json()
-        print(json.dumps(descriptors_json, indent=4))
         await self.protocol.send_iot_descriptors(descriptors_json)
         await self._update_iot_states(False)
 
@@ -1004,98 +999,6 @@ class Application:
         except Exception as e:
             logger.error(f"切换对话模式失败: {e}", exc_info=True)
 
-    def _toggle_window_visibility(self):
-        """显示/隐藏主窗口 (仅GUI模式)"""
-        try:
-            if not self.display:
-                logger.warning("显示组件未初始化")
-                return
-
-            # 检查是否为GUI模式
-            if not hasattr(self.display, 'root'):
-                logger.info("当前为CLI模式，窗口切换功能不可用")
-                return
-
-            # 切换窗口显示状态
-            if hasattr(self.display, 'root') and self.display.root:
-                if self.display.root.isVisible():
-                    self.display.root.hide()
-                    logger.info("主窗口已隐藏")
-                else:
-                    self.display.root.show()
-                    self.display.root.activateWindow()
-                    self.display.root.raise_()
-                    logger.info("主窗口已显示")
-            else:
-                logger.warning("GUI窗口不可用")
-
-        except Exception as e:
-            logger.error(f"切换窗口显示状态失败: {e}", exc_info=True)
-
-    def _shortcut_start_listening(self):
-        """快捷键回调：开始监听（同步）"""
-        try:
-            if self._main_loop and not self._main_loop.is_closed():
-                asyncio.run_coroutine_threadsafe(
-                    self.start_listening(), self._main_loop
-                )
-            else:
-                logger.warning("主事件循环不可用，无法执行快捷键操作")
-        except Exception as e:
-            logger.error(f"快捷键开始监听失败: {e}", exc_info=True)
-
-    def _shortcut_stop_listening(self):
-        """快捷键回调：停止监听（同步）"""
-        try:
-            if self._main_loop and not self._main_loop.is_closed():
-                asyncio.run_coroutine_threadsafe(self.stop_listening(), self._main_loop)
-            else:
-                logger.warning("主事件循环不可用，无法执行快捷键操作")
-        except Exception as e:
-            logger.error(f"快捷键停止监听失败: {e}", exc_info=True)
-
-    def _shortcut_toggle_chat_state(self):
-        """快捷键回调：切换聊天状态（同步）"""
-        try:
-            if self._main_loop and not self._main_loop.is_closed():
-                asyncio.run_coroutine_threadsafe(
-                    self.toggle_chat_state(), self._main_loop
-                )
-            else:
-                logger.warning("主事件循环不可用，无法执行快捷键操作")
-        except Exception as e:
-            logger.error(f"快捷键切换聊天状态失败: {e}", exc_info=True)
-
-    def _shortcut_abort_speaking_sync(self):
-        """快捷键回调：中止语音输出（同步）"""
-        try:
-            if self._main_loop and not self._main_loop.is_closed():
-                from src.constants.constants import AbortReason
-                asyncio.run_coroutine_threadsafe(
-                    self.abort_speaking(AbortReason.WAKE_WORD_DETECTED),
-                    self._main_loop
-                )
-            else:
-                logger.warning("主事件循环不可用，无法执行快捷键操作")
-        except Exception as e:
-            logger.error(f"快捷键中止语音输出失败: {e}", exc_info=True)
-
-    def _shortcut_toggle_mode(self):
-        """快捷键回调：切换对话模式（同步）"""
-        try:
-            # 这是一个同步操作，直接调用
-            self._toggle_mode()
-        except Exception as e:
-            logger.error(f"快捷键切换对话模式失败: {e}", exc_info=True)
-
-    def _shortcut_toggle_window_visibility(self):
-        """快捷键回调：切换窗口显示（同步）"""
-        try:
-            # 这是一个同步操作，直接调用
-            self._toggle_window_visibility()
-        except Exception as e:
-            logger.error(f"快捷键切换窗口显示失败: {e}", exc_info=True)
-
     async def shutdown(self):
         """关闭应用程序"""
         if not self.running:
@@ -1128,11 +1031,28 @@ class Application:
             if self.wake_word_detector:
                 await self.wake_word_detector.stop()
 
-            # 停止快捷键监听
-            if self.shortcut_manager:
-                self.shortcut_manager.stop_listener()
-
             logger.info("异步应用程序已关闭")
 
         except Exception as e:
             logger.error(f"关闭应用程序时出错: {e}", exc_info=True)
+
+    def _initialize_mcp_server(self):
+        """初始化MCP服务器"""
+        logger.info("初始化MCP服务器")
+        # 设置发送回调
+        self.mcp_server.set_send_callback(
+            lambda msg: asyncio.create_task(self.send_mcp_message(msg))
+        )
+        # 添加通用工具
+        self.mcp_server.add_common_tools()
+
+    async def send_mcp_message(self, payload):
+        """发送MCP消息"""
+        if self.protocol:
+            await self.protocol.send_mcp_message(payload)
+
+    async def _handle_mcp_message(self, data):
+        """处理MCP消息"""
+        payload = data.get("payload")
+        if payload:
+            await self.mcp_server.parse_message(payload)
