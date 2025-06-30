@@ -19,7 +19,7 @@ logger = get_logger(__name__)
 
 
 class WakeWordDetector:
-    """异步唤醒词检测器 - 完整实现"""
+    """唤醒词检测器 - 完整实现"""
 
     def __init__(self):
         """初始化唤醒词检测器"""
@@ -28,11 +28,11 @@ class WakeWordDetector:
         self.is_running_flag = False
         self.paused = False
         self.detection_task = None
-        
+
         # 防重复触发机制
         self.last_detection_time = 0
         self.detection_cooldown = 3.0  # 3秒冷却时间
-        
+
         # 回调函数
         self.on_detected_callback: Optional[Callable] = None
         self.on_error: Optional[Callable] = None
@@ -273,10 +273,10 @@ class WakeWordDetector:
             self.audio_codec = audio_codec
             self.is_running_flag = True
             self.paused = False
-            
+
             # 启动检测任务
             self.detection_task = asyncio.create_task(self._detection_loop())
-            
+
             logger.info("异步唤醒词检测器启动成功")
             return True
         except Exception as e:
@@ -288,7 +288,7 @@ class WakeWordDetector:
         """检测循环"""
         error_count = 0
         MAX_ERRORS = 5
-        
+
         while self.is_running_flag:
             try:
                 if self.paused:
@@ -301,11 +301,11 @@ class WakeWordDetector:
 
                 # 从音频编解码器获取数据并处理
                 await self._check_wake_word()
-                
+
                 # 短暂延迟避免过度占用CPU
                 await asyncio.sleep(0.02)
                 error_count = 0
-                
+
             except asyncio.CancelledError:
                 break
             except Exception as e:
@@ -313,11 +313,11 @@ class WakeWordDetector:
                 logger.error(f"唤醒词检测循环错误({error_count}/{MAX_ERRORS}): {e}")
                 if self.on_error:
                     await self._call_error_callback(e)
-                
+
                 if error_count >= MAX_ERRORS:
                     logger.critical("达到最大错误次数，停止检测")
                     break
-                    
+
                 await asyncio.sleep(1)  # 错误后延迟重试
 
     async def _check_wake_word(self):
@@ -470,7 +470,7 @@ class WakeWordDetector:
     async def pause(self):
         """暂停检测"""
         self.paused = True
-        
+
     async def resume(self):
         """恢复检测"""
         self.paused = False
@@ -482,14 +482,14 @@ class WakeWordDetector:
     async def stop(self):
         """停止检测器"""
         self.is_running_flag = False
-        
+
         if self.detection_task:
             self.detection_task.cancel()
             try:
                 await self.detection_task
             except asyncio.CancelledError:
                 pass
-        
+
         logger.info("异步唤醒词检测器已停止")
 
     def _validate_config(self):
@@ -534,15 +534,15 @@ class WakeWordDetector:
         return {
             "enabled": self.enabled,
             "wake_words_count": (
-                len(self.wake_words) if hasattr(self, 'wake_words') else 0
+                len(self.wake_words) if hasattr(self, "wake_words") else 0
             ),
             "similarity_threshold": (
-                self.similarity_threshold 
-                if hasattr(self, 'similarity_threshold') else 0
+                self.similarity_threshold
+                if hasattr(self, "similarity_threshold")
+                else 0
             ),
             "max_edit_distance": (
-                self.max_edit_distance 
-                if hasattr(self, 'max_edit_distance') else 0
+                self.max_edit_distance if hasattr(self, "max_edit_distance") else 0
             ),
             "cache_hits": cache_info.hits,
             "cache_misses": cache_info.misses,
@@ -558,5 +558,5 @@ class WakeWordDetector:
 
     def __del__(self):
         """析构函数"""
-        if hasattr(self, 'is_running_flag') and self.is_running_flag:
-            asyncio.create_task(self.stop()) 
+        if hasattr(self, "is_running_flag") and self.is_running_flag:
+            asyncio.create_task(self.stop())

@@ -1,13 +1,13 @@
 import asyncio
 import json
-import logging
 from asyncio import Task
 from typing import Any, Dict
 
 from src.iot.thing import Parameter, Thing
 from src.iot.thing_manager import ThingManager
+from src.utils.logging_config import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class CountdownTimer(Thing):
@@ -22,8 +22,6 @@ class CountdownTimer(Thing):
         self._next_timer_id = 0
         # 使用锁来保护对 _timers 和 _next_timer_id 的访问，确保线程安全
         self._lock = asyncio.Lock()
-
-        print("[虚拟设备] 倒计时器设备初始化完成")
 
         # 定义方法 - 使用 Parameter 对象
         self.add_method(
@@ -76,8 +74,7 @@ class CountdownTimer(Thing):
             )
         except Exception as e:
             logger.error(
-                f"倒计时 {timer_id} 执行命令 '{command_str}' 时出错: {e}", 
-                exc_info=True
+                f"倒计时 {timer_id} 执行命令 '{command_str}' 时出错: {e}", exc_info=True
             )
 
     async def _delayed_execution(
@@ -90,10 +87,7 @@ class CountdownTimer(Thing):
         except asyncio.CancelledError:
             logger.info(f"倒计时 {timer_id} 被取消")
         except Exception as e:
-            logger.error(
-                f"倒计时 {timer_id} 执行过程中出错: {e}", 
-                exc_info=True
-            )
+            logger.error(f"倒计时 {timer_id} 执行过程中出错: {e}", exc_info=True)
 
     async def _start_countdown(
         self, params_dict: Dict[str, Parameter]
@@ -146,7 +140,7 @@ class CountdownTimer(Thing):
 
         # 获取当前事件循环
         loop = asyncio.get_running_loop()
-        
+
         async with self._lock:
             timer_id = self._next_timer_id
             self._next_timer_id += 1
@@ -180,10 +174,7 @@ class CountdownTimer(Thing):
                 timer_id = int(timer_id)
         except (ValueError, TypeError):
             logger.error(f"取消倒计时失败：无效的 'timer_id' {timer_id}。")
-            return {
-                "status": "error", 
-                "message": f"无效的 'timer_id': {timer_id}"
-            }
+            return {"status": "error", "message": f"无效的 'timer_id': {timer_id}"}
 
         async with self._lock:
             if timer_id in self._timers:

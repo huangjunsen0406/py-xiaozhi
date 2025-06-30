@@ -1,9 +1,11 @@
 import asyncio
 import json
-import logging
 from typing import Any, Dict, Optional, Tuple
 
 from src.iot.thing import Thing
+from src.utils.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
 class ThingManager:
@@ -33,55 +35,19 @@ class ThingManager:
         self.add_thing(Speaker())
         self.add_thing(MusicPlayer())
         # self.add_thing(Camera())
-        
-
-        # Home Assistant设备
-        if config.get_config("HOME_ASSISTANT.TOKEN"):
-            from src.iot.things.ha_control import (
-                HomeAssistantButton,
-                HomeAssistantLight,
-                HomeAssistantNumber,
-                HomeAssistantSwitch,
-            )
-
-            ha_devices = config.get_config("HOME_ASSISTANT.DEVICES", [])
-            for device in ha_devices:
-                entity_id = device.get("entity_id")
-                friendly_name = device.get("friendly_name")
-                if entity_id:
-                    if entity_id.startswith("light."):
-                        self.add_thing(
-                            HomeAssistantLight(entity_id, friendly_name)
-                        )
-                    elif entity_id.startswith("switch."):
-                        self.add_thing(
-                            HomeAssistantSwitch(entity_id, friendly_name)
-                        )
-                    elif entity_id.startswith("number."):
-                        self.add_thing(
-                            HomeAssistantNumber(entity_id, friendly_name)
-                        )
-                    elif entity_id.startswith("button."):
-                        self.add_thing(
-                            HomeAssistantButton(entity_id, friendly_name)
-                        )
-                    else:
-                        self.add_thing(
-                            HomeAssistantLight(entity_id, friendly_name)
-                        )
 
     def add_thing(self, thing: Thing) -> None:
         self.things.append(thing)
 
     async def get_descriptors_json(self) -> str:
-        """异步获取所有设备的描述符JSON"""
+        """获取所有设备的描述符JSON"""
         # 由于get_descriptor_json()是同步方法（返回静态数据），
         # 这里保持简单的同步调用即可
         descriptors = [thing.get_descriptor_json() for thing in self.things]
         return json.dumps(descriptors)
 
     async def get_states_json(self, delta=False) -> Tuple[bool, str]:
-        """异步获取所有设备的状态JSON.
+        """获取所有设备的状态JSON.
 
         Args:
             delta: 是否只返回变化的部分，True表示只返回变化的部分
@@ -93,7 +59,7 @@ class ThingManager:
             self.last_states.clear()
 
         changed = False
-        
+
         tasks = [thing.get_state_json() for thing in self.things]
         states_results = await asyncio.gather(*tasks)
 
@@ -121,12 +87,12 @@ class ThingManager:
         return changed, json.dumps(states)
 
     async def get_states_json_str(self) -> str:
-        """异步版本：为了兼容旧代码，保留原来的方法名和返回值类型."""
+        """为了兼容旧代码，保留原来的方法名和返回值类型."""
         _, json_str = await self.get_states_json(delta=False)
         return json_str
 
     async def invoke(self, command: Dict) -> Optional[Any]:
-        """异步调用设备方法.
+        """调用设备方法.
 
         Args:
             command: 包含name和method等信息的命令字典
@@ -140,5 +106,5 @@ class ThingManager:
                 return await thing.invoke(command)
 
         # 记录错误日志
-        logging.error(f"设备不存在: {thing_name}")
+        logger.error(f"设备不存在: {thing_name}")
         raise ValueError(f"设备不存在: {thing_name}")

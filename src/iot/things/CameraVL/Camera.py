@@ -1,6 +1,5 @@
 import asyncio
 import base64
-import logging
 import threading
 
 import cv2
@@ -9,8 +8,9 @@ from src.application import Application
 from src.constants.constants import DeviceState
 from src.iot.thing import Thing
 from src.iot.things.CameraVL import VL
+from src.utils.logging_config import get_logger
 
-logger = logging.getLogger("Camera")
+logger = get_logger("Camera")
 
 
 class Camera(Thing):

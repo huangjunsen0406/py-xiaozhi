@@ -1,9 +1,6 @@
-annotated-types==0.7.0
-certifi==2025.1.31
-cffi==1.17.1
 comtypes==1.4.6
 cryptography==44.0.1
-numpy
+numpy==1.26.4
 openai
 opuslib==3.0.1
 paho-mqtt==2.1.0
@@ -14,11 +11,12 @@ pynput
 pyperclip==1.9.0
 pypinyin==0.53.0
 requests==2.32.3
+aiohttp==3.9.1
 vosk==0.3.45
 webrtcvad-wheels==2.0.14
 websockets==11.0.3
 colorlog==6.9.0
-soundfile>=0.12.1
 pygame==2.6.1
-scipy
 qasync==0.27.1
+py-machineid==0.8.0
+soxr==0.5.0.post1

@@ -15,7 +15,7 @@ logger = get_logger(__name__)
 
 
 class AudioCodec:
-    """异步音频编解码器类"""
+    """音频编解码器类"""
 
     def __init__(self):
         self.opus_encoder = None
@@ -62,11 +62,9 @@ class AudioCodec:
             input_device_info = sd.query_devices(sd.default.device[0])
             output_device_info = sd.query_devices(sd.default.device[1])
 
-            self.device_input_sample_rate = int(
-                input_device_info['default_samplerate']
-            )
+            self.device_input_sample_rate = int(input_device_info["default_samplerate"])
             self.device_output_sample_rate = int(
-                output_device_info['default_samplerate']
+                output_device_info["default_samplerate"]
             )
 
             # 缓存帧大小计算结果
@@ -101,11 +99,10 @@ class AudioCodec:
                 opuslib.APPLICATION_AUDIO,
             )
             self.opus_decoder = opuslib.Decoder(
-                AudioConfig.OUTPUT_SAMPLE_RATE,  # 24kHz
-                AudioConfig.CHANNELS
+                AudioConfig.OUTPUT_SAMPLE_RATE, AudioConfig.CHANNELS  # 24kHz
             )
 
-            logger.info("异步音频设备和编解码器初始化成功")
+            logger.info("音频设备和编解码器初始化成功")
         except Exception as e:
             logger.error(f"初始化音频设备失败: {e}")
             await self.close()
@@ -118,8 +115,8 @@ class AudioCodec:
                 self.device_input_sample_rate,
                 AudioConfig.INPUT_SAMPLE_RATE,
                 AudioConfig.CHANNELS,
-                dtype='int16',
-                quality='QQ'
+                dtype="int16",
+                quality="QQ",
             )
             logger.info(
                 f"创建输入重采样器: {self.device_input_sample_rate}Hz -> "
@@ -132,8 +129,8 @@ class AudioCodec:
                 AudioConfig.OUTPUT_SAMPLE_RATE,  # Opus输出24kHz
                 self.device_output_sample_rate,
                 AudioConfig.CHANNELS,
-                dtype='int16',
-                quality='QQ'
+                dtype="int16",
+                quality="QQ",
             )
             logger.info(
                 f"创建输出重采样器: {AudioConfig.OUTPUT_SAMPLE_RATE}Hz -> "
@@ -151,7 +148,7 @@ class AudioCodec:
                 blocksize=self._device_input_frame_size,
                 callback=self._input_callback,
                 finished_callback=self._input_finished_callback,
-                latency='low'
+                latency="low",
             )
 
             # 创建输出流（播放）
@@ -162,7 +159,7 @@ class AudioCodec:
                 blocksize=self._device_output_frame_size,
                 callback=self._output_callback,
                 finished_callback=self._output_finished_callback,
-                latency='low'
+                latency="low",
             )
 
             # 启动流
@@ -175,7 +172,7 @@ class AudioCodec:
 
     def _input_callback(self, indata, frames, time_info, status):
         """输入流回调函数"""
-        if status and 'overflow' not in str(status).lower():
+        if status and "overflow" not in str(status).lower():
             logger.warning(f"输入流状态: {status}")
 
         if self._is_closing:
@@ -203,14 +200,10 @@ class AudioCodec:
     def _process_input_resampling(self, audio_data):
         """处理输入重采样"""
         try:
-            resampled_data = self.input_resampler.resample_chunk(
-                audio_data, last=False
-            )
+            resampled_data = self.input_resampler.resample_chunk(audio_data, last=False)
             if len(resampled_data) > 0:
                 # 添加重采样数据到缓冲区
-                self._resample_input_buffer.extend(
-                    resampled_data.astype(np.int16)
-                )
+                self._resample_input_buffer.extend(resampled_data.astype(np.int16))
 
             # 检查缓冲区是否有足够的数据组成完整帧
             expected_frame_size = AudioConfig.INPUT_FRAME_SIZE
@@ -240,11 +233,10 @@ class AudioCodec:
             except asyncio.QueueEmpty:
                 queue.put_nowait(audio_data)
 
-    def _output_callback(self, outdata: np.ndarray, frames: int,
-                         time_info, status):
+    def _output_callback(self, outdata: np.ndarray, frames: int, time_info, status):
         """输出流回调函数"""
         if status:
-            if 'underflow' not in str(status).lower():
+            if "underflow" not in str(status).lower():
                 logger.warning(f"输出流状态: {status}")
 
         try:
@@ -261,8 +253,8 @@ class AudioCodec:
                 if len(audio_data) >= frames:
                     outdata[:] = audio_data[:frames].reshape(-1, 1)
                 else:
-                    outdata[:len(audio_data)] = audio_data.reshape(-1, 1)
-                    outdata[len(audio_data):] = 0
+                    outdata[: len(audio_data)] = audio_data.reshape(-1, 1)
+                    outdata[len(audio_data) :] = 0
 
             except asyncio.QueueEmpty:
                 outdata.fill(0)
@@ -312,7 +304,7 @@ class AudioCodec:
                     blocksize=self._device_input_frame_size,
                     callback=self._input_callback,
                     finished_callback=self._input_finished_callback,
-                    latency='low'
+                    latency="low",
                 )
                 self.input_stream.start()
                 logger.info("输入流重新初始化成功")
@@ -330,7 +322,7 @@ class AudioCodec:
                     blocksize=self._device_output_frame_size,
                     callback=self._output_callback,
                     finished_callback=self._output_finished_callback,
-                    latency='low'
+                    latency="low",
                 )
                 self.output_stream.start()
                 logger.info("输出流重新初始化成功")
@@ -386,9 +378,7 @@ class AudioCodec:
 
                 # 转换为bytes并编码
                 pcm_data = audio_data.astype(np.int16).tobytes()
-                return self.opus_encoder.encode(
-                    pcm_data, AudioConfig.INPUT_FRAME_SIZE
-                )
+                return self.opus_encoder.encode(pcm_data, AudioConfig.INPUT_FRAME_SIZE)
 
             except asyncio.QueueEmpty:
                 return None
@@ -460,7 +450,7 @@ class AudioCodec:
             self.audio_decode_queue,
             self._input_buffer,
             self._output_buffer,
-            self._wake_word_buffer
+            self._wake_word_buffer,
         ]
 
         for queue in queues_to_clear:
@@ -534,7 +524,7 @@ class AudioCodec:
         if resampler:
             try:
                 # 让重采样器处理完剩余数据
-                if hasattr(resampler, 'resample_chunk'):
+                if hasattr(resampler, "resample_chunk"):
                     empty_array = np.array([], dtype=np.int16)
                     resampler.resample_chunk(empty_array, last=True)
             except Exception as e:
@@ -546,7 +536,7 @@ class AudioCodec:
             return
 
         self._is_closing = True
-        logger.info("开始关闭异步音频编解码器...")
+        logger.info("开始关闭音频编解码器...")
 
         try:
             # 清空队列
@@ -585,9 +575,9 @@ class AudioCodec:
             self.opus_encoder = None
             self.opus_decoder = None
 
-            logger.info("异步音频资源已完全释放")
+            logger.info("音频资源已完全释放")
         except Exception as e:
-            logger.error(f"关闭异步音频编解码器过程中发生错误: {e}")
+            logger.error(f"关闭音频编解码器过程中发生错误: {e}")
 
     def __del__(self):
         """析构函数"""

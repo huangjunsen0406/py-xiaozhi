@@ -6,8 +6,6 @@ class Lamp(Thing):
         super().__init__("Lamp", "一个测试用的灯")
         self.power = False
 
-        print("[虚拟设备] 灯设备初始化完成")
-
         # 定义属性 - 使用异步 getter
         self.add_property("power", "灯是否打开", self.get_power)
 
@@ -21,10 +19,8 @@ class Lamp(Thing):
 
     async def _turn_on(self, params):
         self.power = True
-        print("[虚拟设备] 灯已打开")
         return {"status": "success", "message": "灯已打开"}
 
     async def _turn_off(self, params):
         self.power = False
-        print("[虚拟设备] 灯已关闭")
         return {"status": "success", "message": "灯已关闭"}

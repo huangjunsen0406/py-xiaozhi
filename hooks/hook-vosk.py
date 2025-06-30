@@ -14,12 +14,12 @@ from PyInstaller.utils.hooks import (
     copy_metadata,
 )
 
+from utils.resource_finder import find_models_dir
+
 # 添加src目录到Python路径，以便导入资源查找器
 src_path = Path(__file__).parent.parent / "src"
 if str(src_path) not in sys.path:
     sys.path.insert(0, str(src_path))
-
-from utils.resource_finder import find_models_dir
 
 print(f"当前工作目录: {os.getcwd()}")
 

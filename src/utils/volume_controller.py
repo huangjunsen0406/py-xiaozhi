@@ -1,10 +1,11 @@
-import logging
 import platform
 import re
 import shutil
 import subprocess
 from functools import wraps
 from typing import Any, Callable, List, Optional
+
+from src.utils.logging_config import get_logger
 
 
 class VolumeController:
@@ -48,7 +49,7 @@ class VolumeController:
 
     def __init__(self):
         """初始化音量控制器."""
-        self.logger = logging.getLogger("VolumeController")
+        self.logger = get_logger("VolumeController")
         self.system = platform.system()
         self.is_arm = platform.machine().startswith(("arm", "aarch"))
         self.linux_tool = None

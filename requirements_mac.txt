@@ -1,6 +1,4 @@
 applescript==2021.2.9  # macOS音量控制
-certifi==2025.1.31
-cffi==1.17.1
 comtypes==1.4.6
 cryptography==44.0.1
 numpy
@@ -18,5 +16,7 @@ webrtcvad-wheels==2.0.14
 websockets==11.0.3
 colorlog==6.9.0
 pygame==2.6.1
-scipy
 qasync==0.27.1
+py-machineid==0.8.0
+aiohttp==3.9.1
+soxr==0.5.0.post1

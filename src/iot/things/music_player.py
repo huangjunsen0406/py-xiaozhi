@@ -23,15 +23,11 @@ class MusicPlayer(Thing):
     """
 
     def __init__(self):
-        super().__init__(
-            "MusicPlayer",
-            "音乐播放器，支持在线音乐播放控制"
-        )
+        super().__init__("MusicPlayer", "音乐播放器，支持在线音乐播放控制")
 
         # 初始化pygame mixer
         pygame.mixer.init(
-            frequency=AudioConfig.OUTPUT_SAMPLE_RATE,
-            channels=AudioConfig.CHANNELS
+            frequency=AudioConfig.OUTPUT_SAMPLE_RATE, channels=AudioConfig.CHANNELS
         )
 
         # 核心播放状态
@@ -59,11 +55,12 @@ class MusicPlayer(Thing):
             "PLAY_URL": "http://api.xiaodaokg.com/kuwo.php",
             "LYRIC_URL": "http://m.kuwo.cn/newh5/singles/songinfoandlrc",
             "HEADERS": {
-                "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                               "AppleWebKit/537.36"),
+                "User-Agent": (
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " "AppleWebKit/537.36"
+                ),
                 "Accept": "*/*",
                 "Connection": "keep-alive",
-            }
+            },
         }
 
         # 清理临时缓存
@@ -80,6 +77,7 @@ class MusicPlayer(Thing):
         """初始化应用程序引用"""
         try:
             from src.application import Application
+
             self.app = Application.get_instance()
         except Exception as e:
             logger.warning(f"获取Application实例失败: {e}")
@@ -132,36 +130,21 @@ class MusicPlayer(Thing):
             "SearchAndPlay",
             "搜索并播放歌曲",
             [Parameter("song_name", "歌曲名称", ValueType.STRING, True)],
-            self.search_and_play
+            self.search_and_play,
         )
 
-        self.add_method(
-            "PlayPause",
-            "播放/暂停切换",
-            [],
-            self.play_pause
-        )
+        self.add_method("PlayPause", "播放/暂停切换", [], self.play_pause)
 
-        self.add_method(
-            "Stop",
-            "停止播放",
-            [],
-            self.stop
-        )
+        self.add_method("Stop", "停止播放", [], self.stop)
 
         self.add_method(
             "Seek",
             "跳转到指定位置",
             [Parameter("position", "位置(秒)", ValueType.NUMBER, True)],
-            self.seek
+            self.seek,
         )
 
-        self.add_method(
-            "GetLyrics",
-            "获取当前歌曲歌词",
-            [],
-            self.get_lyrics
-        )
+        self.add_method("GetLyrics", "获取当前歌曲歌词", [], self.get_lyrics)
 
     # 属性getter方法
     async def get_current_song(self):
@@ -205,11 +188,9 @@ class MusicPlayer(Thing):
             self.current_position = self.total_duration
 
             # 更新UI显示完成状态
-            if self.app and hasattr(self.app, 'set_chat_message'):
+            if self.app and hasattr(self.app, "set_chat_message"):
                 dur_str = self._format_time(self.total_duration)
-                await self._safe_update_ui(
-                    f"播放完成: {self.current_song} [{dur_str}]"
-                )
+                await self._safe_update_ui(f"播放完成: {self.current_song} [{dur_str}]")
 
     # 核心方法
     async def search_and_play(self, params):
@@ -227,7 +208,7 @@ class MusicPlayer(Thing):
             if success:
                 return {
                     "status": "success",
-                    "message": f"正在播放: {self.current_song}"
+                    "message": f"正在播放: {self.current_song}",
                 }
             else:
                 return {"status": "error", "message": "播放失败"}
@@ -244,8 +225,9 @@ class MusicPlayer(Thing):
                 success = await self._play_url(self.current_url)
                 return {
                     "status": "success" if success else "error",
-                    "message": (f"开始播放: {self.current_song}"
-                                if success else "播放失败")
+                    "message": (
+                        f"开始播放: {self.current_song}" if success else "播放失败"
+                    ),
                 }
 
             elif self.is_playing and self.paused:
@@ -255,12 +237,12 @@ class MusicPlayer(Thing):
                 self.start_play_time = time.time() - self.current_position
 
                 # 更新UI
-                if self.app and hasattr(self.app, 'set_chat_message'):
+                if self.app and hasattr(self.app, "set_chat_message"):
                     await self._safe_update_ui(f"继续播放: {self.current_song}")
 
                 return {
                     "status": "success",
-                    "message": f"继续播放: {self.current_song}"
+                    "message": f"继续播放: {self.current_song}",
                 }
 
             elif self.is_playing and not self.paused:
@@ -270,17 +252,14 @@ class MusicPlayer(Thing):
                 self.current_position = time.time() - self.start_play_time
 
                 # 更新UI
-                if self.app and hasattr(self.app, 'set_chat_message'):
+                if self.app and hasattr(self.app, "set_chat_message"):
                     pos_str = self._format_time(self.current_position)
                     dur_str = self._format_time(self.total_duration)
                     await self._safe_update_ui(
                         f"已暂停: {self.current_song} [{pos_str}/{dur_str}]"
                     )
 
-                return {
-                    "status": "success",
-                    "message": f"已暂停: {self.current_song}"
-                }
+                return {"status": "success", "message": f"已暂停: {self.current_song}"}
 
             else:
                 return {"status": "error", "message": "没有可播放的歌曲"}
@@ -302,7 +281,7 @@ class MusicPlayer(Thing):
             self.current_position = 0
 
             # 更新UI
-            if self.app and hasattr(self.app, 'set_chat_message'):
+            if self.app and hasattr(self.app, "set_chat_message"):
                 await self._safe_update_ui(f"已停止: {current_song}")
 
             return {"status": "success", "message": f"已停止: {current_song}"}
@@ -332,7 +311,7 @@ class MusicPlayer(Thing):
             # 更新UI
             pos_str = self._format_time(position)
             dur_str = self._format_time(self.total_duration)
-            if self.app and hasattr(self.app, 'set_chat_message'):
+            if self.app and hasattr(self.app, "set_chat_message"):
                 await self._safe_update_ui(f"已跳转到: {pos_str}/{dur_str}")
 
             return {"status": "success", "message": f"已跳转到: {position:.1f}秒"}
@@ -390,7 +369,7 @@ class MusicPlayer(Thing):
                 self.config["SEARCH_URL"],
                 params=params,
                 headers=self.config["HEADERS"],
-                timeout=10
+                timeout=10,
             )
             response.raise_for_status()
 
@@ -426,10 +405,7 @@ class MusicPlayer(Thing):
             # 获取播放URL
             play_url = f"{self.config['PLAY_URL']}?ID={song_id}"
             url_response = await asyncio.to_thread(
-                requests.get,
-                play_url,
-                headers=self.config["HEADERS"],
-                timeout=10
+                requests.get, play_url, headers=self.config["HEADERS"], timeout=10
             )
             url_response.raise_for_status()
 
@@ -471,7 +447,7 @@ class MusicPlayer(Thing):
             logger.info(f"开始播放: {self.current_song}")
 
             # 更新UI
-            if self.app and hasattr(self.app, 'set_chat_message'):
+            if self.app and hasattr(self.app, "set_chat_message"):
                 await self._safe_update_ui(f"正在播放: {self.current_song}")
 
             # 启动歌词更新任务
@@ -521,12 +497,12 @@ class MusicPlayer(Thing):
                 url,
                 headers=self.config["HEADERS"],
                 stream=True,
-                timeout=30
+                timeout=30,
             )
             response.raise_for_status()
 
             # 写入临时文件
-            with open(temp_path, 'wb') as f:
+            with open(temp_path, "wb") as f:
                 for chunk in response.iter_content(chunk_size=8192):
                     if chunk:
                         f.write(chunk)
@@ -561,10 +537,7 @@ class MusicPlayer(Thing):
             logger.info(f"获取歌词URL: {lyric_api_url}")
 
             response = await asyncio.to_thread(
-                requests.get,
-                lyric_api_url,
-                headers=self.config["HEADERS"],
-                timeout=10
+                requests.get, lyric_api_url, headers=self.config["HEADERS"], timeout=10
             )
             response.raise_for_status()
 
@@ -572,9 +545,11 @@ class MusicPlayer(Thing):
             data = response.json()
 
             # 解析歌词
-            if (data.get("status") == 200 and
-                    data.get("data") and
-                    data["data"].get("lrclist")):
+            if (
+                data.get("status") == 200
+                and data.get("data")
+                and data["data"].get("lrclist")
+            ):
 
                 lrc_list = data["data"]["lrclist"]
 
@@ -583,10 +558,12 @@ class MusicPlayer(Thing):
                     text = lrc.get("lineLyric", "").strip()
 
                     # 跳过空歌词和元信息歌词
-                    if (text and
-                            not text.startswith("作词") and
-                            not text.startswith("作曲") and
-                            not text.startswith("编曲")):
+                    if (
+                        text
+                        and not text.startswith("作词")
+                        and not text.startswith("作曲")
+                        and not text.startswith("编曲")
+                    ):
                         self.lyrics.append((time_sec, text))
 
                 logger.info(f"成功获取歌词，共 {len(self.lyrics)} 行")
@@ -659,7 +636,7 @@ class MusicPlayer(Thing):
             display_text = f"[{position_str}/{duration_str}] {text}"
 
             # 更新UI
-            if self.app and hasattr(self.app, 'set_chat_message'):
+            if self.app and hasattr(self.app, "set_chat_message"):
                 await self._safe_update_ui(display_text)
                 logger.debug(f"显示歌词: {text}")
 
@@ -685,7 +662,7 @@ class MusicPlayer(Thing):
 
     async def _safe_update_ui(self, message: str):
         """安全地更新UI"""
-        if not self.app or not hasattr(self.app, 'set_chat_message'):
+        if not self.app or not hasattr(self.app, "set_chat_message"):
             return
 
         try:

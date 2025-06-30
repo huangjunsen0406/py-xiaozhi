@@ -8,10 +8,9 @@ class ValueType:
     NUMBER = "number"
     STRING = "string"
     FLOAT = "float"
-    ARRAY = "array"    # 新增
+    ARRAY = "array"  # 新增
     OBJECT = "object"  # 新增
-    # 为了向后兼容，也可以添加
-    LIST = "array"     # LIST 作为 ARRAY 的别名
+    LIST = "array"  # LIST 作为 ARRAY 的别名
 
 
 class Property:
@@ -23,7 +22,6 @@ class Property:
         if not inspect.iscoroutinefunction(getter):
             raise TypeError(f"Property getter for '{name}' must be an async function.")
 
-        # 在全异步设计中，我们延迟类型推断
         self.type = ValueType.STRING  # 默认类型
         self._type_determined = False
 
@@ -48,9 +46,9 @@ class Property:
         return {"description": self.description, "type": self.type}
 
     async def get_state_value(self):
-        """异步获取属性值"""
+        """获取属性值"""
         value = await self.getter()
-        # 如果是第一次调用异步 getter，确定类型
+        # 如果是第一次调用 getter，确定类型
         if not self._type_determined:
             self._determine_type(value)
             self._type_determined = True
@@ -102,14 +100,13 @@ class Method:
         }
 
     async def invoke(self, params: Dict[str, Any]) -> Any:
-        """异步调用方法"""
+        """调用方法"""
         # 设置参数值，处理复杂类型
         for name, value in params.items():
             if name in self.parameters:
                 param = self.parameters[name]
                 # 如果参数类型是STRING，但值是dict或list，转换为JSON字符串（类似C++版本）
-                if (param.type == ValueType.STRING and
-                        isinstance(value, (dict, list))):
+                if param.type == ValueType.STRING and isinstance(value, (dict, list)):
                     param.set_value(json.dumps(value, ensure_ascii=False))
                 else:
                     param.set_value(value)
@@ -157,7 +154,7 @@ class Thing:
         }
 
     async def get_state_json(self) -> Dict:
-        """异步获取设备状态"""
+        """获取设备状态"""
         state = {}
         for name, prop in self.properties.items():
             state[name] = await prop.get_state_value()
@@ -168,7 +165,7 @@ class Thing:
         }
 
     async def invoke(self, command: Dict) -> Any:
-        """异步调用方法"""
+        """调用方法"""
         method_name = command.get("method")
         if method_name not in self.methods:
             raise ValueError(f"方法不存在: {method_name}")

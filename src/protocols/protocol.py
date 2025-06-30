@@ -74,11 +74,7 @@ class Protocol:
 
     async def send_stop_listening(self):
         """发送停止监听的消息."""
-        message = {
-            "session_id": self.session_id,
-            "type": "listen",
-            "state": "stop"
-        }
+        message = {"session_id": self.session_id, "type": "listen", "state": "stop"}
         await self.send_text(json.dumps(message))
 
     async def send_iot_descriptors(self, descriptors):
@@ -105,7 +101,7 @@ class Protocol:
                     "session_id": self.session_id,
                     "type": "iot",
                     "update": True,
-                    "descriptors": [descriptor]
+                    "descriptors": [descriptor],
                 }
 
                 try:
@@ -127,7 +123,7 @@ class Protocol:
             states_data = json.loads(states)
         else:
             states_data = states
-            
+
         message = {
             "session_id": self.session_id,
             "type": "iot",
@@ -142,12 +138,11 @@ class Protocol:
             payload_data = json.loads(payload)
         else:
             payload_data = payload
-            
+
         message = {
             "session_id": self.session_id,
             "type": "mcp",
             "payload": payload_data,
         }
 
-        print(f"send_mcp_message: {json.dumps(message, indent=4)}")
         await self.send_text(json.dumps(message))
