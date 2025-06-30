@@ -1190,7 +1190,7 @@ class Application:
 
             # 停止全局快捷键服务
             try:
-                from views.components.shortcut_manager import (
+                from src.views.components.shortcut_manager import (
                     stop_global_shortcuts_async,
                 )
 
