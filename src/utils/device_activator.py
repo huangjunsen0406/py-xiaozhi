@@ -111,7 +111,7 @@ class DeviceActivator:
             self.logger.info(f"验证码: {code}")
 
             # 构建验证码提示文本并打印
-            text = f"请登录到控制面板添加设备，输入验证码：{' '.join(code)}"
+            text = f".请登录到控制面板添加设备，输入验证码：{' '.join(code)}."
             print("\n==================")
             print(text)
             print("==================\n")

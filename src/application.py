@@ -6,6 +6,11 @@ import weakref
 from typing import Set
 
 from src.constants.constants import AbortReason, DeviceState, ListeningMode
+from src.core.resource_manager import (
+    ResourceType,
+    get_resource_manager,
+    shutdown_all_resources,
+)
 from src.display import gui_display
 
 # MCP服务器
@@ -81,9 +86,6 @@ class Application:
         self.audio_input_queue: asyncio.Queue = asyncio.Queue()
         self.audio_output_queue: asyncio.Queue = asyncio.Queue()
         self.command_queue: asyncio.Queue = asyncio.Queue()
-
-        # 回调函数
-        self.on_state_changed_callbacks = []
 
         # 任务取消事件
         self._shutdown_event = asyncio.Event()
@@ -189,6 +191,9 @@ class Application:
             # 启动核心任务
             await self._start_core_tasks()
 
+            # 启动全局快捷键服务并注册到资源管理器
+            await self._start_global_shortcuts()
+
             # 启动显示界面
             if mode == "gui":
                 await self._start_gui_display()
@@ -230,11 +235,6 @@ class Application:
             activation_success = await self._run_gui_activation_process()
         else:  # CLI模式
             activation_success = await self._run_cli_activation_process()
-
-        if activation_success:
-            print("\n✅ 设备激活成功，启动应用程序...")
-        else:
-            print("\n❌ 设备激活失败或被取消，程序退出")
 
         return activation_success
 
@@ -347,11 +347,11 @@ class Application:
         # 初始化物联网设备
         await self._initialize_iot_devices()
 
-        # 初始化音频编解码器
-        await self._initialize_audio()
-
         # 初始化MCP服务器
         self._initialize_mcp_server()
+
+        # 初始化音频编解码器
+        await self._initialize_audio()
 
         # 设置协议
         self._set_protocol_type(protocol)
@@ -361,6 +361,9 @@ class Application:
 
         # 设置协议回调
         self._setup_protocol_callbacks()
+
+        # 启动日程提醒服务
+        await self._start_calendar_reminder_service()
 
         logger.info("应用程序组件初始化完成")
 
@@ -372,6 +375,19 @@ class Application:
 
             self.audio_codec = AudioCodec()
             await self.audio_codec.initialize()
+
+            # 注册到资源管理器
+            resource_manager = get_resource_manager()
+            await resource_manager.register_resource(
+                resource_id="audio_codec",
+                resource=self.audio_codec,
+                cleanup_func=self.audio_codec.close,
+                resource_type=ResourceType.AUDIO_CODEC,
+                name="音频编解码器",
+                priority=10,
+                is_async=True,
+            )
+
             logger.info("音频编解码器初始化成功")
 
         except Exception as e:
@@ -385,6 +401,18 @@ class Application:
             self.protocol = MqttProtocol(asyncio.get_running_loop())
         else:
             self.protocol = WebsocketProtocol()
+
+        # 注册到资源管理器
+        resource_manager = get_resource_manager()
+        asyncio.create_task(resource_manager.register_resource(
+            resource_id="protocol",
+            resource=self.protocol,
+            cleanup_func=self.protocol.close_audio_channel,
+            resource_type=ResourceType.PROTOCOL,
+            name=f"{protocol_type}协议",
+            priority=5,
+            is_async=True,
+        ))
 
     def _set_display_type(self, mode: str):
         """设置显示界面类型"""
@@ -450,6 +478,11 @@ class Application:
         task = asyncio.create_task(coro, name=name)
         self._main_tasks.add(task)
 
+        # 异步注册到资源管理器
+        task_id = f"task_{name}_{id(task)}"
+        register_task = self._register_task_to_resource_manager(task, task_id, name)
+        asyncio.create_task(register_task)
+
         # 使用弱引用避免循环引用
         weak_tasks = weakref.ref(self._main_tasks)
 
@@ -458,11 +491,41 @@ class Application:
             if tasks is not None:
                 tasks.discard(t)
 
+            # 异步注销资源
+            unregister_task = self._unregister_task_from_resource_manager(task_id)
+            asyncio.create_task(unregister_task)
+
             if not t.cancelled() and t.exception():
                 logger.error(f"任务 {name} 异常结束: {t.exception()}", exc_info=True)
 
         task.add_done_callback(done_callback)
         return task
+
+    async def _register_task_to_resource_manager(
+        self, task: asyncio.Task, task_id: str, name: str
+    ):
+        """异步注册任务到资源管理器"""
+        try:
+            resource_manager = get_resource_manager()
+            await resource_manager.register_resource(
+                resource_id=task_id,
+                resource=task,
+                cleanup_func=lambda: task.cancel(),
+                resource_type=ResourceType.TASK,
+                name=f"任务-{name}",
+                priority=20,
+                is_async=False,
+            )
+        except Exception as e:
+            logger.warning(f"注册任务到资源管理器失败: {e}")
+
+    async def _unregister_task_from_resource_manager(self, task_id: str):
+        """异步注销任务从资源管理器"""
+        try:
+            resource_manager = get_resource_manager()
+            await resource_manager.unregister_resource(task_id)
+        except Exception as e:
+            logger.warning(f"从资源管理器注销任务失败: {e}")
 
     async def _audio_input_processor(self):
         """音频输入处理器"""
@@ -548,8 +611,6 @@ class Application:
         """启动GUI显示"""
         # 在qasync环境中，GUI可以直接在主线程启动
         try:
-            # 直接调用start方法，不使用asyncio.to_thread
-            # 因为现在我们在正确的线程中（主线程+qasync）
             await self.display.start()
         except Exception as e:
             logger.error(f"GUI显示错误: {e}", exc_info=True)
@@ -557,6 +618,34 @@ class Application:
     async def _start_cli_display(self):
         """启动CLI显示"""
         self._create_task(self.display.start(), "CLI显示")
+
+    async def _start_global_shortcuts(self):
+        """启动全局快捷键服务"""
+        try:
+            from src.views.components.shortcut_manager import (
+                start_global_shortcuts_async,
+            )
+
+            shortcut_manager = await start_global_shortcuts_async(logger)
+
+            if shortcut_manager:
+                # 注册到资源管理器
+                resource_manager = get_resource_manager()
+                await resource_manager.register_resource(
+                    resource_id="shortcut_manager",
+                    resource=shortcut_manager,
+                    cleanup_func=shortcut_manager.stop_async,
+                    resource_type=ResourceType.SHORTCUT_MANAGER,
+                    name="全局快捷键管理器",
+                    priority=15,
+                    is_async=True,
+                )
+                logger.info("全局快捷键服务已启动并注册")
+            else:
+                logger.warning("全局快捷键服务启动失败")
+
+        except Exception as e:
+            logger.error(f"启动全局快捷键服务失败: {e}", exc_info=True)
 
     async def schedule_command(self, command):
         """调度命令到命令队列"""
@@ -701,24 +790,12 @@ class Application:
         if state == DeviceState.IDLE:
             self._handle_idle_state()
         elif state == DeviceState.CONNECTING:
-            if self.display:
-                asyncio.create_task(self.display.update_status("连接中..."))
+            asyncio.create_task(self.display.update_status("连接中..."))
         elif state == DeviceState.LISTENING:
             self._handle_listening_state()
         elif state == DeviceState.SPEAKING:
-            if self.display:
-                asyncio.create_task(self.display.update_status("说话中..."))
+            asyncio.create_task(self.display.update_status("说话中..."))
             await self._manage_wake_word_detector("resume")
-
-        # 通知状态变化
-        for callback in self.on_state_changed_callbacks:
-            try:
-                if asyncio.iscoroutinefunction(callback):
-                    await callback(state)
-                else:
-                    callback(state)
-            except Exception as e:
-                logger.error(f"执行状态变化回调时出错: {e}", exc_info=True)
 
     def _handle_idle_state(self):
         """处理空闲状态"""
@@ -763,6 +840,8 @@ class Application:
         """发送文本进行TTS"""
         if not self.protocol.is_audio_channel_opened():
             await self.protocol.open_audio_channel()
+
+        await self.abort_speaking(AbortReason.WAKE_WORD_DETECTED)
         await self.protocol.send_wake_word_detected(text)
 
     def set_chat_message(self, role, message):
@@ -859,6 +938,7 @@ class Application:
 
     async def _handle_tts_start(self):
         """处理TTS开始事件"""
+        logger.info(f"TTS开始，当前状态: {self.device_state}")
         self.aborted = False
         self.is_tts_playing = True
 
@@ -934,7 +1014,6 @@ class Application:
         if self.wake_word_detector:
             await self.wake_word_detector.resume()
 
-    # 其他方法...
     async def _initialize_wake_word_detector(self):
         """初始化唤醒词检测器"""
         if not self.config.get_config("WAKE_WORD_OPTIONS.USE_WAKE_WORD", False):
@@ -957,6 +1036,19 @@ class Application:
             self.wake_word_detector.on_error = self._handle_wake_word_error
 
             await self._start_wake_word_detector()
+
+            # 注册到资源管理器
+            resource_manager = get_resource_manager()
+            await resource_manager.register_resource(
+                resource_id="wake_word_detector",
+                resource=self.wake_word_detector,
+                cleanup_func=self.wake_word_detector.stop,
+                resource_type=ResourceType.WAKE_WORD_DETECTOR,
+                name="唤醒词检测器",
+                priority=8,
+                is_async=True,
+            )
+
             logger.info("唤醒词检测器初始化成功")
 
         except Exception as e:
@@ -1082,46 +1174,14 @@ class Application:
         except Exception as e:
             logger.error(f"更新IoT状态失败: {e}")
 
-    def _on_mode_changed(self, auto_mode):
+    def _on_mode_changed(self):
         """处理对话模式变更"""
         if self.device_state != DeviceState.IDLE:
             asyncio.create_task(self._alert("提示", "只有在待命状态下才能切换对话模式"))
             return False
 
-        self.keep_listening = auto_mode
-        logger.info(f"对话模式已切换为: {'自动' if auto_mode else '手动'}")
+        self.keep_listening = not self.keep_listening
         return True
-
-    def on_state_changed(self, callback):
-        """注册状态变化回调"""
-        self.on_state_changed_callbacks.append(callback)
-
-    def _toggle_mode(self):
-        """切换对话模式(手动↔自动)"""
-        try:
-            # 检查当前状态是否允许切换
-            if self.device_state != DeviceState.IDLE:
-                logger.warning("只有在待命状态下才能切换对话模式")
-                return
-
-            # 切换keep_listening状态
-            self.keep_listening = not self.keep_listening
-
-            mode_name = "自动对话" if self.keep_listening else "手动对话"
-            logger.info(f"对话模式已切换为: {mode_name}")
-
-            # 通知显示层更新
-            if self.display and hasattr(self.display, "auto_mode"):
-                self.display.auto_mode = self.keep_listening
-                # 更新UI显示
-                asyncio.create_task(
-                    self.schedule_command(
-                        lambda: self.display.update_mode_button_status(mode_name)
-                    )
-                )
-
-        except Exception as e:
-            logger.error(f"切换对话模式失败: {e}", exc_info=True)
 
     async def shutdown(self):
         """关闭应用程序"""
@@ -1135,77 +1195,13 @@ class Application:
         self._shutdown_event.set()
 
         try:
-            # 先关闭显示界面
-            if self.display:
-                try:
-                    # 如果是GUI显示，先隐藏系统托盘
-                    if (
-                        hasattr(self.display, "system_tray")
-                        and self.display.system_tray
-                    ):
-                        self.display.system_tray.hide()
+            # 使用资源管理器统一关闭所有资源
+            success = await shutdown_all_resources(timeout=5.0)
 
-                    # 如果有根窗口，先隐藏
-                    if hasattr(self.display, "root") and self.display.root:
-                        self.display.root.hide()
-
-                except Exception as e:
-                    logger.error(f"关闭显示界面时出错: {e}")
-
-            # 取消所有任务
-            all_tasks = self._main_tasks.union(self._background_tasks)
-            for task in all_tasks:
-                if not task.done():
-                    task.cancel()
-
-            # 等待任务完成（设置超时避免卡死）
-            if all_tasks:
-                try:
-                    await asyncio.wait_for(
-                        asyncio.gather(*all_tasks, return_exceptions=True), timeout=2.0
-                    )
-                except asyncio.TimeoutError:
-                    logger.warning("等待任务完成超时，强制继续关闭流程")
-
-            # 关闭组件
-            if self.audio_codec:
-                try:
-                    await asyncio.wait_for(self.audio_codec.close(), timeout=1.0)
-                except asyncio.TimeoutError:
-                    logger.warning("音频编解码器关闭超时")
-
-            if self.protocol:
-                try:
-                    await asyncio.wait_for(
-                        self.protocol.close_audio_channel(), timeout=1.0
-                    )
-                except asyncio.TimeoutError:
-                    logger.warning("协议关闭超时")
-
-            if self.wake_word_detector:
-                try:
-                    await asyncio.wait_for(self.wake_word_detector.stop(), timeout=1.0)
-                except asyncio.TimeoutError:
-                    logger.warning("唤醒词检测器停止超时")
-
-            # 停止全局快捷键服务
-            try:
-                from src.views.components.shortcut_manager import (
-                    stop_global_shortcuts_async,
-                )
-
-                await asyncio.wait_for(stop_global_shortcuts_async(), timeout=1.0)
-            except asyncio.TimeoutError:
-                logger.warning("快捷键服务停止超时")
-            except RuntimeError as e:
-                if "no running event loop" in str(e):
-                    logger.info("事件循环已停止，跳过快捷键服务关闭")
-                else:
-                    logger.error(f"停止快捷键服务时出错: {e}")
-            except Exception as e:
-                logger.error(f"停止快捷键服务时出错: {e}")
-
-            logger.info("异步应用程序已关闭")
+            if success:
+                logger.info("所有资源已成功关闭")
+            else:
+                logger.warning("部分资源关闭失败，但应用程序将继续退出")
 
         except Exception as e:
             logger.error(f"关闭应用程序时出错: {e}", exc_info=True)
@@ -1230,3 +1226,33 @@ class Application:
         payload = data.get("payload")
         if payload:
             await self.mcp_server.parse_message(payload)
+
+    async def _start_calendar_reminder_service(self):
+        """启动日程提醒服务"""
+        try:
+            logger.info("启动日程提醒服务")
+            from src.core.resource_manager import ResourceType, get_resource_manager
+            from src.mcp.tools.calendar import get_reminder_service
+
+            # 获取提醒服务实例（通过单例模式）
+            reminder_service = get_reminder_service()
+
+            # 启动提醒服务（服务内部会自动处理初始化和日程检查）
+            await reminder_service.start()
+
+            # 注册到资源管理器
+            resource_manager = get_resource_manager()
+            await resource_manager.register_resource(
+                resource_id="calendar_reminder_service",
+                resource=reminder_service,
+                cleanup_func=reminder_service.stop,
+                resource_type=ResourceType.OTHER,
+                name="日程提醒服务",
+                priority=25,
+                is_async=True,
+            )
+
+            logger.info("日程提醒服务已启动")
+
+        except Exception as e:
+            logger.error(f"启动日程提醒服务失败: {e}", exc_info=True)

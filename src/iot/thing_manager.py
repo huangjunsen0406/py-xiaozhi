@@ -24,15 +24,15 @@ class ThingManager:
     async def initialize_iot_devices(self, config):
         """初始化物联网设备"""
         # from src.iot.things.CameraVL.Camera import Camera
-        from src.iot.things.countdown_timer import CountdownTimer
+        # from src.iot.things.countdown_timer import CountdownTimer
         from src.iot.things.lamp import Lamp
         from src.iot.things.music_player import MusicPlayer
-        from src.iot.things.speaker import Speaker
 
+        # from src.iot.things.speaker import Speaker
         # 添加设备
-        self.add_thing(CountdownTimer())
+        # self.add_thing(CountdownTimer())
         self.add_thing(Lamp())
-        self.add_thing(Speaker())
+        # self.add_thing(Speaker())
         self.add_thing(MusicPlayer())
         # self.add_thing(Camera())
 

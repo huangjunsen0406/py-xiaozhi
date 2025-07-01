@@ -133,29 +133,7 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         self.abort_callback = abort_callback
         self.send_text_callback = send_text_callback
 
-        # 添加状态监听
-        from src.application import Application
-
-        app = Application.get_instance()
-        if app:
-            app.on_state_changed_callbacks.append(self._on_state_changed)
-
-    def _on_state_changed(self, state):
-        """监听设备状态变化."""
-        from src.constants.constants import DeviceState
-
-        if state == DeviceState.CONNECTING:
-            self.is_connected = True
-        elif state in [DeviceState.LISTENING, DeviceState.SPEAKING]:
-            self.is_connected = True
-        elif state == DeviceState.IDLE:
-            from src.application import Application
-
-            app = Application.get_instance()
-            if app and app.protocol:
-                self.is_connected = app.protocol.is_audio_channel_opened()
-            else:
-                self.is_connected = False
+        # 不再注册状态监听回调，由update_status直接处理所有逻辑
 
     def _on_manual_button_press(self):
         """手动模式按钮按下事件处理."""
@@ -184,7 +162,7 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
     def _on_mode_button_click(self):
         """对话模式切换按钮点击事件."""
         if self.mode_callback:
-            if not self.mode_callback(not self.auto_mode):
+            if not self.mode_callback():
                 return
 
         self.auto_mode = not self.auto_mode
@@ -209,12 +187,17 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             self.manual_btn.show()
 
     async def update_status(self, status: str):
-        """更新状态文本"""
+        """更新状态文本并处理相关逻辑"""
         full_status_text = f"状态: {status}"
         self._safe_update_label(self.status_label, full_status_text)
 
         if status != self.current_status:
             self.current_status = status
+            
+            # 根据状态更新连接状态
+            self._update_connection_status(status)
+            
+            # 更新系统托盘
             self._update_system_tray(status)
 
     async def update_text(self, text: str):
@@ -532,3 +515,19 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
 
         except Exception as e:
             self.logger.error(f"打开设置窗口失败: {e}", exc_info=True)
+
+    def _update_connection_status(self, status: str):
+        """根据状态更新连接状态"""
+        if status in ["连接中...", "聆听中...", "说话中..."]:
+            self.is_connected = True
+        elif status == "待命":
+            # 对于待命状态，需要检查音频通道是否真的开启
+            from src.application import Application
+            app = Application.get_instance()
+            if app and app.protocol:
+                self.is_connected = app.protocol.is_audio_channel_opened()
+            else:
+                self.is_connected = False
+        else:
+            # 其他状态（如错误状态）设为未连接
+            self.is_connected = False

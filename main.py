@@ -3,8 +3,8 @@ import asyncio
 import sys
 
 from src.application import Application
-from src.views.components.shortcut_manager import start_global_shortcuts_async
 from src.utils.logging_config import get_logger, setup_logging
+from src.views.components.shortcut_manager import start_global_shortcuts_async
 
 logger = get_logger(__name__)
 

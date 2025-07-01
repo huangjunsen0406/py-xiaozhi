@@ -160,7 +160,7 @@ class AsyncShortcutManager:
                 app.abort_speaking(AbortReason.WAKE_WORD_DETECTED)
             )
         elif action == "mode_toggle":
-            self._safe_call_sync(lambda: app._toggle_mode())
+            self._safe_call_sync(lambda: app._on_mode_changed())
         elif action == "window_toggle" and self._mode == "gui":
             self._safe_call_sync(lambda: self._toggle_window_visibility(app))
 

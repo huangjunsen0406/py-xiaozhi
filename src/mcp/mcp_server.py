@@ -193,8 +193,6 @@ class McpServer:
     def __init__(self):
         self.tools: List[McpTool] = []
         self._send_callback: Optional[Callable] = None
-        self._board = None
-        self._display = None
         self._camera = None
 
     def set_send_callback(self, callback: Callable):
@@ -218,122 +216,28 @@ class McpServer:
 
     def add_common_tools(self):
         """添加通用工具"""
-        # 导入系统工具
-        from src.mcp.tools import system
-
         # 备份原有工具列表
         original_tools = self.tools.copy()
         self.tools.clear()
 
-        # 添加获取设备状态工具
-        self.add_tool(
-            (
-                "self.get_device_status",
-                "Provides the real-time information of the device, including "
-                "the current status of the audio speaker, screen, battery, "
-                "network, etc.\n"
-                "Use this tool for: \n"
-                "1. Answering questions about current condition (e.g. what is "
-                "the current volume of the audio speaker?)\n"
-                "2. As the first step to control the device (e.g. turn up / "
-                "down the volume of the audio speaker, etc.)",
-                PropertyList(),
-                system.get_device_status,
-            )
-        )
+        # 添加系统工具
+        # from src.mcp.tools.system import get_system_tools_manager
+        #
+        # system_manager = get_system_tools_manager()
+        # system_manager.init_tools(self.add_tool, PropertyList, Property, PropertyType)
 
-        # 添加设置音量工具
-        volume_props = PropertyList(
-            [Property("volume", PropertyType.INTEGER, min_value=0, max_value=100)]
-        )
-        self.add_tool(
-            (
-                "self.audio_speaker.set_volume",
-                "Set the volume of the audio speaker. If the current volume is "
-                "unknown, you must call `self.get_device_status` tool first and "
-                "then call this tool.",
-                volume_props,
-                system.set_volume,
-            )
-        )
+        # 添加日程管理工具
+        from src.mcp.tools.calendar import get_calendar_manager
 
-        # 添加设置屏幕亮度工具
-        brightness_props = PropertyList(
-            [Property("brightness", PropertyType.INTEGER, min_value=0, max_value=100)]
-        )
-        self.add_tool(
-            (
-                "self.screen.set_brightness",
-                "Set the brightness of the screen.",
-                brightness_props,
-                system.set_brightness,
-            )
-        )
+        calendar_manager = get_calendar_manager()
+        calendar_manager.init_tools(self.add_tool, PropertyList, Property, PropertyType)
 
-        # 添加获取屏幕亮度工具
-        self.add_tool(
-            (
-                "self.screen.get_brightness",
-                "Get the current brightness of the screen on Mac computer. "
-                "Returns the brightness level as a percentage (0-100%).\n"
-                "Use this tool when user asks about:\n"
-                "1. Current screen brightness level\n"
-                "2. What is the brightness setting\n"
-                "3. How bright is the screen",
-                PropertyList(),
-                system.get_brightness,
-            )
-        )
 
-        # 添加设置主题工具
-        theme_props = PropertyList([Property("theme", PropertyType.STRING)])
-        self.add_tool(
-            (
-                "self.screen.set_theme",
-                "Set the theme of the screen. The theme can be "
-                "`light` or `dark`. Will always succeed as a simulated operation.",
-                theme_props,
-                system.set_theme,
-            )
-        )
-
-        # 添加拍照工具
-        camera_props = PropertyList([Property("question", PropertyType.STRING)])
-        self.add_tool(
-            (
-                "self.camera.take_photo",
-                "Take a photo and explain it. Use this tool after the user asks "
-                "you to see something.\n"
-                "Args:\n"
-                "  `question`: The question that you want to ask about the "
-                "photo.\n"
-                "Return:\n"
-                "  A JSON object that provides the photo information.",
-                camera_props,
-                system.take_photo,
-            )
-        )
-
-        # 添加获取电池电量工具
-        self.add_tool(
-            (
-                "self.battery.get_info",
-                "Get detailed battery information for Mac computer, including "
-                "battery percentage, charging status, health condition, cycle "
-                "count, and estimated time remaining.\n"
-                "Use this tool when user asks about:\n"
-                "1. Current battery level or percentage\n"
-                "2. Battery charging status\n"
-                "3. Battery health and condition\n"
-                "4. Estimated battery time remaining",
-                PropertyList(),
-                system.get_battery_info,
-            )
-        )
 
         # 恢复原有工具
         self.tools.extend(original_tools)
 
+        print(self.tools)
     async def parse_message(self, message: Union[str, Dict[str, Any]]):
         """解析MCP消息"""
         try:
