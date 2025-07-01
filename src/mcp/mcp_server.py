@@ -221,10 +221,10 @@ class McpServer:
         self.tools.clear()
 
         # 添加系统工具
-        # from src.mcp.tools.system import get_system_tools_manager
-        #
-        # system_manager = get_system_tools_manager()
-        # system_manager.init_tools(self.add_tool, PropertyList, Property, PropertyType)
+        from src.mcp.tools.system import get_system_tools_manager
+
+        system_manager = get_system_tools_manager()
+        system_manager.init_tools(self.add_tool, PropertyList, Property, PropertyType)
 
         # 添加日程管理工具
         from src.mcp.tools.calendar import get_calendar_manager
@@ -237,7 +237,7 @@ class McpServer:
         # 恢复原有工具
         self.tools.extend(original_tools)
 
-        print(self.tools)
+
     async def parse_message(self, message: Union[str, Dict[str, Any]]):
         """解析MCP消息"""
         try:

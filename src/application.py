@@ -841,7 +841,6 @@ class Application:
         if not self.protocol.is_audio_channel_opened():
             await self.protocol.open_audio_channel()
 
-        await self.abort_speaking(AbortReason.WAKE_WORD_DETECTED)
         await self.protocol.send_wake_word_detected(text)
 
     def set_chat_message(self, role, message):
