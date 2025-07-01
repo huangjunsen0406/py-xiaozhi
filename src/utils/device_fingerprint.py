@@ -59,6 +59,33 @@ class DeviceFingerprint:
         """获取计算机主机名."""
         return platform.node()
 
+    def _normalize_mac_address(self, mac_address: str) -> str:
+        """
+        标准化MAC地址格式为小写冒号分隔格式.
+        
+        Args:
+            mac_address: 原始MAC地址，可能使用连字符、冒号或其他分隔符
+            
+        Returns:
+            str: 标准化后的MAC地址，格式为 "00:00:00:00:00:00"
+        """
+        if not mac_address:
+            return mac_address
+        
+        # 移除所有可能的分隔符，只保留十六进制字符
+        clean_mac = ''.join(c for c in mac_address if c.isalnum())
+        
+        # 确保长度为12个字符（6个字节的十六进制表示）
+        if len(clean_mac) != 12:
+            logger.warning(f"MAC地址长度不正确: {mac_address} -> {clean_mac}")
+            return mac_address.lower()
+        
+        # 重新格式化为标准的冒号分隔格式
+        formatted_mac = ':'.join(clean_mac[i:i+2] for i in range(0, 12, 2))
+        
+        # 转换为小写
+        return formatted_mac.lower()
+
     def get_mac_address(self) -> Optional[str]:
         """获取主要网卡的MAC地址."""
         try:
@@ -73,9 +100,11 @@ class DeviceFingerprint:
 
                 for snic in addrs:
                     if snic.family == psutil.AF_LINK and snic.address:
+                        # 标准化MAC地址格式
+                        normalized_mac = self._normalize_mac_address(snic.address)
                         # 过滤掉无效的MAC地址
-                        if snic.address != "00:00:00:00:00:00":
-                            return snic.address
+                        if normalized_mac != "00:00:00:00:00:00":
+                            return normalized_mac
 
             # 如果没有找到合适的MAC地址，返回None
             logger.warning("未找到有效的MAC地址")

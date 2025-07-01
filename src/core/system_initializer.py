@@ -63,7 +63,11 @@ class SystemInitializer:
             self.device_fingerprint.ensure_device_identity()
         )
 
+        # 获取MAC地址并确保小写格式
+        mac_address = self.device_fingerprint.get_mac_address_from_efuse()
+
         logger.info(f"设备序列号: {serial_number}")
+        logger.info(f"MAC地址: {mac_address}")
         logger.info(f"HMAC密钥: {hmac_key[:8] if hmac_key else None}...")
         logger.info(f"激活状态: {'已激活' if is_activated else '未激活'}")
 
@@ -136,7 +140,6 @@ class SystemInitializer:
             if "websocket" in response_data:
                 ws_info = response_data["websocket"]
                 logger.info(f"WebSocket URL: {ws_info.get('url', 'N/A')}")
-
             # 检查是否有激活信息
             if "activation" in response_data:
                 logger.info("检测到激活信息，设备需要激活")
