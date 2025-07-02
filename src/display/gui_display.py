@@ -193,10 +193,10 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
 
         if status != self.current_status:
             self.current_status = status
-            
+
             # 根据状态更新连接状态
             self._update_connection_status(status)
-            
+
             # 更新系统托盘
             self._update_system_tray(status)
 
@@ -308,15 +308,9 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             if self.app is None:
                 raise RuntimeError("QApplication未找到，请确保在qasync环境中运行")
 
-            # 设置字体
-            system = platform.system()
-            if system == "Darwin":  # macOS
-                default_font = QFont("Menlo", 12)
-            elif system == "Windows":
-                default_font = QFont("Consolas", 12)
-            else:  # Linux
-                default_font = QFont("DejaVu Sans Mono", 12)
-
+            # 设置默认字体
+            default_font = QFont()
+            default_font.setPointSize(12)
             self.app.setFont(default_font)
 
             # 加载UI
@@ -523,6 +517,7 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         elif status == "待命":
             # 对于待命状态，需要检查音频通道是否真的开启
             from src.application import Application
+
             app = Application.get_instance()
             if app and app.protocol:
                 self.is_connected = app.protocol.is_audio_channel_opened()
