@@ -1,6 +1,23 @@
 [flake8]
 max-line-length = 88
-extend-ignore = D100,D104,D401,E203,W503,D400,I001
-exclude = .git,__pycache__,.venv,build,dist
+extend-ignore =
+    # Docstring formatting
+    D100,D104,D401,D400,
+    # Black compatibility
+    E203,W503,E501,
+    # Import order (handled by isort)
+    I001,I003,I004,I005,
+    # Long lines in comments and docstrings (let black handle)
+    E501,
+    # Line break before binary operator (black compatibility)
+    W503,
+    # Whitespace before ':' (black compatibility)
+    E203
+exclude = .git,__pycache__,.venv,build,dist,*.egg-info
 import-order-style = google
 application-import-names = py_xiaozhi
+per-file-ignores =
+    # Allow unused imports in __init__.py files
+    __init__.py:F401,F403
+    # Allow star imports in __init__.py files
+    __init__.py:F405

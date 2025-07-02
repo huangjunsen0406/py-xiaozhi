@@ -74,7 +74,9 @@ class MusicPlayer(Thing):
         self._register_properties_and_methods()
 
     def _initialize_app_reference(self):
-        """初始化应用程序引用"""
+        """
+        初始化应用程序引用.
+        """
         try:
             from src.application import Application
 
@@ -84,7 +86,9 @@ class MusicPlayer(Thing):
             self.app = None
 
     def _init_cache_dirs(self):
-        """初始化缓存目录"""
+        """
+        初始化缓存目录.
+        """
         try:
             # 创建主缓存目录
             self.cache_dir.mkdir(parents=True, exist_ok=True)
@@ -100,7 +104,9 @@ class MusicPlayer(Thing):
             self.temp_cache_dir.mkdir(parents=True, exist_ok=True)
 
     def _clean_temp_cache(self):
-        """清理临时缓存文件"""
+        """
+        清理临时缓存文件.
+        """
         try:
             # 清空临时缓存目录中的所有文件
             for file_path in self.temp_cache_dir.glob("*"):
@@ -116,7 +122,9 @@ class MusicPlayer(Thing):
             logger.error(f"清理临时缓存目录失败: {e}")
 
     def _register_properties_and_methods(self):
-        """注册属性和方法"""
+        """
+        注册属性和方法.
+        """
         # 属性
         self.add_property("current_song", "当前歌曲", self.get_current_song)
         self.add_property("is_playing", "是否播放", self.get_is_playing)
@@ -172,14 +180,18 @@ class MusicPlayer(Thing):
         return current_pos
 
     async def get_progress(self):
-        """获取播放进度百分比"""
+        """
+        获取播放进度百分比.
+        """
         if self.total_duration <= 0:
             return 0
         position = await self.get_position()
         return round(position * 100 / self.total_duration, 1)
 
     async def _handle_playback_finished(self):
-        """处理播放完成"""
+        """
+        处理播放完成.
+        """
         if self.is_playing:
             logger.info(f"歌曲播放完成: {self.current_song}")
             pygame.mixer.music.stop()
@@ -194,7 +206,9 @@ class MusicPlayer(Thing):
 
     # 核心方法
     async def search_and_play(self, params):
-        """搜索并播放歌曲"""
+        """
+        搜索并播放歌曲.
+        """
         song_name = params["song_name"].get_value()
 
         try:
@@ -218,7 +232,9 @@ class MusicPlayer(Thing):
             return {"status": "error", "message": f"操作失败: {str(e)}"}
 
     async def play_pause(self, params):
-        """播放/暂停切换"""
+        """
+        播放/暂停切换.
+        """
         try:
             if not self.is_playing and self.current_url:
                 # 重新播放
@@ -269,7 +285,9 @@ class MusicPlayer(Thing):
             return {"status": "error", "message": f"操作失败: {str(e)}"}
 
     async def stop(self, params):
-        """停止播放"""
+        """
+        停止播放.
+        """
         try:
             if not self.is_playing:
                 return {"status": "info", "message": "没有正在播放的歌曲"}
@@ -291,7 +309,9 @@ class MusicPlayer(Thing):
             return {"status": "error", "message": f"停止失败: {str(e)}"}
 
     async def seek(self, params):
-        """跳转到指定位置"""
+        """
+        跳转到指定位置.
+        """
         try:
             position = params["position"].get_value()
 
@@ -321,7 +341,9 @@ class MusicPlayer(Thing):
             return {"status": "error", "message": f"跳转失败: {str(e)}"}
 
     async def get_lyrics(self, params):
-        """获取当前歌曲歌词"""
+        """
+        获取当前歌曲歌词.
+        """
         if not self.lyrics:
             return {"status": "info", "message": "当前歌曲没有歌词", "lyrics": []}
 
@@ -339,7 +361,9 @@ class MusicPlayer(Thing):
 
     # 内部方法
     async def _search_song(self, song_name: str) -> Tuple[str, str]:
-        """搜索歌曲获取ID和URL"""
+        """
+        搜索歌曲获取ID和URL.
+        """
         try:
             # 构建搜索参数
             params = {
@@ -422,7 +446,9 @@ class MusicPlayer(Thing):
             return "", ""
 
     async def _play_url(self, url: str) -> bool:
-        """播放指定URL"""
+        """
+        播放指定URL.
+        """
         try:
             # 停止当前播放
             if self.is_playing:
@@ -460,7 +486,7 @@ class MusicPlayer(Thing):
             return False
 
     async def _get_or_download_file(self, url: str) -> Optional[Path]:
-        """获取或下载文件
+        """获取或下载文件.
 
         先检查缓存，如果缓存中没有则下载
         """
@@ -482,7 +508,7 @@ class MusicPlayer(Thing):
             return None
 
     async def _download_file(self, url: str, filename: str) -> Optional[Path]:
-        """下载文件到缓存目录
+        """下载文件到缓存目录.
 
         先下载到临时目录，下载完成后移动到正式缓存目录
         """
@@ -526,7 +552,9 @@ class MusicPlayer(Thing):
             return None
 
     async def _fetch_lyrics(self, song_id: str):
-        """获取歌词"""
+        """
+        获取歌词.
+        """
         try:
             # 重置歌词
             self.lyrics = []
@@ -550,7 +578,6 @@ class MusicPlayer(Thing):
                 and data.get("data")
                 and data["data"].get("lrclist")
             ):
-
                 lrc_list = data["data"]["lrclist"]
 
                 for lrc in lrc_list:
@@ -574,7 +601,9 @@ class MusicPlayer(Thing):
             logger.error(f"获取歌词失败: {e}")
 
     async def _lyrics_update_task(self):
-        """歌词更新任务"""
+        """
+        歌词更新任务.
+        """
         if not self.lyrics:
             return
 
@@ -603,7 +632,9 @@ class MusicPlayer(Thing):
             logger.error(f"歌词更新任务异常: {e}")
 
     def _find_current_lyric_index(self, current_time: float) -> int:
-        """查找当前时间对应的歌词索引"""
+        """
+        查找当前时间对应的歌词索引.
+        """
         # 查找下一句歌词
         next_lyric_index = None
         for i, (time_sec, _) in enumerate(self.lyrics):
@@ -624,7 +655,9 @@ class MusicPlayer(Thing):
             return 0
 
     async def _display_current_lyric(self, current_index: int):
-        """显示当前歌词"""
+        """
+        显示当前歌词.
+        """
         self.current_lyric_index = current_index
 
         if current_index < len(self.lyrics):
@@ -641,7 +674,9 @@ class MusicPlayer(Thing):
                 logger.debug(f"显示歌词: {text}")
 
     def _extract_value(self, text: str, start_marker: str, end_marker: str) -> str:
-        """从文本中提取值"""
+        """
+        从文本中提取值.
+        """
         start_pos = text.find(start_marker)
         if start_pos == -1:
             return ""
@@ -655,13 +690,17 @@ class MusicPlayer(Thing):
         return text[start_pos:end_pos]
 
     def _format_time(self, seconds: float) -> str:
-        """将秒数格式化为 mm:ss 格式"""
+        """
+        将秒数格式化为 mm:ss 格式.
+        """
         minutes = int(seconds) // 60
         seconds = int(seconds) % 60
         return f"{minutes:02d}:{seconds:02d}"
 
     async def _safe_update_ui(self, message: str):
-        """安全地更新UI"""
+        """
+        安全地更新UI.
+        """
         if not self.app or not hasattr(self.app, "set_chat_message"):
             return
 
@@ -671,7 +710,9 @@ class MusicPlayer(Thing):
             logger.error(f"更新UI失败: {e}")
 
     def __del__(self):
-        """清理资源"""
+        """
+        清理资源.
+        """
         try:
             # 如果程序正常退出，额外清理一次临时缓存
             self._clean_temp_cache()

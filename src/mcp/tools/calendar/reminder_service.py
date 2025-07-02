@@ -1,6 +1,5 @@
 """
-日程提醒服务
-定期检查数据库中的事件，当到达提醒时间时通过TTS播报提醒
+日程提醒服务 定期检查数据库中的事件，当到达提醒时间时通过TTS播报提醒.
 """
 
 import asyncio
@@ -16,7 +15,9 @@ logger = get_logger(__name__)
 
 
 class CalendarReminderService:
-    """日程提醒服务"""
+    """
+    日程提醒服务.
+    """
 
     def __init__(self):
         self.db = get_calendar_database()
@@ -25,7 +26,9 @@ class CalendarReminderService:
         self.check_interval = 30  # 检查间隔（秒）
 
     def _get_application(self):
-        """延迟加载获取应用实例"""
+        """
+        延迟加载获取应用实例.
+        """
         try:
             from src.application import Application
 
@@ -35,7 +38,9 @@ class CalendarReminderService:
             return None
 
     async def start(self):
-        """启动提醒服务"""
+        """
+        启动提醒服务.
+        """
         if self.is_running:
             logger.warning("提醒服务已在运行")
             return
@@ -48,7 +53,9 @@ class CalendarReminderService:
         await self.reset_reminder_flags_for_future_events()
 
     async def stop(self):
-        """停止提醒服务"""
+        """
+        停止提醒服务.
+        """
         if not self.is_running:
             return
 
@@ -64,7 +71,9 @@ class CalendarReminderService:
         logger.info("日程提醒服务已停止")
 
     async def _reminder_loop(self):
-        """提醒检查循环"""
+        """
+        提醒检查循环.
+        """
         logger.info("开始日程提醒检查循环")
 
         while self.is_running:
@@ -78,7 +87,9 @@ class CalendarReminderService:
                 await asyncio.sleep(self.check_interval)
 
     async def _check_and_send_reminders(self):
-        """检查并发送提醒"""
+        """
+        检查并发送提醒.
+        """
         try:
             now = datetime.now()
 
@@ -86,9 +97,9 @@ class CalendarReminderService:
             with self.db._get_connection() as conn:
                 cursor = conn.execute(
                     """
-                    SELECT * FROM events 
-                    WHERE reminder_sent = 0 
-                    AND reminder_time IS NOT NULL 
+                    SELECT * FROM events
+                    WHERE reminder_sent = 0
+                    AND reminder_time IS NOT NULL
                     AND reminder_time <= ?
                     ORDER BY reminder_time
                 """,
@@ -110,7 +121,9 @@ class CalendarReminderService:
             logger.error(f"检查提醒失败: {e}", exc_info=True)
 
     async def _send_reminder(self, event_data: dict):
-        """发送单个提醒"""
+        """
+        发送单个提醒.
+        """
         try:
             event_id = event_data["id"]
             title = event_data["title"]
@@ -170,7 +183,9 @@ class CalendarReminderService:
     def _format_reminder_text(
         self, title: str, time_str: str, category: str, description: str
     ) -> str:
-        """格式化提醒文本"""
+        """
+        格式化提醒文本.
+        """
         # 基本提醒信息
         if time_str == "现在":
             message = f"【{category}】日程提醒：{title} 即将开始"
@@ -184,12 +199,14 @@ class CalendarReminderService:
         return message
 
     async def _mark_reminder_sent(self, event_id: str):
-        """标记提醒已发送"""
+        """
+        标记提醒已发送.
+        """
         try:
             with self.db._get_connection() as conn:
                 conn.execute(
                     """
-                    UPDATE events 
+                    UPDATE events
                     SET reminder_sent = 1, updated_at = ?
                     WHERE id = ?
                 """,
@@ -203,7 +220,9 @@ class CalendarReminderService:
             logger.error(f"标记提醒已发送失败: {e}", exc_info=True)
 
     async def check_daily_events(self):
-        """检查今日事件（可在程序启动时调用）"""
+        """
+        检查今日事件（可在程序启动时调用）
+        """
         try:
             now = datetime.now()
             today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -212,7 +231,7 @@ class CalendarReminderService:
             with self.db._get_connection() as conn:
                 cursor = conn.execute(
                     """
-                    SELECT * FROM events 
+                    SELECT * FROM events
                     WHERE start_time >= ? AND start_time < ?
                     ORDER BY start_time
                 """,
@@ -248,7 +267,9 @@ class CalendarReminderService:
             logger.error(f"检查今日事件失败: {e}", exc_info=True)
 
     def _format_daily_summary(self, events) -> str:
-        """格式化今日日程摘要"""
+        """
+        格式化今日日程摘要.
+        """
         if not events:
             return "今天没有安排任何日程"
 
@@ -265,7 +286,9 @@ class CalendarReminderService:
         return summary
 
     async def reset_reminder_flags_for_future_events(self):
-        """重置未来事件的提醒标志（程序重启时调用）"""
+        """
+        重置未来事件的提醒标志（程序重启时调用）
+        """
         try:
             now = datetime.now()
 
@@ -273,7 +296,7 @@ class CalendarReminderService:
                 # 重置所有未来事件的提醒标志
                 cursor = conn.execute(
                     """
-                    UPDATE events 
+                    UPDATE events
                     SET reminder_sent = 0, updated_at = ?
                     WHERE start_time > ? AND reminder_sent = 1
                 """,
@@ -295,7 +318,9 @@ _reminder_service = None
 
 
 def get_reminder_service() -> CalendarReminderService:
-    """获取提醒服务单例"""
+    """
+    获取提醒服务单例.
+    """
     global _reminder_service
     if _reminder_service is None:
         _reminder_service = CalendarReminderService()

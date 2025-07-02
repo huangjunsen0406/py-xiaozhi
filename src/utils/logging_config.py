@@ -5,7 +5,9 @@ from colorlog import ColoredFormatter
 
 
 def setup_logging():
-    """配置日志系统."""
+    """
+    配置日志系统.
+    """
     from .resource_finder import get_project_root
 
     # 使用resource_finder获取项目根目录并创建logs目录
@@ -89,7 +91,9 @@ def get_logger(name):
 
     # 添加一些辅助方法
     def log_error_with_exc(msg, *args, **kwargs):
-        """记录错误并自动包含异常堆栈."""
+        """
+        记录错误并自动包含异常堆栈.
+        """
         kwargs["exc_info"] = True
         logger.error(msg, *args, **kwargs)
 

@@ -39,7 +39,9 @@ class WebsocketProtocol(Protocol):
         }
 
     async def connect(self) -> bool:
-        """连接到WebSocket服务器."""
+        """
+        连接到WebSocket服务器.
+        """
         try:
             # 在连接时创建 Event，确保在正确的事件循环中
             self.hello_received = asyncio.Event()
@@ -104,7 +106,9 @@ class WebsocketProtocol(Protocol):
             return False
 
     async def _message_handler(self):
-        """处理接收到的WebSocket消息."""
+        """
+        处理接收到的WebSocket消息.
+        """
         try:
             async for message in self.websocket:
                 if isinstance(message, str):
@@ -136,7 +140,9 @@ class WebsocketProtocol(Protocol):
                 self._on_network_error(f"连接错误: {str(e)}")
 
     async def send_audio(self, data: bytes):
-        """发送音频数据."""
+        """
+        发送音频数据.
+        """
         if not self.is_audio_channel_opened():  # 使用已有的 is_connected 方法
             return
 
@@ -147,7 +153,9 @@ class WebsocketProtocol(Protocol):
                 self._on_network_error(f"发送音频数据失败: {str(e)}")
 
     async def send_text(self, message: str):
-        """发送文本消息."""
+        """
+        发送文本消息.
+        """
         if self.websocket:
             try:
                 await self.websocket.send(message)
@@ -158,7 +166,9 @@ class WebsocketProtocol(Protocol):
                     self._on_network_error("客户端已关闭")
 
     def is_audio_channel_opened(self) -> bool:
-        """检查音频通道是否打开."""
+        """
+        检查音频通道是否打开.
+        """
         return self.websocket is not None and self.connected
 
     async def open_audio_channel(self) -> bool:
@@ -173,7 +183,9 @@ class WebsocketProtocol(Protocol):
         return True
 
     async def _handle_server_hello(self, data: dict):
-        """处理服务器的 hello 消息."""
+        """
+        处理服务器的 hello 消息.
+        """
         try:
             # 验证传输方式
             transport = data.get("transport")
@@ -197,7 +209,9 @@ class WebsocketProtocol(Protocol):
                 self._on_network_error(f"处理服务器响应失败: {str(e)}")
 
     async def close_audio_channel(self):
-        """关闭音频通道."""
+        """
+        关闭音频通道.
+        """
         if self.websocket:
             try:
                 await self.websocket.close()

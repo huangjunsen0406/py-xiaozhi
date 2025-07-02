@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-全局资源管理器
-统一管理所有需要清理的资源，解决事件循环相关的问题
+全局资源管理器 统一管理所有需要清理的资源，解决事件循环相关的问题.
 """
 
 import asyncio
@@ -18,7 +17,9 @@ logger = get_logger(__name__)
 
 
 class ResourceType(Enum):
-    """资源类型枚举"""
+    """
+    资源类型枚举.
+    """
 
     AUDIO_CODEC = "audio_codec"
     PROTOCOL = "protocol"
@@ -32,7 +33,9 @@ class ResourceType(Enum):
 
 
 class ResourceState(Enum):
-    """资源状态枚举"""
+    """
+    资源状态枚举.
+    """
 
     ACTIVE = "active"
     CLEANING = "cleaning"
@@ -42,7 +45,9 @@ class ResourceState(Enum):
 
 @dataclass
 class ManagedResource:
-    """管理的资源"""
+    """
+    管理的资源.
+    """
 
     resource: Any
     cleanup_func: Callable
@@ -58,10 +63,14 @@ class ManagedResource:
 
 
 class ResourceManager:
-    """全局资源管理器"""
+    """
+    全局资源管理器.
+    """
 
     def __init__(self):
-        """初始化资源管理器"""
+        """
+        初始化资源管理器.
+        """
         logger.debug("初始化ResourceManager实例")
 
         self._resources: Dict[str, ManagedResource] = {}
@@ -93,7 +102,9 @@ class ResourceManager:
         logger.info("资源管理器初始化完成")
 
     def _is_event_loop_running(self) -> bool:
-        """安全检查事件循环是否运行"""
+        """
+        安全检查事件循环是否运行.
+        """
         try:
             loop = asyncio.get_running_loop()
             return loop.is_running()
@@ -113,7 +124,7 @@ class ResourceManager:
         dependencies: Optional[Set[str]] = None,
         group: str = "",
     ) -> str:
-        """注册资源
+        """注册资源.
 
         Args:
             resource_id: 资源ID，如果为空则自动生成
@@ -141,9 +152,7 @@ class ResourceManager:
 
             # 使用弱引用避免循环引用
             weak_resource = (
-                weakref.ref(resource)
-                if hasattr(resource, "__weakref__")
-                else resource
+                weakref.ref(resource) if hasattr(resource, "__weakref__") else resource
             )
 
             managed_resource = ManagedResource(
@@ -172,7 +181,7 @@ class ResourceManager:
             return resource_id
 
     async def unregister_resource(self, resource_id: str) -> bool:
-        """注销资源
+        """注销资源.
 
         Args:
             resource_id: 资源ID
@@ -195,7 +204,7 @@ class ResourceManager:
             return False
 
     def get_resource(self, resource_id: str) -> Optional[Any]:
-        """获取资源对象
+        """获取资源对象.
 
         Args:
             resource_id: 资源ID
@@ -216,7 +225,7 @@ class ResourceManager:
         group: Optional[str] = None,
         state: Optional[ResourceState] = None,
     ) -> List[str]:
-        """列出资源
+        """列出资源.
 
         Args:
             resource_type: 资源类型过滤器
@@ -229,10 +238,7 @@ class ResourceManager:
         result = []
         for resource_id, resource in self._resources.items():
             # 类型过滤
-            if (
-                resource_type is not None
-                and resource.resource_type != resource_type
-            ):
+            if resource_type is not None and resource.resource_type != resource_type:
                 continue
             # 分组过滤
             if group is not None and resource.group != group:
@@ -244,7 +250,7 @@ class ResourceManager:
         return result
 
     async def health_check_resource(self, resource_id: str) -> bool:
-        """检查资源健康状态
+        """检查资源健康状态.
 
         Args:
             resource_id: 资源ID
@@ -268,7 +274,7 @@ class ResourceManager:
         return managed_resource.state == ResourceState.ACTIVE
 
     async def cleanup_resource(self, resource_id: str) -> bool:
-        """清理单个资源
+        """清理单个资源.
 
         Args:
             resource_id: 资源ID
@@ -297,7 +303,9 @@ class ResourceManager:
     async def _do_cleanup_resource(
         self, resource_id: str, managed_resource: ManagedResource
     ) -> bool:
-        """执行资源清理的实际逻辑"""
+        """
+        执行资源清理的实际逻辑.
+        """
         start_time = time.time()
 
         # 获取实际资源对象
@@ -366,7 +374,9 @@ class ResourceManager:
         managed_resource: ManagedResource,
         actual_resource: Any,
     ) -> bool:
-        """同步方式清理资源的后备方案"""
+        """
+        同步方式清理资源的后备方案.
+        """
         logger.info(f"事件循环已停止，尝试同步清理: {managed_resource.name}")
 
         try:
@@ -392,13 +402,15 @@ class ResourceManager:
             return False
 
     def _update_stats(self, success: bool, elapsed_time: float):
-        """更新统计信息"""
+        """
+        更新统计信息.
+        """
         if success:
             self._stats["total_cleaned"] += 1
             # 计算平均清理时间
             current_avg = self._stats["avg_cleanup_time"]
             total_cleaned = self._stats["total_cleaned"]
-            new_avg = (current_avg * (total_cleaned - 1) + elapsed_time)
+            new_avg = current_avg * (total_cleaned - 1) + elapsed_time
             self._stats["avg_cleanup_time"] = new_avg / total_cleaned
         else:
             self._stats["total_failed"] += 1
@@ -406,7 +418,7 @@ class ResourceManager:
     async def cleanup_resources_by_type(
         self, resource_type: ResourceType, parallel: bool = True
     ) -> int:
-        """按类型清理资源
+        """按类型清理资源.
 
         Args:
             resource_type: 资源类型
@@ -425,7 +437,9 @@ class ResourceManager:
             return await self._cleanup_resources_sequential(resource_ids)
 
     async def _cleanup_resources_parallel(self, resource_ids: List[str]) -> int:
-        """并行清理资源"""
+        """
+        并行清理资源.
+        """
         # 按依赖关系和优先级排序
         sorted_resources = await self._sort_resources_by_dependencies(resource_ids)
 
@@ -475,7 +489,9 @@ class ResourceManager:
         return success_count
 
     async def _cleanup_resources_sequential(self, resource_ids: List[str]) -> int:
-        """顺序清理资源"""
+        """
+        顺序清理资源.
+        """
         # 按依赖关系和优先级排序
         sorted_resources = await self._sort_resources_by_dependencies(resource_ids)
 
@@ -492,7 +508,9 @@ class ResourceManager:
     async def _sort_resources_by_dependencies(
         self, resource_ids: List[str]
     ) -> List[str]:
-        """根据依赖关系和优先级排序资源"""
+        """
+        根据依赖关系和优先级排序资源.
+        """
         # 获取资源信息
         resources_info = []
         for resource_id in resource_ids:
@@ -509,7 +527,7 @@ class ResourceManager:
         return [resource_id for resource_id, _ in resources_info]
 
     async def cleanup_group(self, group: str, parallel: bool = True) -> int:
-        """清理指定分组的所有资源
+        """清理指定分组的所有资源.
 
         Args:
             group: 分组名称
@@ -532,7 +550,9 @@ class ResourceManager:
     async def resource_context(
         self, resource_id: str, resource: Any, cleanup_func: Callable, **kwargs
     ):
-        """资源上下文管理器"""
+        """
+        资源上下文管理器.
+        """
         try:
             # 注册资源
             await self.register_resource(resource_id, resource, cleanup_func, **kwargs)
@@ -541,10 +561,8 @@ class ResourceManager:
             # 自动清理
             await self.cleanup_resource(resource_id)
 
-    async def shutdown_all(
-        self, timeout: float = 5.0, parallel: bool = True
-    ) -> bool:
-        """关闭所有资源
+    async def shutdown_all(self, timeout: float = 5.0, parallel: bool = True) -> bool:
+        """关闭所有资源.
 
         Args:
             timeout: 总超时时间
@@ -634,7 +652,9 @@ class ResourceManager:
     def _log_cleanup_stats(
         self, total_cleaned: int, remaining_count: int, elapsed_time: float
     ):
-        """记录清理统计信息"""
+        """
+        记录清理统计信息.
+        """
         avg_time = self._stats["avg_cleanup_time"]
         stats_msg = (
             f"资源清理统计 - 成功: {total_cleaned}, 剩余: {remaining_count}, "
@@ -648,7 +668,9 @@ class ResourceManager:
             logger.warning(f"仍有 {remaining_count} 个资源未能清理")
 
     def _shutdown_all_sync(self) -> bool:
-        """同步方式关闭所有资源（当没有事件循环时使用）"""
+        """
+        同步方式关闭所有资源（当没有事件循环时使用）
+        """
         logger.info("使用同步方式清理资源...")
         total_cleaned = 0
 
@@ -702,15 +724,21 @@ class ResourceManager:
         return remaining == 0
 
     def is_shutting_down(self) -> bool:
-        """检查是否正在关闭"""
+        """
+        检查是否正在关闭.
+        """
         return self._is_shutting_down
 
     def get_stats(self) -> Dict[str, Union[int, float]]:
-        """获取统计信息"""
+        """
+        获取统计信息.
+        """
         return self._stats.copy()
 
     async def reset(self):
-        """重置资源管理器（主要用于测试）"""
+        """
+        重置资源管理器（主要用于测试）
+        """
         async with self._lock:
             self._resources.clear()
             self._resource_groups.clear()
@@ -730,7 +758,9 @@ _global_resource_manager = None
 
 
 def get_resource_manager() -> ResourceManager:
-    """获取全局资源管理器实例"""
+    """
+    获取全局资源管理器实例.
+    """
     global _global_resource_manager
     if _global_resource_manager is None:
         _global_resource_manager = ResourceManager()
@@ -745,17 +775,23 @@ async def register_resource(
     resource_type: ResourceType = ResourceType.OTHER,
     **kwargs,
 ) -> str:
-    """注册资源的便捷函数"""
+    """
+    注册资源的便捷函数.
+    """
     return await get_resource_manager().register_resource(
         resource_id, resource, cleanup_func, resource_type, **kwargs
     )
 
 
 async def unregister_resource(resource_id: str) -> bool:
-    """注销资源的便捷函数"""
+    """
+    注销资源的便捷函数.
+    """
     return await get_resource_manager().unregister_resource(resource_id)
 
 
 async def shutdown_all_resources(timeout: float = 5.0) -> bool:
-    """关闭所有资源的便捷函数"""
+    """
+    关闭所有资源的便捷函数.
+    """
     return await get_resource_manager().shutdown_all(timeout)

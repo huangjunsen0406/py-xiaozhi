@@ -21,14 +21,18 @@ class DeviceFingerprint:
     _instance = None
 
     def __new__(cls):
-        """确保单例模式."""
+        """
+        确保单例模式.
+        """
         if cls._instance is None:
             cls._instance = super().__new__(cls)
             cls._instance._initialized = False
         return cls._instance
 
     def __init__(self):
-        """初始化设备指纹收集器."""
+        """
+        初始化设备指纹收集器.
+        """
         if self._initialized:
             return
         self._initialized = True
@@ -43,7 +47,9 @@ class DeviceFingerprint:
         self._ensure_efuse_file()
 
     def _init_file_paths(self):
-        """初始化文件路径"""
+        """
+        初始化文件路径.
+        """
         config_dir = find_config_dir()
         if config_dir:
             self.efuse_file = config_dir / "efuse.json"
@@ -56,38 +62,41 @@ class DeviceFingerprint:
             logger.info(f"创建配置目录: {config_path.absolute()}")
 
     def get_hostname(self) -> str:
-        """获取计算机主机名."""
+        """
+        获取计算机主机名.
+        """
         return platform.node()
 
     def _normalize_mac_address(self, mac_address: str) -> str:
-        """
-        标准化MAC地址格式为小写冒号分隔格式.
-        
+        """标准化MAC地址格式为小写冒号分隔格式.
+
         Args:
             mac_address: 原始MAC地址，可能使用连字符、冒号或其他分隔符
-            
+
         Returns:
             str: 标准化后的MAC地址，格式为 "00:00:00:00:00:00"
         """
         if not mac_address:
             return mac_address
-        
+
         # 移除所有可能的分隔符，只保留十六进制字符
-        clean_mac = ''.join(c for c in mac_address if c.isalnum())
-        
+        clean_mac = "".join(c for c in mac_address if c.isalnum())
+
         # 确保长度为12个字符（6个字节的十六进制表示）
         if len(clean_mac) != 12:
             logger.warning(f"MAC地址长度不正确: {mac_address} -> {clean_mac}")
             return mac_address.lower()
-        
+
         # 重新格式化为标准的冒号分隔格式
-        formatted_mac = ':'.join(clean_mac[i:i+2] for i in range(0, 12, 2))
-        
+        formatted_mac = ":".join(clean_mac[i : i + 2] for i in range(0, 12, 2))
+
         # 转换为小写
         return formatted_mac.lower()
 
     def get_mac_address(self) -> Optional[str]:
-        """获取主要网卡的MAC地址."""
+        """
+        获取主要网卡的MAC地址.
+        """
         try:
             # 获取所有网络接口的地址信息
             net_if_addrs = psutil.net_if_addrs()
@@ -115,7 +124,9 @@ class DeviceFingerprint:
             return None
 
     def get_machine_id(self) -> Optional[str]:
-        """获取设备唯一标识."""
+        """
+        获取设备唯一标识.
+        """
         try:
             return machineid.id()
         except machineid.MachineIdNotFound:
@@ -126,7 +137,9 @@ class DeviceFingerprint:
             return None
 
     def _generate_fresh_fingerprint(self) -> Dict:
-        """生成全新的设备指纹（不依赖缓存或文件）."""
+        """
+        生成全新的设备指纹（不依赖缓存或文件）.
+        """
         return {
             "system": self.system,
             "hostname": self.get_hostname(),
@@ -135,7 +148,9 @@ class DeviceFingerprint:
         }
 
     def generate_fingerprint(self) -> Dict:
-        """生成完整的设备指纹（优先从efuse.json读取）."""
+        """
+        生成完整的设备指纹（优先从efuse.json读取）.
+        """
         # 首先尝试从efuse.json读取设备指纹
         if self.efuse_file.exists():
             try:
@@ -151,7 +166,9 @@ class DeviceFingerprint:
         return self._generate_fresh_fingerprint()
 
     def generate_hardware_hash(self) -> str:
-        """根据硬件信息生成唯一的哈希值."""
+        """
+        根据硬件信息生成唯一的哈希值.
+        """
         fingerprint = self.generate_fingerprint()
 
         # 提取最不可变的硬件标识符
@@ -182,7 +199,9 @@ class DeviceFingerprint:
         return hashlib.sha256(fingerprint_str.encode("utf-8")).hexdigest()
 
     def generate_serial_number(self) -> str:
-        """生成设备序列号."""
+        """
+        生成设备序列号.
+        """
         fingerprint = self.generate_fingerprint()
 
         # 优先使用主网卡MAC地址生成序列号
@@ -210,7 +229,9 @@ class DeviceFingerprint:
         return serial_number
 
     def _ensure_efuse_file(self):
-        """确保efuse文件存在且包含完整信息."""
+        """
+        确保efuse文件存在且包含完整信息.
+        """
         logger.info(f"检查efuse文件: {self.efuse_file.absolute()}")
 
         # 先生成设备指纹（这样可以确保硬件信息可用）
@@ -225,7 +246,9 @@ class DeviceFingerprint:
             self._validate_and_fix_efuse_file(fingerprint, mac_address)
 
     def _create_new_efuse_file(self, fingerprint: Dict, mac_address: Optional[str]):
-        """创建新的efuse文件."""
+        """
+        创建新的efuse文件.
+        """
         # 生成序列号和HMAC密钥
         serial_number = self.generate_serial_number()
         hmac_key = self.generate_hardware_hash()
@@ -255,7 +278,9 @@ class DeviceFingerprint:
     def _validate_and_fix_efuse_file(
         self, fingerprint: Dict, mac_address: Optional[str]
     ):
-        """验证并修复efuse文件的完整性."""
+        """
+        验证并修复efuse文件的完整性.
+        """
         try:
             efuse_data = self._load_efuse_data_from_file()
 
@@ -294,7 +319,9 @@ class DeviceFingerprint:
         fingerprint: Dict,
         mac_address: Optional[str],
     ):
-        """修复缺失的字段."""
+        """
+        修复缺失的字段.
+        """
         for field in missing_fields:
             if field == "device_fingerprint":
                 efuse_data[field] = fingerprint
@@ -315,12 +342,16 @@ class DeviceFingerprint:
             logger.error("修复efuse配置文件失败")
 
     def _load_efuse_data_from_file(self) -> Dict:
-        """直接从文件加载efuse数据（不使用缓存）."""
+        """
+        直接从文件加载efuse数据（不使用缓存）.
+        """
         with open(self.efuse_file, "r", encoding="utf-8") as f:
             return json.load(f)
 
     def _load_efuse_data(self) -> Dict:
-        """加载efuse数据（带缓存）."""
+        """
+        加载efuse数据（带缓存）.
+        """
         # 如果有缓存，直接返回
         if self._efuse_cache is not None:
             return self._efuse_cache
@@ -342,7 +373,9 @@ class DeviceFingerprint:
             }
 
     def _save_efuse_data(self, data: Dict) -> bool:
-        """保存efuse数据."""
+        """
+        保存efuse数据.
+        """
         try:
             # 确保目录存在
             self.efuse_file.parent.mkdir(parents=True, exist_ok=True)
@@ -375,38 +408,52 @@ class DeviceFingerprint:
         return serial_number, hmac_key, is_activated
 
     def has_serial_number(self) -> bool:
-        """检查是否有序列号."""
+        """
+        检查是否有序列号.
+        """
         efuse_data = self._load_efuse_data()
         return efuse_data.get("serial_number") is not None
 
     def get_serial_number(self) -> Optional[str]:
-        """获取序列号."""
+        """
+        获取序列号.
+        """
         efuse_data = self._load_efuse_data()
         return efuse_data.get("serial_number")
 
     def get_hmac_key(self) -> Optional[str]:
-        """获取HMAC密钥."""
+        """
+        获取HMAC密钥.
+        """
         efuse_data = self._load_efuse_data()
         return efuse_data.get("hmac_key")
 
     def get_mac_address_from_efuse(self) -> Optional[str]:
-        """从efuse.json获取MAC地址."""
+        """
+        从efuse.json获取MAC地址.
+        """
         efuse_data = self._load_efuse_data()
         return efuse_data.get("mac_address")
 
     def set_activation_status(self, status: bool) -> bool:
-        """设置激活状态."""
+        """
+        设置激活状态.
+        """
         efuse_data = self._load_efuse_data()
         efuse_data["activation_status"] = status
         return self._save_efuse_data(efuse_data)
 
     def is_activated(self) -> bool:
-        """检查设备是否已激活."""
+        """
+        检查设备是否已激活.
+        """
         efuse_data = self._load_efuse_data()
         return efuse_data.get("activation_status", False)
 
     def generate_hmac(self, challenge: str) -> Optional[str]:
-        """使用HMAC密钥生成签名."""
+        """
+        使用HMAC密钥生成签名.
+        """
         if not challenge:
             logger.error("挑战字符串不能为空")
             return None
@@ -430,7 +477,9 @@ class DeviceFingerprint:
 
     @classmethod
     def get_instance(cls) -> "DeviceFingerprint":
-        """获取设备指纹实例"""
+        """
+        获取设备指纹实例.
+        """
         if cls._instance is None:
             cls._instance = cls()
         return cls._instance

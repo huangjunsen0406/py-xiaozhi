@@ -1,5 +1,5 @@
 """
-日程管理SQLite数据库操作模块
+日程管理SQLite数据库操作模块.
 """
 
 import os
@@ -17,14 +17,18 @@ DATABASE_FILE = "cache/calendar.db"
 
 
 class CalendarDatabase:
-    """日程管理数据库操作类"""
+    """
+    日程管理数据库操作类.
+    """
 
     def __init__(self):
         self.db_file = DATABASE_FILE
         self._ensure_database()
 
     def _ensure_database(self):
-        """确保数据库和表存在"""
+        """
+        确保数据库和表存在.
+        """
         os.makedirs(os.path.dirname(self.db_file), exist_ok=True)
 
         with self._get_connection() as conn:
@@ -73,7 +77,9 @@ class CalendarDatabase:
 
     @contextmanager
     def _get_connection(self):
-        """获取数据库连接的上下文管理器"""
+        """
+        获取数据库连接的上下文管理器.
+        """
         conn = None
         try:
             conn = sqlite3.connect(self.db_file)
@@ -89,7 +95,9 @@ class CalendarDatabase:
                 conn.close()
 
     def add_event(self, event_data: Dict[str, Any]) -> bool:
-        """添加事件"""
+        """
+        添加事件.
+        """
         try:
             with self._get_connection() as conn:
                 # 检查时间冲突
@@ -99,7 +107,7 @@ class CalendarDatabase:
                 conn.execute(
                     """
                     INSERT INTO events (
-                        id, title, start_time, end_time, description, 
+                        id, title, start_time, end_time, description,
                         category, reminder_minutes, reminder_time, reminder_sent,
                         created_at, updated_at
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -128,7 +136,9 @@ class CalendarDatabase:
     def get_events(
         self, start_date: str = None, end_date: str = None, category: str = None
     ) -> List[Dict[str, Any]]:
-        """获取事件列表"""
+        """
+        获取事件列表.
+        """
         try:
             with self._get_connection() as conn:
                 query = "SELECT * FROM events WHERE 1=1"
@@ -161,7 +171,9 @@ class CalendarDatabase:
             return []
 
     def update_event(self, event_id: str, **kwargs) -> bool:
-        """更新事件"""
+        """
+        更新事件.
+        """
         try:
             with self._get_connection() as conn:
                 # 构建更新查询
@@ -204,7 +216,9 @@ class CalendarDatabase:
             return False
 
     def delete_event(self, event_id: str) -> bool:
-        """删除事件"""
+        """
+        删除事件.
+        """
         try:
             with self._get_connection() as conn:
                 cursor = conn.execute("DELETE FROM events WHERE id = ?", (event_id,))
@@ -227,7 +241,7 @@ class CalendarDatabase:
         category: str = None,
         delete_all: bool = False,
     ) -> Dict[str, Any]:
-        """批量删除事件
+        """批量删除事件.
 
         Args:
             start_date: 开始日期，ISO格式
@@ -334,7 +348,9 @@ class CalendarDatabase:
             }
 
     def get_event_by_id(self, event_id: str) -> Optional[Dict[str, Any]]:
-        """根据ID获取事件"""
+        """
+        根据ID获取事件.
+        """
         try:
             with self._get_connection() as conn:
                 cursor = conn.execute("SELECT * FROM events WHERE id = ?", (event_id,))
@@ -348,7 +364,9 @@ class CalendarDatabase:
             return None
 
     def get_categories(self) -> List[str]:
-        """获取所有分类"""
+        """
+        获取所有分类.
+        """
         try:
             with self._get_connection() as conn:
                 cursor = conn.execute("SELECT name FROM categories ORDER BY name")
@@ -359,7 +377,9 @@ class CalendarDatabase:
             return ["默认"]
 
     def add_category(self, category_name: str) -> bool:
-        """添加新分类"""
+        """
+        添加新分类.
+        """
         try:
             with self._get_connection() as conn:
                 conn.execute(
@@ -374,7 +394,9 @@ class CalendarDatabase:
             return False
 
     def delete_category(self, category_name: str) -> bool:
-        """删除分类（如果没有事件使用）"""
+        """
+        删除分类（如果没有事件使用）
+        """
         try:
             with self._get_connection() as conn:
                 # 检查是否有事件使用该分类
@@ -405,10 +427,12 @@ class CalendarDatabase:
     def _has_conflict(
         self, conn: sqlite3.Connection, event_data: Dict[str, Any]
     ) -> bool:
-        """检查时间冲突"""
+        """
+        检查时间冲突.
+        """
         cursor = conn.execute(
             """
-            SELECT title FROM events 
+            SELECT title FROM events
             WHERE id != ? AND (
                 (start_time < ? AND end_time > ?) OR
                 (start_time < ? AND end_time > ?)
@@ -433,7 +457,9 @@ class CalendarDatabase:
         return False
 
     def get_statistics(self) -> Dict[str, Any]:
-        """获取统计信息"""
+        """
+        获取统计信息.
+        """
         try:
             with self._get_connection() as conn:
                 # 总事件数
@@ -443,9 +469,9 @@ class CalendarDatabase:
                 # 按分类统计
                 cursor = conn.execute(
                     """
-                    SELECT category, COUNT(*) 
-                    FROM events 
-                    GROUP BY category 
+                    SELECT category, COUNT(*)
+                    FROM events
+                    GROUP BY category
                     ORDER BY COUNT(*) DESC
                 """
                 )
@@ -455,7 +481,7 @@ class CalendarDatabase:
                 today = datetime.now().strftime("%Y-%m-%d")
                 cursor = conn.execute(
                     """
-                    SELECT COUNT(*) FROM events 
+                    SELECT COUNT(*) FROM events
                     WHERE date(start_time) = ?
                 """,
                     (today,),
@@ -472,7 +498,9 @@ class CalendarDatabase:
             return {}
 
     def migrate_from_json(self, json_file_path: str) -> bool:
-        """从JSON文件迁移数据"""
+        """
+        从JSON文件迁移数据.
+        """
         try:
             import json
 
@@ -499,7 +527,7 @@ class CalendarDatabase:
                     conn.execute(
                         """
                         INSERT OR REPLACE INTO events (
-                            id, title, start_time, end_time, description, 
+                            id, title, start_time, end_time, description,
                             category, reminder_minutes, created_at, updated_at
                         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
@@ -527,7 +555,9 @@ class CalendarDatabase:
             return False
 
     def _upgrade_database(self, conn: sqlite3.Connection):
-        """升级数据库结构"""
+        """
+        升级数据库结构.
+        """
         try:
             # 检查是否存在新字段
             cursor = conn.execute("PRAGMA table_info(events)")
@@ -581,7 +611,9 @@ _calendar_db = None
 
 
 def get_calendar_database() -> CalendarDatabase:
-    """获取数据库实例单例"""
+    """
+    获取数据库实例单例.
+    """
     global _calendar_db
     if _calendar_db is None:
         _calendar_db = CalendarDatabase()

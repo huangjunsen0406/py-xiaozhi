@@ -40,31 +40,43 @@ class CliDisplay(BaseDisplay):
         abort_callback: Optional[Callable] = None,
         send_text_callback: Optional[Callable] = None,
     ):
-        """设置回调函数"""
+        """
+        设置回调函数.
+        """
         self.auto_callback = auto_callback
         self.abort_callback = abort_callback
         self.send_text_callback = send_text_callback
         self.mode_callback = mode_callback
 
     async def update_button_status(self, text: str):
-        """更新按钮状态"""
+        """
+        更新按钮状态.
+        """
         print(f"按钮状态: {text}")
 
     async def update_status(self, status: str):
-        """更新状态文本"""
+        """
+        更新状态文本.
+        """
         print(f"\r状态: {status}        ", end="", flush=True)
 
     async def update_text(self, text: str):
-        """更新TTS文本"""
+        """
+        更新TTS文本.
+        """
         if text and text.strip():
             print(f"\n文本: {text}")
 
     async def update_emotion(self, emotion_name: str):
-        """更新表情显示"""
+        """
+        更新表情显示.
+        """
         print(f"表情: {emotion_name}")
 
     async def start(self):
-        """启动异步CLI显示"""
+        """
+        启动异步CLI显示.
+        """
         print("\n=== 小智Ai命令行控制 ===")
         print("可用命令：")
         print("  r     - 开始/停止对话")
@@ -84,7 +96,9 @@ class CliDisplay(BaseDisplay):
             await self.close()
 
     async def _command_processor(self):
-        """命令处理器"""
+        """
+        命令处理器.
+        """
         while self.running:
             try:
                 command = await asyncio.wait_for(self.command_queue.get(), timeout=1.0)
@@ -100,7 +114,9 @@ class CliDisplay(BaseDisplay):
                 self.logger.error(f"命令处理错误: {e}")
 
     async def _keyboard_input_loop(self):
-        """键盘输入循环"""
+        """
+        键盘输入循环.
+        """
         try:
             while self.running:
                 cmd = await asyncio.to_thread(input)
@@ -109,7 +125,9 @@ class CliDisplay(BaseDisplay):
             pass
 
     async def _handle_command(self, cmd: str):
-        """处理命令"""
+        """
+        处理命令.
+        """
         if cmd == "q":
             await self.close()
         elif cmd == "h":
@@ -125,12 +143,16 @@ class CliDisplay(BaseDisplay):
                 await self.send_text_callback(cmd)
 
     async def close(self):
-        """关闭CLI显示"""
+        """
+        关闭CLI显示.
+        """
         self.running = False
         print("\n正在关闭应用...")
 
     def _print_help(self):
-        """打印帮助信息"""
+        """
+        打印帮助信息.
+        """
         print("\n=== 小智Ai命令行控制 ===")
         print("可用命令：")
         print("  r     - 开始/停止对话")

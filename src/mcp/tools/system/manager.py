@@ -1,5 +1,4 @@
-"""
-系统工具管理器
+"""系统工具管理器.
 
 负责系统工具的初始化、配置和MCP工具注册
 """
@@ -14,15 +13,21 @@ logger = get_logger(__name__)
 
 
 class SystemToolsManager:
-    """系统工具管理器"""
+    """
+    系统工具管理器.
+    """
 
     def __init__(self):
-        """初始化系统工具管理器"""
+        """
+        初始化系统工具管理器.
+        """
         self._initialized = False
         logger.info("[SystemManager] 系统工具管理器初始化")
 
     def init_tools(self, add_tool, PropertyList, Property, PropertyType):
-        """初始化并注册所有系统工具"""
+        """
+        初始化并注册所有系统工具.
+        """
         try:
             logger.info("[SystemManager] 开始注册系统工具")
 
@@ -42,7 +47,9 @@ class SystemToolsManager:
             raise
 
     def _register_device_status_tool(self, add_tool, PropertyList):
-        """注册设备状态查询工具"""
+        """
+        注册设备状态查询工具.
+        """
         add_tool(
             (
                 "self.get_device_status",
@@ -63,7 +70,9 @@ class SystemToolsManager:
     def _register_volume_control_tool(
         self, add_tool, PropertyList, Property, PropertyType
     ):
-        """注册音量控制工具"""
+        """
+        注册音量控制工具.
+        """
         volume_props = PropertyList(
             [Property("volume", PropertyType.INTEGER, min_value=0, max_value=100)]
         )
@@ -80,11 +89,15 @@ class SystemToolsManager:
         logger.debug("[SystemManager] 注册音量控制工具成功")
 
     def is_initialized(self) -> bool:
-        """检查管理器是否已初始化"""
+        """
+        检查管理器是否已初始化.
+        """
         return self._initialized
 
     def get_status(self) -> Dict[str, Any]:
-        """获取管理器状态"""
+        """
+        获取管理器状态.
+        """
         return {
             "initialized": self._initialized,
             "tools_count": 2,  # 当前注册的工具数量
@@ -97,7 +110,9 @@ _system_tools_manager = None
 
 
 def get_system_tools_manager() -> SystemToolsManager:
-    """获取系统工具管理器单例"""
+    """
+    获取系统工具管理器单例.
+    """
     global _system_tools_manager
     if _system_tools_manager is None:
         _system_tools_manager = SystemToolsManager()

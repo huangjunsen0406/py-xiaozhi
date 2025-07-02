@@ -3,7 +3,9 @@ from enum import Enum
 
 
 class InitializationStage(Enum):
-    """初始化阶段枚举"""
+    """
+    初始化阶段枚举.
+    """
 
     DEVICE_FINGERPRINT = "第一阶段：设备身份准备"
     CONFIG_MANAGEMENT = "第二阶段：配置管理初始化"
@@ -12,7 +14,9 @@ class InitializationStage(Enum):
 
 
 class SystemConstants:
-    """系统常量"""
+    """
+    系统常量.
+    """
 
     # 应用信息
     APP_NAME = "py-xiaozhi"

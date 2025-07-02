@@ -1,5 +1,4 @@
-"""
-系统工具实现
+"""系统工具实现.
 
 提供具体的系统工具功能实现
 """
@@ -16,7 +15,9 @@ logger = get_logger(__name__)
 
 
 async def get_system_status(args: Dict[str, Any]) -> str:
-    """获取完整的系统状态"""
+    """
+    获取完整的系统状态.
+    """
     try:
         logger.info("[SystemTools] 开始获取系统状态")
 
@@ -46,7 +47,9 @@ async def get_system_status(args: Dict[str, Any]) -> str:
 
 
 async def set_volume(args: Dict[str, Any]) -> bool:
-    """设置音量"""
+    """
+    设置音量.
+    """
     try:
         volume = args["volume"]
         logger.info(f"[SystemTools] 设置音量到 {volume}")
@@ -78,7 +81,9 @@ async def set_volume(args: Dict[str, Any]) -> bool:
 
 
 async def _get_audio_status() -> Dict[str, Any]:
-    """获取音频状态"""
+    """
+    获取音频状态.
+    """
     try:
         from src.utils.volume_controller import VolumeController
 
@@ -105,7 +110,9 @@ async def _get_audio_status() -> Dict[str, Any]:
 
 
 def _get_application_status() -> Dict[str, Any]:
-    """获取应用状态信息"""
+    """
+    获取应用状态信息.
+    """
     try:
         from src.application import Application
         from src.iot.thing_manager import ThingManager

@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """
-日程查询脚本
-用于查看和管理日程安排
+日程查询脚本 用于查看和管理日程安排.
 """
 
 import argparse
@@ -10,24 +9,28 @@ import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 
+from src.mcp.tools.calendar import get_calendar_manager
+from src.utils.logging_config import get_logger
+
 # 添加项目根目录到Python路径
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
-
-from src.mcp.tools.calendar import get_calendar_manager
-from src.utils.logging_config import get_logger
 
 logger = get_logger(__name__)
 
 
 class CalendarQueryScript:
-    """日程查询脚本类"""
+    """
+    日程查询脚本类.
+    """
 
     def __init__(self):
         self.manager = get_calendar_manager()
 
     def format_event_display(self, event, show_details=True):
-        """格式化事件显示"""
+        """
+        格式化事件显示.
+        """
         start_dt = datetime.fromisoformat(event.start_time)
         end_dt = datetime.fromisoformat(event.end_time)
 
@@ -47,9 +50,9 @@ class CalendarQueryScript:
         if event.reminder_minutes > 0:
             details.append(f"   ⏰ 提醒: 提前{event.reminder_minutes}分钟")
             if hasattr(event, "reminder_sent") and event.reminder_sent:
-                details.append(f"   ✅ 提醒状态: 已发送")
+                details.append("   ✅ 提醒状态: 已发送")
             else:
-                details.append(f"   ⏳ 提醒状态: 待发送")
+                details.append("   ⏳ 提醒状态: 待发送")
 
         # 时间距离
         now = datetime.now()
@@ -70,18 +73,20 @@ class CalendarQueryScript:
             if time_until_parts:
                 details.append(f"   🕐 距离开始: {' '.join(time_until_parts)}")
             else:
-                details.append(f"   🕐 距离开始: 即将开始")
+                details.append("   🕐 距离开始: 即将开始")
         elif start_dt <= now <= end_dt:
-            details.append(f"   🔴 状态: 正在进行中")
+            details.append("   🔴 状态: 正在进行中")
         else:
-            details.append(f"   ✅ 状态: 已结束")
+            details.append("   ✅ 状态: 已结束")
 
         if details:
             return basic_info + "\n" + "\n".join(details)
         return basic_info
 
     async def query_today(self):
-        """查询今日日程"""
+        """
+        查询今日日程.
+        """
         print("📅 今日日程安排")
         print("=" * 50)
 
@@ -104,7 +109,9 @@ class CalendarQueryScript:
                 print()
 
     async def query_tomorrow(self):
-        """查询明日日程"""
+        """
+        查询明日日程.
+        """
         print("📅 明日日程安排")
         print("=" * 50)
 
@@ -129,7 +136,9 @@ class CalendarQueryScript:
                 print()
 
     async def query_week(self):
-        """查询本周日程"""
+        """
+        查询本周日程.
+        """
         print("📅 本周日程安排")
         print("=" * 50)
 
@@ -171,7 +180,9 @@ class CalendarQueryScript:
             print()
 
     async def query_upcoming(self, hours=24):
-        """查询即将到来的日程"""
+        """
+        查询即将到来的日程.
+        """
         print(f"📅 未来 {hours} 小时内的日程")
         print("=" * 50)
 
@@ -193,7 +204,9 @@ class CalendarQueryScript:
                 print()
 
     async def query_by_category(self, category=None):
-        """按分类查询日程"""
+        """
+        按分类查询日程.
+        """
         if category:
             print(f"📅 【{category}】分类的日程")
             print("=" * 50)
@@ -226,7 +239,9 @@ class CalendarQueryScript:
                 print(f"{i}. 【{cat}】- {len(events)} 个日程")
 
     async def query_all(self):
-        """查询所有日程"""
+        """
+        查询所有日程.
+        """
         print("📅 所有日程安排")
         print("=" * 50)
 
@@ -283,7 +298,9 @@ class CalendarQueryScript:
                 print(f"  ... 还有 {len(past_events) - 3} 个已完成的日程")
 
     async def search_events(self, keyword):
-        """搜索日程"""
+        """
+        搜索日程.
+        """
         print(f"🔍 搜索包含 '{keyword}' 的日程")
         print("=" * 50)
 
@@ -310,7 +327,9 @@ class CalendarQueryScript:
 
 
 async def main():
-    """主函数"""
+    """
+    主函数.
+    """
     parser = argparse.ArgumentParser(description="日程查询脚本")
     parser.add_argument(
         "command",

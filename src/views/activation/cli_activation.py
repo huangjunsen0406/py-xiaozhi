@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-CLI模式设备激活流程
-提供与GUI激活窗口相同的功能，但使用纯终端输出
+CLI模式设备激活流程 提供与GUI激活窗口相同的功能，但使用纯终端输出.
 """
 
 import asyncio
@@ -16,7 +15,9 @@ logger = get_logger(__name__)
 
 
 class CLIActivation:
-    """CLI模式设备激活处理器"""
+    """
+    CLI模式设备激活处理器.
+    """
 
     def __init__(self):
         # 组件实例
@@ -31,7 +32,7 @@ class CLIActivation:
         self.logger = logger
 
     async def run_activation_process(self) -> bool:
-        """运行完整的CLI激活流程
+        """运行完整的CLI激活流程.
 
         Returns:
             bool: 激活是否成功
@@ -61,7 +62,9 @@ class CLIActivation:
             return False
 
     def _print_header(self):
-        """打印CLI激活流程头部信息"""
+        """
+        打印CLI激活流程头部信息.
+        """
         print("\n" + "=" * 60)
         print("小智AI客户端 - 设备激活流程")
         print("=" * 60)
@@ -69,7 +72,9 @@ class CLIActivation:
         print()
 
     async def _run_initialization_with_progress(self) -> bool:
-        """运行初始化并显示进度"""
+        """
+        运行初始化并显示进度.
+        """
         try:
             # 第一阶段：设备身份准备
             self._print_stage_header("第一阶段：设备身份准备", 1, 4)
@@ -100,20 +105,26 @@ class CLIActivation:
             return False
 
     def _print_stage_header(self, stage_name: str, current: int, total: int):
-        """打印阶段头部信息"""
+        """
+        打印阶段头部信息.
+        """
         progress = f"[{current}/{total}]"
         print(f"\n{progress} {stage_name}")
         print("-" * 40)
 
     def _print_stage_complete(self, current: int, total: int):
-        """打印阶段完成信息"""
+        """
+        打印阶段完成信息.
+        """
         progress_percent = int((current / total) * 100)
         filled = int(progress_percent / 5)
         progress_bar = "█" * filled + "░" * (20 - filled)
         print(f"完成 [{progress_bar}] {progress_percent}%")
 
     def _update_device_info(self):
-        """更新设备信息显示"""
+        """
+        更新设备信息显示.
+        """
         if (
             not self.system_initializer
             or not self.system_initializer.device_fingerprint
@@ -141,7 +152,9 @@ class CLIActivation:
         )
 
     async def _check_activation_status(self) -> bool:
-        """检查激活状态"""
+        """
+        检查激活状态.
+        """
         if self.is_activated:
             self._log_and_print("\n设备已激活，无需重复激活")
             return True
@@ -157,7 +170,9 @@ class CLIActivation:
                 return False
 
     async def _start_activation_process(self, activation_data: dict) -> bool:
-        """开始激活流程"""
+        """
+        开始激活流程.
+        """
         try:
             self.activation_data = activation_data
 
@@ -191,7 +206,9 @@ class CLIActivation:
             return False
 
     def _show_activation_info(self, activation_data: dict):
-        """显示激活信息"""
+        """
+        显示激活信息.
+        """
         code = activation_data.get("code", "------")
         message = activation_data.get("message", "请访问xiaozhi.me输入验证码")
 
@@ -217,7 +234,9 @@ class CLIActivation:
         self._log_and_print(f"激活说明: {message}")
 
     def _print_activation_success(self):
-        """打印激活成功信息"""
+        """
+        打印激活成功信息.
+        """
         print("\n" + "=" * 60)
         print("设备激活成功！")
         print("=" * 60)
@@ -227,7 +246,9 @@ class CLIActivation:
         print("=" * 60)
 
     def _print_activation_failure(self):
-        """打印激活失败信息"""
+        """
+        打印激活失败信息.
+        """
         print("\n" + "=" * 60)
         print("设备激活失败")
         print("=" * 60)
@@ -242,14 +263,18 @@ class CLIActivation:
         print("=" * 60)
 
     def _log_and_print(self, message: str):
-        """同时记录日志和打印到终端"""
+        """
+        同时记录日志和打印到终端.
+        """
         timestamp = datetime.now().strftime("%H:%M:%S")
         log_message = f"[{timestamp}] {message}"
         print(log_message)
         self.logger.info(message)
 
     def get_activation_result(self) -> dict:
-        """获取激活结果"""
+        """
+        获取激活结果.
+        """
         device_fingerprint = None
         config_manager = None
 

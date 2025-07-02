@@ -44,14 +44,18 @@ class ConfigManager:
     }
 
     def __new__(cls):
-        """确保单例模式."""
+        """
+        确保单例模式.
+        """
         if cls._instance is None:
             cls._instance = super().__new__(cls)
             cls._instance._initialized = False
         return cls._instance
 
     def __init__(self):
-        """初始化配置管理器."""
+        """
+        初始化配置管理器.
+        """
         if self._initialized:
             return
         self._initialized = True
@@ -66,7 +70,9 @@ class ConfigManager:
         self._config = self._load_config()
 
     def _init_config_paths(self):
-        """初始化配置文件路径"""
+        """
+        初始化配置文件路径.
+        """
         # 使用resource_finder查找或创建配置目录
         self.config_dir = resource_finder.find_config_dir()
         if not self.config_dir:
@@ -83,7 +89,9 @@ class ConfigManager:
         logger.info(f"配置文件: {self.config_file.absolute()}")
 
     def _ensure_required_directories(self):
-        """确保必要的目录存在"""
+        """
+        确保必要的目录存在.
+        """
         project_root = resource_finder.get_project_root()
 
         # 创建 models 目录
@@ -99,7 +107,9 @@ class ConfigManager:
             logger.info(f"创建缓存目录: {cache_dir.absolute()}")
 
     def _load_config(self) -> Dict[str, Any]:
-        """加载配置文件，如果不存在则创建."""
+        """
+        加载配置文件，如果不存在则创建.
+        """
         try:
             # 首先尝试使用resource_finder查找配置文件
             config_file_path = resource_finder.find_file("config/config.json")
@@ -125,7 +135,9 @@ class ConfigManager:
             return self.DEFAULT_CONFIG.copy()
 
     def _save_config(self, config: dict) -> bool:
-        """保存配置到文件."""
+        """
+        保存配置到文件.
+        """
         try:
             # 确保配置目录存在
             self.config_dir.mkdir(parents=True, exist_ok=True)
@@ -143,7 +155,9 @@ class ConfigManager:
 
     @staticmethod
     def _merge_configs(default: dict, custom: dict) -> dict:
-        """递归合并配置字典."""
+        """
+        递归合并配置字典.
+        """
         result = default.copy()
         for key, value in custom.items():
             if (
@@ -186,7 +200,9 @@ class ConfigManager:
             return False
 
     def reload_config(self) -> bool:
-        """重新加载配置文件"""
+        """
+        重新加载配置文件.
+        """
         try:
             self._config = self._load_config()
             logger.info("配置文件已重新加载")
@@ -196,11 +212,15 @@ class ConfigManager:
             return False
 
     def generate_uuid(self) -> str:
-        """生成 UUID v4."""
+        """
+        生成 UUID v4.
+        """
         return str(uuid.uuid4())
 
     def initialize_client_id(self):
-        """确保存在客户端ID."""
+        """
+        确保存在客户端ID.
+        """
         if not self.get_config("SYSTEM_OPTIONS.CLIENT_ID"):
             client_id = self.generate_uuid()
             success = self.update_config("SYSTEM_OPTIONS.CLIENT_ID", client_id)
@@ -210,7 +230,9 @@ class ConfigManager:
                 logger.error("保存新的客户端ID失败")
 
     def initialize_device_id_from_fingerprint(self, device_fingerprint):
-        """从设备指纹初始化设备ID."""
+        """
+        从设备指纹初始化设备ID.
+        """
         if not self.get_config("SYSTEM_OPTIONS.DEVICE_ID"):
             try:
                 # 从efuse.json获取MAC地址作为DEVICE_ID
@@ -244,7 +266,9 @@ class ConfigManager:
 
     @classmethod
     def get_instance(cls):
-        """获取配置管理器实例"""
+        """
+        获取配置管理器实例.
+        """
         if cls._instance is None:
             cls._instance = cls()
         return cls._instance

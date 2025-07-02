@@ -18,7 +18,9 @@ from src.utils.resource_finder import resource_finder
 
 
 class SettingsWindow(QDialog):
-    """参数配置窗口"""
+    """
+    参数配置窗口.
+    """
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -34,7 +36,9 @@ class SettingsWindow(QDialog):
         self._load_config_values()
 
     def _setup_ui(self):
-        """设置UI界面"""
+        """
+        设置UI界面.
+        """
         try:
             from PyQt5 import uic
 
@@ -49,7 +53,9 @@ class SettingsWindow(QDialog):
             raise
 
     def _get_ui_controls(self):
-        """获取UI控件引用"""
+        """
+        获取UI控件引用.
+        """
         # 系统选项控件
         self.ui_controls.update(
             {
@@ -118,7 +124,9 @@ class SettingsWindow(QDialog):
         )
 
     def _connect_events(self):
-        """连接事件处理"""
+        """
+        连接事件处理.
+        """
         if self.ui_controls["save_btn"]:
             self.ui_controls["save_btn"].clicked.connect(self._on_save_clicked)
 
@@ -134,7 +142,9 @@ class SettingsWindow(QDialog):
             )
 
     def _load_config_values(self):
-        """从配置文件加载值到UI控件"""
+        """
+        从配置文件加载值到UI控件.
+        """
         try:
             # 系统选项
             client_id = self.config_manager.get_config("SYSTEM_OPTIONS.CLIENT_ID", "")
@@ -237,33 +247,43 @@ class SettingsWindow(QDialog):
             self.logger.error(f"加载配置值失败: {e}", exc_info=True)
 
     def _set_text_value(self, control_name: str, value: str):
-        """设置文本控件的值"""
+        """
+        设置文本控件的值.
+        """
         control = self.ui_controls.get(control_name)
         if control and hasattr(control, "setText"):
             control.setText(str(value) if value is not None else "")
 
     def _set_spin_value(self, control_name: str, value: int):
-        """设置数字控件的值"""
+        """
+        设置数字控件的值.
+        """
         control = self.ui_controls.get(control_name)
         if control and hasattr(control, "setValue"):
             control.setValue(int(value) if value is not None else 0)
 
     def _get_text_value(self, control_name: str) -> str:
-        """获取文本控件的值"""
+        """
+        获取文本控件的值.
+        """
         control = self.ui_controls.get(control_name)
         if control and hasattr(control, "text"):
             return control.text().strip()
         return ""
 
     def _get_spin_value(self, control_name: str) -> int:
-        """获取数字控件的值"""
+        """
+        获取数字控件的值.
+        """
         control = self.ui_controls.get(control_name)
         if control and hasattr(control, "value"):
             return control.value()
         return 0
 
     def _on_save_clicked(self):
-        """保存按钮点击事件"""
+        """
+        保存按钮点击事件.
+        """
         try:
             # 收集所有配置数据
             success = self._save_all_config()
@@ -290,7 +310,9 @@ class SettingsWindow(QDialog):
             QMessageBox.critical(self, "错误", f"保存配置时发生错误: {str(e)}")
 
     def _save_all_config(self) -> bool:
-        """保存所有配置"""
+        """
+        保存所有配置.
+        """
         try:
             # 系统选项 - 网络配置
             ota_url = self._get_text_value("ota_url_edit")
@@ -419,7 +441,9 @@ class SettingsWindow(QDialog):
             return False
 
     def _on_reset_clicked(self):
-        """重置按钮点击事件"""
+        """
+        重置按钮点击事件.
+        """
         reply = QMessageBox.question(
             self,
             "确认重置",
@@ -432,7 +456,9 @@ class SettingsWindow(QDialog):
             self._reset_to_defaults()
 
     def _reset_to_defaults(self):
-        """重置为默认值"""
+        """
+        重置为默认值.
+        """
         try:
             # 获取默认配置
             default_config = ConfigManager.DEFAULT_CONFIG
@@ -492,7 +518,9 @@ class SettingsWindow(QDialog):
             QMessageBox.critical(self, "错误", f"重置配置时发生错误: {str(e)}")
 
     def _on_model_path_browse(self):
-        """浏览模型路径"""
+        """
+        浏览模型路径.
+        """
         try:
             current_path = self._get_text_value("model_path_edit")
             if not current_path:
@@ -518,7 +546,9 @@ class SettingsWindow(QDialog):
             QMessageBox.warning(self, "错误", f"浏览模型路径时发生错误: {str(e)}")
 
     def _restart_application(self):
-        """重启应用程序"""
+        """
+        重启应用程序.
+        """
         try:
             self.logger.info("用户选择重启应用程序")
 
@@ -535,7 +565,9 @@ class SettingsWindow(QDialog):
             )
 
     def _direct_restart(self):
-        """直接重启程序"""
+        """
+        直接重启程序.
+        """
         try:
             import os
             import sys
@@ -564,6 +596,8 @@ class SettingsWindow(QDialog):
             self.logger.error(f"直接重启失败: {e}", exc_info=True)
 
     def closeEvent(self, event):
-        """窗口关闭事件"""
+        """
+        窗口关闭事件.
+        """
         self.logger.debug("设置窗口已关闭")
         super().closeEvent(event)

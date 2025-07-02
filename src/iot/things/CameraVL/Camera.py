@@ -17,7 +17,9 @@ class Camera(Thing):
     def __init__(self):
         super().__init__("Camera", "摄像头管理")
         self.app = None
-        """初始化摄像头管理器."""
+        """
+        初始化摄像头管理器.
+        """
         if hasattr(self, "_initialized"):
             return
         self._initialized = True
@@ -60,7 +62,9 @@ class Camera(Thing):
         )
 
     def _camera_loop(self):
-        """摄像头线程的主循环."""
+        """
+        摄像头线程的主循环.
+        """
         camera_index = self.config.get_config("CAMERA.camera_index")
         self.cap = cv2.VideoCapture(camera_index)
 
@@ -96,7 +100,9 @@ class Camera(Thing):
         cv2.destroyAllWindows()
 
     def start_camera(self):
-        """启动摄像头线程."""
+        """
+        启动摄像头线程.
+        """
         if self.camera_thread is not None and self.camera_thread.is_alive():
             logger.warning("摄像头线程已在运行")
             return
@@ -107,7 +113,9 @@ class Camera(Thing):
         return {"status": "success", "message": "摄像头线程已打开"}
 
     def capture_frame_to_base64(self):
-        """截取当前画面并转换为 Base64 编码."""
+        """
+        截取当前画面并转换为 Base64 编码.
+        """
         if not self.cap or not self.cap.isOpened():
             logger.error("摄像头未打开")
             return None
@@ -131,7 +139,9 @@ class Camera(Thing):
         return {"status": "success", "message": "识别成功", "result": self.result}
 
     def stop_camera(self):
-        """停止摄像头线程."""
+        """
+        停止摄像头线程.
+        """
         self.is_running = False
         if self.camera_thread is not None:
             self.camera_thread.join()  # 等待线程结束

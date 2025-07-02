@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 """
-四阶段初始化流程测试脚本
-展示设备身份准备、配置管理、OTA配置获取三个阶段的协调工作
-激活流程由用户自己实现
+四阶段初始化流程测试脚本 展示设备身份准备、配置管理、OTA配置获取三个阶段的协调工作 激活流程由用户自己实现.
 """
 
 import json
@@ -27,7 +25,9 @@ class SystemInitializer:
         self.current_stage = None
 
     async def run_initialization(self):
-        """运行完整的初始化流程"""
+        """
+        运行完整的初始化流程.
+        """
         logger.info("开始系统初始化流程")
 
         try:
@@ -51,7 +51,9 @@ class SystemInitializer:
             return False
 
     async def stage_1_device_fingerprint(self):
-        """第一阶段：设备身份准备"""
+        """
+        第一阶段：设备身份准备.
+        """
         self.current_stage = InitializationStage.DEVICE_FINGERPRINT
         logger.info(f"开始{self.current_stage.value}")
 
@@ -59,9 +61,11 @@ class SystemInitializer:
         self.device_fingerprint = DeviceFingerprint.get_instance()
 
         # 确保设备身份信息完整
-        serial_number, hmac_key, is_activated = (
-            self.device_fingerprint.ensure_device_identity()
-        )
+        (
+            serial_number,
+            hmac_key,
+            is_activated,
+        ) = self.device_fingerprint.ensure_device_identity()
 
         # 获取MAC地址并确保小写格式
         mac_address = self.device_fingerprint.get_mac_address_from_efuse()
@@ -87,7 +91,9 @@ class SystemInitializer:
         logger.info(f"完成{self.current_stage.value}")
 
     async def stage_2_config_management(self):
-        """第二阶段：配置管理初始化"""
+        """
+        第二阶段：配置管理初始化.
+        """
         self.current_stage = InitializationStage.CONFIG_MANAGEMENT
         logger.info(f"开始{self.current_stage.value}")
 
@@ -112,7 +118,9 @@ class SystemInitializer:
         logger.info(f"完成{self.current_stage.value}")
 
     async def stage_3_ota_config(self):
-        """第三阶段：OTA获取配置"""
+        """
+        第三阶段：OTA获取配置.
+        """
         self.current_stage = InitializationStage.OTA_CONFIG
         logger.info(f"开始{self.current_stage.value}")
 
@@ -155,7 +163,9 @@ class SystemInitializer:
         logger.info(f"完成{self.current_stage.value}")
 
     def stage_4_activation_ready(self):
-        """第四阶段：激活流程准备就绪"""
+        """
+        第四阶段：激活流程准备就绪.
+        """
         self.current_stage = InitializationStage.ACTIVATION
         logger.info(f"准备{self.current_stage.value}")
 
@@ -185,13 +195,19 @@ class SystemInitializer:
         logger.info(f"{self.current_stage.value}准备完成")
 
     def get_activation_data(self):
-        """获取激活数据（供激活模块使用）"""
+        """
+        获取激活数据（供激活模块使用）
+        """
         return getattr(self, "activation_data", None)
 
     def get_device_fingerprint(self):
-        """获取设备指纹实例"""
+        """
+        获取设备指纹实例.
+        """
         return self.device_fingerprint
 
     def get_config_manager(self):
-        """获取配置管理器实例"""
+        """
+        获取配置管理器实例.
+        """
         return self.config_manager

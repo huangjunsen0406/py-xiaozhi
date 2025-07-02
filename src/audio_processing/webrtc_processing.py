@@ -29,7 +29,9 @@ logger = get_logger(__name__)
 
 # 获取DLL文件的绝对路径
 def get_webrtc_dll_path():
-    """获取WebRTC APM库的路径."""
+    """
+    获取WebRTC APM库的路径.
+    """
     dll_path = find_resource("libs/webrtc_apm/win/x86_64/libwebrtc_apm.dll")
     if dll_path:
         return str(dll_path)
@@ -250,7 +252,9 @@ if apm_lib:
 
 
 def create_optimized_apm_config():
-    """创建优化的WebRTC APM配置，专为实时音频处理优化."""
+    """
+    创建优化的WebRTC APM配置，专为实时音频处理优化.
+    """
     config = Config()
 
     # Pipeline配置 - 使用16kHz优化
@@ -330,7 +334,9 @@ def create_optimized_apm_config():
 
 
 class WebRTCProcessor:
-    """WebRTC音频处理器，提供实时回声消除和音频增强功能."""
+    """
+    WebRTC音频处理器，提供实时回声消除和音频增强功能.
+    """
 
     def __init__(self, sample_rate=16000, channels=1, frame_size=160):
         """初始化WebRTC处理器.
@@ -363,7 +369,9 @@ class WebRTCProcessor:
         self._initialize()
 
     def _initialize(self):
-        """初始化WebRTC APM."""
+        """
+        初始化WebRTC APM.
+        """
         if not apm_lib:
             logger.error("WebRTC APM库未加载，无法初始化处理器")
             return False
@@ -525,7 +533,9 @@ class WebRTCProcessor:
             return None
 
     def close(self):
-        """关闭WebRTC处理器，释放资源."""
+        """
+        关闭WebRTC处理器，释放资源.
+        """
         if not self._initialized:
             return
 
@@ -552,5 +562,7 @@ class WebRTCProcessor:
             logger.error(f"关闭WebRTC处理器失败: {e}")
 
     def __del__(self):
-        """析构函数，确保资源被释放."""
+        """
+        析构函数，确保资源被释放.
+        """
         self.close()

@@ -1,6 +1,5 @@
 """
-日程管理器
-负责日程数据的存储、查询、更新等核心功能
+日程管理器 负责日程数据的存储、查询、更新等核心功能.
 """
 
 import os
@@ -15,7 +14,9 @@ logger = get_logger(__name__)
 
 
 class CalendarManager:
-    """日程管理器"""
+    """
+    日程管理器.
+    """
 
     def __init__(self):
         self.db = get_calendar_database()
@@ -23,7 +24,9 @@ class CalendarManager:
         self._migrate_from_json_if_exists()
 
     def init_tools(self, add_tool, PropertyList, Property, PropertyType):
-        """初始化并注册所有日程管理工具"""
+        """
+        初始化并注册所有日程管理工具.
+        """
         from .tools import (
             create_event,
             delete_event,
@@ -270,7 +273,9 @@ class CalendarManager:
         )
 
     def _migrate_from_json_if_exists(self):
-        """从旧的JSON文件迁移数据（如果存在）"""
+        """
+        从旧的JSON文件迁移数据（如果存在）
+        """
         json_file = "cache/calendar_data.json"
         if os.path.exists(json_file):
             logger.info("发现旧的JSON数据文件，开始迁移到SQLite...")
@@ -283,13 +288,17 @@ class CalendarManager:
                 logger.warning("数据迁移失败，保留原JSON文件")
 
     def add_event(self, event: CalendarEvent) -> bool:
-        """添加事件"""
+        """
+        添加事件.
+        """
         return self.db.add_event(event.to_dict())
 
     def get_events(
         self, start_date: str = None, end_date: str = None, category: str = None
     ) -> List[CalendarEvent]:
-        """获取事件列表"""
+        """
+        获取事件列表.
+        """
         try:
             events_data = self.db.get_events(start_date, end_date, category)
             return [CalendarEvent.from_dict(event_data) for event_data in events_data]
@@ -298,11 +307,15 @@ class CalendarManager:
             return []
 
     def update_event(self, event_id: str, **kwargs) -> bool:
-        """更新事件"""
+        """
+        更新事件.
+        """
         return self.db.update_event(event_id, **kwargs)
 
     def delete_event(self, event_id: str) -> bool:
-        """删除事件"""
+        """
+        删除事件.
+        """
         return self.db.delete_event(event_id)
 
     def delete_events_batch(
@@ -312,11 +325,15 @@ class CalendarManager:
         category: str = None,
         delete_all: bool = False,
     ):
-        """批量删除事件"""
+        """
+        批量删除事件.
+        """
         return self.db.delete_events_batch(start_date, end_date, category, delete_all)
 
     def get_categories(self) -> List[str]:
-        """获取所有分类"""
+        """
+        获取所有分类.
+        """
         return self.db.get_categories()
 
 
@@ -325,7 +342,9 @@ _calendar_manager = None
 
 
 def get_calendar_manager() -> CalendarManager:
-    """获取日程管理器单例"""
+    """
+    获取日程管理器单例.
+    """
     global _calendar_manager
     if _calendar_manager is None:
         _calendar_manager = CalendarManager()

@@ -1,4 +1,5 @@
 # py-xiaozhi
+
 <p align="center">
   <a href="https://github.com/huangjunsen0406/py-xiaozhi/releases/latest">
     <img src="https://img.shields.io/github/v/release/huangjunsen0406/py-xiaozhi?style=flat-square&logo=github&color=blue" alt="Release"/>
@@ -23,17 +24,20 @@
 English | [简体中文](README.md)
 
 ## Project Introduction
+
 py-xiaozhi is a Python-based Xiaozhi voice client, designed to learn coding and experience AI voice interaction without hardware requirements. This repository is ported from [xiaozhi-esp32](https://github.com/78/xiaozhi-esp32).
 
 ## Demo
+
 - [Bilibili Demo Video](https://www.bilibili.com/video/BV1HmPjeSED2/#reply255921347937)
 
 ![Image](./documents/docs/guide/images/系统界面.png)
 
 ## Features
+
 - **AI Voice Interaction**: Supports voice input and recognition, enabling smart human-computer interaction with natural conversation flow.
 - **Visual Multimodal**: Supports image recognition and processing, providing multimodal interaction capabilities and image content understanding.
-- **IoT Device Integration**: 
+- **IoT Device Integration**:
   - Supports smart home device control including lights, volume, temperature sensors, etc.
   - Integrates with Home Assistant smart home platform to control lights, switches, number controllers, and buttons
   - Provides countdown timer functionality for delayed command execution
@@ -53,17 +57,20 @@ py-xiaozhi is a Python-based Xiaozhi voice client, designed to learn coding and 
 - **Stability Optimization**: Fixes multiple issues including reconnection and cross-platform compatibility.
 
 ## System Requirements
+
 - Python version: 3.9 >= version <= 3.12
 - Supported operating systems: Windows 10+, macOS 10.15+, Linux
 - Microphone and speaker devices
 
-## Read This First!
+## Read This First
+
 - Carefully read [项目文档](https://huangjunsen0406.github.io/py-xiaozhi/) for startup tutorials and file descriptions
 - The main branch has the latest code; manually reinstall pip dependencies after each update to ensure you have new dependencies
 
 [Zero to Xiaozhi Client (Video Tutorial)](https://www.bilibili.com/video/BV1dWQhYEEmq/?vd_source=2065ec11f7577e7107a55bbdc3d12fce)
 
 ## Configuration System
+
 The project uses a layered configuration system, including:
 
 1. **Basic Configuration**: Sets basic runtime parameters, located in `config/config.json`
@@ -74,6 +81,7 @@ The project uses a layered configuration system, including:
 For detailed configuration instructions, please refer to [Configuration Documentation](./documents/docs/guide/02_配置说明.md)
 
 ## IoT Functionality
+
 py-xiaozhi provides rich IoT device control features:
 
 - **Virtual Devices**: Light control, volume adjustment, countdown timers, etc.
@@ -101,9 +109,11 @@ For supported device types and usage examples, please refer to [IoT Functionalit
 ```
 
 ## Upcoming Features
+
 - [ ] **New GUI (Electron)**: Provides a more modern and beautiful user interface, optimizing the interaction experience.
 
 ## FAQ
+
 - **Can't find audio device**: Please check if your microphone and speakers are properly connected and enabled.
 - **Wake word not responding**: Check if the `USE_WAKE_WORD` setting in `config.json` is set to `true` and the model path is correct.
 - **Network connection failure**: Check network settings and firewall configuration to ensure WebSocket or MQTT communication is not blocked.
@@ -111,6 +121,7 @@ For supported device types and usage examples, please refer to [IoT Functionalit
 - **IoT devices not responding**: Check if the corresponding device configuration information is correct, such as Home Assistant URL and Token.
 
 ## Related Third-party Open Source Projects
+
 [Xiaozhi Mobile Client](https://github.com/TOM88812/xiaozhi-android-client)
 
 [xiaozhi-esp32-server (Open source server)](https://github.com/xinnan-tech/xiaozhi-esp32-server)
@@ -120,7 +131,6 @@ For supported device types and usage examples, please refer to [IoT Functionalit
 [IntelliConnect(Aiot Middleware)](https://github.com/ruanrongman/IntelliConnect)
 
 [open-xiaoai(Xiaoai Audio Access Xiaozhi)](https://github.com/idootop/open-xiaoai.git)
-
 
 ## Project Structure
 
@@ -146,6 +156,7 @@ For supported device types and usage examples, please refer to [IoT Functionalit
 ```
 
 ## Contribution Guidelines
+
 We welcome issue reports and code contributions. Please ensure you follow these specifications:
 
 1. Code style complies with PEP8 standards
@@ -155,6 +166,7 @@ We welcome issue reports and code contributions. Please ensure you follow these 
 ## Community and Support
 
 ### Thanks to the Following Open Source Contributors
+>
 > In no particular order
 
 [Xiaoxia](https://github.com/78)
@@ -183,7 +195,9 @@ We welcome issue reports and code contributions. Please ensure you follow these 
 </div>
 
 ## Project Statistics
+
 [![Star History Chart](https://api.star-history.com/svg?repos=huangjunsen0406/py-xiaozhi&type=Date)](https://www.star-history.com/#huangjunsen0406/py-xiaozhi&Date)
 
 ## License
-[MIT License](LICENSE) 
+
+[MIT License](LICENSE)

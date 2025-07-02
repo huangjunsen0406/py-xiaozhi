@@ -1,5 +1,5 @@
 """
-日程管理数据模型
+日程管理数据模型.
 """
 
 import uuid
@@ -8,7 +8,9 @@ from typing import Any, Dict
 
 
 class CalendarEvent:
-    """日程事件数据模型"""
+    """
+    日程事件数据模型.
+    """
 
     def __init__(
         self,
@@ -33,7 +35,9 @@ class CalendarEvent:
         self.updated_at = datetime.now().isoformat()
 
     def to_dict(self) -> Dict[str, Any]:
-        """转换为字典"""
+        """
+        转换为字典.
+        """
         return {
             "id": self.id,
             "title": self.title,
@@ -50,7 +54,9 @@ class CalendarEvent:
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "CalendarEvent":
-        """从字典创建事件"""
+        """
+        从字典创建事件.
+        """
         event = cls(
             title=data["title"],
             start_time=data["start_time"],
@@ -67,7 +73,9 @@ class CalendarEvent:
         return event
 
     def _calculate_reminder_time(self) -> str:
-        """计算提醒时间"""
+        """
+        计算提醒时间.
+        """
         try:
             from datetime import timedelta
 

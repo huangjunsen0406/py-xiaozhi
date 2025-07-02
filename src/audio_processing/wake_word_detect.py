@@ -22,7 +22,9 @@ class WakeWordDetector:
     """唤醒词检测器 - 完整实现"""
 
     def __init__(self):
-        """初始化唤醒词检测器"""
+        """
+        初始化唤醒词检测器.
+        """
         # 初始化基本属性
         self.audio_codec = None
         self.is_running_flag = False
@@ -78,7 +80,9 @@ class WakeWordDetector:
         self._validate_config()
 
     def _init_model(self, config):
-        """初始化语音识别模型"""
+        """
+        初始化语音识别模型.
+        """
         try:
             model_path = self._get_model_path(config)
             if not os.path.exists(model_path):
@@ -96,7 +100,9 @@ class WakeWordDetector:
             self.enabled = False
 
     def _get_model_path(self, config):
-        """获取模型路径"""
+        """
+        获取模型路径.
+        """
         from src.utils.resource_finder import resource_finder
 
         model_name = config.get_config(
@@ -140,7 +146,9 @@ class WakeWordDetector:
         return str(default_path)
 
     def _build_wake_word_patterns(self):
-        """构建唤醒词的拼音模式，包括多种变体"""
+        """
+        构建唤醒词的拼音模式，包括多种变体.
+        """
         patterns = {}
         for word in self.wake_words:
             # 标准拼音（无音调）
@@ -168,7 +176,9 @@ class WakeWordDetector:
 
     @lru_cache(maxsize=128)
     def _get_text_pinyin_variants(self, text):
-        """获取文本的拼音变体（带缓存）"""
+        """
+        获取文本的拼音变体（带缓存）
+        """
         if not text or not text.strip():
             return {}
 
@@ -187,7 +197,9 @@ class WakeWordDetector:
         }
 
     def _calculate_similarity(self, text_variants, pattern):
-        """计算文本与唤醒词模式的相似度"""
+        """
+        计算文本与唤醒词模式的相似度.
+        """
         max_similarity = 0.0
         best_match_type = None
 
@@ -232,7 +244,9 @@ class WakeWordDetector:
         return max_similarity, best_match_type
 
     def _levenshtein_distance(self, s1, s2):
-        """计算编辑距离"""
+        """
+        计算编辑距离.
+        """
         if len(s1) < len(s2):
             return self._levenshtein_distance(s2, s1)
 
@@ -252,7 +266,9 @@ class WakeWordDetector:
         return previous_row[-1]
 
     def _is_subsequence(self, pattern, text):
-        """检查pattern是否为text的子序列"""
+        """
+        检查pattern是否为text的子序列.
+        """
         i = 0
         for char in text:
             if i < len(pattern) and char == pattern[i]:
@@ -260,11 +276,15 @@ class WakeWordDetector:
         return i == len(pattern)
 
     def on_detected(self, callback: Callable):
-        """设置检测到唤醒词的回调函数"""
+        """
+        设置检测到唤醒词的回调函数.
+        """
         self.on_detected_callback = callback
 
     async def start(self, audio_codec) -> bool:
-        """启动唤醒词检测器"""
+        """
+        启动唤醒词检测器.
+        """
         if not self.enabled:
             logger.warning("唤醒词功能未启用")
             return False
@@ -285,7 +305,9 @@ class WakeWordDetector:
             return False
 
     async def _detection_loop(self):
-        """检测循环"""
+        """
+        检测循环.
+        """
         error_count = 0
         MAX_ERRORS = 5
 
@@ -321,7 +343,9 @@ class WakeWordDetector:
                 await asyncio.sleep(1)  # 错误后延迟重试
 
     async def _check_wake_word(self):
-        """检查唤醒词（异步实现）"""
+        """
+        检查唤醒词（异步实现）
+        """
         try:
             if not self.audio_codec:
                 return
@@ -363,7 +387,9 @@ class WakeWordDetector:
             logger.debug(f"检查唤醒词时出错: {e}")
 
     async def _process_audio_data(self, data):
-        """异步处理音频数据"""
+        """
+        异步处理音频数据.
+        """
         try:
             # 处理完整识别结果
             if self.recognizer.AcceptWaveform(data):
@@ -395,7 +421,9 @@ class WakeWordDetector:
             logger.error(f"音频数据处理错误: {e}")
 
     async def _check_wake_word_text(self, text):
-        """检查文本中的唤醒词"""
+        """
+        检查文本中的唤醒词.
+        """
         if not text or not text.strip():
             return
 
@@ -446,7 +474,9 @@ class WakeWordDetector:
             self._recent_texts.clear()
 
     async def _trigger_callbacks(self, wake_word, text):
-        """触发回调函数"""
+        """
+        触发回调函数.
+        """
         if self.on_detected_callback:
             try:
                 if asyncio.iscoroutinefunction(self.on_detected_callback):
@@ -457,7 +487,9 @@ class WakeWordDetector:
                 logger.error(f"唤醒词回调执行失败: {e}")
 
     async def _call_error_callback(self, error):
-        """调用错误回调"""
+        """
+        调用错误回调.
+        """
         try:
             if self.on_error:
                 if asyncio.iscoroutinefunction(self.on_error):
@@ -468,19 +500,27 @@ class WakeWordDetector:
             logger.error(f"执行错误回调时失败: {e}")
 
     async def pause(self):
-        """暂停检测"""
+        """
+        暂停检测.
+        """
         self.paused = True
 
     async def resume(self):
-        """恢复检测"""
+        """
+        恢复检测.
+        """
         self.paused = False
 
     def is_running(self) -> bool:
-        """检查是否正在运行"""
+        """
+        检查是否正在运行.
+        """
         return self.is_running_flag and not self.paused
 
     async def stop(self):
-        """停止检测器"""
+        """
+        停止检测器.
+        """
         self.is_running_flag = False
 
         if self.detection_task:
@@ -493,7 +533,9 @@ class WakeWordDetector:
         logger.info("异步唤醒词检测器已停止")
 
     def _validate_config(self):
-        """验证配置参数"""
+        """
+        验证配置参数.
+        """
         if not self.enabled:
             return
 
@@ -529,7 +571,9 @@ class WakeWordDetector:
         )
 
     def get_performance_stats(self):
-        """获取性能统计信息"""
+        """
+        获取性能统计信息.
+        """
         cache_info = self._get_text_pinyin_variants.cache_info()
         return {
             "enabled": self.enabled,
@@ -551,12 +595,16 @@ class WakeWordDetector:
         }
 
     def clear_cache(self):
-        """清空缓存"""
+        """
+        清空缓存.
+        """
         self._get_text_pinyin_variants.cache_clear()
         self._recent_texts.clear()
         logger.info("缓存已清空")
 
     def __del__(self):
-        """析构函数"""
+        """
+        析构函数.
+        """
         if hasattr(self, "is_running_flag") and self.is_running_flag:
             asyncio.create_task(self.stop())

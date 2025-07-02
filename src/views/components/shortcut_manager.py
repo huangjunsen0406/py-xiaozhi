@@ -16,7 +16,9 @@ except ImportError:
 
 
 class AsyncShortcutManager:
-    """异步全局快捷键管理器"""
+    """
+    异步全局快捷键管理器.
+    """
 
     # 默认快捷键配置
     DEFAULT_SHORTCUTS = {
@@ -43,7 +45,9 @@ class AsyncShortcutManager:
         self.shortcuts = self.DEFAULT_SHORTCUTS.copy()
 
     def _get_app_instance(self):
-        """获取Application实例"""
+        """
+        获取Application实例.
+        """
         if self._app_instance is None:
             try:
                 # 延迟导入避免循环导入
@@ -68,25 +72,33 @@ class AsyncShortcutManager:
         return self._app_instance
 
     async def _safe_call_async(self, coro):
-        """安全地调用异步方法"""
+        """
+        安全地调用异步方法.
+        """
         try:
             await coro
         except Exception as e:
             self.logger.error(f"执行异步快捷键操作失败: {e}", exc_info=True)
 
     def _safe_call_sync(self, func):
-        """安全地调用同步方法"""
+        """
+        安全地调用同步方法.
+        """
         try:
             func()
         except Exception as e:
             self.logger.error(f"执行同步快捷键操作失败: {e}", exc_info=True)
 
     def is_combo(self, *keys) -> bool:
-        """判断是否同时按下了一组按键"""
+        """
+        判断是否同时按下了一组按键.
+        """
         return all(k in self.pressed_keys for k in keys)
 
     def _normalize_key(self, key):
-        """标准化按键名称"""
+        """
+        标准化按键名称.
+        """
         if key == pynput_keyboard.Key.alt_l or key == pynput_keyboard.Key.alt_r:
             return "alt"
         elif key == pynput_keyboard.Key.shift_l or key == pynput_keyboard.Key.shift_r:
@@ -99,7 +111,9 @@ class AsyncShortcutManager:
             return str(key).replace("Key.", "").lower()
 
     def _on_press(self, key):
-        """按键按下事件处理"""
+        """
+        按键按下事件处理.
+        """
         try:
             # 记录按下的键
             normalized_key = self._normalize_key(key)
@@ -120,7 +134,9 @@ class AsyncShortcutManager:
             self.logger.error(f"键盘事件处理错误: {e}")
 
     def _on_release(self, key):
-        """按键释放事件处理"""
+        """
+        按键释放事件处理.
+        """
         try:
             # 清除释放的键
             normalized_key = self._normalize_key(key)
@@ -136,7 +152,9 @@ class AsyncShortcutManager:
             self.logger.error(f"键盘事件处理错误: {e}")
 
     async def _handle_shortcut_action(self, action: str):
-        """处理快捷键动作"""
+        """
+        处理快捷键动作.
+        """
         app = self._get_app_instance()
         if not app:
             return
@@ -165,7 +183,9 @@ class AsyncShortcutManager:
             self._safe_call_sync(lambda: self._toggle_window_visibility(app))
 
     def _toggle_window_visibility(self, app):
-        """切换窗口显示状态"""
+        """
+        切换窗口显示状态.
+        """
         try:
             if not app.display or not hasattr(app.display, "root"):
                 self.logger.warning("GUI窗口不可用")
@@ -187,7 +207,9 @@ class AsyncShortcutManager:
             self.logger.error(f"切换窗口显示状态失败: {e}", exc_info=True)
 
     async def start_async(self):
-        """异步启动键盘监听"""
+        """
+        异步启动键盘监听.
+        """
         if pynput_keyboard is None:
             self.logger.warning(
                 "键盘监听不可用：pynput 库未能正确加载。快捷键功能将不可用。"
@@ -211,7 +233,9 @@ class AsyncShortcutManager:
         return True
 
     async def stop_async(self):
-        """异步停止键盘监听"""
+        """
+        异步停止键盘监听.
+        """
         if self.keyboard_listener:
             try:
                 self._running = False
@@ -224,16 +248,22 @@ class AsyncShortcutManager:
                 self.keyboard_listener = None
 
     def add_shortcut(self, key_combo: tuple, action: str):
-        """添加新的快捷键"""
+        """
+        添加新的快捷键.
+        """
         self.shortcuts[key_combo] = action
 
     def remove_shortcut(self, key_combo: tuple):
-        """移除快捷键"""
+        """
+        移除快捷键.
+        """
         if key_combo in self.shortcuts:
             del self.shortcuts[key_combo]
 
     def get_shortcuts_description(self) -> str:
-        """获取快捷键描述"""
+        """
+        获取快捷键描述.
+        """
         descriptions = []
         action_names = {
             "manual_press": "长按说话",
@@ -255,7 +285,9 @@ class AsyncShortcutManager:
         return " | ".join(descriptions)
 
     def is_available(self) -> bool:
-        """检查快捷键功能是否可用"""
+        """
+        检查快捷键功能是否可用.
+        """
         return pynput_keyboard is not None
 
 
@@ -264,7 +296,9 @@ _global_shortcut_manager = None
 
 
 async def start_global_shortcuts_async(logger: logging.Logger = None):
-    """异步启动全局快捷键服务"""
+    """
+    异步启动全局快捷键服务.
+    """
     global _global_shortcut_manager
     if _global_shortcut_manager is None:
         _global_shortcut_manager = AsyncShortcutManager(logger)
@@ -278,7 +312,9 @@ async def start_global_shortcuts_async(logger: logging.Logger = None):
 
 
 async def stop_global_shortcuts_async():
-    """异步停止全局快捷键服务"""
+    """
+    异步停止全局快捷键服务.
+    """
     global _global_shortcut_manager
     if _global_shortcut_manager:
         await _global_shortcut_manager.stop_async()
@@ -286,5 +322,7 @@ async def stop_global_shortcuts_async():
 
 
 def get_global_shortcuts_manager():
-    """获取全局快捷键管理器实例"""
+    """
+    获取全局快捷键管理器实例.
+    """
     return _global_shortcut_manager

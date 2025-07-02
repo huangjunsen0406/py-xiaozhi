@@ -26,7 +26,9 @@ class Property:
         self._type_determined = False
 
     def _determine_type(self, value: Any):
-        """根据值确定属性类型"""
+        """
+        根据值确定属性类型.
+        """
         if isinstance(value, bool):
             self.type = ValueType.BOOLEAN
         elif isinstance(value, int):
@@ -46,7 +48,9 @@ class Property:
         return {"description": self.description, "type": self.type}
 
     async def get_state_value(self):
-        """获取属性值"""
+        """
+        获取属性值.
+        """
         value = await self.getter()
         # 如果是第一次调用 getter，确定类型
         if not self._type_determined:
@@ -100,7 +104,9 @@ class Method:
         }
 
     async def invoke(self, params: Dict[str, Any]) -> Any:
-        """调用方法"""
+        """
+        调用方法.
+        """
         # 设置参数值，处理复杂类型
         for name, value in params.items():
             if name in self.parameters:
@@ -154,7 +160,9 @@ class Thing:
         }
 
     async def get_state_json(self) -> Dict:
-        """获取设备状态"""
+        """
+        获取设备状态.
+        """
         state = {}
         for name, prop in self.properties.items():
             state[name] = await prop.get_state_value()
@@ -165,7 +173,9 @@ class Thing:
         }
 
     async def invoke(self, command: Dict) -> Any:
-        """调用方法"""
+        """
+        调用方法.
+        """
         method_name = command.get("method")
         if method_name not in self.methods:
             raise ValueError(f"方法不存在: {method_name}")

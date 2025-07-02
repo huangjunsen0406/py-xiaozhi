@@ -48,7 +48,9 @@ class MqttProtocol(Protocol):
         self.server_hello_event = asyncio.Event()
 
     async def connect(self):
-        """连接到MQTT服务器."""
+        """
+        连接到MQTT服务器.
+        """
         # 重置hello事件
         self.server_hello_event = asyncio.Event()
 
@@ -232,7 +234,9 @@ class MqttProtocol(Protocol):
             return False
 
     def _handle_mqtt_message(self, payload):
-        """处理MQTT消息."""
+        """
+        处理MQTT消息.
+        """
         try:
             data = json.loads(payload)
             msg_type = data.get("type")
@@ -344,7 +348,6 @@ class MqttProtocol(Protocol):
                     if self._on_incoming_audio:
 
                         def process_audio(audio_data=decrypted):
-
                             if asyncio.iscoroutinefunction(self._on_incoming_audio):
                                 coro = self._on_incoming_audio(audio_data)
                                 if coro is not None:
@@ -370,7 +373,9 @@ class MqttProtocol(Protocol):
         logger.info("UDP接收线程已停止")
 
     async def send_text(self, message):
-        """发送文本消息."""
+        """
+        发送文本消息.
+        """
         if not self.mqtt_client:
             logger.error("MQTT客户端未初始化")
             return False
@@ -431,13 +436,17 @@ class MqttProtocol(Protocol):
             return False
 
     async def open_audio_channel(self):
-        """打开音频通道."""
+        """
+        打开音频通道.
+        """
         if not self.connected:
             return await self.connect()
         return True
 
     async def close_audio_channel(self):
-        """关闭音频通道."""
+        """
+        关闭音频通道.
+        """
         try:
             # 如果有会话ID，发送goodbye消息
             if self.session_id:
@@ -454,7 +463,9 @@ class MqttProtocol(Protocol):
                 await self._on_audio_channel_closed()
 
     def is_audio_channel_opened(self):
-        """检查音频通道是否已打开."""
+        """
+        检查音频通道是否已打开.
+        """
         return self.udp_socket is not None and self.connected
 
     def aes_ctr_encrypt(self, key, nonce, plaintext):
@@ -489,7 +500,9 @@ class MqttProtocol(Protocol):
         return plaintext
 
     async def _handle_goodbye(self):
-        """处理goodbye消息."""
+        """
+        处理goodbye消息.
+        """
         try:
             # 停止UDP接收线程
             if self.udp_thread and self.udp_thread.is_alive():
@@ -534,7 +547,9 @@ class MqttProtocol(Protocol):
             logger.error(f"处理goodbye消息时出错: {e}")
 
     def _stop_udp_receiver(self):
-        """停止UDP接收线程和关闭UDP套接字."""
+        """
+        停止UDP接收线程和关闭UDP套接字.
+        """
         # 关闭UDP接收线程
         if (
             hasattr(self, "udp_thread")
@@ -555,7 +570,9 @@ class MqttProtocol(Protocol):
                 logger.error(f"关闭UDP套接字失败: {e}")
 
     def __del__(self):
-        """析构函数，清理资源."""
+        """
+        析构函数，清理资源.
+        """
         # 停止UDP接收相关资源
         self._stop_udp_receiver()
 

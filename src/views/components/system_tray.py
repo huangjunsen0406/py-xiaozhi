@@ -1,6 +1,5 @@
 """
-系统托盘组件模块
-提供系统托盘图标、菜单和状态指示功能
+系统托盘组件模块 提供系统托盘图标、菜单和状态指示功能.
 """
 
 from typing import Optional
@@ -13,7 +12,9 @@ from src.utils.logging_config import get_logger
 
 
 class SystemTray(QObject):
-    """系统托盘组件"""
+    """
+    系统托盘组件.
+    """
 
     # 定义信号
     show_window_requested = pyqtSignal()
@@ -38,7 +39,9 @@ class SystemTray(QObject):
         self._setup_tray()
 
     def _setup_tray(self):
-        """设置系统托盘图标"""
+        """
+        设置系统托盘图标.
+        """
         try:
             # 检查系统是否支持系统托盘
             if not QSystemTrayIcon.isSystemTrayAvailable():
@@ -66,7 +69,9 @@ class SystemTray(QObject):
             self.logger.error(f"初始化系统托盘图标失败: {e}", exc_info=True)
 
     def _create_tray_menu(self):
-        """创建托盘右键菜单"""
+        """
+        创建托盘右键菜单.
+        """
         self.tray_menu = QMenu()
 
         # 添加显示主窗口菜单项
@@ -91,24 +96,32 @@ class SystemTray(QObject):
         self.tray_menu.addAction(quit_action)
 
     def _on_tray_activated(self, reason):
-        """处理托盘图标点击事件"""
+        """
+        处理托盘图标点击事件.
+        """
         if reason == QSystemTrayIcon.Trigger:  # 单击
             self.show_window_requested.emit()
 
     def _on_show_window(self):
-        """处理显示窗口菜单项点击"""
+        """
+        处理显示窗口菜单项点击.
+        """
         self.show_window_requested.emit()
 
     def _on_settings(self):
-        """处理设置菜单项点击"""
+        """
+        处理设置菜单项点击.
+        """
         self.settings_requested.emit()
 
     def _on_quit(self):
-        """处理退出菜单项点击"""
+        """
+        处理退出菜单项点击.
+        """
         self.quit_requested.emit()
 
     def update_status(self, status: str, connected: bool = True):
-        """更新托盘图标状态
+        """更新托盘图标状态.
 
         Args:
             status: 状态文本
@@ -145,7 +158,7 @@ class SystemTray(QObject):
             self.logger.error(f"更新系统托盘图标失败: {e}")
 
     def _get_status_color(self, status: str, connected: bool) -> QColor:
-        """根据状态返回对应的颜色
+        """根据状态返回对应的颜色.
 
         Args:
             status: 状态文本
@@ -173,7 +186,7 @@ class SystemTray(QObject):
         icon_type=QSystemTrayIcon.Information,
         duration: int = 2000,
     ):
-        """显示托盘通知消息
+        """显示托盘通知消息.
 
         Args:
             title: 通知标题
@@ -185,14 +198,20 @@ class SystemTray(QObject):
             self.tray_icon.showMessage(title, message, icon_type, duration)
 
     def hide(self):
-        """隐藏托盘图标"""
+        """
+        隐藏托盘图标.
+        """
         if self.tray_icon:
             self.tray_icon.hide()
 
     def is_visible(self) -> bool:
-        """检查托盘图标是否可见"""
+        """
+        检查托盘图标是否可见.
+        """
         return self.tray_icon and self.tray_icon.isVisible()
 
     def is_available(self) -> bool:
-        """检查系统托盘是否可用"""
+        """
+        检查系统托盘是否可用.
+        """
         return QSystemTrayIcon.isSystemTrayAvailable()

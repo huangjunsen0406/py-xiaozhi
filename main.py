@@ -10,7 +10,9 @@ logger = get_logger(__name__)
 
 
 def parse_args():
-    """解析命令行参数"""
+    """
+    解析命令行参数.
+    """
     parser = argparse.ArgumentParser(description="小智Ai客户端")
     parser.add_argument(
         "--mode",
@@ -33,7 +35,9 @@ def parse_args():
 
 
 async def main():
-    """主函数"""
+    """
+    主函数.
+    """
     setup_logging()
     args = parse_args()
 

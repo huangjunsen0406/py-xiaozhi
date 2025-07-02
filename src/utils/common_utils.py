@@ -1,4 +1,6 @@
-"""通用工具函数集合模块 包含文本转语音、浏览器操作、剪贴板等通用工具函数."""
+"""
+通用工具函数集合模块 包含文本转语音、浏览器操作、剪贴板等通用工具函数.
+"""
 
 import shutil
 import webbrowser
@@ -118,7 +120,9 @@ def play_audio_nonblocking(text: str) -> None:
             logger.error(f"音频工作线程出错: {e}")
 
     def fallback_opus_tts():
-        """使用系统TTS的备用方式（避免独立PyAudio实例）"""
+        """
+        使用系统TTS的备用方式（避免独立PyAudio实例）
+        """
         try:
             logger.warning("Opus音频播放需要AudioCodec支持，回退到系统TTS")
 

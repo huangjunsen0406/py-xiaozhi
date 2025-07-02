@@ -15,7 +15,9 @@ logger = get_logger(__name__)
 
 
 def get_device_status() -> Dict[str, Any]:
-    """获取当前主机的整体设备状态"""
+    """
+    获取当前主机的整体设备状态.
+    """
     try:
         status = {}
 
@@ -79,7 +81,9 @@ def get_device_status() -> Dict[str, Any]:
 
 
 def _get_local_ip() -> str:
-    """获取本地IP地址"""
+    """
+    获取本地IP地址.
+    """
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.connect(("8.8.8.8", 80))

@@ -1,6 +1,5 @@
 """
-日程管理MCP工具函数
-提供给MCP服务器调用的异步工具函数
+日程管理MCP工具函数 提供给MCP服务器调用的异步工具函数.
 """
 
 import json
@@ -16,7 +15,9 @@ logger = get_logger(__name__)
 
 
 async def create_event(args: Dict[str, Any]) -> str:
-    """创建日程事件"""
+    """
+    创建日程事件.
+    """
     try:
         title = args["title"]
         start_time = args["start_time"]
@@ -88,7 +89,9 @@ async def create_event(args: Dict[str, Any]) -> str:
 
 
 async def get_events_by_date(args: Dict[str, Any]) -> str:
-    """按日期查询日程"""
+    """
+    按日期查询日程.
+    """
     try:
         date_type = args.get("date_type", "today")  # today, tomorrow, week, month
         category = args.get("category")
@@ -168,7 +171,9 @@ async def get_events_by_date(args: Dict[str, Any]) -> str:
 
 
 async def update_event(args: Dict[str, Any]) -> str:
-    """更新日程事件"""
+    """
+    更新日程事件.
+    """
     try:
         event_id = args["event_id"]
 
@@ -215,7 +220,9 @@ async def update_event(args: Dict[str, Any]) -> str:
 
 
 async def delete_event(args: Dict[str, Any]) -> str:
-    """删除日程事件"""
+    """
+    删除日程事件.
+    """
     try:
         event_id = args["event_id"]
 
@@ -238,7 +245,9 @@ async def delete_event(args: Dict[str, Any]) -> str:
 
 
 async def delete_events_batch(args: Dict[str, Any]) -> str:
-    """批量删除日程事件"""
+    """
+    批量删除日程事件.
+    """
     try:
         start_date = args.get("start_date")
         end_date = args.get("end_date")
@@ -300,7 +309,9 @@ async def delete_events_batch(args: Dict[str, Any]) -> str:
 
 
 async def get_categories(args: Dict[str, Any]) -> str:
-    """获取所有日程分类"""
+    """
+    获取所有日程分类.
+    """
     try:
         manager = get_calendar_manager()
         categories = manager.get_categories()
@@ -317,7 +328,9 @@ async def get_categories(args: Dict[str, Any]) -> str:
 
 
 async def get_upcoming_events(args: Dict[str, Any]) -> str:
-    """获取即将到来的日程（未来24小时内）"""
+    """
+    获取即将到来的日程（未来24小时内）
+    """
     try:
         hours = args.get("hours", 24)  # 默认查询未来24小时
 

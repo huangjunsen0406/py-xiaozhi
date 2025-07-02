@@ -9,7 +9,9 @@ from src.utils.logging_config import get_logger
 
 
 class VolumeController:
-    """跨平台音量控制器."""
+    """
+    跨平台音量控制器.
+    """
 
     # 默认音量常量
     DEFAULT_VOLUME = 70
@@ -48,7 +50,9 @@ class VolumeController:
     }
 
     def __init__(self):
-        """初始化音量控制器."""
+        """
+        初始化音量控制器.
+        """
         self.logger = get_logger("VolumeController")
         self.system = platform.system()
         self.is_arm = platform.machine().startswith(("arm", "aarch"))
@@ -91,7 +95,9 @@ class VolumeController:
         return module
 
     def _safe_execute(self, func_name: str, default_return: Any = None) -> Callable:
-        """安全执行函数的装饰器."""
+        """
+        安全执行函数的装饰器.
+        """
 
         def decorator(func):
             @wraps(func)
@@ -109,7 +115,9 @@ class VolumeController:
     def _run_command(
         self, cmd: List[str], check: bool = False
     ) -> Optional[subprocess.CompletedProcess]:
-        """通用命令执行方法."""
+        """
+        通用命令执行方法.
+        """
         try:
             return subprocess.run(cmd, capture_output=True, text=True, check=check)
         except Exception as e:
@@ -117,7 +125,9 @@ class VolumeController:
             return None
 
     def _init_windows(self) -> None:
-        """初始化Windows音量控制."""
+        """
+        初始化Windows音量控制.
+        """
         try:
             # 使用懒加载导入所需模块
             POINTER = self._lazy_import("ctypes", "POINTER")
@@ -139,7 +149,9 @@ class VolumeController:
             raise
 
     def _init_macos(self) -> None:
-        """初始化macOS音量控制."""
+        """
+        初始化macOS音量控制.
+        """
         try:
             applescript = self._lazy_import("applescript")
 
@@ -153,7 +165,9 @@ class VolumeController:
             raise
 
     def _init_linux(self) -> None:
-        """初始化Linux音量控制."""
+        """
+        初始化Linux音量控制.
+        """
         # 按优先级检查工具
         linux_tools = ["pactl", "wpctl", "amixer"]
         for tool in linux_tools:
@@ -172,7 +186,9 @@ class VolumeController:
         self.logger.debug(f"Linux音量控制初始化成功，使用: {self.linux_tool}")
 
     def get_volume(self) -> int:
-        """获取当前音量 (0-100)"""
+        """
+        获取当前音量 (0-100)
+        """
         get_method_name, _ = self.VOLUME_METHODS.get(self.system, (None, None))
         if not get_method_name:
             return self.DEFAULT_VOLUME
@@ -181,7 +197,9 @@ class VolumeController:
         return get_method()
 
     def set_volume(self, volume: int) -> None:
-        """设置音量 (0-100)"""
+        """
+        设置音量 (0-100)
+        """
         # 确保音量在有效范围内
         volume = max(0, min(100, volume))
 
@@ -229,7 +247,9 @@ class VolumeController:
         return set_volume
 
     def _get_linux_volume(self) -> int:
-        """获取Linux音量."""
+        """
+        获取Linux音量.
+        """
         get_method_name, _ = self.LINUX_VOLUME_METHODS.get(
             self.linux_tool, (None, None)
         )
@@ -240,7 +260,9 @@ class VolumeController:
         return get_method()
 
     def _set_linux_volume(self, volume: int) -> None:
-        """设置Linux音量."""
+        """
+        设置Linux音量.
+        """
         _, set_method_name = self.LINUX_VOLUME_METHODS.get(
             self.linux_tool, (None, None)
         )
@@ -336,7 +358,9 @@ class VolumeController:
 
     @staticmethod
     def check_dependencies() -> bool:
-        """检查并报告缺少的依赖."""
+        """
+        检查并报告缺少的依赖.
+        """
         system = platform.system()
         missing = []
 
@@ -352,7 +376,9 @@ class VolumeController:
 
     @staticmethod
     def _check_python_modules(system: str, missing: List[str]) -> None:
-        """检查Python模块依赖."""
+        """
+        检查Python模块依赖.
+        """
         if system == "Windows":
             for module in ["pycaw", "comtypes"]:
                 try:
@@ -367,7 +393,9 @@ class VolumeController:
 
     @staticmethod
     def _check_linux_tools(missing: List[str]) -> None:
-        """检查Linux工具依赖."""
+        """
+        检查Linux工具依赖.
+        """
         tools = ["pactl", "wpctl", "amixer", "alsamixer"]
         found = any(shutil.which(tool) for tool in tools)
         if not found:
@@ -375,7 +403,9 @@ class VolumeController:
 
     @staticmethod
     def _report_missing_dependencies(system: str, missing: List[str]) -> bool:
-        """报告缺少的依赖."""
+        """
+        报告缺少的依赖.
+        """
         if missing:
             print(f"警告: 音量控制需要以下依赖，但未找到: {', '.join(missing)}")
             print("请使用以下命令安装缺少的依赖:")

@@ -125,7 +125,9 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         abort_callback: Optional[Callable] = None,
         send_text_callback: Optional[Callable] = None,
     ):
-        """设置回调函数."""
+        """
+        设置回调函数.
+        """
         self.button_press_callback = press_callback
         self.button_release_callback = release_callback
         self.mode_callback = mode_callback
@@ -136,31 +138,41 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         # 不再注册状态监听回调，由update_status直接处理所有逻辑
 
     def _on_manual_button_press(self):
-        """手动模式按钮按下事件处理."""
+        """
+        手动模式按钮按下事件处理.
+        """
         if self.manual_btn and self.manual_btn.isVisible():
             self.manual_btn.setText("松开以停止")
         if self.button_press_callback:
             self.button_press_callback()
 
     def _on_manual_button_release(self):
-        """手动模式按钮释放事件处理."""
+        """
+        手动模式按钮释放事件处理.
+        """
         if self.manual_btn and self.manual_btn.isVisible():
             self.manual_btn.setText("按住后说话")
         if self.button_release_callback:
             self.button_release_callback()
 
     def _on_auto_button_click(self):
-        """自动模式按钮点击事件处理."""
+        """
+        自动模式按钮点击事件处理.
+        """
         if self.auto_callback:
             self.auto_callback()
 
     def _on_abort_button_click(self):
-        """处理中止按钮点击事件."""
+        """
+        处理中止按钮点击事件.
+        """
         if self.abort_callback:
             self.abort_callback()
 
     def _on_mode_button_click(self):
-        """对话模式切换按钮点击事件."""
+        """
+        对话模式切换按钮点击事件.
+        """
         if self.mode_callback:
             if not self.mode_callback():
                 return
@@ -175,19 +187,25 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             self._switch_to_manual_mode()
 
     def _switch_to_auto_mode(self):
-        """切换到自动模式的UI更新."""
+        """
+        切换到自动模式的UI更新.
+        """
         if self.manual_btn and self.auto_btn:
             self.manual_btn.hide()
             self.auto_btn.show()
 
     def _switch_to_manual_mode(self):
-        """切换到手动模式的UI更新."""
+        """
+        切换到手动模式的UI更新.
+        """
         if self.manual_btn and self.auto_btn:
             self.auto_btn.hide()
             self.manual_btn.show()
 
     async def update_status(self, status: str):
-        """更新状态文本并处理相关逻辑"""
+        """
+        更新状态文本并处理相关逻辑.
+        """
         full_status_text = f"状态: {status}"
         self._safe_update_label(self.status_label, full_status_text)
 
@@ -201,11 +219,15 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             self._update_system_tray(status)
 
     async def update_text(self, text: str):
-        """更新TTS文本."""
+        """
+        更新TTS文本.
+        """
         self._safe_update_label(self.tts_text_label, text)
 
     async def update_emotion(self, emotion_name: str):
-        """更新表情显示"""
+        """
+        更新表情显示.
+        """
         if emotion_name == self._last_emotion_name:
             return
 
@@ -219,7 +241,9 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
                 self.logger.error(f"设置表情GIF时发生错误: {str(e)}")
 
     def _get_emotion_gif_path(self, emotion_name: str) -> str:
-        """获取表情GIF文件路径"""
+        """
+        获取表情GIF文件路径.
+        """
         if emotion_name in self._emotion_cache:
             return self._emotion_cache[emotion_name]
 
@@ -241,7 +265,9 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         return path
 
     def _set_emotion_gif(self, label, gif_path):
-        """设置表情GIF动画."""
+        """
+        设置表情GIF动画.
+        """
         if not label:
             return
 
@@ -283,7 +309,9 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             label.setText("😊")
 
     def _safe_update_label(self, label, text):
-        """安全地更新标签文本."""
+        """
+        安全地更新标签文本.
+        """
         if label:
             try:
                 label.setText(text)
@@ -291,7 +319,9 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
                 self.logger.error(f"更新标签失败: {e}")
 
     async def close(self):
-        """关闭窗口处理."""
+        """
+        关闭窗口处理.
+        """
         self._running = False
         if self.system_tray:
             self.system_tray.hide()
@@ -299,7 +329,9 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             self.root.close()
 
     async def start(self):
-        """启动GUI."""
+        """
+        启动GUI.
+        """
         try:
             # 设置Qt环境变量
             os.environ.setdefault("QT_LOGGING_RULES", "qt.qpa.fonts.debug=false")
@@ -338,7 +370,9 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             raise
 
     def _init_ui_controls(self):
-        """初始化UI控件"""
+        """
+        初始化UI控件.
+        """
         self.status_label = self.root.findChild(QLabel, "status_label")
         self.emotion_label = self.root.findChild(QLabel, "emotion_label")
         self.tts_text_label = self.root.findChild(QLabel, "tts_text_label")
@@ -350,7 +384,9 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         self.send_btn = self.root.findChild(QPushButton, "send_btn")
 
     def _connect_events(self):
-        """连接事件"""
+        """
+        连接事件.
+        """
         if self.manual_btn:
             self.manual_btn.pressed.connect(self._on_manual_button_press)
             self.manual_btn.released.connect(self._on_manual_button_release)
@@ -369,7 +405,9 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         self.root.closeEvent = self._closeEvent
 
     def _setup_system_tray(self):
-        """设置系统托盘"""
+        """
+        设置系统托盘.
+        """
         try:
             from src.views.components.system_tray import SystemTray
 
@@ -382,19 +420,25 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             self.logger.error(f"初始化系统托盘组件失败: {e}", exc_info=True)
 
     async def _set_default_emotion(self):
-        """设置默认表情"""
+        """
+        设置默认表情.
+        """
         try:
             await self.update_emotion("neutral")
         except Exception as e:
             self.logger.error(f"设置默认表情失败: {e}", exc_info=True)
 
     def _update_system_tray(self, status):
-        """更新系统托盘状态"""
+        """
+        更新系统托盘状态.
+        """
         if self.system_tray:
             self.system_tray.update_status(status, self.is_connected)
 
     def _show_main_window(self):
-        """显示主窗口."""
+        """
+        显示主窗口.
+        """
         if self.root:
             if self.root.isMinimized():
                 self.root.showNormal()
@@ -404,7 +448,9 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             self.root.raise_()
 
     def _quit_application(self):
-        """退出应用程序."""
+        """
+        退出应用程序.
+        """
         self.logger.info("开始退出应用程序...")
         self._running = False
 
@@ -460,7 +506,9 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             QApplication.quit()
 
     def _closeEvent(self, event):
-        """处理窗口关闭事件."""
+        """
+        处理窗口关闭事件.
+        """
         if self.system_tray and self.system_tray.is_visible():
             self.root.hide()
             self.system_tray.show_message(
@@ -472,17 +520,23 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             event.accept()
 
     def _update_mode_button_status(self, text: str):
-        """更新模式按钮状态."""
+        """
+        更新模式按钮状态.
+        """
         if self.mode_btn:
             self.mode_btn.setText(text)
 
     async def update_button_status(self, text: str):
-        """更新按钮状态"""
+        """
+        更新按钮状态.
+        """
         if self.auto_mode and self.auto_btn:
             self.auto_btn.setText(text)
 
     def _on_send_button_click(self):
-        """处理发送文本按钮点击事件."""
+        """
+        处理发送文本按钮点击事件.
+        """
         if not self.text_input or not self.send_text_callback:
             return
 
@@ -500,7 +554,9 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             self.logger.error(f"发送文本时出错: {e}")
 
     def _on_settings_button_click(self):
-        """处理设置按钮点击事件."""
+        """
+        处理设置按钮点击事件.
+        """
         try:
             from src.views.settings import SettingsWindow
 
@@ -511,7 +567,9 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             self.logger.error(f"打开设置窗口失败: {e}", exc_info=True)
 
     def _update_connection_status(self, status: str):
-        """根据状态更新连接状态"""
+        """
+        根据状态更新连接状态.
+        """
         if status in ["连接中...", "聆听中...", "说话中..."]:
             self.is_connected = True
         elif status == "待命":

@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-设备激活窗口
-显示激活流程、设备信息和激活进度
+设备激活窗口 显示激活流程、设备信息和激活进度.
 """
 
 from datetime import datetime
@@ -23,7 +22,9 @@ logger = get_logger(__name__)
 
 
 class ActivationWindow(BaseWindow, AsyncMixin):
-    """设备激活窗口"""
+    """
+    设备激活窗口.
+    """
 
     # 自定义信号
     activation_completed = pyqtSignal(bool)  # 激活完成信号
@@ -49,7 +50,9 @@ class ActivationWindow(BaseWindow, AsyncMixin):
         self.start_update_timer(100)  # 100ms后开始初始化
 
     def _setup_ui(self):
-        """设置UI"""
+        """
+        设置UI.
+        """
         ui_file = Path(__file__).parent / "activation_window.ui"
         uic.loadUi(str(ui_file), self)
 
@@ -60,7 +63,9 @@ class ActivationWindow(BaseWindow, AsyncMixin):
         self.logger.info("激活窗口UI加载完成")
 
     def _setup_adaptive_size(self):
-        """设置自适应窗口尺寸"""
+        """
+        设置自适应窗口尺寸.
+        """
 
         # 获取屏幕尺寸
         screen = QApplication.primaryScreen()
@@ -117,7 +122,9 @@ class ActivationWindow(BaseWindow, AsyncMixin):
             self.log_text.setMaximumHeight(60)
 
     def _apply_small_screen_styles(self):
-        """应用小屏幕样式"""
+        """
+        应用小屏幕样式.
+        """
         # 调整字体大小
         self.setStyleSheet(
             """
@@ -132,7 +139,9 @@ class ActivationWindow(BaseWindow, AsyncMixin):
             self.log_text.setMaximumHeight(80)
 
     def _setup_connections(self):
-        """设置信号连接"""
+        """
+        设置信号连接.
+        """
         # 按钮连接
         self.close_btn.clicked.connect(self.close)
         self.retry_btn.clicked.connect(self._on_retry_clicked)
@@ -141,15 +150,18 @@ class ActivationWindow(BaseWindow, AsyncMixin):
         self.logger.debug("信号连接设置完成")
 
     def _setup_signal_connections(self):
-        """设置异步信号连接"""
+        """
+        设置异步信号连接.
+        """
         self.signal_emitter.status_changed.connect(self._on_status_changed)
         self.signal_emitter.error_occurred.connect(self._on_error_occurred)
         self.signal_emitter.data_ready.connect(self._on_data_ready)
 
     def _setup_styles(self):
-        """设置样式"""
+        """
+        设置样式.
+        """
         # 基础样式已在UI文件中定义
-        pass
 
     def _on_timer_update(self):
         """定时器更新回调 - 启动初始化"""
@@ -166,7 +178,9 @@ class ActivationWindow(BaseWindow, AsyncMixin):
                 self.start_update_timer(500)
 
     async def _start_initialization(self):
-        """开始系统初始化流程"""
+        """
+        开始系统初始化流程.
+        """
         try:
             self._append_log("开始系统初始化流程")
 
@@ -188,7 +202,9 @@ class ActivationWindow(BaseWindow, AsyncMixin):
             self.signal_emitter.emit_error(f"初始化异常: {e}")
 
     async def _run_initialization_stages(self) -> bool:
-        """运行初始化各阶段"""
+        """
+        运行初始化各阶段.
+        """
         try:
             # 第一阶段：设备身份准备
             self._append_log("第一阶段：设备身份准备")
@@ -214,7 +230,9 @@ class ActivationWindow(BaseWindow, AsyncMixin):
             return False
 
     def _update_device_info(self):
-        """更新设备信息显示"""
+        """
+        更新设备信息显示.
+        """
         if (
             not self.system_initializer
             or not self.system_initializer.device_fingerprint
@@ -248,7 +266,9 @@ class ActivationWindow(BaseWindow, AsyncMixin):
         )
 
     async def _check_activation_status(self):
-        """检查激活状态"""
+        """
+        检查激活状态.
+        """
         if self.is_activated:
             self._append_log("设备已激活，无需重复激活")
             self.activation_completed.emit(True)
@@ -263,7 +283,9 @@ class ActivationWindow(BaseWindow, AsyncMixin):
                 self.signal_emitter.emit_error("未获取到激活数据，请检查网络连接")
 
     async def _start_activation_process(self, activation_data: dict):
-        """开始激活流程"""
+        """
+        开始激活流程.
+        """
         try:
             self.activation_data = activation_data
 
@@ -298,7 +320,9 @@ class ActivationWindow(BaseWindow, AsyncMixin):
             self.signal_emitter.emit_error(f"激活异常: {e}")
 
     def _show_activation_info(self, activation_data: dict):
-        """显示激活信息"""
+        """
+        显示激活信息.
+        """
         code = activation_data.get("code", "------")
 
         # 更新设备信息中的激活码
@@ -308,7 +332,9 @@ class ActivationWindow(BaseWindow, AsyncMixin):
         self._append_log(f"获取激活验证码: {code}")
 
     def _on_activation_success(self):
-        """激活成功处理"""
+        """
+        激活成功处理.
+        """
         # 更新状态显示
         self.status_value.setText("已激活")
         self.status_value.setStyleSheet("color: #28a745;")
@@ -321,19 +347,27 @@ class ActivationWindow(BaseWindow, AsyncMixin):
         self.is_activated = True
 
     def _on_status_changed(self, status: str):
-        """状态变化处理"""
+        """
+        状态变化处理.
+        """
         self.update_status(status)
 
     def _on_error_occurred(self, error_message: str):
-        """错误处理"""
+        """
+        错误处理.
+        """
         self._append_log(f"错误: {error_message}")
 
     def _on_data_ready(self, data):
-        """数据就绪处理"""
+        """
+        数据就绪处理.
+        """
         self.logger.debug(f"收到数据: {data}")
 
     def _on_retry_clicked(self):
-        """重新激活按钮点击"""
+        """
+        重新激活按钮点击.
+        """
         self._append_log("用户请求重新激活")
 
         # 检查是否已经关闭
@@ -347,7 +381,9 @@ class ActivationWindow(BaseWindow, AsyncMixin):
         self.create_task(self._start_initialization(), "retry_initialization")
 
     def _on_copy_code_clicked(self):
-        """复制验证码按钮点击"""
+        """
+        复制验证码按钮点击.
+        """
         if self.activation_data:
             code = self.activation_data.get("code", "")
             if code:
@@ -356,14 +392,18 @@ class ActivationWindow(BaseWindow, AsyncMixin):
                 self._append_log(f"验证码已复制到剪贴板: {code}")
 
     def _append_log(self, message: str):
-        """添加日志信息"""
+        """
+        添加日志信息.
+        """
         timestamp = datetime.now().strftime("%H:%M:%S")
         log_message = f"[{timestamp}] {message}"
         self.log_text.append(log_message)
         self.logger.info(message)
 
     def get_activation_result(self) -> dict:
-        """获取激活结果"""
+        """
+        获取激活结果.
+        """
         device_fingerprint = None
         config_manager = None
 
@@ -378,7 +418,9 @@ class ActivationWindow(BaseWindow, AsyncMixin):
         }
 
     async def shutdown_async(self):
-        """异步关闭"""
+        """
+        异步关闭.
+        """
         self._append_log("正在关闭激活窗口...")
 
         # 取消激活流程（如果正在进行）

@@ -11,7 +11,9 @@ logger = get_logger(__name__)
 
 
 class CountdownTimer(Thing):
-    """一个用于延迟执行命令的倒计时器设备。"""
+    """
+    一个用于延迟执行命令的倒计时器设备。
+    """
 
     DEFAULT_DELAY = 5  # seconds
 
@@ -50,7 +52,9 @@ class CountdownTimer(Thing):
         )
 
     async def _execute_command(self, timer_id: int, command_str: str) -> None:
-        """计时器到期时执行的回调函数。"""
+        """
+        计时器到期时执行的回调函数。
+        """
         # 首先从活动计时器列表中移除自己
         async with self._lock:
             if timer_id not in self._timers:
@@ -80,7 +84,9 @@ class CountdownTimer(Thing):
     async def _delayed_execution(
         self, delay: int, timer_id: int, command_str: str
     ) -> None:
-        """异步延迟执行函数"""
+        """
+        异步延迟执行函数.
+        """
         try:
             await asyncio.sleep(delay)
             await self._execute_command(timer_id, command_str)
@@ -92,7 +98,9 @@ class CountdownTimer(Thing):
     async def _start_countdown(
         self, params_dict: Dict[str, Parameter]
     ) -> Dict[str, Any]:
-        """处理 StartCountdown 方法调用。注意: params 现在是 Parameter 对象的字典."""
+        """
+        处理 StartCountdown 方法调用。注意: params 现在是 Parameter 对象的字典.
+        """
         # 从 Parameter 对象字典中获取值
         command_param = params_dict.get("command")
         delay_param = params_dict.get("delay")
@@ -160,7 +168,9 @@ class CountdownTimer(Thing):
     async def _cancel_countdown(
         self, params_dict: Dict[str, Parameter]
     ) -> Dict[str, Any]:
-        """处理 CancelCountdown 方法调用。注意: params 现在是 Parameter 对象的字典."""
+        """
+        处理 CancelCountdown 方法调用。注意: params 现在是 Parameter 对象的字典.
+        """
         timer_id_param = params_dict.get("timer_id")
         timer_id = timer_id_param.get_value() if timer_id_param else None
 
@@ -190,7 +200,9 @@ class CountdownTimer(Thing):
                 }
 
     async def cleanup(self) -> None:
-        """在应用程序关闭时清理所有活动的计时器。"""
+        """
+        在应用程序关闭时清理所有活动的计时器。
+        """
         logger.info("正在清理倒计时器...")
         async with self._lock:
             active_timer_ids = list(self._timers.keys())  # 创建键的副本以安全迭代

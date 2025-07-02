@@ -16,7 +16,9 @@ logger = get_logger(__name__)
 
 
 class BaseWindow(QMainWindow):
-    """所有窗口的基类，提供异步支持"""
+    """
+    所有窗口的基类，提供异步支持.
+    """
 
     # 定义信号
     window_closed = pyqtSignal()
@@ -43,32 +45,34 @@ class BaseWindow(QMainWindow):
 
     def _setup_ui(self):
         """设置UI - 子类重写"""
-        pass
 
     def _setup_connections(self):
         """设置信号连接 - 子类重写"""
-        pass
 
     def _setup_styles(self):
         """设置样式 - 子类重写"""
-        pass
 
     def _on_timer_update(self):
         """定时器更新回调 - 子类重写"""
-        pass
 
     def start_update_timer(self, interval_ms: int = 1000):
-        """启动定时更新"""
+        """
+        启动定时更新.
+        """
         self._update_timer.start(interval_ms)
         self.logger.debug(f"启动定时更新，间隔: {interval_ms}ms")
 
     def stop_update_timer(self):
-        """停止定时更新"""
+        """
+        停止定时更新.
+        """
         self._update_timer.stop()
         self.logger.debug("停止定时更新")
 
     def create_task(self, coro, name: str = None):
-        """创建异步任务并管理"""
+        """
+        创建异步任务并管理.
+        """
         task = asyncio.create_task(coro, name=name)
         self._tasks.add(task)
 
@@ -81,7 +85,9 @@ class BaseWindow(QMainWindow):
         return task
 
     async def shutdown_async(self):
-        """异步关闭窗口"""
+        """
+        异步关闭窗口.
+        """
         self.logger.info("开始异步关闭窗口")
 
         # 设置关闭事件
@@ -102,7 +108,9 @@ class BaseWindow(QMainWindow):
         self.logger.info("窗口异步关闭完成")
 
     def closeEvent(self, event):
-        """窗口关闭事件"""
+        """
+        窗口关闭事件.
+        """
         self.logger.info("窗口关闭事件触发")
 
         # 设置关闭事件标志
@@ -130,10 +138,14 @@ class BaseWindow(QMainWindow):
         self.logger.info("窗口关闭处理完成")
 
     def update_status(self, message: str):
-        """更新状态消息"""
+        """
+        更新状态消息.
+        """
         self.status_updated.emit(message)
         self.logger.debug(f"状态更新: {message}")
 
     def is_shutdown_requested(self) -> bool:
-        """检查是否请求关闭"""
+        """
+        检查是否请求关闭.
+        """
         return self._shutdown_event.is_set()

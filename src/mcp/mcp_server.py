@@ -19,7 +19,9 @@ ReturnValue = Union[bool, int, str]
 
 
 class PropertyType(Enum):
-    """属性类型枚举"""
+    """
+    属性类型枚举.
+    """
 
     BOOLEAN = "boolean"
     INTEGER = "integer"
@@ -28,7 +30,9 @@ class PropertyType(Enum):
 
 @dataclass
 class Property:
-    """MCP工具属性定义"""
+    """
+    MCP工具属性定义.
+    """
 
     name: str
     type: PropertyType
@@ -45,7 +49,9 @@ class Property:
         return self.min_value is not None and self.max_value is not None
 
     def value(self, value: Any) -> Any:
-        """验证并返回值"""
+        """
+        验证并返回值.
+        """
         if self.type == PropertyType.INTEGER and self.has_range:
             if value < self.min_value:
                 raise ValueError(
@@ -58,7 +64,9 @@ class Property:
         return value
 
     def to_json(self) -> Dict[str, Any]:
-        """转换为JSON格式"""
+        """
+        转换为JSON格式.
+        """
         result = {"type": self.type.value}
 
         if self.has_default_value:
@@ -75,12 +83,16 @@ class Property:
 
 @dataclass
 class PropertyList:
-    """属性列表"""
+    """
+    属性列表.
+    """
 
     properties: List[Property] = field(default_factory=list)
 
     def __init__(self, properties: Optional[List[Property]] = None):
-        """初始化属性列表"""
+        """
+        初始化属性列表.
+        """
         self.properties = properties or []
 
     def add_property(self, prop: Property):
@@ -93,15 +105,21 @@ class PropertyList:
         raise KeyError(f"Property not found: {name}")
 
     def get_required(self) -> List[str]:
-        """获取必需的属性名称列表"""
+        """
+        获取必需的属性名称列表.
+        """
         return [p.name for p in self.properties if not p.has_default_value]
 
     def to_json(self) -> Dict[str, Any]:
-        """转换为JSON格式"""
+        """
+        转换为JSON格式.
+        """
         return {prop.name: prop.to_json() for prop in self.properties}
 
     def parse_arguments(self, arguments: Optional[Dict[str, Any]]) -> Dict[str, Any]:
-        """解析并验证参数"""
+        """
+        解析并验证参数.
+        """
         result = {}
 
         for prop in self.properties:
@@ -128,7 +146,9 @@ class PropertyList:
 
 @dataclass
 class McpTool:
-    """MCP工具定义"""
+    """
+    MCP工具定义.
+    """
 
     name: str
     description: str
@@ -136,7 +156,9 @@ class McpTool:
     callback: Callable[[Dict[str, Any]], ReturnValue]
 
     def to_json(self) -> Dict[str, Any]:
-        """转换为JSON格式"""
+        """
+        转换为JSON格式.
+        """
         return {
             "name": self.name,
             "description": self.description,
@@ -148,7 +170,9 @@ class McpTool:
         }
 
     async def call(self, arguments: Dict[str, Any]) -> str:
-        """调用工具"""
+        """
+        调用工具.
+        """
         try:
             # 解析参数
             parsed_args = self.properties.parse_arguments(arguments)
@@ -179,13 +203,17 @@ class McpTool:
 
 
 class McpServer:
-    """MCP服务器实现"""
+    """
+    MCP服务器实现.
+    """
 
     _instance = None
 
     @classmethod
     def get_instance(cls):
-        """获取单例实例"""
+        """
+        获取单例实例.
+        """
         if cls._instance is None:
             cls._instance = McpServer()
         return cls._instance
@@ -196,11 +224,15 @@ class McpServer:
         self._camera = None
 
     def set_send_callback(self, callback: Callable):
-        """设置发送消息的回调函数"""
+        """
+        设置发送消息的回调函数.
+        """
         self._send_callback = callback
 
     def add_tool(self, tool: Union[McpTool, Tuple[str, str, PropertyList, Callable]]):
-        """添加工具"""
+        """
+        添加工具.
+        """
         if isinstance(tool, tuple):
             # 从参数创建McpTool
             name, description, properties, callback = tool
@@ -215,7 +247,9 @@ class McpServer:
         self.tools.append(tool)
 
     def add_common_tools(self):
-        """添加通用工具"""
+        """
+        添加通用工具.
+        """
         # 备份原有工具列表
         original_tools = self.tools.copy()
         self.tools.clear()
@@ -232,14 +266,13 @@ class McpServer:
         calendar_manager = get_calendar_manager()
         calendar_manager.init_tools(self.add_tool, PropertyList, Property, PropertyType)
 
-
-
         # 恢复原有工具
         self.tools.extend(original_tools)
 
-
     async def parse_message(self, message: Union[str, Dict[str, Any]]):
-        """解析MCP消息"""
+        """
+        解析MCP消息.
+        """
         try:
             if isinstance(message, str):
                 data = json.loads(message)
@@ -291,7 +324,9 @@ class McpServer:
                 await self._reply_error(id, str(e))
 
     async def _handle_initialize(self, id: int, params: Dict[str, Any]):
-        """处理初始化请求"""
+        """
+        处理初始化请求.
+        """
         # 解析capabilities
         capabilities = params.get("capabilities", {})
         await self._parse_capabilities(capabilities)
@@ -309,7 +344,9 @@ class McpServer:
         await self._reply_result(id, result)
 
     async def _handle_tools_list(self, id: int, params: Dict[str, Any]):
-        """处理工具列表请求"""
+        """
+        处理工具列表请求.
+        """
         cursor = params.get("cursor", "")
         max_payload_size = 8000
 
@@ -344,7 +381,9 @@ class McpServer:
         await self._reply_result(id, result)
 
     async def _handle_tool_call(self, id: int, params: Dict[str, Any]):
-        """处理工具调用请求"""
+        """
+        处理工具调用请求.
+        """
         logger.info(f"[MCP] 收到工具调用请求! ID={id}, 参数={params}")
 
         tool_name = params.get("name")
@@ -380,7 +419,9 @@ class McpServer:
             await self._reply_error(id, str(e))
 
     async def _parse_capabilities(self, capabilities: Dict[str, Any]):
-        """解析capabilities"""
+        """
+        解析capabilities.
+        """
         vision = capabilities.get("vision", {})
         if vision:
             url = vision.get("url")
@@ -389,7 +430,9 @@ class McpServer:
                 await self._camera.set_explain_url(url, token)
 
     async def _reply_result(self, id: int, result: Any):
-        """发送成功响应"""
+        """
+        发送成功响应.
+        """
         payload = {"jsonrpc": "2.0", "id": id, "result": result}
 
         result_len = len(json.dumps(result))
@@ -401,7 +444,9 @@ class McpServer:
             logger.error("[MCP] 发送回调未设置!")
 
     async def _reply_error(self, id: int, message: str):
-        """发送错误响应"""
+        """
+        发送错误响应.
+        """
         payload = {"jsonrpc": "2.0", "id": id, "error": {"message": message}}
 
         logger.error(f"[MCP] 发送错误响应: ID={id}, 错误={message}")

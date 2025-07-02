@@ -15,7 +15,9 @@ logger = get_logger(__name__)
 
 
 class AudioCodec:
-    """音频编解码器类"""
+    """
+    音频编解码器类.
+    """
 
     def __init__(self):
         self.opus_encoder = None
@@ -56,7 +58,9 @@ class AudioCodec:
         self._wake_word_buffer = asyncio.Queue(maxsize=100)
 
     async def initialize(self):
-        """初始化音频设备和编解码器"""
+        """
+        初始化音频设备和编解码器.
+        """
         try:
             # 获取设备默认采样率
             input_device_info = sd.query_devices(sd.default.device[0])
@@ -109,7 +113,9 @@ class AudioCodec:
             raise
 
     async def _create_resamplers(self):
-        """创建重采样器"""
+        """
+        创建重采样器.
+        """
         if self.device_input_sample_rate != AudioConfig.INPUT_SAMPLE_RATE:
             self.input_resampler = soxr.ResampleStream(
                 self.device_input_sample_rate,
@@ -138,7 +144,9 @@ class AudioCodec:
             )
 
     async def _create_streams(self):
-        """创建输入和输出流"""
+        """
+        创建输入和输出流.
+        """
         try:
             # 创建输入流（录音）
             self.input_stream = sd.InputStream(
@@ -171,7 +179,9 @@ class AudioCodec:
             raise
 
     def _input_callback(self, indata, frames, time_info, status):
-        """输入流回调函数"""
+        """
+        输入流回调函数.
+        """
         if status and "overflow" not in str(status).lower():
             logger.warning(f"输入流状态: {status}")
 
@@ -198,7 +208,9 @@ class AudioCodec:
             logger.error(f"输入回调错误: {e}")
 
     def _process_input_resampling(self, audio_data):
-        """处理输入重采样"""
+        """
+        处理输入重采样.
+        """
         try:
             resampled_data = self.input_resampler.resample_chunk(audio_data, last=False)
             if len(resampled_data) > 0:
@@ -222,7 +234,9 @@ class AudioCodec:
             return None
 
     def _put_audio_data_safe(self, queue, audio_data):
-        """安全地将音频数据放入队列"""
+        """
+        安全地将音频数据放入队列.
+        """
         try:
             queue.put_nowait(audio_data)
         except asyncio.QueueFull:
@@ -234,7 +248,9 @@ class AudioCodec:
                 queue.put_nowait(audio_data)
 
     def _output_callback(self, outdata: np.ndarray, frames: int, time_info, status):
-        """输出流回调函数"""
+        """
+        输出流回调函数.
+        """
         if status:
             if "underflow" not in str(status).lower():
                 logger.warning(f"输出流状态: {status}")
@@ -264,7 +280,9 @@ class AudioCodec:
             outdata.fill(0)
 
     def _process_output_resampling(self, audio_data):
-        """处理输出重采样"""
+        """
+        处理输出重采样.
+        """
         try:
             resampled_data = self.output_resampler.resample_chunk(
                 audio_data, last=False
@@ -278,15 +296,21 @@ class AudioCodec:
             return None
 
     def _input_finished_callback(self):
-        """输入流结束回调"""
+        """
+        输入流结束回调.
+        """
         logger.info("输入流已结束")
 
     def _output_finished_callback(self):
-        """输出流结束回调"""
+        """
+        输出流结束回调.
+        """
         logger.info("输出流已结束")
 
     async def reinitialize_stream(self, is_input=True):
-        """重新初始化流"""
+        """
+        重新初始化流.
+        """
         if self._is_closing:
             return False if is_input else None
 
@@ -336,23 +360,31 @@ class AudioCodec:
                 raise
 
     async def pause_input(self):
-        """暂停音频输入"""
+        """
+        暂停音频输入.
+        """
         self._is_input_paused = True
         # 暂停输入的同时清空输入缓冲区
         self._clear_queue(self._input_buffer)
         logger.info("音频输入已暂停并清空缓冲区")
 
     async def resume_input(self):
-        """恢复音频输入"""
+        """
+        恢复音频输入.
+        """
         self._is_input_paused = False
         logger.info("音频输入已恢复")
 
     def is_input_paused(self):
-        """检查输入是否已暂停"""
+        """
+        检查输入是否已暂停.
+        """
         return self._is_input_paused
 
     def _clear_queue(self, queue):
-        """清空队列的辅助方法"""
+        """
+        清空队列的辅助方法.
+        """
         while not queue.empty():
             try:
                 queue.get_nowait()
@@ -360,7 +392,9 @@ class AudioCodec:
                 break
 
     async def read_audio(self) -> Optional[bytes]:
-        """读取音频数据并编码"""
+        """
+        读取音频数据并编码.
+        """
         if self.is_input_paused():
             return None
 
@@ -389,7 +423,9 @@ class AudioCodec:
         return None
 
     async def play_audio(self):
-        """播放音频（处理解码队列中的数据）"""
+        """
+        播放音频（处理解码队列中的数据）
+        """
         try:
             if self.audio_decode_queue.empty():
                 return
@@ -428,11 +464,15 @@ class AudioCodec:
             logger.error(f"播放音频时发生未预期错误: {e}")
 
     async def write_audio(self, opus_data: bytes):
-        """将Opus数据写入播放队列"""
+        """
+        将Opus数据写入播放队列.
+        """
         self._put_audio_data_safe(self.audio_decode_queue, opus_data)
 
     async def wait_for_audio_complete(self, timeout=5.0):
-        """等待音频播放完成"""
+        """
+        等待音频播放完成.
+        """
         start = time.time()
         while not self.audio_decode_queue.empty() and time.time() - start < timeout:
             await asyncio.sleep(0.1)
@@ -442,7 +482,9 @@ class AudioCodec:
             logger.warning(f"音频播放超时，剩余队列: {remaining} 帧")
 
     async def clear_audio_queue(self):
-        """清空音频队列"""
+        """
+        清空音频队列.
+        """
         cleared_count = 0
 
         # 清空所有队列
@@ -485,7 +527,9 @@ class AudioCodec:
             logger.info(f"清空音频队列，丢弃 {cleared_count} 帧音频数据")
 
     async def start_streams(self):
-        """启动音频流"""
+        """
+        启动音频流.
+        """
         try:
             if self.input_stream and not self.input_stream.active:
                 try:
@@ -506,7 +550,9 @@ class AudioCodec:
             logger.error(f"启动音频流失败: {e}")
 
     async def stop_streams(self):
-        """停止音频流"""
+        """
+        停止音频流.
+        """
         try:
             if self.input_stream and self.input_stream.active:
                 self.input_stream.stop()
@@ -520,7 +566,9 @@ class AudioCodec:
             logger.warning(f"停止输出流失败: {e}")
 
     async def _cleanup_resampler(self, resampler, name):
-        """清理重采样器的辅助方法"""
+        """
+        清理重采样器的辅助方法.
+        """
         if resampler:
             try:
                 # 让重采样器处理完剩余数据
@@ -531,7 +579,9 @@ class AudioCodec:
                 logger.warning(f"清理{name}重采样器失败: {e}")
 
     async def close(self):
-        """关闭音频编解码器"""
+        """
+        关闭音频编解码器.
+        """
         if self._is_closing:
             return
 
@@ -580,7 +630,9 @@ class AudioCodec:
             logger.error(f"关闭音频编解码器过程中发生错误: {e}")
 
     def __del__(self):
-        """析构函数"""
+        """
+        析构函数.
+        """
         if not self._is_closing:
             # 在析构函数中不能使用asyncio.create_task，改为记录警告
             logger.warning("AudioCodec对象被销毁但未正确关闭，请确保调用close()方法")

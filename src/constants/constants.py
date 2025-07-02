@@ -6,7 +6,9 @@ config = ConfigManager.get_instance()
 
 
 class ListeningMode:
-    """监听模式."""
+    """
+    监听模式.
+    """
 
     REALTIME = "realtime"
     AUTO_STOP = "auto_stop"
@@ -14,7 +16,9 @@ class ListeningMode:
 
 
 class AbortReason:
-    """中止原因."""
+    """
+    中止原因.
+    """
 
     NONE = "none"
     WAKE_WORD_DETECTED = "wake_word_detected"
@@ -22,7 +26,9 @@ class AbortReason:
 
 
 class DeviceState:
-    """设备状态."""
+    """
+    设备状态.
+    """
 
     IDLE = "idle"
     CONNECTING = "connecting"
@@ -31,7 +37,9 @@ class DeviceState:
 
 
 class EventType:
-    """事件类型."""
+    """
+    事件类型.
+    """
 
     SCHEDULE_EVENT = "schedule_event"
     AUDIO_INPUT_READY_EVENT = "audio_input_ready_event"
@@ -51,7 +59,7 @@ def is_official_server(ws_addr: str) -> bool:
 
 
 def get_frame_duration() -> int:
-    """获取设备的帧长度
+    """获取设备的帧长度.
 
     返回:
         int: 帧长度(毫秒)
@@ -80,7 +88,9 @@ def get_frame_duration() -> int:
 
 
 class AudioConfig:
-    """音频配置类."""
+    """
+    音频配置类.
+    """
 
     # 固定配置
     INPUT_SAMPLE_RATE = 16000  # 输入采样率16kHz
