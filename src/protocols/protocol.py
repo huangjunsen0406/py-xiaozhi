@@ -15,6 +15,9 @@ class Protocol:
         self._on_audio_channel_opened = None
         self._on_audio_channel_closed = None
         self._on_network_error = None
+        # 新增连接状态变化回调
+        self._on_connection_state_changed = None
+        self._on_reconnecting = None
 
     def on_incoming_json(self, callback):
         """
@@ -46,11 +49,53 @@ class Protocol:
         """
         self._on_network_error = callback
 
+    def on_connection_state_changed(self, callback):
+        """
+        设置连接状态变化回调函数.
+        
+        Args:
+            callback: 回调函数，接收参数 (connected: bool, reason: str)
+        """
+        self._on_connection_state_changed = callback
+
+    def on_reconnecting(self, callback):
+        """
+        设置重连尝试回调函数.
+        
+        Args:
+            callback: 回调函数，接收参数 (attempt: int, max_attempts: int)
+        """
+        self._on_reconnecting = callback
+
     async def send_text(self, message):
         """
         发送文本消息的抽象方法，需要在子类中实现.
         """
         raise NotImplementedError("send_text方法必须由子类实现")
+
+    async def send_audio(self, data: bytes):
+        """
+        发送音频数据的抽象方法，需要在子类中实现.
+        """
+        raise NotImplementedError("send_audio方法必须由子类实现")
+
+    def is_audio_channel_opened(self) -> bool:
+        """
+        检查音频通道是否打开的抽象方法，需要在子类中实现.
+        """
+        raise NotImplementedError("is_audio_channel_opened方法必须由子类实现")
+
+    async def open_audio_channel(self) -> bool:
+        """
+        打开音频通道的抽象方法，需要在子类中实现.
+        """
+        raise NotImplementedError("open_audio_channel方法必须由子类实现")
+
+    async def close_audio_channel(self):
+        """
+        关闭音频通道的抽象方法，需要在子类中实现.
+        """
+        raise NotImplementedError("close_audio_channel方法必须由子类实现")
 
     async def send_abort_speaking(self, reason):
         """
