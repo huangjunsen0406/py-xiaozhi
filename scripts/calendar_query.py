@@ -9,12 +9,12 @@ import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from src.mcp.tools.calendar import get_calendar_manager
-from src.utils.logging_config import get_logger
-
-# 添加项目根目录到Python路径
+# 添加项目根目录到Python路径 - 必须在导入src模块之前
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
+
+from src.mcp.tools.calendar import get_calendar_manager  # noqa: E402
+from src.utils.logging_config import get_logger  # noqa: E402
 
 logger = get_logger(__name__)
 

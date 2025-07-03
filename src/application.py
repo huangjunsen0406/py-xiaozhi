@@ -394,6 +394,9 @@ class Application:
         # 启动日程提醒服务
         await self._start_calendar_reminder_service()
 
+        # 启动倒计时器服务
+        await self._start_timer_service()
+
         logger.info("应用程序组件初始化完成")
 
     async def _initialize_audio(self):
@@ -1266,3 +1269,19 @@ class Application:
 
         except Exception as e:
             logger.error(f"启动日程提醒服务失败: {e}", exc_info=True)
+
+    async def _start_timer_service(self):
+        """
+        启动倒计时器服务.
+        """
+        try:
+            logger.info("启动倒计时器服务")
+            from src.mcp.tools.timer.timer_service import get_timer_service
+
+            # 获取倒计时器服务实例（通过单例模式）
+            get_timer_service()
+
+            logger.info("倒计时器服务已启动并注册到资源管理器")
+
+        except Exception as e:
+            logger.error(f"启动倒计时器服务失败: {e}", exc_info=True)
