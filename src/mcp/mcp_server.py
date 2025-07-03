@@ -272,6 +272,12 @@ class McpServer:
         timer_manager = get_timer_manager()
         timer_manager.init_tools(self.add_tool, PropertyList, Property, PropertyType)
 
+        # 添加音乐播放器工具
+        from src.mcp.tools.music import get_music_tools_manager
+
+        music_manager = get_music_tools_manager()
+        music_manager.init_tools(self.add_tool, PropertyList, Property, PropertyType)
+
         # 恢复原有工具
         self.tools.extend(original_tools)
 

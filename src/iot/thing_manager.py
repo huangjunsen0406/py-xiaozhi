@@ -22,20 +22,21 @@ class ThingManager:
         self.last_states = {}  # 添加状态缓存字典，存储上一次的状态
 
     async def initialize_iot_devices(self, config):
-        """
-        初始化物联网设备.
+        """初始化物联网设备.
+
+        注意：倒计时器功能已迁移到MCP工具中，提供更好的AI集成和状态反馈。
         """
         # from src.iot.things.CameraVL.Camera import Camera
-        # from src.iot.things.countdown_timer import CountdownTimer
+        # from src.iot.things.countdown_timer import CountdownTimer  # 已迁移到MCP
         from src.iot.things.lamp import Lamp
-        from src.iot.things.music_player import MusicPlayer
+        # from src.iot.things.music_player import MusicPlayer
 
         # from src.iot.things.speaker import Speaker
         # 添加设备
-        # self.add_thing(CountdownTimer())
+        # self.add_thing(CountdownTimer())  # 已迁移到MCP工具
         self.add_thing(Lamp())
         # self.add_thing(Speaker())
-        self.add_thing(MusicPlayer())
+        # self.add_thing(MusicPlayer())
         # self.add_thing(Camera())
 
     def add_thing(self, thing: Thing) -> None:

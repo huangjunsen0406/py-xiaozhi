@@ -13,8 +13,8 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from src.mcp.tools.calendar import get_calendar_manager  # noqa: E402
-from src.utils.logging_config import get_logger  # noqa: E402
+from src.mcp.tools.calendar import get_calendar_manager
+from src.utils.logging_config import get_logger
 
 logger = get_logger(__name__)
 

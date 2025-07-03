@@ -370,6 +370,9 @@ class Application:
         # 设置显示类型（必须在设备状态设置之前）
         self._set_display_type(mode)
 
+        # 初始化MCP服务器
+        self._initialize_mcp_server()
+
         # 设置设备状态
         await self._set_device_state(DeviceState.IDLE)
 
@@ -381,9 +384,6 @@ class Application:
 
         # 设置协议
         self._set_protocol_type(protocol)
-
-        # 初始化MCP服务器
-        self._initialize_mcp_server()
 
         # 初始化唤醒词检测
         await self._initialize_wake_word_detector()
