@@ -1,4 +1,5 @@
 import asyncio
+import gc
 import time
 from collections import deque
 from typing import Optional
@@ -44,7 +45,6 @@ class AudioCodec:
 
         # 状态管理
         self._is_closing = False
-        self._is_input_paused = False
 
         # SoundDevice流对象
         self.input_stream = None
@@ -53,9 +53,6 @@ class AudioCodec:
         # 音频缓冲区
         self._input_buffer = asyncio.Queue(maxsize=300)
         self._output_buffer = asyncio.Queue(maxsize=200)
-
-        # 专门为唤醒词检测器提供的缓冲区（不受暂停影响）
-        self._wake_word_buffer = asyncio.Queue(maxsize=100)
 
     async def initialize(self):
         """
@@ -198,11 +195,7 @@ class AudioCodec:
                     return
 
             # 使用统一的队列操作方法
-            self._put_audio_data_safe(self._wake_word_buffer, audio_data)
-
-            # 只有在未暂停时才填充正常的输入缓冲区
-            if not self._is_input_paused:
-                self._put_audio_data_safe(self._input_buffer, audio_data)
+            self._put_audio_data_safe(self._input_buffer, audio_data)
 
         except Exception as e:
             logger.error(f"输入回调错误: {e}")
@@ -359,45 +352,35 @@ class AudioCodec:
             else:
                 raise
 
-    async def pause_input(self):
-        """
-        暂停音频输入.
-        """
-        self._is_input_paused = True
-        # 暂停输入的同时清空输入缓冲区
-        self._clear_queue(self._input_buffer)
-        logger.info("音频输入已暂停并清空缓冲区")
+    async def get_raw_audio_for_detection(self) -> Optional[bytes]:
+        """为唤醒词检测获取原始音频数据.
 
-    async def resume_input(self):
+        返回PCM格式的音频数据，如果没有数据则返回None.
         """
-        恢复音频输入.
-        """
-        self._is_input_paused = False
-        logger.info("音频输入已恢复")
+        try:
+            if self._input_buffer.empty():
+                return None
 
-    def is_input_paused(self):
-        """
-        检查输入是否已暂停.
-        """
-        return self._is_input_paused
+            audio_data = self._input_buffer.get_nowait()
 
-    def _clear_queue(self, queue):
-        """
-        清空队列的辅助方法.
-        """
-        while not queue.empty():
-            try:
-                queue.get_nowait()
-            except asyncio.QueueEmpty:
-                break
+            # 转换为bytes格式
+            if hasattr(audio_data, "tobytes"):
+                return audio_data.tobytes()
+            elif hasattr(audio_data, "astype"):
+                return audio_data.astype("int16").tobytes()
+            else:
+                return audio_data
+
+        except asyncio.QueueEmpty:
+            return None
+        except Exception as e:
+            logger.error(f"获取原始音频数据失败: {e}")
+            return None
 
     async def read_audio(self) -> Optional[bytes]:
         """
         读取音频数据并编码.
         """
-        if self.is_input_paused():
-            return None
-
         try:
             # 直接处理单帧数据，避免浪费
             try:
@@ -492,7 +475,6 @@ class AudioCodec:
             self.audio_decode_queue,
             self._input_buffer,
             self._output_buffer,
-            self._wake_word_buffer,
         ]
 
         for queue in queues_to_clear:
@@ -511,20 +493,13 @@ class AudioCodec:
         # 额外等待一小段时间，确保正在处理的音频数据完成
         await asyncio.sleep(0.01)
 
-        # 再次清空可能新产生的数据
-        extra_cleared = 0
-        for queue in [self._input_buffer, self._wake_word_buffer]:
-            while not queue.empty():
-                try:
-                    queue.get_nowait()
-                    extra_cleared += 1
-                except asyncio.QueueEmpty:
-                    break
-
-        cleared_count += extra_cleared
-
         if cleared_count > 0:
             logger.info(f"清空音频队列，丢弃 {cleared_count} 帧音频数据")
+
+        # 定期执行垃圾回收以释放内存
+        if cleared_count > 100:  # 清理了大量数据时
+            gc.collect()
+            logger.debug("执行垃圾回收以释放内存")
 
     async def start_streams(self):
         """
@@ -624,6 +599,8 @@ class AudioCodec:
             # 清理编解码器
             self.opus_encoder = None
             self.opus_decoder = None
+
+            gc.collect()  # 强制释放 nanobind 的 C++ 对象
 
             logger.info("音频资源已完全释放")
         except Exception as e:

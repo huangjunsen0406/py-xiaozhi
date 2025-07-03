@@ -71,24 +71,6 @@ class AsyncShortcutManager:
 
         return self._app_instance
 
-    async def _safe_call_async(self, coro):
-        """
-        安全地调用异步方法.
-        """
-        try:
-            await coro
-        except Exception as e:
-            self.logger.error(f"执行异步快捷键操作失败: {e}", exc_info=True)
-
-    def _safe_call_sync(self, func):
-        """
-        安全地调用同步方法.
-        """
-        try:
-            func()
-        except Exception as e:
-            self.logger.error(f"执行同步快捷键操作失败: {e}", exc_info=True)
-
     def is_combo(self, *keys) -> bool:
         """
         判断是否同时按下了一组按键.
@@ -123,15 +105,22 @@ class AsyncShortcutManager:
             # 检查所有配置的快捷键
             for key_combo, action in self.shortcuts.items():
                 if self.is_combo(*key_combo):
-                    # 异步处理快捷键动作
-                    asyncio.create_task(self._handle_shortcut_action(action))
+                    # 创建异步任务处理快捷键动作
+                    task = asyncio.create_task(self._handle_shortcut_action(action))
+
+                    # 添加错误处理回调
+                    def task_done_callback(t):
+                        if t.exception():
+                            self.logger.error(f"快捷键任务执行异常: {t.exception()}")
+
+                    task.add_done_callback(task_done_callback)
 
                     # 特殊处理：记录Alt+Shift+V按下状态
                     if action == "manual_press":
                         self.manual_v_pressed = True
 
         except Exception as e:
-            self.logger.error(f"键盘事件处理错误: {e}")
+            self.logger.error(f"键盘按下事件处理错误: {e}")
 
     def _on_release(self, key):
         """
@@ -146,10 +135,21 @@ class AsyncShortcutManager:
             # 特殊处理：长按说话的释放事件
             if self.manual_v_pressed and not self.is_combo("alt", "shift", "v"):
                 self.manual_v_pressed = False
-                asyncio.create_task(self._handle_shortcut_action("manual_release"))
+
+                # 创建异步任务处理释放动作
+                task = asyncio.create_task(
+                    self._handle_shortcut_action("manual_release")
+                )
+
+                # 添加错误处理回调
+                def task_done_callback(t):
+                    if t.exception():
+                        self.logger.error(f"快捷键释放任务执行异常: {t.exception()}")
+
+                task.add_done_callback(task_done_callback)
 
         except Exception as e:
-            self.logger.error(f"键盘事件处理错误: {e}")
+            self.logger.error(f"键盘释放事件处理错误: {e}")
 
     async def _handle_shortcut_action(self, action: str):
         """
@@ -164,27 +164,34 @@ class AsyncShortcutManager:
             self.logger.info("CLI模式下跳过窗口切换快捷键")
             return
 
-        # 执行对应的操作
-        if action == "manual_press":
-            await self._safe_call_async(app.start_listening())
-        elif action == "manual_release":
-            await self._safe_call_async(app.stop_listening())
-        elif action == "auto_toggle":
-            await self._safe_call_async(app.toggle_chat_state())
-        elif action == "abort":
-            from src.constants.constants import AbortReason
+        # 执行对应的操作 - 直接调用Application方法
+        try:
+            if action == "manual_press":
+                # 开始监听 - 通过命令队列确保顺序执行
+                await app.start_listening()
+            elif action == "manual_release":
+                # 停止监听 - 通过命令队列确保顺序执行
+                await app.stop_listening()
+            elif action == "auto_toggle":
+                # 切换聊天状态 - 通过命令队列确保顺序执行
+                await app.toggle_chat_state()
+            elif action == "abort":
+                # 中止语音 - 通过命令队列确保顺序执行
+                from src.constants.constants import AbortReason
 
-            await self._safe_call_async(
-                app.abort_speaking(AbortReason.WAKE_WORD_DETECTED)
-            )
-        elif action == "mode_toggle":
-            self._safe_call_sync(lambda: app._on_mode_changed())
-        elif action == "window_toggle" and self._mode == "gui":
-            self._safe_call_sync(lambda: self._toggle_window_visibility(app))
+                await app.abort_speaking(AbortReason.WAKE_WORD_DETECTED)
+            elif action == "mode_toggle":
+                # 模式切换 - 通过命令队列确保顺序执行
+                await app.schedule_command(app._on_mode_changed)
+            elif action == "window_toggle" and self._mode == "gui":
+                # 窗口切换 - 直接操作GUI，不需要通过命令队列
+                await self._toggle_window_visibility(app)
+        except Exception as e:
+            self.logger.error(f"执行快捷键动作 {action} 失败: {e}", exc_info=True)
 
-    def _toggle_window_visibility(self, app):
+    async def _toggle_window_visibility(self, app):
         """
-        切换窗口显示状态.
+        切换窗口显示状态 - 直接操作GUI组件.
         """
         try:
             if not app.display or not hasattr(app.display, "root"):
@@ -289,6 +296,12 @@ class AsyncShortcutManager:
         检查快捷键功能是否可用.
         """
         return pynput_keyboard is not None
+
+    def is_running(self) -> bool:
+        """
+        检查快捷键监听是否正在运行.
+        """
+        return self._running and self.keyboard_listener is not None
 
 
 # 全局快捷键实例

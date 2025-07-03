@@ -4,7 +4,6 @@ import sys
 
 from src.application import Application
 from src.utils.logging_config import get_logger, setup_logging
-from src.views.components.shortcut_manager import start_global_shortcuts_async
 
 logger = get_logger(__name__)
 
@@ -43,9 +42,6 @@ async def main():
 
     logger.info("启动应用程序")
     app = Application.get_instance()
-
-    # 启动全局快捷键服务
-    await start_global_shortcuts_async(logger)
 
     return await app.run(
         mode=args.mode, protocol=args.protocol, skip_activation=args.skip_activation

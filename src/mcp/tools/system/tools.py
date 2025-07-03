@@ -120,11 +120,8 @@ def _get_application_status() -> Dict[str, Any]:
         app = Application.get_instance()
         thing_manager = ThingManager.get_instance()
 
-        device_state = (
-            app.device_state.name
-            if hasattr(app.device_state, "name")
-            else str(app.device_state)
-        )
+        # DeviceState的值直接是字符串，不需要访问.name属性
+        device_state = str(app.device_state)
         iot_count = len(thing_manager.things) if thing_manager else 0
 
         return {
