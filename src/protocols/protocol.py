@@ -50,18 +50,16 @@ class Protocol:
         self._on_network_error = callback
 
     def on_connection_state_changed(self, callback):
-        """
-        设置连接状态变化回调函数.
-        
+        """设置连接状态变化回调函数.
+
         Args:
             callback: 回调函数，接收参数 (connected: bool, reason: str)
         """
         self._on_connection_state_changed = callback
 
     def on_reconnecting(self, callback):
-        """
-        设置重连尝试回调函数.
-        
+        """设置重连尝试回调函数.
+
         Args:
             callback: 回调函数，接收参数 (attempt: int, max_attempts: int)
         """

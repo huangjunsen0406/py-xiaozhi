@@ -8,7 +8,7 @@ import shutil
 import tempfile
 import time
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import List, Optional, Tuple
 
 import pygame
 import requests
@@ -21,6 +21,7 @@ from src.utils.resource_finder import get_project_root
 try:
     from mutagen import File as MutagenFile
     from mutagen.id3 import ID3NoHeaderError
+
     MUTAGEN_AVAILABLE = True
 except ImportError:
     MUTAGEN_AVAILABLE = False
@@ -29,57 +30,63 @@ logger = get_logger(__name__)
 
 
 class MusicMetadata:
-    """音乐元数据类"""
-    
+    """
+    音乐元数据类.
+    """
+
     def __init__(self, file_path: Path):
         self.file_path = file_path
         self.filename = file_path.name
         self.file_id = file_path.stem  # 文件名去掉扩展名，即歌曲ID
         self.file_size = file_path.stat().st_size
-        
+
         # 从文件提取的元数据
         self.title = None
         self.artist = None
         self.album = None
         self.duration = None  # 秒数
-        
+
     def extract_metadata(self) -> bool:
-        """提取音乐文件元数据"""
+        """
+        提取音乐文件元数据.
+        """
         if not MUTAGEN_AVAILABLE:
             return False
-            
+
         try:
             audio_file = MutagenFile(self.file_path)
             if audio_file is None:
                 return False
-            
+
             # 基本信息
-            if hasattr(audio_file, 'info'):
-                self.duration = getattr(audio_file.info, 'length', None)
-            
+            if hasattr(audio_file, "info"):
+                self.duration = getattr(audio_file.info, "length", None)
+
             # ID3标签信息
             tags = audio_file.tags if audio_file.tags else {}
-            
+
             # 标题
-            self.title = self._get_tag_value(tags, ['TIT2', 'TITLE', '\xa9nam'])
-            
+            self.title = self._get_tag_value(tags, ["TIT2", "TITLE", "\xa9nam"])
+
             # 艺术家
-            self.artist = self._get_tag_value(tags, ['TPE1', 'ARTIST', '\xa9ART'])
-            
+            self.artist = self._get_tag_value(tags, ["TPE1", "ARTIST", "\xa9ART"])
+
             # 专辑
-            self.album = self._get_tag_value(tags, ['TALB', 'ALBUM', '\xa9alb'])
-            
+            self.album = self._get_tag_value(tags, ["TALB", "ALBUM", "\xa9alb"])
+
             return True
-            
+
         except ID3NoHeaderError:
             # 没有ID3标签，不是错误
             return True
         except Exception as e:
             logger.debug(f"提取元数据失败 {self.filename}: {e}")
             return False
-    
+
     def _get_tag_value(self, tags: dict, tag_names: List[str]) -> Optional[str]:
-        """从多个可能的标签名中获取值"""
+        """
+        从多个可能的标签名中获取值.
+        """
         for tag_name in tag_names:
             if tag_name in tags:
                 value = tags[tag_name]
@@ -88,12 +95,14 @@ class MusicMetadata:
                 elif value:
                     return str(value)
         return None
-    
+
     def format_duration(self) -> str:
-        """格式化播放时长"""
+        """
+        格式化播放时长.
+        """
         if self.duration is None:
             return "未知"
-        
+
         minutes = int(self.duration) // 60
         seconds = int(self.duration) % 60
         return f"{minutes:02d}:{seconds:02d}"
@@ -207,66 +216,70 @@ class MusicPlayer:
 
     def _scan_local_music(self, force_refresh: bool = False) -> List[MusicMetadata]:
         """
-        扫描本地音乐缓存，返回歌单
+        扫描本地音乐缓存，返回歌单.
         """
         current_time = time.time()
-        
+
         # 如果不强制刷新且缓存未过期（5分钟），直接返回缓存
-        if not force_refresh and self._local_playlist is not None and (current_time - self._last_scan_time) < 300:
+        if (
+            not force_refresh
+            and self._local_playlist is not None
+            and (current_time - self._last_scan_time) < 300
+        ):
             return self._local_playlist
-        
+
         playlist = []
-        
+
         if not self.cache_dir.exists():
             logger.warning(f"缓存目录不存在: {self.cache_dir}")
             return playlist
-        
+
         # 查找所有音乐文件
         music_files = []
         for pattern in ["*.mp3", "*.m4a", "*.flac", "*.wav", "*.ogg"]:
             music_files.extend(self.cache_dir.glob(pattern))
-        
+
         logger.debug(f"找到 {len(music_files)} 个音乐文件")
-        
+
         # 扫描每个文件
         for file_path in music_files:
             try:
                 metadata = MusicMetadata(file_path)
-                
+
                 # 尝试提取元数据
                 if MUTAGEN_AVAILABLE:
                     metadata.extract_metadata()
-                
+
                 playlist.append(metadata)
-                
+
             except Exception as e:
                 logger.debug(f"处理音乐文件失败 {file_path.name}: {e}")
-        
+
         # 按艺术家和标题排序
         playlist.sort(key=lambda x: (x.artist or "Unknown", x.title or x.filename))
-        
+
         # 更新缓存
         self._local_playlist = playlist
         self._last_scan_time = current_time
-        
+
         logger.info(f"扫描完成，找到 {len(playlist)} 首本地音乐")
         return playlist
 
     async def get_local_playlist(self, force_refresh: bool = False) -> dict:
         """
-        获取本地音乐歌单
+        获取本地音乐歌单.
         """
         try:
             playlist = self._scan_local_music(force_refresh)
-            
+
             if not playlist:
                 return {
                     "status": "info",
                     "message": "本地缓存中没有音乐文件",
                     "playlist": [],
-                    "total_count": 0
+                    "total_count": 0,
                 }
-            
+
             # 格式化歌单，简洁格式方便 AI 读取
             formatted_playlist = []
             for metadata in playlist:
@@ -274,84 +287,91 @@ class MusicPlayer:
                 artist = metadata.artist or "未知艺术家"
                 song_info = f"{title} - {artist}"
                 formatted_playlist.append(song_info)
-            
+
             return {
                 "status": "success",
                 "message": f"找到 {len(playlist)} 首本地音乐",
                 "playlist": formatted_playlist,
-                "total_count": len(playlist)
+                "total_count": len(playlist),
             }
-            
+
         except Exception as e:
             logger.error(f"获取本地歌单失败: {e}")
             return {
                 "status": "error",
                 "message": f"获取本地歌单失败: {str(e)}",
                 "playlist": [],
-                "total_count": 0
+                "total_count": 0,
             }
 
     async def search_local_music(self, query: str) -> dict:
         """
-        搜索本地音乐
+        搜索本地音乐.
         """
         try:
             playlist = self._scan_local_music()
-            
+
             if not playlist:
                 return {
                     "status": "info",
                     "message": "本地缓存中没有音乐文件",
                     "results": [],
-                    "found_count": 0
+                    "found_count": 0,
                 }
-            
+
             query = query.lower()
             results = []
-            
+
             for metadata in playlist:
                 # 在标题、艺术家、文件名中搜索
-                searchable_text = " ".join(filter(None, [
-                    metadata.title,
-                    metadata.artist,
-                    metadata.album,
-                    metadata.filename
-                ])).lower()
-                
+                searchable_text = " ".join(
+                    filter(
+                        None,
+                        [
+                            metadata.title,
+                            metadata.artist,
+                            metadata.album,
+                            metadata.filename,
+                        ],
+                    )
+                ).lower()
+
                 if query in searchable_text:
                     title = metadata.title or "未知标题"
                     artist = metadata.artist or "未知艺术家"
                     song_info = f"{title} - {artist}"
-                    results.append({
-                        "song_info": song_info,
-                        "file_id": metadata.file_id,
-                        "duration": metadata.format_duration()
-                    })
-            
+                    results.append(
+                        {
+                            "song_info": song_info,
+                            "file_id": metadata.file_id,
+                            "duration": metadata.format_duration(),
+                        }
+                    )
+
             return {
                 "status": "success",
                 "message": f"在本地音乐中找到 {len(results)} 首匹配的歌曲",
                 "results": results,
-                "found_count": len(results)
+                "found_count": len(results),
             }
-            
+
         except Exception as e:
             logger.error(f"搜索本地音乐失败: {e}")
             return {
                 "status": "error",
                 "message": f"搜索失败: {str(e)}",
                 "results": [],
-                "found_count": 0
+                "found_count": 0,
             }
 
     async def play_local_song_by_id(self, file_id: str) -> dict:
         """
-        根据文件ID播放本地歌曲
+        根据文件ID播放本地歌曲.
         """
         try:
             # 构建文件路径
             file_path = self.cache_dir / f"{file_id}.mp3"
-            
+
             if not file_path.exists():
                 # 尝试其他格式
                 for ext in [".m4a", ".flac", ".wav", ".ogg"]:
@@ -361,20 +381,20 @@ class MusicPlayer:
                         break
                 else:
                     return {"status": "error", "message": f"本地文件不存在: {file_id}"}
-            
+
             # 获取歌曲信息
             metadata = MusicMetadata(file_path)
             if MUTAGEN_AVAILABLE:
                 metadata.extract_metadata()
-            
+
             # 停止当前播放
             if self.is_playing:
                 pygame.mixer.music.stop()
-            
+
             # 加载并播放
             pygame.mixer.music.load(str(file_path))
             pygame.mixer.music.play()
-            
+
             # 更新播放状态
             title = metadata.title or "未知标题"
             artist = metadata.artist or "未知艺术家"
@@ -388,18 +408,18 @@ class MusicPlayer:
             self.start_play_time = time.time()
             self.current_lyric_index = -1
             self.lyrics = []  # 本地文件暂不支持歌词
-            
+
             logger.info(f"开始播放本地音乐: {self.current_song}")
-            
+
             # 更新UI
             if self.app and hasattr(self.app, "set_chat_message"):
                 await self._safe_update_ui(f"正在播放本地音乐: {self.current_song}")
-            
+
             return {
                 "status": "success",
                 "message": f"正在播放本地音乐: {self.current_song}",
             }
-            
+
         except Exception as e:
             logger.error(f"播放本地音乐失败: {e}")
             return {"status": "error", "message": f"播放失败: {str(e)}"}
@@ -611,7 +631,7 @@ class MusicPlayer:
         """
         position = await self.get_position()
         progress = await self.get_progress()
-        
+
         return {
             "status": "success",
             "current_song": self.current_song,
@@ -620,7 +640,7 @@ class MusicPlayer:
             "duration": self.total_duration,
             "position": position,
             "progress": progress,
-            "has_lyrics": len(self.lyrics) > 0
+            "has_lyrics": len(self.lyrics) > 0,
         }
 
     # 内部方法
@@ -997,4 +1017,4 @@ def get_music_player_instance() -> MusicPlayer:
     if _music_player_instance is None:
         _music_player_instance = MusicPlayer()
         logger.info("[MusicPlayer] 创建音乐播放器单例实例")
-    return _music_player_instance 
+    return _music_player_instance

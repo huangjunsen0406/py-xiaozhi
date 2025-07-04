@@ -56,7 +56,9 @@ class MusicToolsManager:
             self._register_get_status_tool(add_tool, PropertyList)
 
             # 注册获取本地歌单工具
-            self._register_get_local_playlist_tool(add_tool, PropertyList, Property, PropertyType)
+            self._register_get_local_playlist_tool(
+                add_tool, PropertyList, Property, PropertyType
+            )
 
             self._initialized = True
             logger.info("[MusicManager] 音乐工具注册完成")
@@ -77,10 +79,8 @@ class MusicToolsManager:
             result = await self._music_player.search_and_play(song_name)
             return result.get("message", "搜索播放完成")
 
-        search_props = PropertyList(
-            [Property("song_name", PropertyType.STRING)]
-        )
-        
+        search_props = PropertyList([Property("song_name", PropertyType.STRING)])
+
         add_tool(
             (
                 "music_player.search_and_play",
@@ -148,7 +148,7 @@ class MusicToolsManager:
         seek_props = PropertyList(
             [Property("position", PropertyType.INTEGER, min_value=0)]
         )
-        
+
         add_tool(
             (
                 "music_player.seek",
@@ -196,23 +196,25 @@ class MusicToolsManager:
             if result.get("status") == "success":
                 status_info = []
                 status_info.append(f"当前歌曲: {result.get('current_song', '无')}")
-                status_info.append(f"播放状态: {'播放中' if result.get('is_playing') else '已停止'}")
-                if result.get('is_playing'):
-                    if result.get('paused'):
+                status_info.append(
+                    f"播放状态: {'播放中' if result.get('is_playing') else '已停止'}"
+                )
+                if result.get("is_playing"):
+                    if result.get("paused"):
                         status_info.append("状态: 已暂停")
                     else:
                         status_info.append("状态: 正在播放")
-                    
-                    duration = result.get('duration', 0)
-                    position = result.get('position', 0)
-                    progress = result.get('progress', 0)
-                    
+
+                    duration = result.get("duration", 0)
+                    position = result.get("position", 0)
+                    progress = result.get("progress", 0)
+
                     status_info.append(f"播放时长: {self._format_time(duration)}")
                     status_info.append(f"当前位置: {self._format_time(position)}")
                     status_info.append(f"播放进度: {progress}%")
-                    has_lyrics = "是" if result.get('has_lyrics') else "否"
+                    has_lyrics = "是" if result.get("has_lyrics") else "否"
                     status_info.append(f"歌词可用: {has_lyrics}")
-                
+
                 return "\n".join(status_info)
             else:
                 return "获取播放器状态失败"
@@ -229,7 +231,9 @@ class MusicToolsManager:
         )
         logger.debug("[MusicManager] 注册获取状态工具成功")
 
-    def _register_get_local_playlist_tool(self, add_tool, PropertyList, Property, PropertyType):
+    def _register_get_local_playlist_tool(
+        self, add_tool, PropertyList, Property, PropertyType
+    ):
         """
         注册获取本地歌单工具.
         """
@@ -237,11 +241,11 @@ class MusicToolsManager:
         async def get_local_playlist_wrapper(args: Dict[str, Any]) -> str:
             force_refresh = args.get("force_refresh", False)
             result = await self._music_player.get_local_playlist(force_refresh)
-            
+
             if result.get("status") == "success":
                 playlist = result.get("playlist", [])
                 total_count = result.get("total_count", 0)
-                
+
                 if playlist:
                     playlist_text = f"本地音乐歌单 (共{total_count}首):\n"
                     playlist_text += "\n".join(playlist)
@@ -254,7 +258,7 @@ class MusicToolsManager:
         refresh_props = PropertyList(
             [Property("force_refresh", PropertyType.BOOLEAN, default_value=False)]
         )
-        
+
         add_tool(
             (
                 "music_player.get_local_playlist",
@@ -292,12 +296,12 @@ class MusicToolsManager:
             "tools_count": 7,  # 当前注册的工具数量
             "available_tools": [
                 "search_and_play",
-                "play_pause", 
+                "play_pause",
                 "stop",
                 "seek",
                 "get_lyrics",
                 "get_status",
-                "get_local_playlist"
+                "get_local_playlist",
             ],
             "music_player_ready": self._music_player is not None,
         }
@@ -315,4 +319,4 @@ def get_music_tools_manager() -> MusicToolsManager:
     if _music_tools_manager is None:
         _music_tools_manager = MusicToolsManager()
         logger.debug("[MusicManager] 创建音乐工具管理器实例")
-    return _music_tools_manager 
+    return _music_tools_manager

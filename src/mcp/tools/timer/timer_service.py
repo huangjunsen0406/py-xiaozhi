@@ -248,11 +248,11 @@ class TimerTask:
         try:
             # 解析MCP工具调用命令
             command_dict = json.loads(self.command)
-            
+
             # 验证命令格式（MCP工具调用格式）
             if "name" not in command_dict or "arguments" not in command_dict:
                 raise ValueError("MCP命令格式错误，必须包含 'name' 和 'arguments' 字段")
-            
+
             tool_name = command_dict["name"]
             arguments = command_dict["arguments"]
 
@@ -260,7 +260,7 @@ class TimerTask:
             from src.mcp.mcp_server import McpServer
 
             mcp_server = McpServer.get_instance()
-            
+
             # 查找工具
             tool = None
             for t in mcp_server.tools:
@@ -273,13 +273,15 @@ class TimerTask:
 
             # 执行MCP工具
             result = await tool.call(arguments)
-            
+
             # 解析结果
             result_data = json.loads(result)
             is_success = not result_data.get("isError", False)
-            
+
             if is_success:
-                logger.info(f"倒计时 {self.timer_id} 执行MCP工具成功，工具: {tool_name}")
+                logger.info(
+                    f"倒计时 {self.timer_id} 执行MCP工具成功，工具: {tool_name}"
+                )
                 await self._notify_execution_result(True, f"已执行 {tool_name}")
             else:
                 error_text = result_data.get("content", [{}])[0].get("text", "未知错误")
@@ -312,7 +314,7 @@ class TimerTask:
                 if self.description:
                     message = f"{self.description}执行失败"
 
-            print("倒计时：",message)
+            print("倒计时：", message)
             await app._send_text_tts(message)
         except Exception as e:
             logger.warning(f"通知倒计时执行结果失败: {e}")

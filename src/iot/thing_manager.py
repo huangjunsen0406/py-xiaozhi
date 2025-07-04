@@ -29,8 +29,8 @@ class ThingManager:
         # from src.iot.things.CameraVL.Camera import Camera
         # from src.iot.things.countdown_timer import CountdownTimer  # 已迁移到MCP
         from src.iot.things.lamp import Lamp
-        # from src.iot.things.music_player import MusicPlayer
 
+        # from src.iot.things.music_player import MusicPlayer
         # from src.iot.things.speaker import Speaker
         # 添加设备
         # self.add_thing(CountdownTimer())  # 已迁移到MCP工具
