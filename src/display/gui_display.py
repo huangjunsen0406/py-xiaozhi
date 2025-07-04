@@ -30,46 +30,6 @@ from abc import ABCMeta
 from src.display.base_display import BaseDisplay
 from src.utils.resource_finder import find_assets_dir
 
-# def restart_program():
-#     """重启当前 Python 程序，支持打包环境。"""
-#     try:
-#         python = sys.executable
-#         print(f"尝试使用以下命令重启: {python} {sys.argv}")
-
-#         # 尝试关闭 Qt 应用，虽然 execv 会接管，但这样做更规范
-#         app = QApplication.instance()
-#         if app:
-#             app.quit()
-
-#         # 在打包环境中使用不同的重启方法
-#         if getattr(sys, "frozen", False):
-#             # 打包环境下，使用subprocess启动新进程
-#             import subprocess
-
-#             # 构建完整的命令行
-#             if sys.platform.startswith("win"):
-#                 # Windows下使用detached创建独立进程
-#                 executable = os.path.abspath(sys.executable)
-#                 subprocess.Popen(
-#                     [executable] + sys.argv[1:],
-#                     creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
-#                 )
-#             else:
-#                 # Linux/Mac下
-#                 executable = os.path.abspath(sys.executable)
-#                 subprocess.Popen([executable] + sys.argv[1:], start_new_session=True)
-
-#             # 退出当前进程
-#             sys.exit(0)
-#         else:
-#             # 非打包环境，使用os.execv
-#             os.execv(python, [python] + sys.argv)
-#     except Exception as e:
-#         print(f"重启程序失败: {e}")
-#         logging.getLogger("Display").error(f"重启程序失败: {e}", exc_info=True)
-#         # 如果重启失败，可以选择退出或通知用户
-#         sys.exit(1)  # 或者弹出一个错误消息框
-
 
 # 创建兼容的元类
 class CombinedMeta(type(QObject), ABCMeta):
@@ -584,3 +544,26 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         else:
             # 其他状态（如错误状态）设为未连接
             self.is_connected = False
+
+    async def toggle_mode(self):
+        """
+        切换模式
+        """
+        # 调用现有的模式切换功能
+        if hasattr(self, 'mode_callback') and self.mode_callback:
+            self._on_mode_button_click()
+            self.logger.debug("通过快捷键切换了对话模式")
+        
+    async def toggle_window_visibility(self):
+        """
+        切换窗口可见性
+        """
+        if self.root:
+            if self.root.isVisible():
+                self.logger.debug("通过快捷键隐藏窗口")
+                self.root.hide()
+            else:
+                self.logger.debug("通过快捷键显示窗口")
+                self.root.show()
+                self.root.activateWindow()
+                self.root.raise_()

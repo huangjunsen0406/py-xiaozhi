@@ -719,14 +719,12 @@ class Application:
         """
         中止语音输出.
         """
-        async with self._abort_lock:
-            if self.aborted:
-                logger.debug(f"已经中止，忽略重复的中止请求: {reason}")
-                return
+        if self.aborted:
+            logger.debug(f"已经中止，忽略重复的中止请求: {reason}")
+            return
 
-            logger.info(f"中止语音输出，原因: {reason}")
-            self.aborted = True
-
+        logger.info(f"中止语音输出，原因: {reason}")
+        self.aborted = True
         if self.audio_codec:
             await self.audio_codec.clear_audio_queue()
 

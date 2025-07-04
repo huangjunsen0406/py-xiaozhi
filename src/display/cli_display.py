@@ -161,3 +161,17 @@ class CliDisplay(BaseDisplay):
         print("  h     - 显示此帮助信息")
         print("  其他  - 发送文本消息")
         print("============================\n")
+
+    async def toggle_mode(self):
+        """
+        CLI模式下的模式切换（无操作）
+        """
+        self.logger.debug("CLI模式下不支持模式切换")
+        pass
+
+    async def toggle_window_visibility(self):
+        """
+        CLI模式下的窗口切换（无操作）
+        """
+        self.logger.debug("CLI模式下不支持窗口切换")
+        pass

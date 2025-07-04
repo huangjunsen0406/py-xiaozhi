@@ -1,341 +1,227 @@
 import asyncio
-import logging
-import os
-import platform
 
-# 根据不同操作系统处理 pynput 导入
-try:
-    if platform.system() == "Windows":
-        from pynput import keyboard as pynput_keyboard
-    elif os.environ.get("DISPLAY"):
-        from pynput import keyboard as pynput_keyboard
-    else:
-        pynput_keyboard = None
-except ImportError:
-    pynput_keyboard = None
+from src.utils.config_manager import ConfigManager
+from src.utils.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
-class AsyncShortcutManager:
-    """
-    异步全局快捷键管理器.
-    """
-
-    # 默认快捷键配置
-    DEFAULT_SHORTCUTS = {
-        ("alt", "shift", "v"): "manual_press",  # 长按说话
-        ("alt", "shift", "a"): "auto_toggle",  # 自动对话
-        ("alt", "shift", "x"): "abort",  # 打断
-        ("alt", "shift", "m"): "mode_toggle",  # 模式切换
-        ("alt", "shift", "h"): "window_toggle",  # 显示/隐藏窗口
-    }
-
-    def __init__(self, logger: logging.Logger = None):
-        from src.utils.logging_config import get_logger
-
-        self.logger = logger or get_logger(__name__)
-        self.keyboard_listener = None
-        self.pressed_keys = set()  # 按键状态集合
-        self.manual_v_pressed = False  # 记录Alt+Shift+V是否被按下
-        self._running = False
-        self._app_instance = None
-        self._mode = None  # 存储应用运行模式 (gui/cli)
-        self._task = None  # 保存异步任务
-
-        # 快捷键配置
-        self.shortcuts = self.DEFAULT_SHORTCUTS.copy()
-
-    def _get_app_instance(self):
-        """
-        获取Application实例.
-        """
-        if self._app_instance is None:
-            try:
-                # 延迟导入避免循环导入
-                from src.application import Application
-
-                self._app_instance = Application.get_instance()
-
-                # 获取应用模式
-                if (
-                    hasattr(self._app_instance, "display")
-                    and self._app_instance.display
-                ):
-                    if hasattr(self._app_instance.display, "root"):
-                        self._mode = "gui"
-                    else:
-                        self._mode = "cli"
-
-                self.logger.info(f"获取到Application实例，模式: {self._mode}")
-            except Exception as e:
-                self.logger.error(f"获取Application实例失败: {e}")
-
-        return self._app_instance
-
-    def is_combo(self, *keys) -> bool:
-        """
-        判断是否同时按下了一组按键.
-        """
-        return all(k in self.pressed_keys for k in keys)
-
-    def _normalize_key(self, key):
-        """
-        标准化按键名称.
-        """
-        if key == pynput_keyboard.Key.alt_l or key == pynput_keyboard.Key.alt_r:
-            return "alt"
-        elif key == pynput_keyboard.Key.shift_l or key == pynput_keyboard.Key.shift_r:
-            return "shift"
-        elif key == pynput_keyboard.Key.ctrl_l or key == pynput_keyboard.Key.ctrl_r:
-            return "ctrl"
-        elif hasattr(key, "char") and key.char:
-            return key.char.lower()
-        else:
-            return str(key).replace("Key.", "").lower()
-
-    def _on_press(self, key):
-        """
-        按键按下事件处理.
-        """
-        try:
-            # 记录按下的键
-            normalized_key = self._normalize_key(key)
-            if normalized_key:
-                self.pressed_keys.add(normalized_key)
-
-            # 检查所有配置的快捷键
-            for key_combo, action in self.shortcuts.items():
-                if self.is_combo(*key_combo):
-                    # 创建异步任务处理快捷键动作
-                    task = asyncio.create_task(self._handle_shortcut_action(action))
-
-                    # 添加错误处理回调
-                    def task_done_callback(t):
-                        if t.exception():
-                            self.logger.error(f"快捷键任务执行异常: {t.exception()}")
-
-                    task.add_done_callback(task_done_callback)
-
-                    # 特殊处理：记录Alt+Shift+V按下状态
-                    if action == "manual_press":
-                        self.manual_v_pressed = True
-
-        except Exception as e:
-            self.logger.error(f"键盘按下事件处理错误: {e}")
-
-    def _on_release(self, key):
-        """
-        按键释放事件处理.
-        """
-        try:
-            # 清除释放的键
-            normalized_key = self._normalize_key(key)
-            if normalized_key:
-                self.pressed_keys.discard(normalized_key)
-
-            # 特殊处理：长按说话的释放事件
-            if self.manual_v_pressed and not self.is_combo("alt", "shift", "v"):
-                self.manual_v_pressed = False
-
-                # 创建异步任务处理释放动作
-                task = asyncio.create_task(
-                    self._handle_shortcut_action("manual_release")
-                )
-
-                # 添加错误处理回调
-                def task_done_callback(t):
-                    if t.exception():
-                        self.logger.error(f"快捷键释放任务执行异常: {t.exception()}")
-
-                task.add_done_callback(task_done_callback)
-
-        except Exception as e:
-            self.logger.error(f"键盘释放事件处理错误: {e}")
-
-    async def _handle_shortcut_action(self, action: str):
-        """
-        处理快捷键动作.
-        """
-        app = self._get_app_instance()
-        if not app:
-            return
-
-        # 检查CLI模式下是否应该跳过窗口相关操作
-        if self._mode == "cli" and action == "window_toggle":
-            self.logger.info("CLI模式下跳过窗口切换快捷键")
-            return
-
-        # 执行对应的操作 - 直接调用Application方法
-        try:
-            if action == "manual_press":
-                # 开始监听 - 通过命令队列确保顺序执行
-                await app.start_listening()
-            elif action == "manual_release":
-                # 停止监听 - 通过命令队列确保顺序执行
-                await app.stop_listening()
-            elif action == "auto_toggle":
-                # 切换聊天状态 - 通过命令队列确保顺序执行
-                await app.toggle_chat_state()
-            elif action == "abort":
-                # 中止语音 - 通过命令队列确保顺序执行
-                from src.constants.constants import AbortReason
-
-                await app.abort_speaking(AbortReason.WAKE_WORD_DETECTED)
-            elif action == "mode_toggle":
-                # 模式切换 - 通过命令队列确保顺序执行
-                await app.schedule_command(app._on_mode_changed)
-            elif action == "window_toggle" and self._mode == "gui":
-                # 窗口切换 - 直接操作GUI，不需要通过命令队列
-                await self._toggle_window_visibility(app)
-        except Exception as e:
-            self.logger.error(f"执行快捷键动作 {action} 失败: {e}", exc_info=True)
-
-    async def _toggle_window_visibility(self, app):
-        """
-        切换窗口显示状态 - 直接操作GUI组件.
-        """
-        try:
-            if not app.display or not hasattr(app.display, "root"):
-                self.logger.warning("GUI窗口不可用")
-                return
-
-            if app.display.root:
-                if app.display.root.isVisible():
-                    app.display.root.hide()
-                    self.logger.info("主窗口已隐藏")
-                else:
-                    app.display.root.show()
-                    app.display.root.activateWindow()
-                    app.display.root.raise_()
-                    self.logger.info("主窗口已显示")
-            else:
-                self.logger.warning("GUI窗口不可用")
-
-        except Exception as e:
-            self.logger.error(f"切换窗口显示状态失败: {e}", exc_info=True)
-
-    async def start_async(self):
-        """
-        异步启动键盘监听.
-        """
-        if pynput_keyboard is None:
-            self.logger.warning(
-                "键盘监听不可用：pynput 库未能正确加载。快捷键功能将不可用。"
-            )
+class ShortcutManager:
+    """全局快捷键管理器"""
+    
+    def __init__(self):
+        """初始化快捷键管理器"""
+        self.config = ConfigManager.get_instance()
+        self.shortcuts_config = self.config.get_config("SHORTCUTS", {})
+        self.enabled = self.shortcuts_config.get("ENABLED", True)
+        self.pressed_keys = set()
+        self.application = None
+        self.display = None
+        self.running = False
+        self._listener = None
+        self._main_loop = None
+        # 添加一个标志来跟踪按住说话状态
+        self.manual_press_active = False
+        
+    async def start(self):
+        """启动快捷键监听"""
+        if not self.enabled:
+            logger.info("全局快捷键已禁用")
             return False
+            
+        try:
+            # 保存主事件循环引用
+            self._main_loop = asyncio.get_running_loop()
+            
+            # 导入pynput库
+            from pynput import keyboard
 
-        if self.keyboard_listener is None:
-            try:
-                self.keyboard_listener = pynput_keyboard.Listener(
-                    on_press=self._on_press, on_release=self._on_release
-                )
-                self.keyboard_listener.start()
-                self._running = True
-                self.logger.info("全局快捷键监听已启动")
-                self.logger.info(f"快捷键列表: {self.get_shortcuts_description()}")
-                return True
-            except Exception as e:
-                self.logger.error(f"启动快捷键监听失败: {e}")
-                self.keyboard_listener = None
-                return False
-        return True
-
-    async def stop_async(self):
+            # 获取Application实例
+            from src.application import Application
+            self.application = Application.get_instance()
+            self.display = self.application.display
+            
+            # 定义按键回调
+            def on_press(key):
+                if not self.running:
+                    return
+                    
+                try:
+                    key_name = self._get_key_name(key)
+                    if key_name:
+                        self.pressed_keys.add(key_name)
+                        self._check_shortcuts(True)
+                except Exception as e:
+                    logger.error(f"按键处理错误: {e}")
+                    
+            def on_release(key):
+                if not self.running:
+                    return
+                    
+                try:
+                    key_name = self._get_key_name(key)
+                    if key_name:
+                        if key_name in self.pressed_keys:
+                            self.pressed_keys.remove(key_name)
+                        self._check_shortcuts(False)
+                except Exception as e:
+                    logger.error(f"释放键处理错误: {e}")
+            
+            # 启动监听器
+            self._listener = keyboard.Listener(on_press=on_press, on_release=on_release)
+            self._listener.start()
+            self.running = True
+            logger.info("全局快捷键监听已启动")
+            return True
+            
+        except ImportError:
+            logger.error("未安装pynput库，无法使用全局快捷键功能")
+            return False
+        except Exception as e:
+            logger.error(f"启动全局快捷键监听失败: {e}")
+            return False
+    
+    def _get_key_name(self, key):
+        """获取按键名称"""
+        try:
+            if hasattr(key, 'name'):
+                return key.name.lower()
+            elif hasattr(key, 'char') and key.char:
+                return key.char.lower()
+            return None
+        except Exception:
+            return None
+            
+    def _check_shortcuts(self, is_press):
+        """检查快捷键组合"""
+        # 检查修饰键状态
+        ctrl_pressed = "ctrl" in self.pressed_keys or "ctrl_l" in self.pressed_keys or "ctrl_r" in self.pressed_keys
+        
+        if not ctrl_pressed:
+            # 如果Ctrl键被释放，且按住说话功能处于激活状态，则停止监听
+            if not is_press and self.manual_press_active:
+                self._handle_manual_press(False)
+            return
+            
+        # 获取快捷键配置
+        manual_press = self.shortcuts_config.get("MANUAL_PRESS", {})
+        auto_toggle = self.shortcuts_config.get("AUTO_TOGGLE", {})
+        abort = self.shortcuts_config.get("ABORT", {})
+        mode_toggle = self.shortcuts_config.get("MODE_TOGGLE", {})
+        window_toggle = self.shortcuts_config.get("WINDOW_TOGGLE", {})
+        
+        # 检查各个快捷键
+        if self._check_shortcut_key(manual_press):
+            self._handle_manual_press(is_press)
+        # 其他快捷键仅在按下时触发
+        elif is_press:
+            if self._check_shortcut_key(auto_toggle):
+                self._handle_auto_toggle()
+            elif self._check_shortcut_key(abort):
+                self._handle_abort()
+            elif self._check_shortcut_key(mode_toggle):
+                self._handle_mode_toggle()
+            elif self._check_shortcut_key(window_toggle):
+                self._handle_window_toggle()
+        # 如果没有检测到任何快捷键组合，但按住说话功能处于激活状态，则停止监听
+        elif not is_press and self.manual_press_active:
+            self._handle_manual_press(False)
+    
+    def _check_shortcut_key(self, shortcut_config):
+        """检查特定快捷键是否被按下"""
+        key = shortcut_config.get("key", "").lower()
+        return key in self.pressed_keys 
+    
+    def _run_coroutine_threadsafe(self, coro):
         """
-        异步停止键盘监听.
+        线程安全地运行协程
         """
-        if self.keyboard_listener:
-            try:
-                self._running = False
-                self.keyboard_listener.stop()
-                self.keyboard_listener.join()
-                self.logger.info("全局快捷键监听已停止")
-            except Exception as e:
-                self.logger.error(f"停止快捷键监听失败: {e}")
-            finally:
-                self.keyboard_listener = None
-
-    def add_shortcut(self, key_combo: tuple, action: str):
+        if not self._main_loop or not self.running:
+            logger.warning("事件循环未运行或快捷键管理器已停止")
+            return
+            
+        try:
+            asyncio.run_coroutine_threadsafe(coro, self._main_loop)
+        except Exception as e:
+            logger.error(f"线程安全运行协程失败: {e}")
+        
+    def _handle_manual_press(self, is_press):
         """
-        添加新的快捷键.
+        处理按住说话快捷键
+        
+        按住快捷键时开始监听（保持监听状态直到松开）
+        松开快捷键后停止监听并发送语音内容
+        
+        Args:
+            is_press: 是否为按下事件，True表示按下，False表示释放
         """
-        self.shortcuts[key_combo] = action
-
-    def remove_shortcut(self, key_combo: tuple):
-        """
-        移除快捷键.
-        """
-        if key_combo in self.shortcuts:
-            del self.shortcuts[key_combo]
-
-    def get_shortcuts_description(self) -> str:
-        """
-        获取快捷键描述.
-        """
-        descriptions = []
-        action_names = {
-            "manual_press": "长按说话",
-            "auto_toggle": "自动对话",
-            "abort": "打断",
-            "mode_toggle": "模式切换",
-            "window_toggle": "窗口切换",
-        }
-
-        for key_combo, action in self.shortcuts.items():
-            # 在CLI模式下跳过窗口相关快捷键的描述
-            if self._mode == "cli" and action == "window_toggle":
-                continue
-
-            key_str = "+".join([k.title() for k in key_combo])
-            action_desc = action_names.get(action, action)
-            descriptions.append(f"{key_str} ({action_desc})")
-
-        return " | ".join(descriptions)
-
-    def is_available(self) -> bool:
-        """
-        检查快捷键功能是否可用.
-        """
-        return pynput_keyboard is not None
-
-    def is_running(self) -> bool:
-        """
-        检查快捷键监听是否正在运行.
-        """
-        return self._running and self.keyboard_listener is not None
-
-
-# 全局快捷键实例
-_global_shortcut_manager = None
+        if not self.application:
+            return
+            
+        if is_press and not self.manual_press_active:
+            # 按下开始监听
+            logger.debug("快捷键：开始监听")
+            self._run_coroutine_threadsafe(self.application.start_listening())
+            self.manual_press_active = True
+        elif not is_press and self.manual_press_active:
+            # 松开时停止监听并发送
+            logger.debug("快捷键：停止监听")
+            self._run_coroutine_threadsafe(self.application.stop_listening())
+            self.manual_press_active = False
+    
+    def _handle_auto_toggle(self):
+        """处理自动对话快捷键"""
+        if self.application:
+            self._run_coroutine_threadsafe(self.application.toggle_chat_state())
+    
+    def _handle_abort(self):
+        """处理中断对话快捷键"""
+        if self.application:
+            from src.constants.constants import AbortReason
+            self._run_coroutine_threadsafe(self.application.abort_speaking(AbortReason.NONE))
+    
+    def _handle_mode_toggle(self):
+        """处理模式切换快捷键"""
+        if self.display:
+            self._run_coroutine_threadsafe(self.display.toggle_mode())
+    
+    def _handle_window_toggle(self):
+        """处理窗口显示/隐藏快捷键"""
+        if self.display:
+            self._run_coroutine_threadsafe(self.display.toggle_window_visibility())
+    
+    async def stop(self):
+        """停止快捷键监听"""
+        self.running = False
+        # 确保清理按住说话状态
+        self.manual_press_active = False
+        if self._listener:
+            self._listener.stop()
+            self._listener = None
+        logger.info("全局快捷键监听已停止")
 
 
-async def start_global_shortcuts_async(logger: logging.Logger = None):
+# 异步启动函数
+async def start_global_shortcuts_async(logger_instance=None):
     """
-    异步启动全局快捷键服务.
+    异步启动全局快捷键管理器
+    
+    返回:
+        ShortcutManager实例或None（如果启动失败）
     """
-    global _global_shortcut_manager
-    if _global_shortcut_manager is None:
-        _global_shortcut_manager = AsyncShortcutManager(logger)
-        # 等待一小段时间确保Application实例已经创建
-        await asyncio.sleep(0.5)
-        success = await _global_shortcut_manager.start_async()
-        if success and logger:
-            logger.info("全局快捷键服务已启动")
-        return _global_shortcut_manager
-    return _global_shortcut_manager
-
-
-async def stop_global_shortcuts_async():
-    """
-    异步停止全局快捷键服务.
-    """
-    global _global_shortcut_manager
-    if _global_shortcut_manager:
-        await _global_shortcut_manager.stop_async()
-        _global_shortcut_manager = None
-
-
-def get_global_shortcuts_manager():
-    """
-    获取全局快捷键管理器实例.
-    """
-    return _global_shortcut_manager
+    try:
+        shortcut_manager = ShortcutManager()
+        success = await shortcut_manager.start()
+        
+        if success:
+            if logger_instance:
+                logger_instance.info("全局快捷键管理器启动成功")
+            return shortcut_manager
+        else:
+            if logger_instance:
+                logger_instance.warning("全局快捷键管理器启动失败")
+            return None
+    except Exception as e:
+        if logger_instance:
+            logger_instance.error(f"启动全局快捷键管理器时出错: {e}")
+        return None

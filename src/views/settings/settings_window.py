@@ -9,12 +9,14 @@ from PyQt5.QtWidgets import (
     QMessageBox,
     QPushButton,
     QSpinBox,
+    QTabWidget,
     QTextEdit,
 )
 
 from src.utils.config_manager import ConfigManager
 from src.utils.logging_config import get_logger
 from src.utils.resource_finder import resource_finder
+from src.views.settings.components.shortcuts_settings import ShortcutsSettingsWidget
 
 
 class SettingsWindow(QDialog):
@@ -29,6 +31,9 @@ class SettingsWindow(QDialog):
 
         # UI控件
         self.ui_controls = {}
+        
+        # 快捷键设置组件
+        self.shortcuts_tab = None
 
         # 初始化UI
         self._setup_ui()
@@ -47,10 +52,45 @@ class SettingsWindow(QDialog):
 
             # 获取所有UI控件的引用
             self._get_ui_controls()
+            
+            # 添加快捷键设置选项卡
+            self._add_shortcuts_tab()
 
         except Exception as e:
             self.logger.error(f"设置UI失败: {e}", exc_info=True)
             raise
+            
+    def _add_shortcuts_tab(self):
+        """
+        添加快捷键设置选项卡
+        """
+        try:
+            # 获取TabWidget
+            tab_widget = self.findChild(QTabWidget, "tabWidget")
+            if not tab_widget:
+                self.logger.error("未找到TabWidget控件")
+                return
+                
+            # 创建快捷键设置组件
+            self.shortcuts_tab = ShortcutsSettingsWidget()
+            
+            # 添加到选项卡
+            tab_widget.addTab(self.shortcuts_tab, "快捷键")
+            
+            # 连接信号
+            self.shortcuts_tab.settings_changed.connect(self._on_settings_changed)
+            
+            self.logger.debug("成功添加快捷键设置选项卡")
+            
+        except Exception as e:
+            self.logger.error(f"添加快捷键设置选项卡失败: {e}", exc_info=True)
+
+    def _on_settings_changed(self):
+        """
+        设置变更回调
+        """
+        # 可以在此添加一些提示或者其他逻辑
+        pass
 
     def _get_ui_controls(self):
         """

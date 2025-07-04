@@ -41,6 +41,34 @@ class ConfigManager:
             "VLapi_key": "你自己的key",
             "models": "glm-4v-plus",
         },
+        "SHORTCUTS": {
+            "ENABLED": True,
+            "MANUAL_PRESS": {
+                "modifier": "ctrl",
+                "key": "j",
+                "description": "按住说话"
+            },
+            "AUTO_TOGGLE": {
+                "modifier": "ctrl",
+                "key": "k",
+                "description": "自动对话"
+            },
+            "ABORT": {
+                "modifier": "ctrl",
+                "key": "q",
+                "description": "中断对话"
+            },
+            "MODE_TOGGLE": {
+                "modifier": "ctrl",
+                "key": "m",
+                "description": "切换模式"
+            },
+            "WINDOW_TOGGLE": {
+                "modifier": "ctrl",
+                "key": "w",
+                "description": "显示/隐藏窗口"
+            }
+        }
     }
 
     def __new__(cls):
