@@ -3,7 +3,6 @@
 CLI模式设备激活流程 提供与GUI激活窗口相同的功能，但使用纯终端输出.
 """
 
-import asyncio
 from datetime import datetime
 from typing import Optional
 
@@ -19,9 +18,9 @@ class CLIActivation:
     CLI模式设备激活处理器.
     """
 
-    def __init__(self):
+    def __init__(self, system_initializer: Optional[SystemInitializer] = None):
         # 组件实例
-        self.system_initializer: Optional[SystemInitializer] = None
+        self.system_initializer = system_initializer
         self.device_activator: Optional[DeviceActivator] = None
 
         # 状态管理
@@ -39,19 +38,40 @@ class CLIActivation:
         """
         try:
             self._print_header()
-            self._log_and_print("开始系统初始化流程")
 
-            self.system_initializer = SystemInitializer()
-
-            # 运行四阶段初始化
-            success = await self._run_initialization_with_progress()
-
-            if success:
-                self._log_and_print("系统初始化完成")
-                return await self._check_activation_status()
+            # 如果已经提供了SystemInitializer实例，直接使用
+            if self.system_initializer:
+                self._log_and_print("使用已初始化的系统")
+                self._update_device_info()
+                return await self._start_activation_process()
             else:
-                self._log_and_print("系统初始化失败")
-                return False
+                # 否则创建新的实例并运行初始化
+                self._log_and_print("开始系统初始化流程")
+                self.system_initializer = SystemInitializer()
+
+                # 运行初始化流程
+                init_result = await self.system_initializer.run_initialization()
+
+                if init_result.get("success", False):
+                    self._update_device_info()
+
+                    # 显示状态消息
+                    status_message = init_result.get("status_message", "")
+                    if status_message:
+                        self._log_and_print(status_message)
+
+                    # 检查是否需要激活
+                    if init_result.get("need_activation_ui", True):
+                        return await self._start_activation_process()
+                    else:
+                        # 无需激活，直接完成
+                        self.is_activated = True
+                        self._log_and_print("设备已激活，无需进一步操作")
+                        return True
+                else:
+                    error_msg = init_result.get("error", "初始化失败")
+                    self._log_and_print(f"错误: {error_msg}")
+                    return False
 
         except KeyboardInterrupt:
             self._log_and_print("\n用户中断激活流程")
@@ -71,56 +91,6 @@ class CLIActivation:
         print("正在初始化设备，请稍候...")
         print()
 
-    async def _run_initialization_with_progress(self) -> bool:
-        """
-        运行初始化并显示进度.
-        """
-        try:
-            # 第一阶段：设备身份准备
-            self._print_stage_header("第一阶段：设备身份准备", 1, 4)
-            await self.system_initializer.stage_1_device_fingerprint()
-            self._update_device_info()
-            self._print_stage_complete(1, 4)
-
-            # 第二阶段：配置管理初始化
-            self._print_stage_header("第二阶段：配置管理初始化", 2, 4)
-            await self.system_initializer.stage_2_config_management()
-            self._print_stage_complete(2, 4)
-
-            # 第三阶段：OTA获取配置
-            self._print_stage_header("第三阶段：OTA配置获取", 3, 4)
-            await self.system_initializer.stage_3_ota_config()
-            self._print_stage_complete(3, 4)
-
-            # 第四阶段：激活流程准备
-            self._print_stage_header("第四阶段：激活流程准备", 4, 4)
-            self.system_initializer.stage_4_activation_ready()
-            self._print_stage_complete(4, 4)
-
-            return True
-
-        except Exception as e:
-            self.logger.error(f"初始化阶段失败: {e}")
-            self._log_and_print(f"初始化失败: {e}")
-            return False
-
-    def _print_stage_header(self, stage_name: str, current: int, total: int):
-        """
-        打印阶段头部信息.
-        """
-        progress = f"[{current}/{total}]"
-        print(f"\n{progress} {stage_name}")
-        print("-" * 40)
-
-    def _print_stage_complete(self, current: int, total: int):
-        """
-        打印阶段完成信息.
-        """
-        progress_percent = int((current / total) * 100)
-        filled = int(progress_percent / 5)
-        progress_bar = "█" * filled + "░" * (20 - filled)
-        print(f"完成 [{progress_bar}] {progress_percent}%")
-
     def _update_device_info(self):
         """
         更新设备信息显示.
@@ -136,44 +106,45 @@ class CLIActivation:
         # 获取设备信息
         serial_number = device_fp.get_serial_number()
         mac_address = device_fp.get_mac_address_from_efuse()
-        is_activated = device_fp.is_activated()
-        self.is_activated = is_activated
+
+        # 获取激活状态
+        activation_status = self.system_initializer.get_activation_status()
+        local_activated = activation_status.get("local_activated", False)
+        server_activated = activation_status.get("server_activated", False)
+        status_consistent = activation_status.get("status_consistent", True)
+
+        # 更新激活状态
+        self.is_activated = local_activated
 
         # 显示设备信息
         print("📱 设备信息:")
         print(f"   序列号: {serial_number if serial_number else '--'}")
         print(f"   MAC地址: {mac_address if mac_address else '--'}")
-        status_text = "已激活" if is_activated else "未激活"
+
+        # 显示激活状态
+        if not status_consistent:
+            if local_activated and not server_activated:
+                status_text = "状态不一致(需重新激活)"
+            else:
+                status_text = "状态不一致(已自动修复)"
+        else:
+            status_text = "已激活" if local_activated else "未激活"
+
         print(f"   激活状态: {status_text}")
 
-        activated_text = "已激活" if is_activated else "未激活"
-        self._log_and_print(
-            f"📱 设备信息更新 - 序列号: {serial_number}, " f"激活状态: {activated_text}"
-        )
-
-    async def _check_activation_status(self) -> bool:
-        """
-        检查激活状态.
-        """
-        if self.is_activated:
-            self._log_and_print("\n设备已激活，无需重复激活")
-            return True
-        else:
-            # 检查是否有激活数据
-            activation_data = self.system_initializer.get_activation_data()
-            if activation_data:
-                self._log_and_print("\n检测到激活请求，准备激活流程")
-                return await self._start_activation_process(activation_data)
-            else:
-                self._log_and_print("\n未获取到激活数据")
-                print("错误: 未获取到激活数据，请检查网络连接")
-                return False
-
-    async def _start_activation_process(self, activation_data: dict) -> bool:
+    async def _start_activation_process(self) -> bool:
         """
         开始激活流程.
         """
         try:
+            # 获取激活数据
+            activation_data = self.system_initializer.get_activation_data()
+
+            if not activation_data:
+                self._log_and_print("\n未获取到激活数据")
+                print("错误: 未获取到激活数据，请检查网络连接")
+                return False
+
             self.activation_data = activation_data
 
             # 显示激活信息
@@ -187,8 +158,8 @@ class CLIActivation:
             self._log_and_print("\n开始设备激活流程...")
             print("正在连接激活服务器，请保持网络连接...")
 
-            activation_success = await asyncio.to_thread(
-                self.device_activator.process_activation, activation_data
+            activation_success = await self.device_activator.process_activation(
+                activation_data
             )
 
             if activation_success:

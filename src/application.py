@@ -6,17 +6,36 @@ from typing import Set
 
 from src.constants.constants import AbortReason, DeviceState, ListeningMode
 from src.display import gui_display
-
-# MCP服务器
 from src.mcp.mcp_server import McpServer
 from src.protocols.mqtt_protocol import MqttProtocol
 from src.protocols.websocket_protocol import WebsocketProtocol
 from src.utils.common_utils import handle_verification_code
 from src.utils.config_manager import ConfigManager
 from src.utils.logging_config import get_logger
-
-# 处理opus动态库
 from src.utils.opus_loader import setup_opus
+
+# 忽略SIGTRAP信号
+try:
+    signal.signal(signal.SIGTRAP, signal.SIG_IGN)
+except (AttributeError, ValueError) as e:
+    print(f"注意: 无法设置SIGTRAP处理器: {e}")
+
+
+def handle_sigint(signum, frame):
+    app = Application.get_instance()
+    if app:
+        # 使用事件循环运行shutdown
+        loop = asyncio.get_event_loop()
+        if loop and loop.is_running():
+            loop.create_task(app.shutdown())
+        else:
+            sys.exit(0)
+
+
+try:
+    signal.signal(signal.SIGINT, handle_sigint)
+except (AttributeError, ValueError) as e:
+    print(f"注意: 无法设置SIGINT处理器: {e}")
 
 setup_opus()
 
@@ -72,13 +91,11 @@ class Application:
         self.protocol = None
         self.display = None
         self.wake_word_detector = None
-        self.shortcut_manager = None
-
         # 任务管理
         self.running = False
         self._main_tasks: Set[asyncio.Task] = set()
 
-        # 事件队列（替代threading.Event）
+        # 事件队列
         self.audio_input_queue: asyncio.Queue = asyncio.Queue()
         self.audio_output_queue: asyncio.Queue = asyncio.Queue()
         self.command_queue: asyncio.Queue = asyncio.Queue()
@@ -115,16 +132,15 @@ class Application:
 
         mode = kwargs.get("mode", "gui")
         protocol = kwargs.get("protocol", "websocket")
-        skip_activation = kwargs.get("skip_activation", False)
 
         if mode == "gui":
             # GUI模式：需要创建Qt应用和qasync事件循环
-            return await self._run_gui_mode(protocol, skip_activation)
+            return await self._run_gui_mode(protocol)
         else:
             # CLI模式：使用标准asyncio
-            return await self._run_cli_mode(protocol, skip_activation)
+            return await self._run_cli_mode(protocol)
 
-    async def _run_gui_mode(self, protocol: str, skip_activation: bool):
+    async def _run_gui_mode(self, protocol: str):
         """
         在GUI模式下运行应用程序.
         """
@@ -136,8 +152,13 @@ class Application:
             return 1
 
         try:
-            # 创建QApplication
-            app = QApplication(sys.argv)
+            # 检查是否已存在QApplication实例
+            app = QApplication.instance()
+            if app is None:
+                logger.info("创建新的QApplication实例")
+                app = QApplication(sys.argv)
+            else:
+                logger.info("使用已存在的QApplication实例")
 
             # 创建qasync事件循环
             loop = qasync.QEventLoop(app)
@@ -146,7 +167,7 @@ class Application:
             # 在qasync环境中运行应用程序
             with loop:
                 try:
-                    task = self._run_application_core(protocol, "gui", skip_activation)
+                    task = self._run_application_core(protocol, "gui")
                     return loop.run_until_complete(task)
                 except RuntimeError as e:
                     error_msg = "Event loop stopped before Future completed"
@@ -169,47 +190,31 @@ class Application:
             except Exception:
                 pass
 
-    async def _run_cli_mode(self, protocol: str, skip_activation: bool):
+    async def _run_cli_mode(self, protocol: str):
         """
         在CLI模式下运行应用程序.
         """
         try:
-            return await self._run_application_core(protocol, "cli", skip_activation)
+            return await self._run_application_core(protocol, "cli")
         except Exception as e:
             logger.error(f"CLI应用程序异常退出: {e}", exc_info=True)
             return 1
 
-    async def _run_application_core(
-        self, protocol: str, mode: str, skip_activation: bool
-    ):
+    async def _run_application_core(self, protocol: str, mode: str):
         """
         应用程序核心运行逻辑.
         """
         try:
-            # 处理激活流程
-            if not skip_activation:
-                if not await self._handle_activation_process(mode):
-                    logger.error("设备激活失败，程序退出")
-                    return 1
-            else:
-                logger.warning("跳过激活流程（调试模式）")
-
             self.running = True
 
             # 保存主线程的事件循环
             self._main_loop = asyncio.get_running_loop()
-
-            # 设置信号处理
-            self._setup_signal_handlers()
 
             # 初始化组件
             await self._initialize_components(mode, protocol)
 
             # 启动核心任务
             await self._start_core_tasks()
-
-            # 启动全局快捷键服务并注册到资源管理器
-            await self._start_global_shortcuts()
 
             # 启动显示界面
             if mode == "gui":
@@ -235,131 +240,6 @@ class Application:
                 await self.shutdown()
             except Exception as e:
                 logger.error(f"关闭应用程序时出错: {e}")
-
-    async def _handle_activation_process(self, mode: str) -> bool:
-        """
-        处理激活流程.
-        """
-        logger.info("检查设备激活状态...")
-
-        # 检查是否已激活
-        if await self._check_activation_status():
-            logger.info("设备已激活，直接启动应用程序")
-            return True
-
-        logger.info("设备未激活，启动激活流程...")
-
-        # 根据模式选择激活方式
-        if mode == "gui":
-            activation_success = await self._run_gui_activation_process()
-        else:  # CLI模式
-            activation_success = await self._run_cli_activation_process()
-
-        return activation_success
-
-    async def _check_activation_status(self) -> bool:
-        """
-        检查激活状态.
-        """
-        try:
-            from src.utils.device_fingerprint import DeviceFingerprint
-
-            device_fp = DeviceFingerprint.get_instance()
-            is_activated = device_fp.is_activated()
-
-            logger.info(f"设备激活状态: {'已激活' if is_activated else '未激活'}")
-            return is_activated
-
-        except Exception as e:
-            logger.error(f"检查激活状态失败: {e}", exc_info=True)
-            return False
-
-    async def _run_gui_activation_process(self) -> bool:
-        """
-        运行GUI激活流程.
-        """
-        try:
-            from src.views.activation.activation_window import ActivationWindow
-
-            logger.info("开始GUI设备激活流程")
-
-            # 创建激活窗口
-            activation_window = ActivationWindow()
-
-            # 创建Future来等待激活完成
-            activation_future = asyncio.Future()
-
-            # 设置激活完成回调
-            def on_activation_completed(success: bool):
-                logger.info(f"GUI激活流程完成: 成功={success}")
-                if not activation_future.done():
-                    activation_future.set_result(success)
-
-            # 设置窗口关闭回调
-            def on_window_closed():
-                logger.info("激活窗口被关闭")
-                if not activation_future.done():
-                    activation_future.set_result(False)
-
-            # 连接信号
-            activation_window.activation_completed.connect(on_activation_completed)
-            activation_window.window_closed.connect(on_window_closed)
-
-            # 显示激活窗口
-            activation_window.show()
-
-            # 等待激活完成
-            activation_success = await activation_future
-
-            # 关闭窗口
-            activation_window.close()
-
-            logger.info(f"GUI设备激活{'成功' if activation_success else '失败'}")
-            return activation_success
-
-        except Exception as e:
-            logger.error(f"GUI激活流程异常: {e}", exc_info=True)
-            return False
-
-    async def _run_cli_activation_process(self) -> bool:
-        """
-        运行CLI激活流程.
-        """
-        try:
-            from src.views.activation.cli_activation import CLIActivation
-
-            logger.info("开始CLI设备激活流程")
-
-            # 创建CLI激活处理器
-            cli_activation = CLIActivation()
-
-            # 运行激活流程
-            activation_success = await cli_activation.run_activation_process()
-
-            logger.info(f"CLI设备激活{'成功' if activation_success else '失败'}")
-            return activation_success
-
-        except Exception as e:
-            logger.error(f"CLI激活流程异常: {e}", exc_info=True)
-            return False
-
-    def _setup_signal_handlers(self):
-        """
-        设置信号处理器.
-        """
-
-        def signal_handler():
-            logger.info("接收到中断信号，开始关闭...")
-            asyncio.create_task(self.shutdown())
-
-        # 设置信号处理
-        try:
-            loop = asyncio.get_running_loop()
-            loop.add_signal_handler(signal.SIGINT, signal_handler)
-            loop.add_signal_handler(signal.SIGTERM, signal_handler)
-        except NotImplementedError:
-            # Windows不支持add_signal_handler
-            signal.signal(signal.SIGINT, lambda s, f: signal_handler())
 
     async def _initialize_components(self, mode: str, protocol: str):
         """
@@ -396,6 +276,9 @@ class Application:
 
         # 启动倒计时器服务
         await self._start_timer_service()
+
+        # 初始化快捷键管理器
+        await self._initialize_shortcuts()
 
         logger.info("应用程序组件初始化完成")
 
@@ -615,27 +498,6 @@ class Application:
         启动CLI显示.
         """
         self._create_task(self.display.start(), "CLI显示")
-
-    async def _start_global_shortcuts(self):
-        """
-        启动全局快捷键服务.
-        """
-        try:
-            from src.views.components.shortcut_manager import (
-                start_global_shortcuts_async,
-            )
-
-            shortcut_manager = await start_global_shortcuts_async(logger)
-
-            if shortcut_manager:
-                # 保存快捷键管理器实例
-                self.shortcut_manager = shortcut_manager
-                logger.info("全局快捷键服务已启动")
-            else:
-                logger.warning("全局快捷键服务启动失败")
-
-        except Exception as e:
-            logger.error(f"启动全局快捷键服务失败: {e}", exc_info=True)
 
     async def schedule_command(self, command):
         """
@@ -1163,11 +1025,6 @@ class Application:
         self._shutdown_event.set()
 
         try:
-            # 1. 停止全局快捷键
-            await self._safe_close_resource(
-                self.shortcut_manager, "全局快捷键", "stop_async"
-            )
-
             # 2. 关闭唤醒词检测器
             await self._safe_close_resource(
                 self.wake_word_detector, "唤醒词检测器", "stop"
@@ -1283,3 +1140,20 @@ class Application:
 
         except Exception as e:
             logger.error(f"启动倒计时器服务失败: {e}", exc_info=True)
+
+    async def _initialize_shortcuts(self):
+        """
+        初始化快捷键管理器.
+        """
+        try:
+            from src.views.components.shortcut_manager import (
+                start_global_shortcuts_async,
+            )
+
+            shortcut_manager = await start_global_shortcuts_async(logger)
+            if shortcut_manager:
+                logger.info("快捷键管理器初始化成功")
+            else:
+                logger.warning("快捷键管理器初始化失败")
+        except Exception as e:
+            logger.error(f"初始化快捷键管理器失败: {e}", exc_info=True)

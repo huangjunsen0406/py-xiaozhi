@@ -547,16 +547,16 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
 
     async def toggle_mode(self):
         """
-        切换模式
+        切换模式.
         """
         # 调用现有的模式切换功能
-        if hasattr(self, 'mode_callback') and self.mode_callback:
+        if hasattr(self, "mode_callback") and self.mode_callback:
             self._on_mode_button_click()
             self.logger.debug("通过快捷键切换了对话模式")
-        
+
     async def toggle_window_visibility(self):
         """
-        切换窗口可见性
+        切换窗口可见性.
         """
         if self.root:
             if self.root.isVisible():

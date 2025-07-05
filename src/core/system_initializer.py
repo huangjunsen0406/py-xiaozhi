@@ -3,8 +3,10 @@
 四阶段初始化流程测试脚本 展示设备身份准备、配置管理、OTA配置获取三个阶段的协调工作 激活流程由用户自己实现.
 """
 
+import asyncio
 import json
 from pathlib import Path
+from typing import Dict
 
 from src.constants.system import InitializationStage
 from src.core.ota import Ota
@@ -23,10 +25,18 @@ class SystemInitializer:
         self.config_manager = None
         self.ota = None
         self.current_stage = None
+        self.activation_data = None
+        self.activation_status = {
+            "local_activated": False,  # 本地激活状态
+            "server_activated": False,  # 服务器激活状态
+            "status_consistent": True,  # 状态是否一致
+        }
 
-    async def run_initialization(self):
-        """
-        运行完整的初始化流程.
+    async def run_initialization(self) -> Dict:
+        """运行完整的初始化流程.
+
+        Returns:
+            Dict: 初始化结果，包含激活状态和是否需要激活界面
         """
         logger.info("开始系统初始化流程")
 
@@ -40,15 +50,20 @@ class SystemInitializer:
             # 第三阶段：OTA获取配置
             await self.stage_3_ota_config()
 
-            # 第四阶段：激活流程（由用户实现）
-            self.stage_4_activation_ready()
+            # 分析激活状态
+            activation_result = self.analyze_activation_status()
 
-            logger.info("系统初始化流程完成，准备进入激活阶段")
-            return True
+            # 根据分析结果决定是否需要激活流程
+            if activation_result["need_activation_ui"]:
+                logger.info("需要显示激活界面")
+            else:
+                logger.info("无需显示激活界面，设备已激活")
+
+            return activation_result
 
         except Exception as e:
             logger.error(f"系统初始化失败: {e}")
-            return False
+            return {"success": False, "error": str(e), "need_activation_ui": False}
 
     async def stage_1_device_fingerprint(self):
         """
@@ -67,13 +82,16 @@ class SystemInitializer:
             is_activated,
         ) = self.device_fingerprint.ensure_device_identity()
 
+        # 记录本地激活状态
+        self.activation_status["local_activated"] = is_activated
+
         # 获取MAC地址并确保小写格式
         mac_address = self.device_fingerprint.get_mac_address_from_efuse()
 
         logger.info(f"设备序列号: {serial_number}")
         logger.info(f"MAC地址: {mac_address}")
         logger.info(f"HMAC密钥: {hmac_key[:8] if hmac_key else None}...")
-        logger.info(f"激活状态: {'已激活' if is_activated else '未激活'}")
+        logger.info(f"本地激活状态: {'已激活' if is_activated else '未激活'}")
 
         # 验证efuse.json文件是否完整
         efuse_file = Path("config/efuse.json")
@@ -148,13 +166,18 @@ class SystemInitializer:
             if "websocket" in response_data:
                 ws_info = response_data["websocket"]
                 logger.info(f"WebSocket URL: {ws_info.get('url', 'N/A')}")
+
             # 检查是否有激活信息
             if "activation" in response_data:
                 logger.info("检测到激活信息，设备需要激活")
                 self.activation_data = response_data["activation"]
+                # 服务器认为设备未激活
+                self.activation_status["server_activated"] = False
             else:
                 logger.info("未检测到激活信息，设备可能已激活")
                 self.activation_data = None
+                # 服务器认为设备已激活
+                self.activation_status["server_activated"] = True
 
         except Exception as e:
             logger.error(f"OTA配置获取失败: {e}")
@@ -162,37 +185,76 @@ class SystemInitializer:
 
         logger.info(f"完成{self.current_stage.value}")
 
-    def stage_4_activation_ready(self):
+    def analyze_activation_status(self) -> Dict:
+        """分析激活状态，决定后续流程.
+
+        Returns:
+            Dict: 分析结果，包含是否需要激活界面等信息
         """
-        第四阶段：激活流程准备就绪.
-        """
-        self.current_stage = InitializationStage.ACTIVATION
-        logger.info(f"准备{self.current_stage.value}")
+        local_activated = self.activation_status["local_activated"]
+        server_activated = self.activation_status["server_activated"]
 
-        # 检查激活状态
-        is_activated = self.device_fingerprint.is_activated()
+        # 检查状态是否一致
+        status_consistent = local_activated == server_activated
+        self.activation_status["status_consistent"] = status_consistent
 
-        if is_activated:
-            logger.info("设备已激活，无需再次激活")
-        else:
-            logger.info("设备未激活，需要进行激活流程")
+        result = {
+            "success": True,
+            "local_activated": local_activated,
+            "server_activated": server_activated,
+            "status_consistent": status_consistent,
+            "need_activation_ui": False,
+            "status_message": "",
+        }
 
-            if hasattr(self, "activation_data") and self.activation_data:
-                logger.debug("激活数据已准备就绪:")
-                challenge = self.activation_data.get("challenge", "N/A")
-                logger.debug(f"- 挑战码: {challenge}")
+        # 情况1: 本地未激活，服务器返回激活数据 - 正常激活流程
+        if not local_activated and not server_activated:
+            result["need_activation_ui"] = True
+            result["status_message"] = "设备需要激活"
 
-                code = self.activation_data.get("code", "N/A")
-                logger.debug(f"- 验证码: {code}")
+        # 情况2: 本地已激活，服务器无激活数据 - 正常已激活状态
+        elif local_activated and server_activated:
+            result["need_activation_ui"] = False
+            result["status_message"] = "设备已激活"
 
-                message = self.activation_data.get("message", "N/A")
-                logger.debug(f"- 消息: {message}")
+        # 情况3: 本地未激活，但服务器无激活数据 - 状态不一致，自动修复
+        elif not local_activated and server_activated:
+            logger.warning(
+                "状态不一致: 本地未激活，但服务器认为已激活，自动修复本地状态"
+            )
+            # 自动更新本地状态为已激活
+            self.device_fingerprint.set_activation_status(True)
+            result["need_activation_ui"] = False
+            result["status_message"] = "已自动修复激活状态"
+            result["local_activated"] = True  # 更新结果中的状态
 
-                logger.info("所有前置条件已满足，可以开始激活流程")
+        # 情况4: 本地已激活，但服务器返回激活数据 - 状态不一致，尝试自动修复
+        elif local_activated and not server_activated:
+            logger.warning("状态不一致: 本地已激活，但服务器认为未激活，尝试自动修复")
+
+            # 检查是否有激活数据
+            if self.activation_data and isinstance(self.activation_data, dict):
+                # 如果有激活码，则需要重新激活
+                if "code" in self.activation_data:
+                    logger.info("服务器返回了激活码，需要重新激活")
+                    result["need_activation_ui"] = True
+                    result["status_message"] = "激活状态不一致，需要重新激活"
+                else:
+                    # 没有激活码，可能是服务器状态未更新，尝试继续使用
+                    logger.info("服务器未返回激活码，保持本地激活状态")
+                    result["need_activation_ui"] = False
+                    result["status_message"] = "保持本地激活状态"
             else:
-                logger.warning("未获取到激活数据，可能需要重新获取OTA配置")
+                # 没有激活数据，可能是网络问题，保持本地状态
+                logger.info("未获取到激活数据，保持本地激活状态")
+                result["need_activation_ui"] = False
+                result["status_message"] = "保持本地激活状态"
+                # 强制更新状态一致性，避免重复激活
+                result["status_consistent"] = True
+                self.activation_status["status_consistent"] = True
+                self.activation_status["server_activated"] = True
 
-        logger.info(f"{self.current_stage.value}准备完成")
+        return result
 
     def get_activation_data(self):
         """
@@ -211,3 +273,108 @@ class SystemInitializer:
         获取配置管理器实例.
         """
         return self.config_manager
+
+    def get_activation_status(self) -> Dict:
+        """
+        获取激活状态信息.
+        """
+        return self.activation_status
+
+    async def handle_activation_process(self, mode: str = "gui") -> Dict:
+        """处理激活流程，根据需要创建激活界面.
+
+        Args:
+            mode: 界面模式，"gui"或"cli"
+
+        Returns:
+            Dict: 激活结果
+        """
+        # 先运行初始化流程
+        init_result = await self.run_initialization()
+
+        # 如果不需要激活界面，直接返回结果
+        if not init_result.get("need_activation_ui", False):
+            return {
+                "is_activated": True,
+                "device_fingerprint": self.device_fingerprint,
+                "config_manager": self.config_manager,
+            }
+
+        # 需要激活界面，根据模式创建
+        if mode == "gui":
+            return await self._run_gui_activation()
+        else:
+            return await self._run_cli_activation()
+
+    async def _run_gui_activation(self) -> Dict:
+        """运行GUI激活流程.
+
+        Returns:
+            Dict: 激活结果
+        """
+        try:
+            from src.views.activation.activation_window import ActivationWindow
+
+            # 创建激活窗口
+            activation_window = ActivationWindow(self)
+
+            # 创建Future来等待激活完成
+            activation_future = asyncio.Future()
+
+            # 设置激活完成回调
+            def on_activation_completed(success: bool):
+                if not activation_future.done():
+                    activation_future.set_result(success)
+
+            # 设置窗口关闭回调
+            def on_window_closed():
+                if not activation_future.done():
+                    activation_future.set_result(False)
+
+            # 连接信号
+            activation_window.activation_completed.connect(on_activation_completed)
+            activation_window.window_closed.connect(on_window_closed)
+
+            # 显示激活窗口
+            activation_window.show()
+
+            # 等待激活完成
+            activation_success = await activation_future
+
+            # 关闭窗口
+            activation_window.close()
+
+            return {
+                "is_activated": activation_success,
+                "device_fingerprint": self.device_fingerprint,
+                "config_manager": self.config_manager,
+            }
+
+        except Exception as e:
+            logger.error(f"GUI激活流程异常: {e}", exc_info=True)
+            return {"is_activated": False, "error": str(e)}
+
+    async def _run_cli_activation(self) -> Dict:
+        """运行CLI激活流程.
+
+        Returns:
+            Dict: 激活结果
+        """
+        try:
+            from src.views.activation.cli_activation import CLIActivation
+
+            # 创建CLI激活处理器
+            cli_activation = CLIActivation(self)
+
+            # 运行激活流程
+            activation_success = await cli_activation.run_activation_process()
+
+            return {
+                "is_activated": activation_success,
+                "device_fingerprint": self.device_fingerprint,
+                "config_manager": self.config_manager,
+            }
+
+        except Exception as e:
+            logger.error(f"CLI激活流程异常: {e}", exc_info=True)
+            return {"is_activated": False, "error": str(e)}

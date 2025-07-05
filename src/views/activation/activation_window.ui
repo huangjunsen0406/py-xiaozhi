@@ -7,13 +7,13 @@
     <x>0</x>
     <y>0</y>
     <width>600</width>
-    <height>550</height>
+    <height>350</height>
    </rect>
   </property>
   <property name="minimumSize">
    <size>
     <width>450</width>
-    <height>450</height>
+    <height>300</height>
    </size>
   </property>
   <property name="windowTitle">
@@ -26,33 +26,20 @@
   <widget class="QWidget" name="centralwidget">
    <layout class="QVBoxLayout" name="verticalLayout">
     <property name="spacing">
-     <number>8</number>
+     <number>10</number>
     </property>
     <property name="leftMargin">
-     <number>15</number>
+     <number>10</number>
     </property>
     <property name="topMargin">
-     <number>15</number>
+     <number>10</number>
     </property>
     <property name="rightMargin">
-     <number>15</number>
+     <number>10</number>
     </property>
     <property name="bottomMargin">
-     <number>15</number>
+     <number>10</number>
     </property>
-    <item>
-     <widget class="QLabel" name="title_label">
-      <property name="text">
-       <string>设备激活向导</string>
-      </property>
-      <property name="alignment">
-       <set>Qt::AlignCenter</set>
-      </property>
-      <property name="styleSheet">
-       <string>font-size: 18pt; font-weight: bold; color: #2c3e50; margin: 5px;</string>
-      </property>
-     </widget>
-    </item>
     <item>
      <widget class="QFrame" name="info_frame">
       <property name="frameShape">
@@ -63,7 +50,7 @@
       </property>
       <layout class="QVBoxLayout" name="info_layout">
        <property name="spacing">
-        <number>8</number>
+        <number>6</number>
        </property>
        <property name="leftMargin">
         <number>5</number>
@@ -275,7 +262,7 @@
                   background-color: #17a2b8;
                   color: white;
                   border: none;
-                  padding: 10px;
+                  padding: 6px 12px;
                   border-radius: 4px;
                   font-weight: bold;
                   font-size: 10pt;
@@ -311,37 +298,6 @@
      </widget>
     </item>
     <item>
-     <widget class="QTextEdit" name="log_text">
-      <property name="minimumSize">
-       <size>
-        <width>0</width>
-        <height>60</height>
-       </size>
-      </property>
-      <property name="maximumSize">
-       <size>
-        <width>16777215</width>
-        <height>120</height>
-       </size>
-      </property>
-      <property name="styleSheet">
-       <string>
-         QTextEdit {
-           background-color: #f8f9fa;
-           border: 1px solid #dee2e6;
-           border-radius: 4px;
-           font-family: monospace;
-           font-size: 9pt;
-           padding: 5px;
-         }
-       </string>
-      </property>
-      <property name="readOnly">
-       <bool>true</bool>
-      </property>
-     </widget>
-    </item>
-    <item>
      <layout class="QHBoxLayout" name="button_layout">
       <property name="spacing">
        <number>8</number>
@@ -370,8 +326,8 @@
              background-color: #6c757d;
              color: white;
              border: none;
-             padding: 8px 16px;
-             border-radius: 5px;
+             padding: 6px 12px;
+             border-radius: 4px;
              font-weight: bold;
              min-width: 80px;
            }
@@ -396,8 +352,8 @@
              background-color: #dc3545;
              color: white;
              border: none;
-             padding: 8px 16px;
-             border-radius: 5px;
+             padding: 6px 12px;
+             border-radius: 4px;
              font-weight: bold;
              min-width: 80px;
            }
