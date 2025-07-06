@@ -54,12 +54,26 @@ async def handle_activation(mode: str) -> bool:
         # 运行初始化流程
         init_result = await system_initializer.run_initialization()
 
-        # 如果不需要激活界面，直接返回结果
-        if not init_result.get("need_activation_ui", False):
-            logger.info("无需显示激活界面，设备已激活")
+        # 检查初始化是否成功
+        if not init_result.get("success", False):
+            logger.error(f"系统初始化失败: {init_result.get('error', '未知错误')}")
+            return False
+
+        # 获取激活版本
+        activation_version = init_result.get("activation_version", "v1")
+        logger.info(f"当前激活版本: {activation_version}")
+
+        # 如果是v1协议，直接返回成功
+        if activation_version == "v1":
+            logger.info("v1协议：系统初始化完成，无需激活流程")
             return True
 
-        logger.info("需要显示激活界面，准备激活流程")
+        # 如果是v2协议，检查是否需要激活界面
+        if not init_result.get("need_activation_ui", False):
+            logger.info("v2协议：无需显示激活界面，设备已激活")
+            return True
+
+        logger.info("v2协议：需要显示激活界面，准备激活流程")
 
         # 需要激活界面，根据模式处理
         if mode == "gui":

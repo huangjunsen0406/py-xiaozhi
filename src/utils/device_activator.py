@@ -133,7 +133,7 @@ class DeviceActivator:
             self.logger.info(f"验证码: {code}")
 
             # 构建验证码提示文本并打印
-            text = f".请登录到控制面板添加设备，输入验证码：{' '.join(code)}."
+            text = f".请登录到控制面板添加设备，输入验证码：{' '.join(code)}..."
             print("\n==================")
             print(text)
             print("==================\n")
@@ -149,18 +149,19 @@ class DeviceActivator:
             except Exception as e:
                 self.logger.error(f"播放验证码语音失败: {e}")
 
-            # 尝试激活设备
-            return await self.activate(challenge)
+            # 尝试激活设备，传递验证码信息
+            return await self.activate(challenge, code)
 
         except asyncio.CancelledError:
             self.logger.info("激活流程被取消")
             return False
 
-    async def activate(self, challenge: str) -> bool:
+    async def activate(self, challenge: str, code: str = None) -> bool:
         """异步执行激活流程.
 
         Args:
             challenge: 服务器发送的挑战字符串
+            code: 验证码，用于重试时播放
 
         Returns:
             bool: 激活是否成功
@@ -232,6 +233,19 @@ class DeviceActivator:
                         self.logger.info(
                             f"尝试激活 (尝试 {attempt + 1}/{max_retries})..."
                         )
+
+                        # 每次重试时播放验证码（从第2次开始）
+                        if attempt > 0 and code:
+                            try:
+                                from src.utils.common_utils import (
+                                    play_audio_nonblocking,
+                                )
+
+                                text = f".请登录到控制面板添加设备，输入验证码：{' '.join(code)}..."
+                                play_audio_nonblocking(text)
+                                self.logger.info(f"重试播放验证码: {code}")
+                            except Exception as e:
+                                self.logger.error(f"重试播放验证码失败: {e}")
 
                         # 发送激活请求
                         async with session.post(

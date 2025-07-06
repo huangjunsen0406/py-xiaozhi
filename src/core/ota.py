@@ -93,14 +93,28 @@ class Ota:
         board_type = SystemConstants.BOARD_TYPE
         app_name = SystemConstants.APP_NAME
 
-        return {
-            "Activation-Version": app_version,
+        # 基础头部
+        headers = {
             "Device-Id": self.mac_addr,
             "Client-Id": self.config.get_config("SYSTEM_OPTIONS.CLIENT_ID"),
             "Content-Type": "application/json",
             "User-Agent": f"{board_type}/{app_name}-{app_version}",
             "Accept-Language": "zh-CN",
         }
+
+        # 根据激活版本决定是否添加Activation-Version头部
+        activation_version = self.config.get_config(
+            "SYSTEM_OPTIONS.NETWORK.ACTIVATION_VERSION", "v1"
+        )
+        
+        # 只有v2协议才添加Activation-Version头部
+        if activation_version == "v2":
+            headers["Activation-Version"] = app_version
+            self.logger.debug(f"v2协议：添加Activation-Version头部: {app_version}")
+        else:
+            self.logger.debug("v1协议：不添加Activation-Version头部")
+
+        return headers
 
     async def get_ota_config(self):
         """

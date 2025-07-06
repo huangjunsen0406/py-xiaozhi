@@ -50,16 +50,39 @@ class SystemInitializer:
             # 第三阶段：OTA获取配置
             await self.stage_3_ota_config()
 
-            # 分析激活状态
-            activation_result = self.analyze_activation_status()
+            # 获取激活版本配置
+            activation_version = self.config_manager.get_config(
+                "SYSTEM_OPTIONS.NETWORK.ACTIVATION_VERSION", "v1"
+            )
+            
+            logger.info(f"激活版本: {activation_version}")
 
-            # 根据分析结果决定是否需要激活流程
-            if activation_result["need_activation_ui"]:
-                logger.info("需要显示激活界面")
+            # 根据激活版本决定是否需要激活流程
+            if activation_version == "v1":
+                # v1协议：完成前三个阶段后直接返回成功
+                logger.info("v1协议：前三个阶段完成，无需激活流程")
+                return {
+                    "success": True,
+                    "local_activated": True,
+                    "server_activated": True,
+                    "status_consistent": True,
+                    "need_activation_ui": False,
+                    "status_message": "v1协议初始化完成",
+                    "activation_version": activation_version,
+                }
             else:
-                logger.info("无需显示激活界面，设备已激活")
+                # v2协议：需要分析激活状态
+                logger.info("v2协议：分析激活状态")
+                activation_result = self.analyze_activation_status()
+                activation_result["activation_version"] = activation_version
 
-            return activation_result
+                # 根据分析结果决定是否需要激活流程
+                if activation_result["need_activation_ui"]:
+                    logger.info("需要显示激活界面")
+                else:
+                    logger.info("无需显示激活界面，设备已激活")
+
+                return activation_result
 
         except Exception as e:
             logger.error(f"系统初始化失败: {e}")
