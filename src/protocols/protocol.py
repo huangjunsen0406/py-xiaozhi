@@ -93,3 +93,12 @@ class Protocol:
             "states": json.loads(states) if isinstance(states, str) else states,
         }
         await self.send_text(json.dumps(message))
+
+    async def send_mcp_message(self, payload):
+        """发送MCP类型的消息"""
+        message = {
+            "session_id": self.session_id,
+            "type": "mcp",
+            "payload": payload
+        }
+        await self.send_text(json.dumps(message, ensure_ascii=False))

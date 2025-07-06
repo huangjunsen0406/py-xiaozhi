@@ -365,6 +365,8 @@ class Application:
                 self._handle_llm_message(data)
             elif msg_type == "iot":
                 self._handle_iot_message(data)
+            elif msg_type == "mcp":
+                self._handle_mcp_message(data)
             else:
                 logger.warning(f"收到未知类型的消息: {msg_type}")
         except Exception as e:
@@ -1314,6 +1316,14 @@ class Application:
             except Exception as e:
                 logger.error(f"执行物联网命令失败: {e}")
 
+    def _handle_mcp_message(self, data):
+        """处理MCP消息"""
+        from src.mcp.mcp_server_tools import McpServer
+        mcp_server = McpServer.get_instance()
+        logger.info(f"获取MCP消息: {data}")
+        payload = data.get("payload", {})
+        mcp_server.parse_message(json.dumps(payload, ensure_ascii=False))
+
     def _update_iot_states(self, delta=None):
         """更新物联网设备状态.
 
@@ -1352,6 +1362,12 @@ class Application:
                 logger.info("物联网设备状态已更新(完整)")
         else:
             logger.debug("物联网设备状态无变化，跳过更新")
+
+    def send_mcp_message(self, payload):
+        asyncio.run_coroutine_threadsafe(
+            self.protocol.send_mcp_message(payload),
+            self.loop
+        )
 
     def _update_wake_word_detector_stream(self):
         """更新唤醒词检测器的音频流."""
