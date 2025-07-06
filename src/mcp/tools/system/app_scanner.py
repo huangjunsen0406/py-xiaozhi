@@ -8,12 +8,18 @@ import json
 import os
 import platform
 import subprocess
+import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from src.utils.logging_config import get_logger
 
 logger = get_logger(__name__)
+
+# 全局缓存变量
+_app_cache: Optional[Dict[str, Any]] = None
+_cache_timestamp: float = 0
+_cache_duration = 300  # 缓存5分钟
 
 
 async def scan_installed_applications(args: Dict[str, Any]) -> str:
@@ -27,8 +33,26 @@ async def scan_installed_applications(args: Dict[str, Any]) -> str:
     Returns:
         str: JSON格式的应用程序列表
     """
+    global _app_cache, _cache_timestamp
+    
     try:
         force_refresh = args.get("force_refresh", False)
+        current_time = time.time()
+        
+        # 检查是否需要使用缓存
+        if not force_refresh and _app_cache and (current_time - _cache_timestamp) < _cache_duration:
+            logger.info(f"[AppScanner] 使用内存缓存，缓存时间: {int(current_time - _cache_timestamp)}秒前")
+            return json.dumps(_app_cache, ensure_ascii=False, indent=2)
+        
+        # 尝试从文件缓存加载
+        if not force_refresh:
+            file_cache = await _load_file_cache()
+            if file_cache:
+                _app_cache = file_cache
+                _cache_timestamp = current_time
+                logger.info("[AppScanner] 使用文件缓存")
+                return json.dumps(_app_cache, ensure_ascii=False, indent=2)
+        
         logger.info(f"[AppScanner] 开始扫描已安装应用程序，强制刷新: {force_refresh}")
         
         # 使用线程池执行扫描，避免阻塞事件循环
@@ -38,8 +62,17 @@ async def scan_installed_applications(args: Dict[str, Any]) -> str:
             "success": True,
             "total_count": len(apps),
             "applications": apps,
-            "message": f"成功扫描到 {len(apps)} 个已安装应用程序"
+            "message": f"成功扫描到 {len(apps)} 个已安装应用程序",
+            "scan_time": current_time,
+            "cache_duration": _cache_duration
         }
+        
+        # 更新缓存
+        _app_cache = result
+        _cache_timestamp = current_time
+        
+        # 异步保存到文件缓存
+        asyncio.create_task(_save_file_cache(result))
         
         logger.info(f"[AppScanner] 扫描完成，找到 {len(apps)} 个应用程序")
         return json.dumps(result, ensure_ascii=False, indent=2)
@@ -53,6 +86,102 @@ async def scan_installed_applications(args: Dict[str, Any]) -> str:
             "applications": [],
             "message": error_msg
         }, ensure_ascii=False)
+
+
+async def _load_file_cache() -> Optional[Dict[str, Any]]:
+    """
+    从文件加载缓存.
+    """
+    try:
+        cache_file = _get_cache_file_path()
+        if not cache_file.exists():
+            return None
+        
+        # 检查文件缓存是否过期
+        file_mtime = cache_file.stat().st_mtime
+        if time.time() - file_mtime > _cache_duration:
+            logger.debug("[AppScanner] 文件缓存已过期")
+            return None
+        
+        with open(cache_file, 'r', encoding='utf-8') as f:
+            cache_data = json.load(f)
+        
+        # 验证缓存数据结构
+        if (isinstance(cache_data, dict) and
+                "applications" in cache_data and
+                "scan_time" in cache_data):
+            logger.debug(f"[AppScanner] 加载文件缓存成功，包含 {len(cache_data['applications'])} 个应用")
+            return cache_data
+        
+    except Exception as e:
+        logger.debug(f"[AppScanner] 加载文件缓存失败: {e}")
+    
+    return None
+
+
+async def _save_file_cache(cache_data: Dict[str, Any]) -> None:
+    """
+    保存缓存到文件.
+    """
+    try:
+        cache_file = _get_cache_file_path()
+        cache_file.parent.mkdir(parents=True, exist_ok=True)
+        
+        with open(cache_file, 'w', encoding='utf-8') as f:
+            json.dump(cache_data, f, ensure_ascii=False, indent=2)
+        
+        logger.debug(f"[AppScanner] 缓存已保存到文件: {cache_file}")
+        
+    except Exception as e:
+        logger.warning(f"[AppScanner] 保存文件缓存失败: {e}")
+
+
+def _get_cache_file_path() -> Path:
+    """
+    获取缓存文件路径.
+    """
+    cache_dir = Path("cache")
+    return cache_dir / "installed_apps.json"
+
+
+def clear_app_cache() -> None:
+    """
+    清空应用程序缓存.
+    """
+    global _app_cache, _cache_timestamp
+    
+    _app_cache = None
+    _cache_timestamp = 0
+    
+    # 删除文件缓存
+    try:
+        cache_file = _get_cache_file_path()
+        if cache_file.exists():
+            cache_file.unlink()
+            logger.info("[AppScanner] 已清空应用程序缓存")
+    except Exception as e:
+        logger.warning(f"[AppScanner] 清空文件缓存失败: {e}")
+
+
+def get_cache_status() -> Dict[str, Any]:
+    """
+    获取缓存状态信息.
+    """
+    global _app_cache, _cache_timestamp
+    
+    current_time = time.time()
+    cache_age = current_time - _cache_timestamp if _cache_timestamp > 0 else -1
+    cache_file = _get_cache_file_path()
+    
+    return {
+        "memory_cache_exists": _app_cache is not None,
+        "memory_cache_age_seconds": int(cache_age) if cache_age >= 0 else None,
+        "memory_cache_valid": cache_age >= 0 and cache_age < _cache_duration,
+        "file_cache_exists": cache_file.exists(),
+        "file_cache_size": cache_file.stat().st_size if cache_file.exists() else 0,
+        "cache_duration_seconds": _cache_duration,
+        "cached_app_count": len(_app_cache["applications"]) if _app_cache else 0
+    }
 
 
 def _scan_applications_sync(force_refresh: bool = False) -> List[Dict[str, str]]:
@@ -118,159 +247,51 @@ def _scan_macos_applications() -> List[Dict[str, str]]:
 
 def _scan_windows_applications() -> List[Dict[str, str]]:
     """
-    扫描Windows系统中的应用程序.
+    扫描Windows系统中的应用程序（只保留主要应用）.
     """
     apps = []
     
-    # 1. 使用PowerShell获取已安装的程序（注册表方式）
+    # 1. 扫描开始菜单中的主要应用程序（最直接的方法）
     try:
-        logger.info("[AppScanner] 开始扫描注册表中的已安装程序")
-        powershell_cmd = [
-            "powershell", "-Command",
-            "Get-ItemProperty HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\* | "
-            "Select-Object DisplayName, InstallLocation | "
-            "Where-Object {$_.DisplayName -ne $null} | "
-            "ConvertTo-Json"
-        ]
-        
-        result = subprocess.run(powershell_cmd, capture_output=True, text=True, timeout=30)
-        if result.returncode == 0 and result.stdout:
-            try:
-                installed_apps = json.loads(result.stdout)
-                if isinstance(installed_apps, dict):
-                    installed_apps = [installed_apps]
-                
-                for app in installed_apps:
-                    display_name = app.get("DisplayName", "")
-                    if display_name:
-                        clean_name = _clean_app_name(display_name)
-                        apps.append({
-                            "name": clean_name,
-                            "display_name": display_name,
-                            "path": app.get("InstallLocation", ""),
-                            "type": "installed"
-                        })
-                        
-                logger.info(f"[AppScanner] 从注册表扫描到 {len([a for a in apps if a['type'] == 'installed'])} 个已安装程序")
-            except json.JSONDecodeError:
-                logger.warning("[AppScanner] 无法解析PowerShell输出")
-    
-    except (subprocess.TimeoutExpired, subprocess.SubprocessError) as e:
-        logger.warning(f"[AppScanner] PowerShell扫描失败: {e}")
-    
-    # 2. 扫描UWP应用（Windows Store应用）
-    try:
-        logger.info("[AppScanner] 开始扫描UWP应用")
-        uwp_apps = _scan_uwp_applications()
-        apps.extend(uwp_apps)
-        logger.info(f"[AppScanner] 扫描到 {len(uwp_apps)} 个UWP应用")
-    except Exception as e:
-        logger.warning(f"[AppScanner] UWP应用扫描失败: {e}")
-    
-    # 3. 扫描开始菜单快捷方式
-    try:
-        logger.info("[AppScanner] 开始扫描开始菜单快捷方式")
-        start_menu_apps = _scan_start_menu_shortcuts()
-        # 去重：避免重复添加已经从注册表扫描到的应用
-        existing_names = {app['display_name'].lower() for app in apps}
-        for app in start_menu_apps:
-            if app['display_name'].lower() not in existing_names:
-                apps.append(app)
-        logger.info(f"[AppScanner] 从开始菜单扫描到 {len([a for a in start_menu_apps if a['display_name'].lower() not in existing_names])} 个新应用")
+        logger.info("[AppScanner] 开始扫描开始菜单主要应用")
+        start_menu_apps = _scan_main_start_menu_apps()
+        apps.extend(start_menu_apps)
+        logger.info(f"[AppScanner] 从开始菜单扫描到 {len(start_menu_apps)} 个主要应用")
     except Exception as e:
         logger.warning(f"[AppScanner] 开始菜单扫描失败: {e}")
     
-    # 4. 添加常见的Windows系统应用
+    # 2. 扫描注册表中的主要第三方应用（过滤系统组件）
+    try:
+        logger.info("[AppScanner] 开始扫描已安装的主要应用程序")
+        registry_apps = _scan_main_registry_apps()
+        # 去重：避免重复添加开始菜单中的应用
+        existing_names = {app['display_name'].lower() for app in apps}
+        for app in registry_apps:
+            if app['display_name'].lower() not in existing_names:
+                apps.append(app)
+        logger.info(f"[AppScanner] 从注册表扫描到 {len([a for a in registry_apps if a['display_name'].lower() not in existing_names])} 个新的主要应用")
+    except Exception as e:
+        logger.warning(f"[AppScanner] 注册表扫描失败: {e}")
+    
+    # 3. 添加常见的系统应用（只保留用户常用的）
     system_apps = [
         {"name": "Calculator", "display_name": "计算器", "path": "calc", "type": "system"},
         {"name": "Notepad", "display_name": "记事本", "path": "notepad", "type": "system"},
         {"name": "Paint", "display_name": "画图", "path": "mspaint", "type": "system"},
-        {"name": "Command Prompt", "display_name": "命令提示符", "path": "cmd", "type": "system"},
-        {"name": "PowerShell", "display_name": "PowerShell", "path": "powershell", "type": "system"},
         {"name": "File Explorer", "display_name": "文件资源管理器", "path": "explorer", "type": "system"},
         {"name": "Task Manager", "display_name": "任务管理器", "path": "taskmgr", "type": "system"},
-        {"name": "Registry Editor", "display_name": "注册表编辑器", "path": "regedit", "type": "system"},
         {"name": "Control Panel", "display_name": "控制面板", "path": "control", "type": "system"},
-        {"name": "Device Manager", "display_name": "设备管理器", "path": "devmgmt.msc", "type": "system"},
+        {"name": "Settings", "display_name": "设置", "path": "ms-settings:", "type": "system"},
     ]
     apps.extend(system_apps)
     
+    logger.info(f"[AppScanner] Windows应用扫描完成，总共找到 {len(apps)} 个主要应用程序")
     return apps
 
 
-def _scan_uwp_applications() -> List[Dict[str, str]]:
+def _scan_main_start_menu_apps() -> List[Dict[str, str]]:
     """
-    扫描UWP（Windows Store）应用程序.
-    """
-    apps = []
-    
-    try:
-        # 使用PowerShell获取UWP应用
-        powershell_script = """
-        Get-AppxPackage | Where-Object {$_.Name -notlike "*Microsoft.Windows*" -and $_.Name -notlike "*Microsoft.NET*" -and $_.Name -notlike "*Microsoft.VCLibs*"} | 
-        ForEach-Object {
-            try {
-                $manifest = Get-AppxPackageManifest $_.PackageFullName -ErrorAction SilentlyContinue
-                if ($manifest -and $manifest.Package.Applications.Application) {
-                    $app = $manifest.Package.Applications.Application | Select-Object -First 1
-                    if ($app.Id) {
-                        $displayName = if ($manifest.Package.Properties.DisplayName -match '^ms-resource:') {
-                            $_.Name
-                        } else {
-                            $manifest.Package.Properties.DisplayName
-                        }
-                        [PSCustomObject]@{
-                            Name = $_.Name
-                            DisplayName = $displayName
-                            PackageFullName = $_.PackageFullName
-                            AppId = $app.Id
-                        }
-                    }
-                }
-            } catch {
-                # 忽略错误，继续处理下一个
-            }
-        } | ConvertTo-Json
-        """
-        
-        result = subprocess.run(
-            ["powershell", "-Command", powershell_script],
-            capture_output=True,
-            text=True,
-            timeout=60
-        )
-        
-        if result.returncode == 0 and result.stdout.strip():
-            try:
-                uwp_data = json.loads(result.stdout)
-                if isinstance(uwp_data, dict):
-                    uwp_data = [uwp_data]
-                
-                for app in uwp_data:
-                    display_name = app.get("DisplayName", app.get("Name", ""))
-                    if display_name:
-                        clean_name = _clean_app_name(display_name)
-                        # 使用特殊的UWP启动路径格式
-                        uwp_path = f"shell:AppsFolder\\{app['PackageFullName']}!{app['AppId']}"
-                        apps.append({
-                            "name": clean_name,
-                            "display_name": display_name,
-                            "path": uwp_path,
-                            "type": "uwp"
-                        })
-                        
-            except json.JSONDecodeError as e:
-                logger.debug(f"[AppScanner] UWP JSON解析失败: {e}")
-                
-    except Exception as e:
-        logger.debug(f"[AppScanner] UWP扫描异常: {e}")
-    
-    return apps
-
-
-def _scan_start_menu_shortcuts() -> List[Dict[str, str]]:
-    """
-    扫描开始菜单中的快捷方式.
+    扫描开始菜单中的主要应用程序（过滤系统组件和辅助工具）.
     """
     apps = []
     
@@ -289,18 +310,19 @@ def _scan_start_menu_shortcuts() -> List[Dict[str, str]]:
                             try:
                                 shortcut_path = os.path.join(root, file)
                                 display_name = file[:-4]  # 移除.lnk扩展名
-                                clean_name = _clean_app_name(display_name)
                                 
-                                # 尝试解析快捷方式目标
-                                target_path = _resolve_shortcut_target(shortcut_path)
-                                
-                                apps.append({
-                                    "name": clean_name,
-                                    "display_name": display_name,
-                                    "path": target_path or shortcut_path,
-                                    "type": "shortcut"
-                                })
-                                
+                                # 过滤掉不需要的应用程序
+                                if _should_include_app(display_name):
+                                    clean_name = _clean_app_name(display_name)
+                                    target_path = _resolve_shortcut_target(shortcut_path)
+                                    
+                                    apps.append({
+                                        "name": clean_name,
+                                        "display_name": display_name,
+                                        "path": target_path or shortcut_path,
+                                        "type": "shortcut"
+                                    })
+                                    
                             except Exception as e:
                                 logger.debug(f"[AppScanner] 处理快捷方式失败 {file}: {e}")
                                 
@@ -308,6 +330,141 @@ def _scan_start_menu_shortcuts() -> List[Dict[str, str]]:
                 logger.debug(f"[AppScanner] 扫描开始菜单失败 {start_path}: {e}")
     
     return apps
+
+
+def _scan_main_registry_apps() -> List[Dict[str, str]]:
+    """
+    扫描注册表中的主要应用程序（过滤系统组件）.
+    """
+    apps = []
+    
+    try:
+        powershell_cmd = [
+            "powershell", "-Command",
+            "Get-ItemProperty HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\* | "
+            "Select-Object DisplayName, InstallLocation, Publisher | "
+            "Where-Object {$_.DisplayName -ne $null} | "
+            "ConvertTo-Json"
+        ]
+        
+        result = subprocess.run(powershell_cmd, capture_output=True, text=True, timeout=30)
+        if result.returncode == 0 and result.stdout:
+            try:
+                installed_apps = json.loads(result.stdout)
+                if isinstance(installed_apps, dict):
+                    installed_apps = [installed_apps]
+                
+                for app in installed_apps:
+                    display_name = app.get("DisplayName", "")
+                    publisher = app.get("Publisher", "")
+                    
+                    if display_name and _should_include_app(display_name, publisher):
+                        clean_name = _clean_app_name(display_name)
+                        apps.append({
+                            "name": clean_name,
+                            "display_name": display_name,
+                            "path": app.get("InstallLocation", ""),
+                            "type": "installed"
+                        })
+                        
+            except json.JSONDecodeError:
+                logger.warning("[AppScanner] 无法解析PowerShell输出")
+    
+    except (subprocess.TimeoutExpired, subprocess.SubprocessError) as e:
+        logger.warning(f"[AppScanner] PowerShell扫描失败: {e}")
+    
+    return apps
+
+
+def _should_include_app(display_name: str, publisher: str = "") -> bool:
+    """
+    判断是否应该包含该应用程序.
+    
+    Args:
+        display_name: 应用程序显示名称
+        publisher: 发布者（可选）
+    
+    Returns:
+        bool: 是否应该包含
+    """
+    name_lower = display_name.lower()
+    
+    # 明确排除的系统组件和运行库
+    exclude_keywords = [
+        # Microsoft系统组件
+        'microsoft visual c++', 'microsoft .net', 'microsoft office', 'microsoft edge webview',
+        'microsoft visual studio', 'microsoft redistributable', 'microsoft windows sdk',
+        
+        # 系统工具和驱动
+        'uninstall', '卸载', 'readme', 'help', '帮助', 'documentation', '文档',
+        'driver', '驱动', 'update', '更新', 'hotfix', 'patch', '补丁',
+        
+        # 开发工具组件
+        'development', 'sdk', 'runtime', 'redistributable', 'framework',
+        'python documentation', 'python test suite', 'python executables',
+        'java update', 'java development kit',
+        
+        # 系统服务
+        'service pack', 'security update', 'language pack',
+        
+        # 无用的快捷方式
+        'website', 'web site', '网站', 'online', '在线',
+        'report', '报告', 'feedback', '反馈',
+    ]
+    
+    # 检查是否包含排除关键词
+    for keyword in exclude_keywords:
+        if keyword in name_lower:
+            return False
+    
+    # 明确包含的知名应用程序
+    include_keywords = [
+        # 浏览器
+        'chrome', 'firefox', 'edge', 'safari', 'opera', 'brave',
+        
+        # 办公软件
+        'office', 'word', 'excel', 'powerpoint', 'outlook', 'onenote',
+        'wps', 'typora', 'notion', 'obsidian',
+        
+        # 开发工具
+        'visual studio code', 'vscode', 'pycharm', 'idea', 'eclipse',
+        'git', 'docker', 'nodejs', 'android studio',
+        
+        # 通信软件
+        'qq', '微信', 'wechat', 'skype', 'zoom', 'teams', '飞书', 'feishu',
+        'discord', 'slack', 'telegram',
+        
+        # 媒体软件
+        'vlc', 'potplayer', '网易云音乐', 'spotify', 'itunes',
+        'photoshop', 'premiere', 'after effects', 'illustrator',
+        
+        # 游戏平台
+        'steam', 'epic', 'origin', 'uplay', 'battlenet',
+        
+        # 实用工具
+        '7-zip', 'winrar', 'bandizip', 'everything', 'listary',
+        'notepad++', 'sublime', 'atom',
+    ]
+    
+    # 检查是否包含明确包含的关键词
+    for keyword in include_keywords:
+        if keyword in name_lower:
+            return True
+    
+    # 如果有发布者信息，排除Microsoft发布的系统组件
+    if publisher:
+        publisher_lower = publisher.lower()
+        if ('microsoft corporation' in publisher_lower and 
+                any(x in name_lower for x in ['visual c++', '.net', 'redistributable', 'runtime', 'framework', 'update'])):
+            return False
+    
+    # 默认包含其他应用程序（假设是用户安装的）
+    # 但排除明显的系统组件
+    system_indicators = ['(x64)', '(x86)', 'redistributable', 'runtime', 'framework']
+    if any(indicator in name_lower for indicator in system_indicators):
+        return False
+    
+    return True
 
 
 def _resolve_shortcut_target(shortcut_path: str) -> Optional[str]:

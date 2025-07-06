@@ -4,7 +4,6 @@
 """
 
 import asyncio
-import json
 import os
 import platform
 import subprocess
@@ -78,44 +77,15 @@ async def _find_matching_application(app_name: str) -> Optional[Dict[str, str]]:
         匹配的应用程序信息，如果没找到则返回None
     """
     try:
-        from .app_scanner import scan_installed_applications
+        from .app_utils import find_best_matching_app
 
-        # 扫描已安装的应用程序
-        result_json = await scan_installed_applications({"force_refresh": False})
-        result = json.loads(result_json)
+        # 使用统一的匹配逻辑
+        matched_app = await find_best_matching_app(app_name, "installed")
         
-        if not result.get("success", False):
-            return None
+        if matched_app:
+            logger.info(f"[AppLauncher] 通过统一匹配找到应用: {matched_app.get('display_name', matched_app.get('name', ''))}")
         
-        applications = result.get("applications", [])
-        app_name_lower = app_name.lower()
-        
-        # 1. 精确匹配（忽略大小写）
-        for app in applications:
-            if app["name"].lower() == app_name_lower:
-                return app
-            if app["display_name"].lower() == app_name_lower:
-                return app
-        
-        # 2. 部分匹配（包含关系）
-        for app in applications:
-            if app_name_lower in app["name"].lower():
-                return app
-            if app_name_lower in app["display_name"].lower():
-                return app
-        
-        # 3. 模糊匹配（移除空格和特殊字符）
-        import re
-        clean_app_name = re.sub(r'[^a-zA-Z0-9\u4e00-\u9fff]', '', app_name_lower)
-        
-        for app in applications:
-            clean_name = re.sub(r'[^a-zA-Z0-9\u4e00-\u9fff]', '', app["name"].lower())
-            clean_display = re.sub(r'[^a-zA-Z0-9\u4e00-\u9fff]', '', app["display_name"].lower())
-            
-            if clean_app_name == clean_name or clean_app_name == clean_display:
-                return app
-        
-        return None
+        return matched_app
         
     except Exception as e:
         logger.warning(f"[AppLauncher] 查找匹配应用程序时出错: {e}")
@@ -158,90 +128,116 @@ def _launch_windows_app(app_name: str) -> bool:
     try:
         logger.info(f"[AppLauncher] Windows启动应用程序: {app_name}")
         
-        # 方法1: 使用PowerShell Start-Process启动（推荐方法）
-        try:
-            # 转义应用程序名称中的特殊字符
-            escaped_name = app_name.replace('"', '""').replace("'", "''")
-            powershell_cmd = f'powershell -Command "Start-Process \'{escaped_name}\'"'
-            result = subprocess.run(powershell_cmd, shell=True, capture_output=True, text=True, timeout=10)
-            if result.returncode == 0:
-                logger.info(f"[AppLauncher] PowerShell Start-Process成功启动: {app_name}")
-                return True
-            else:
-                logger.debug(f"[AppLauncher] PowerShell Start-Process失败: {result.stderr}")
-        except Exception as e:
-            logger.debug(f"[AppLauncher] PowerShell Start-Process异常: {e}")
-        
-        # 方法2: 使用start命令
-        try:
-            # 使用双引号包围应用程序名称以处理空格
-            start_cmd = f'start "" "{app_name}"'
-            result = subprocess.run(start_cmd, shell=True, capture_output=True, text=True, timeout=10)
-            if result.returncode == 0:
-                logger.info(f"[AppLauncher] start命令成功启动: {app_name}")
-                return True
-            else:
-                logger.debug(f"[AppLauncher] start命令失败: {result.stderr}")
-        except Exception as e:
-            logger.debug(f"[AppLauncher] start命令异常: {e}")
-        
-        # 方法3: 使用os.startfile
-        try:
-            os.startfile(app_name)
-            logger.info(f"[AppLauncher] os.startfile成功启动: {app_name}")
-            return True
-        except OSError as e:
-            logger.debug(f"[AppLauncher] os.startfile失败: {e}")
-        
-        # 方法4: 通过注册表查找应用程序路径
-        try:
-            executable_path = _find_executable_in_registry(app_name)
-            if executable_path:
-                subprocess.Popen([executable_path])
-                logger.info(f"[AppLauncher] 注册表路径成功启动: {executable_path}")
-                return True
-        except Exception as e:
-            logger.debug(f"[AppLauncher] 注册表查找异常: {e}")
-        
-        # 方法5: 尝试常见的应用程序路径
-        common_paths = [
-            f"C:\\Program Files\\{app_name}\\{app_name}.exe",
-            f"C:\\Program Files (x86)\\{app_name}\\{app_name}.exe",
-            f"C:\\Users\\{os.getenv('USERNAME')}\\AppData\\Local\\Programs\\{app_name}\\{app_name}.exe",
-            f"C:\\Users\\{os.getenv('USERNAME')}\\AppData\\Local\\{app_name}\\{app_name}.exe",
-            f"C:\\Users\\{os.getenv('USERNAME')}\\AppData\\Roaming\\{app_name}\\{app_name}.exe",
+        # 按优先级尝试不同的启动方法
+        launch_methods = [
+            ("PowerShell Start-Process", _try_powershell_start),
+            ("start命令", _try_start_command),
+            ("os.startfile", _try_os_startfile),
+            ("注册表查找", _try_registry_launch),
+            ("常见路径", _try_common_paths),
+            ("where命令", _try_where_command),
+            ("UWP应用", _try_uwp_launch)
         ]
         
-        for path in common_paths:
-            if os.path.exists(path):
-                subprocess.Popen([path])
-                logger.info(f"[AppLauncher] 常见路径成功启动: {path}")
-                return True
-        
-        # 方法6: 尝试使用where命令查找
-        try:
-            result = subprocess.run(f"where {app_name}", shell=True, capture_output=True, text=True, timeout=5)
-            if result.returncode == 0:
-                exe_path = result.stdout.strip().split('\n')[0]  # 取第一个结果
-                subprocess.Popen([exe_path])
-                logger.info(f"[AppLauncher] where命令成功启动: {exe_path}")
-                return True
-        except Exception as e:
-            logger.debug(f"[AppLauncher] where命令异常: {e}")
-        
-        # 方法7: 尝试UWP应用启动
-        try:
-            if _launch_uwp_app(app_name):
-                logger.info(f"[AppLauncher] UWP应用成功启动: {app_name}")
-                return True
-        except Exception as e:
-            logger.debug(f"[AppLauncher] UWP启动异常: {e}")
+        for method_name, method_func in launch_methods:
+            try:
+                if method_func(app_name):
+                    logger.info(f"[AppLauncher] {method_name}成功启动: {app_name}")
+                    return True
+                else:
+                    logger.debug(f"[AppLauncher] {method_name}启动失败: {app_name}")
+            except Exception as e:
+                logger.debug(f"[AppLauncher] {method_name}异常: {e}")
         
         logger.warning(f"[AppLauncher] 所有Windows启动方法都失败了: {app_name}")
         return False
         
     except Exception as e:
         logger.error(f"[AppLauncher] Windows启动异常: {e}", exc_info=True)
+        return False
+
+
+def _try_powershell_start(app_name: str) -> bool:
+    """尝试使用PowerShell Start-Process启动应用程序"""
+    try:
+        escaped_name = app_name.replace('"', '""').replace("'", "''")
+        powershell_cmd = f'powershell -Command "Start-Process \'{escaped_name}\'"'
+        result = subprocess.run(powershell_cmd, shell=True, capture_output=True, text=True, timeout=10)
+        return result.returncode == 0
+    except Exception:
+        return False
+
+
+def _try_start_command(app_name: str) -> bool:
+    """尝试使用start命令启动应用程序"""
+    try:
+        start_cmd = f'start "" "{app_name}"'
+        result = subprocess.run(start_cmd, shell=True, capture_output=True, text=True, timeout=10)
+        return result.returncode == 0
+    except Exception:
+        return False
+
+
+def _try_os_startfile(app_name: str) -> bool:
+    """尝试使用os.startfile启动应用程序"""
+    try:
+        os.startfile(app_name)
+        return True
+    except OSError:
+        return False
+
+
+def _try_registry_launch(app_name: str) -> bool:
+    """尝试通过注册表查找并启动应用程序"""
+    try:
+        executable_path = _find_executable_in_registry(app_name)
+        if executable_path:
+            subprocess.Popen([executable_path])
+            return True
+    except Exception:
+        pass
+    return False
+
+
+def _try_common_paths(app_name: str) -> bool:
+    """尝试常见的应用程序路径"""
+    common_paths = [
+        f"C:\\Program Files\\{app_name}\\{app_name}.exe",
+        f"C:\\Program Files (x86)\\{app_name}\\{app_name}.exe",
+        f"C:\\Users\\{os.getenv('USERNAME')}\\AppData\\Local\\Programs\\{app_name}\\{app_name}.exe",
+        f"C:\\Users\\{os.getenv('USERNAME')}\\AppData\\Local\\{app_name}\\{app_name}.exe",
+        f"C:\\Users\\{os.getenv('USERNAME')}\\AppData\\Roaming\\{app_name}\\{app_name}.exe",
+    ]
+    
+    for path in common_paths:
+        if os.path.exists(path):
+            try:
+                subprocess.Popen([path])
+                return True
+            except Exception:
+                continue
+    return False
+
+
+def _try_where_command(app_name: str) -> bool:
+    """尝试使用where命令查找并启动应用程序"""
+    try:
+        result = subprocess.run(f"where {app_name}", shell=True, capture_output=True, text=True, timeout=5)
+        if result.returncode == 0:
+            exe_path = result.stdout.strip().split('\n')[0]  # 取第一个结果
+            if exe_path and os.path.exists(exe_path):
+                subprocess.Popen([exe_path])
+                return True
+    except Exception:
+        pass
+    return False
+
+
+def _try_uwp_launch(app_name: str) -> bool:
+    """尝试启动UWP应用程序"""
+    try:
+        return _launch_uwp_app(app_name)
+    except Exception:
         return False
 
 
