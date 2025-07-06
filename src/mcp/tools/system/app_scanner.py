@@ -5,10 +5,11 @@
 
 import asyncio
 import json
+import os
 import platform
 import subprocess
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from src.utils.logging_config import get_logger
 
@@ -121,8 +122,9 @@ def _scan_windows_applications() -> List[Dict[str, str]]:
     """
     apps = []
     
+    # 1. 使用PowerShell获取已安装的程序（注册表方式）
     try:
-        # 使用PowerShell获取已安装的应用程序
+        logger.info("[AppScanner] 开始扫描注册表中的已安装程序")
         powershell_cmd = [
             "powershell", "-Command",
             "Get-ItemProperty HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\* | "
@@ -148,13 +150,37 @@ def _scan_windows_applications() -> List[Dict[str, str]]:
                             "path": app.get("InstallLocation", ""),
                             "type": "installed"
                         })
+                        
+                logger.info(f"[AppScanner] 从注册表扫描到 {len([a for a in apps if a['type'] == 'installed'])} 个已安装程序")
             except json.JSONDecodeError:
                 logger.warning("[AppScanner] 无法解析PowerShell输出")
     
     except (subprocess.TimeoutExpired, subprocess.SubprocessError) as e:
         logger.warning(f"[AppScanner] PowerShell扫描失败: {e}")
     
-    # 添加常见的Windows系统应用
+    # 2. 扫描UWP应用（Windows Store应用）
+    try:
+        logger.info("[AppScanner] 开始扫描UWP应用")
+        uwp_apps = _scan_uwp_applications()
+        apps.extend(uwp_apps)
+        logger.info(f"[AppScanner] 扫描到 {len(uwp_apps)} 个UWP应用")
+    except Exception as e:
+        logger.warning(f"[AppScanner] UWP应用扫描失败: {e}")
+    
+    # 3. 扫描开始菜单快捷方式
+    try:
+        logger.info("[AppScanner] 开始扫描开始菜单快捷方式")
+        start_menu_apps = _scan_start_menu_shortcuts()
+        # 去重：避免重复添加已经从注册表扫描到的应用
+        existing_names = {app['display_name'].lower() for app in apps}
+        for app in start_menu_apps:
+            if app['display_name'].lower() not in existing_names:
+                apps.append(app)
+        logger.info(f"[AppScanner] 从开始菜单扫描到 {len([a for a in start_menu_apps if a['display_name'].lower() not in existing_names])} 个新应用")
+    except Exception as e:
+        logger.warning(f"[AppScanner] 开始菜单扫描失败: {e}")
+    
+    # 4. 添加常见的Windows系统应用
     system_apps = [
         {"name": "Calculator", "display_name": "计算器", "path": "calc", "type": "system"},
         {"name": "Notepad", "display_name": "记事本", "path": "notepad", "type": "system"},
@@ -162,10 +188,154 @@ def _scan_windows_applications() -> List[Dict[str, str]]:
         {"name": "Command Prompt", "display_name": "命令提示符", "path": "cmd", "type": "system"},
         {"name": "PowerShell", "display_name": "PowerShell", "path": "powershell", "type": "system"},
         {"name": "File Explorer", "display_name": "文件资源管理器", "path": "explorer", "type": "system"},
+        {"name": "Task Manager", "display_name": "任务管理器", "path": "taskmgr", "type": "system"},
+        {"name": "Registry Editor", "display_name": "注册表编辑器", "path": "regedit", "type": "system"},
+        {"name": "Control Panel", "display_name": "控制面板", "path": "control", "type": "system"},
+        {"name": "Device Manager", "display_name": "设备管理器", "path": "devmgmt.msc", "type": "system"},
     ]
     apps.extend(system_apps)
     
     return apps
+
+
+def _scan_uwp_applications() -> List[Dict[str, str]]:
+    """
+    扫描UWP（Windows Store）应用程序.
+    """
+    apps = []
+    
+    try:
+        # 使用PowerShell获取UWP应用
+        powershell_script = """
+        Get-AppxPackage | Where-Object {$_.Name -notlike "*Microsoft.Windows*" -and $_.Name -notlike "*Microsoft.NET*" -and $_.Name -notlike "*Microsoft.VCLibs*"} | 
+        ForEach-Object {
+            try {
+                $manifest = Get-AppxPackageManifest $_.PackageFullName -ErrorAction SilentlyContinue
+                if ($manifest -and $manifest.Package.Applications.Application) {
+                    $app = $manifest.Package.Applications.Application | Select-Object -First 1
+                    if ($app.Id) {
+                        $displayName = if ($manifest.Package.Properties.DisplayName -match '^ms-resource:') {
+                            $_.Name
+                        } else {
+                            $manifest.Package.Properties.DisplayName
+                        }
+                        [PSCustomObject]@{
+                            Name = $_.Name
+                            DisplayName = $displayName
+                            PackageFullName = $_.PackageFullName
+                            AppId = $app.Id
+                        }
+                    }
+                }
+            } catch {
+                # 忽略错误，继续处理下一个
+            }
+        } | ConvertTo-Json
+        """
+        
+        result = subprocess.run(
+            ["powershell", "-Command", powershell_script],
+            capture_output=True,
+            text=True,
+            timeout=60
+        )
+        
+        if result.returncode == 0 and result.stdout.strip():
+            try:
+                uwp_data = json.loads(result.stdout)
+                if isinstance(uwp_data, dict):
+                    uwp_data = [uwp_data]
+                
+                for app in uwp_data:
+                    display_name = app.get("DisplayName", app.get("Name", ""))
+                    if display_name:
+                        clean_name = _clean_app_name(display_name)
+                        # 使用特殊的UWP启动路径格式
+                        uwp_path = f"shell:AppsFolder\\{app['PackageFullName']}!{app['AppId']}"
+                        apps.append({
+                            "name": clean_name,
+                            "display_name": display_name,
+                            "path": uwp_path,
+                            "type": "uwp"
+                        })
+                        
+            except json.JSONDecodeError as e:
+                logger.debug(f"[AppScanner] UWP JSON解析失败: {e}")
+                
+    except Exception as e:
+        logger.debug(f"[AppScanner] UWP扫描异常: {e}")
+    
+    return apps
+
+
+def _scan_start_menu_shortcuts() -> List[Dict[str, str]]:
+    """
+    扫描开始菜单中的快捷方式.
+    """
+    apps = []
+    
+    # 开始菜单目录
+    start_menu_paths = [
+        os.path.join(os.environ.get('PROGRAMDATA', ''), 'Microsoft', 'Windows', 'Start Menu', 'Programs'),
+        os.path.join(os.environ.get('APPDATA', ''), 'Microsoft', 'Windows', 'Start Menu', 'Programs'),
+    ]
+    
+    for start_path in start_menu_paths:
+        if os.path.exists(start_path):
+            try:
+                for root, dirs, files in os.walk(start_path):
+                    for file in files:
+                        if file.lower().endswith('.lnk'):
+                            try:
+                                shortcut_path = os.path.join(root, file)
+                                display_name = file[:-4]  # 移除.lnk扩展名
+                                clean_name = _clean_app_name(display_name)
+                                
+                                # 尝试解析快捷方式目标
+                                target_path = _resolve_shortcut_target(shortcut_path)
+                                
+                                apps.append({
+                                    "name": clean_name,
+                                    "display_name": display_name,
+                                    "path": target_path or shortcut_path,
+                                    "type": "shortcut"
+                                })
+                                
+                            except Exception as e:
+                                logger.debug(f"[AppScanner] 处理快捷方式失败 {file}: {e}")
+                                
+            except Exception as e:
+                logger.debug(f"[AppScanner] 扫描开始菜单失败 {start_path}: {e}")
+    
+    return apps
+
+
+def _resolve_shortcut_target(shortcut_path: str) -> Optional[str]:
+    """
+    解析Windows快捷方式的目标路径.
+    
+    Args:
+        shortcut_path: 快捷方式文件路径
+    
+    Returns:
+        目标路径，如果解析失败则返回None
+    """
+    try:
+        import win32com.client
+        
+        shell = win32com.client.Dispatch("WScript.Shell")
+        shortcut = shell.CreateShortCut(shortcut_path)
+        target_path = shortcut.Targetpath
+        
+        if target_path and os.path.exists(target_path):
+            return target_path
+            
+    except ImportError:
+        logger.debug("[AppScanner] win32com模块不可用，无法解析快捷方式")
+    except Exception as e:
+        logger.debug(f"[AppScanner] 解析快捷方式失败: {e}")
+    
+    return None
 
 
 def _scan_linux_applications() -> List[Dict[str, str]]:

@@ -116,9 +116,9 @@ async def _find_running_applications(app_name: str) -> List[Dict[str, Any]]:
         
         for app in all_apps:
             # 多种匹配方式
-            if (app_name_lower in app["name"].lower() or 
-                app_name_lower in app.get("display_name", "").lower() or
-                app_name_lower in app.get("command", "").lower()):
+            if (app_name_lower in app["name"].lower() or
+                    app_name_lower in app.get("display_name", "").lower() or
+                    app_name_lower in app.get("command", "").lower()):
                 matched_apps.append(app)
         
         return matched_apps
@@ -200,43 +200,152 @@ def _list_windows_running_apps(filter_name: str = "") -> List[Dict[str, Any]]:
     """
     apps = []
     
+    # 方法1: 使用简化的tasklist命令（更快）
     try:
-        # 使用tasklist命令获取进程信息
+        logger.debug("[AppKiller] 尝试使用简化tasklist命令")
         result = subprocess.run(
-            ["tasklist", "/fo", "csv", "/v"],
-            capture_output=True, text=True, timeout=15
+            ["tasklist", "/fo", "csv"],  # 移除/v参数以提高速度
+            capture_output=True, text=True, timeout=10, encoding='gbk'
         )
         
         if result.returncode == 0:
             lines = result.stdout.strip().split('\n')[1:]  # 跳过标题行
             
             for line in lines:
-                # 解析CSV格式
-                parts = line.split('","')
-                if len(parts) >= 2:
-                    image_name = parts[0].strip('"')
-                    pid = parts[1].strip('"')
-                    
-                    # 过滤系统进程
-                    if not image_name.lower().endswith('.exe'):
-                        continue
-                    
-                    app_name = image_name.replace('.exe', '')
-                    
-                    # 应用过滤条件
-                    if not filter_name or filter_name.lower() in app_name.lower():
-                        apps.append({
-                            "pid": int(pid),
-                            "name": app_name,
-                            "display_name": image_name,
-                            "command": image_name,
-                            "type": "application"
-                        })
+                try:
+                    # 解析CSV格式
+                    parts = [p.strip('"') for p in line.split('","')]
+                    if len(parts) >= 2:
+                        image_name = parts[0]
+                        pid = parts[1]
+                        
+                        # 过滤系统进程和服务
+                        if not image_name.lower().endswith('.exe'):
+                            continue
+                        
+                        # 排除常见的系统进程
+                        system_processes = {
+                            'dwm.exe', 'winlogon.exe', 'csrss.exe', 'smss.exe',
+                            'wininit.exe', 'services.exe', 'lsass.exe', 'svchost.exe',
+                            'spoolsv.exe', 'explorer.exe', 'taskhostw.exe', 'winlogon.exe'
+                        }
+                        
+                        if image_name.lower() in system_processes:
+                            continue
+                        
+                        app_name = image_name.replace('.exe', '')
+                        
+                        # 应用过滤条件
+                        if not filter_name or filter_name.lower() in app_name.lower():
+                            apps.append({
+                                "pid": int(pid),
+                                "name": app_name,
+                                "display_name": image_name,
+                                "command": image_name,
+                                "type": "application"
+                            })
+                except (ValueError, IndexError) as e:
+                    logger.debug(f"[AppKiller] 解析tasklist行失败: {e}")
+                    continue
     
     except (subprocess.TimeoutExpired, subprocess.SubprocessError) as e:
-        logger.warning(f"[AppKiller] Windows进程扫描失败: {e}")
+        logger.warning(f"[AppKiller] tasklist命令失败: {e}")
     
-    return apps
+    # 方法2: 如果tasklist失败，使用PowerShell作为备选
+    if not apps:
+        try:
+            logger.debug("[AppKiller] 尝试使用PowerShell扫描进程")
+            powershell_script = """
+            Get-Process | Where-Object {
+                $_.ProcessName -notmatch '^(dwm|winlogon|csrss|smss|wininit|services|lsass|svchost|spoolsv|taskhostw)$' -and
+                $_.MainWindowTitle -ne '' -and
+                $_.ProcessName -ne 'explorer'
+            } | Select-Object Id, ProcessName, MainWindowTitle | ConvertTo-Json
+            """
+            
+            result = subprocess.run(
+                ["powershell", "-Command", powershell_script],
+                capture_output=True, text=True, timeout=15
+            )
+            
+            if result.returncode == 0 and result.stdout.strip():
+                try:
+                    process_data = json.loads(result.stdout)
+                    if isinstance(process_data, dict):
+                        process_data = [process_data]
+                    
+                    for proc in process_data:
+                        proc_name = proc.get("ProcessName", "")
+                        pid = proc.get("Id", 0)
+                        window_title = proc.get("MainWindowTitle", "")
+                        
+                        if proc_name and pid:
+                            # 应用过滤条件
+                            if not filter_name or filter_name.lower() in proc_name.lower():
+                                apps.append({
+                                    "pid": int(pid),
+                                    "name": proc_name,
+                                    "display_name": f"{proc_name}.exe",
+                                    "command": f"{proc_name}.exe",
+                                    "window_title": window_title,
+                                    "type": "application"
+                                })
+                                
+                except json.JSONDecodeError as e:
+                    logger.debug(f"[AppKiller] PowerShell JSON解析失败: {e}")
+                    
+        except (subprocess.TimeoutExpired, subprocess.SubprocessError) as e:
+            logger.warning(f"[AppKiller] PowerShell进程扫描失败: {e}")
+    
+    # 方法3: 使用wmic作为最后备选（如果前两种方法都失败）
+    if not apps:
+        try:
+            logger.debug("[AppKiller] 尝试使用wmic扫描进程")
+            result = subprocess.run(
+                ["wmic", "process", "get", "ProcessId,Name", "/format:csv"],
+                capture_output=True, text=True, timeout=10
+            )
+            
+            if result.returncode == 0:
+                lines = result.stdout.strip().split('\n')[1:]  # 跳过标题行
+                
+                for line in lines:
+                    parts = line.split(',')
+                    if len(parts) >= 3:
+                        try:
+                            name = parts[1].strip()
+                            pid = parts[2].strip()
+                            
+                            if name.lower().endswith('.exe') and pid.isdigit():
+                                app_name = name.replace('.exe', '')
+                                
+                                # 应用过滤条件
+                                if not filter_name or filter_name.lower() in app_name.lower():
+                                    apps.append({
+                                        "pid": int(pid),
+                                        "name": app_name,
+                                        "display_name": name,
+                                        "command": name,
+                                        "type": "application"
+                                    })
+                        except (ValueError, IndexError):
+                            continue
+                            
+        except (subprocess.TimeoutExpired, subprocess.SubprocessError) as e:
+            logger.warning(f"[AppKiller] wmic进程扫描失败: {e}")
+    
+    # 去重并按名称排序
+    seen_pids = set()
+    unique_apps = []
+    for app in apps:
+        if app["pid"] not in seen_pids:
+            seen_pids.add(app["pid"])
+            unique_apps.append(app)
+    
+    unique_apps.sort(key=lambda x: x["name"].lower())
+    
+    logger.info(f"[AppKiller] Windows进程扫描完成，找到 {len(unique_apps)} 个应用程序")
+    return unique_apps
 
 
 def _list_linux_running_apps(filter_name: str = "") -> List[Dict[str, Any]]:
@@ -320,23 +429,32 @@ def _kill_windows_app(pid: int, force: bool) -> bool:
     在Windows上关闭应用程序.
     """
     try:
+        logger.info(f"[AppKiller] 尝试关闭Windows应用程序，PID: {pid}, 强制关闭: {force}")
+        
         if force:
             # 强制关闭
             result = subprocess.run(
                 ["taskkill", "/PID", str(pid), "/F"], 
-                capture_output=True, timeout=5
+                capture_output=True, text=True, timeout=10
             )
         else:
             # 正常关闭
             result = subprocess.run(
                 ["taskkill", "/PID", str(pid)], 
-                capture_output=True, timeout=5
+                capture_output=True, text=True, timeout=10
             )
         
-        return result.returncode == 0
+        success = result.returncode == 0
+        
+        if success:
+            logger.info(f"[AppKiller] 成功关闭应用程序，PID: {pid}")
+        else:
+            logger.warning(f"[AppKiller] 关闭应用程序失败，PID: {pid}, 错误信息: {result.stderr}")
+            
+        return success
         
     except (subprocess.TimeoutExpired, subprocess.SubprocessError) as e:
-        logger.error(f"[AppKiller] Windows关闭应用程序失败: {e}")
+        logger.error(f"[AppKiller] Windows关闭应用程序异常，PID: {pid}, 错误: {e}")
         return False
 
 

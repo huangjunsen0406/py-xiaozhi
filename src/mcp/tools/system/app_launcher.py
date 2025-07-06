@@ -34,9 +34,19 @@ async def launch_application(args: Dict[str, Any]) -> bool:
         matched_app = await _find_matching_application(app_name)
         if matched_app:
             logger.info(f"[AppLauncher] 找到匹配的应用程序: {matched_app['display_name']}")
-            # 使用匹配到的应用程序路径或名称
-            target_name = matched_app.get('path', matched_app['name'])
-            success = await asyncio.to_thread(_launch_app_sync, target_name, platform.system())
+            # 根据应用程序类型使用不同的启动方法
+            app_type = matched_app.get('type', 'unknown')
+            app_path = matched_app.get('path', matched_app['name'])
+            
+            if app_type == 'uwp':
+                # UWP应用使用特殊的启动方法
+                success = await asyncio.to_thread(_launch_uwp_app_by_path, app_path)
+            elif app_type == 'shortcut' and app_path.endswith('.lnk'):
+                # 快捷方式文件
+                success = await asyncio.to_thread(_launch_shortcut, app_path)
+            else:
+                # 常规应用程序
+                success = await asyncio.to_thread(_launch_app_sync, app_path, platform.system())
         else:
             # 如果没有找到匹配，使用原来的方法
             logger.info(f"[AppLauncher] 未找到精确匹配，使用原始名称: {app_name}")
@@ -146,39 +156,197 @@ def _launch_windows_app(app_name: str) -> bool:
         bool: 启动是否成功
     """
     try:
-        # 方法1: 直接使用应用程序名称
-        try:
-            subprocess.Popen([app_name], shell=True)
-            return True
-        except (OSError, subprocess.SubprocessError):
-            pass
+        logger.info(f"[AppLauncher] Windows启动应用程序: {app_name}")
         
-        # 方法2: 使用os.startfile
+        # 方法1: 使用PowerShell Start-Process启动（推荐方法）
+        try:
+            # 转义应用程序名称中的特殊字符
+            escaped_name = app_name.replace('"', '""').replace("'", "''")
+            powershell_cmd = f'powershell -Command "Start-Process \'{escaped_name}\'"'
+            result = subprocess.run(powershell_cmd, shell=True, capture_output=True, text=True, timeout=10)
+            if result.returncode == 0:
+                logger.info(f"[AppLauncher] PowerShell Start-Process成功启动: {app_name}")
+                return True
+            else:
+                logger.debug(f"[AppLauncher] PowerShell Start-Process失败: {result.stderr}")
+        except Exception as e:
+            logger.debug(f"[AppLauncher] PowerShell Start-Process异常: {e}")
+        
+        # 方法2: 使用start命令
+        try:
+            # 使用双引号包围应用程序名称以处理空格
+            start_cmd = f'start "" "{app_name}"'
+            result = subprocess.run(start_cmd, shell=True, capture_output=True, text=True, timeout=10)
+            if result.returncode == 0:
+                logger.info(f"[AppLauncher] start命令成功启动: {app_name}")
+                return True
+            else:
+                logger.debug(f"[AppLauncher] start命令失败: {result.stderr}")
+        except Exception as e:
+            logger.debug(f"[AppLauncher] start命令异常: {e}")
+        
+        # 方法3: 使用os.startfile
         try:
             os.startfile(app_name)
+            logger.info(f"[AppLauncher] os.startfile成功启动: {app_name}")
             return True
-        except OSError:
-            pass
+        except OSError as e:
+            logger.debug(f"[AppLauncher] os.startfile失败: {e}")
         
-        # 方法3: 尝试常见的应用程序路径
+        # 方法4: 通过注册表查找应用程序路径
+        try:
+            executable_path = _find_executable_in_registry(app_name)
+            if executable_path:
+                subprocess.Popen([executable_path])
+                logger.info(f"[AppLauncher] 注册表路径成功启动: {executable_path}")
+                return True
+        except Exception as e:
+            logger.debug(f"[AppLauncher] 注册表查找异常: {e}")
+        
+        # 方法5: 尝试常见的应用程序路径
         common_paths = [
             f"C:\\Program Files\\{app_name}\\{app_name}.exe",
             f"C:\\Program Files (x86)\\{app_name}\\{app_name}.exe",
             f"C:\\Users\\{os.getenv('USERNAME')}\\AppData\\Local\\Programs\\{app_name}\\{app_name}.exe",
+            f"C:\\Users\\{os.getenv('USERNAME')}\\AppData\\Local\\{app_name}\\{app_name}.exe",
+            f"C:\\Users\\{os.getenv('USERNAME')}\\AppData\\Roaming\\{app_name}\\{app_name}.exe",
         ]
         
         for path in common_paths:
             if os.path.exists(path):
                 subprocess.Popen([path])
+                logger.info(f"[AppLauncher] 常见路径成功启动: {path}")
                 return True
         
-        # 方法4: 使用start命令
-        subprocess.Popen(f"start {app_name}", shell=True)
-        return True
+        # 方法6: 尝试使用where命令查找
+        try:
+            result = subprocess.run(f"where {app_name}", shell=True, capture_output=True, text=True, timeout=5)
+            if result.returncode == 0:
+                exe_path = result.stdout.strip().split('\n')[0]  # 取第一个结果
+                subprocess.Popen([exe_path])
+                logger.info(f"[AppLauncher] where命令成功启动: {exe_path}")
+                return True
+        except Exception as e:
+            logger.debug(f"[AppLauncher] where命令异常: {e}")
+        
+        # 方法7: 尝试UWP应用启动
+        try:
+            if _launch_uwp_app(app_name):
+                logger.info(f"[AppLauncher] UWP应用成功启动: {app_name}")
+                return True
+        except Exception as e:
+            logger.debug(f"[AppLauncher] UWP启动异常: {e}")
+        
+        logger.warning(f"[AppLauncher] 所有Windows启动方法都失败了: {app_name}")
+        return False
         
     except Exception as e:
-        logger.error(f"[AppLauncher] Windows启动失败: {e}")
+        logger.error(f"[AppLauncher] Windows启动异常: {e}", exc_info=True)
         return False
+
+
+def _find_executable_in_registry(app_name: str) -> Optional[str]:
+    """
+    通过注册表查找应用程序的可执行文件路径.
+    
+    Args:
+        app_name: 应用程序名称
+    
+    Returns:
+        应用程序路径，如果没找到则返回None
+    """
+    try:
+        import winreg
+
+        # 查找注册表中的卸载信息
+        registry_paths = [
+            r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
+            r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"
+        ]
+        
+        for registry_path in registry_paths:
+            try:
+                with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, registry_path) as key:
+                    for i in range(winreg.QueryInfoKey(key)[0]):
+                        try:
+                            subkey_name = winreg.EnumKey(key, i)
+                            with winreg.OpenKey(key, subkey_name) as subkey:
+                                try:
+                                    display_name = winreg.QueryValueEx(subkey, "DisplayName")[0]
+                                    if app_name.lower() in display_name.lower():
+                                        try:
+                                            install_location = winreg.QueryValueEx(subkey, "InstallLocation")[0]
+                                            if install_location and os.path.exists(install_location):
+                                                # 查找主执行文件
+                                                for root, dirs, files in os.walk(install_location):
+                                                    for file in files:
+                                                        if file.lower().endswith('.exe') and app_name.lower() in file.lower():
+                                                            return os.path.join(root, file)
+                                        except FileNotFoundError:
+                                            pass
+                                        
+                                        try:
+                                            display_icon = winreg.QueryValueEx(subkey, "DisplayIcon")[0]
+                                            if display_icon and display_icon.endswith('.exe') and os.path.exists(display_icon):
+                                                return display_icon
+                                        except FileNotFoundError:
+                                            pass
+                                            
+                                except FileNotFoundError:
+                                    continue
+                        except Exception:
+                            continue
+            except Exception:
+                continue
+        
+        return None
+        
+    except ImportError:
+        logger.debug("[AppLauncher] winreg模块不可用，跳过注册表查找")
+        return None
+    except Exception as e:
+        logger.debug(f"[AppLauncher] 注册表查找失败: {e}")
+        return None
+
+
+def _launch_uwp_app(app_name: str) -> bool:
+    """
+    尝试启动UWP（Windows Store）应用程序.
+    
+    Args:
+        app_name: 应用程序名称
+    
+    Returns:
+        bool: 启动是否成功
+    """
+    try:
+        # 使用PowerShell查找和启动UWP应用
+        powershell_script = f"""
+        $app = Get-AppxPackage | Where-Object {{$_.Name -like "*{app_name}*" -or $_.PackageFullName -like "*{app_name}*"}} | Select-Object -First 1
+        if ($app) {{
+            $manifest = Get-AppxPackageManifest $app.PackageFullName
+            $appId = $manifest.Package.Applications.Application.Id
+            if ($appId) {{
+                Start-Process "shell:AppsFolder\\$($app.PackageFullName)!$appId"
+                Write-Output "Success"
+            }}
+        }}
+        """
+        
+        result = subprocess.run(
+            ["powershell", "-Command", powershell_script],
+            capture_output=True,
+            text=True,
+            timeout=15
+        )
+        
+        if result.returncode == 0 and "Success" in result.stdout:
+            return True
+            
+    except Exception as e:
+        logger.debug(f"[AppLauncher] UWP启动异常: {e}")
+    
+    return False
 
 
 def _launch_macos_app(app_name: str) -> bool:
@@ -287,4 +455,46 @@ def _launch_linux_app(app_name: str) -> bool:
         
     except Exception as e:
         logger.error(f"[AppLauncher] Linux启动失败: {e}")
+        return False
+
+
+def _launch_uwp_app_by_path(uwp_path: str) -> bool:
+    """
+    通过UWP路径启动应用程序.
+    
+    Args:
+        uwp_path: UWP应用程序路径（shell:AppsFolder\\...格式）
+    
+    Returns:
+        bool: 启动是否成功
+    """
+    try:
+        if uwp_path.startswith("shell:AppsFolder\\"):
+            # 使用explorer启动UWP应用
+            subprocess.Popen(["explorer.exe", uwp_path])
+            logger.info(f"[AppLauncher] UWP应用启动成功: {uwp_path}")
+            return True
+        else:
+            return False
+    except Exception as e:
+        logger.error(f"[AppLauncher] UWP应用启动失败: {e}")
+        return False
+
+
+def _launch_shortcut(shortcut_path: str) -> bool:
+    """
+    启动快捷方式文件.
+    
+    Args:
+        shortcut_path: 快捷方式文件路径
+    
+    Returns:
+        bool: 启动是否成功
+    """
+    try:
+        os.startfile(shortcut_path)
+        logger.info(f"[AppLauncher] 快捷方式启动成功: {shortcut_path}")
+        return True
+    except Exception as e:
+        logger.error(f"[AppLauncher] 快捷方式启动失败: {e}")
         return False 
