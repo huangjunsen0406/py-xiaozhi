@@ -23,3 +23,4 @@ soxr==0.5.0.post1
 mutagen==1.47.0
 beautifulsoup4==4.12.3
 brotli==1.1.0
+python-dateutil

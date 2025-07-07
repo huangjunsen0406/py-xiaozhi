@@ -290,6 +290,23 @@ class McpServer:
         search_manager = get_search_manager()
         search_manager.init_tools(self.add_tool, PropertyList, Property, PropertyType)
 
+        # 添加摄像头工具
+        from src.mcp.tools.camera.camera import Camera, take_photo
+
+        # 设置摄像头实例
+        self._camera = Camera.get_instance()
+        
+        # 注册take_photo工具
+        properties = PropertyList([
+            Property("question", PropertyType.STRING)
+        ])
+        self.add_tool(McpTool(
+            "take_photo",
+            "Take photo and answer a question about it.",
+            properties,
+            take_photo
+        ))
+
         # 恢复原有工具
         self.tools.extend(original_tools)
 
@@ -442,16 +459,17 @@ class McpServer:
             logger.error(f"[MCP] 工具 {tool_name} 执行失败: {e}", exc_info=True)
             await self._reply_error(id, str(e))
 
-    async def _parse_capabilities(self, capabilities: Dict[str, Any]):
-        """
-        解析capabilities.
-        """
+    async def _parse_capabilities(self, capabilities):
+        """解析capabilities"""
         vision = capabilities.get("vision", {})
-        if vision:
+        if vision and isinstance(vision, dict):
             url = vision.get("url")
             token = vision.get("token")
             if url and self._camera:
-                await self._camera.set_explain_url(url, token)
+                self._camera.set_explain_url(url)
+                if token:
+                    self._camera.set_explain_token(token)
+                logger.info(f"Vision service configured with URL: {url}")
 
     async def _reply_result(self, id: int, result: Any):
         """
