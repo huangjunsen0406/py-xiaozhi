@@ -79,6 +79,8 @@ class CalendarReminderService:
         while self.is_running:
             try:
                 await self._check_and_send_reminders()
+                # 定期清理过期事件的提醒标志
+                await self._cleanup_expired_reminders()
                 await asyncio.sleep(self.check_interval)
             except asyncio.CancelledError:
                 break
@@ -94,6 +96,7 @@ class CalendarReminderService:
             now = datetime.now()
 
             # 查询所有未发送提醒且提醒时间已到的事件
+            # 同时确保事件还没有过期（开始时间在当前时间之后或者在合理的过期时间内）
             with self.db._get_connection() as conn:
                 cursor = conn.execute(
                     """
@@ -101,9 +104,10 @@ class CalendarReminderService:
                     WHERE reminder_sent = 0
                     AND reminder_time IS NOT NULL
                     AND reminder_time <= ?
+                    AND start_time > ?
                     ORDER BY reminder_time
                 """,
-                    (now.isoformat(),),
+                    (now.isoformat(), (now - timedelta(hours=1)).isoformat()),
                 )
 
                 pending_reminders = cursor.fetchall()
@@ -311,6 +315,33 @@ class CalendarReminderService:
 
         except Exception as e:
             logger.error(f"重置提醒标志失败: {e}", exc_info=True)
+
+    async def _cleanup_expired_reminders(self):
+        """
+        清理过期事件的提醒标志（超过24小时的过期事件）
+        """
+        try:
+            now = datetime.now()
+            cleanup_threshold = now - timedelta(hours=24)
+
+            with self.db._get_connection() as conn:
+                cursor = conn.execute(
+                    """
+                    UPDATE events
+                    SET reminder_sent = 1, updated_at = ?
+                    WHERE start_time < ? AND reminder_sent = 0
+                """,
+                    (now.isoformat(), cleanup_threshold.isoformat()),
+                )
+
+                cleanup_count = cursor.rowcount
+                conn.commit()
+
+            if cleanup_count > 0:
+                logger.info(f"已清理 {cleanup_count} 个过期事件的提醒标志")
+
+        except Exception as e:
+            logger.error(f"清理过期提醒标志失败: {e}", exc_info=True)
 
 
 # 全局提醒服务实例
