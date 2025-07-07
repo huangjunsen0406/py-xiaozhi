@@ -291,11 +291,8 @@ class McpServer:
         search_manager.init_tools(self.add_tool, PropertyList, Property, PropertyType)
 
         # 添加摄像头工具
-        from src.mcp.tools.camera.camera import Camera, take_photo
+        from src.mcp.tools.camera import take_photo
 
-        # 设置摄像头实例
-        self._camera = Camera.get_instance()
-        
         # 注册take_photo工具
         properties = PropertyList([
             Property("question", PropertyType.STRING)
@@ -465,10 +462,13 @@ class McpServer:
         if vision and isinstance(vision, dict):
             url = vision.get("url")
             token = vision.get("token")
-            if url and self._camera:
-                self._camera.set_explain_url(url)
-                if token:
-                    self._camera.set_explain_token(token)
+            if url:
+                from src.mcp.tools.camera import get_camera_instance
+                camera = get_camera_instance()
+                if hasattr(camera, 'set_explain_url'):
+                    camera.set_explain_url(url)
+                if token and hasattr(camera, 'set_explain_token'):
+                    camera.set_explain_token(token)
                 logger.info(f"Vision service configured with URL: {url}")
 
     async def _reply_result(self, id: int, result: Any):
