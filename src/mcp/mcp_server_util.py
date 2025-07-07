@@ -1,7 +1,7 @@
-from dataclasses import dataclass
-from typing import Union, Optional, Callable, List, Dict
 import json
-
+import logging
+from dataclasses import dataclass
+from typing import Callable, Dict, List, Optional, Union
 
 ReturnValue = Union[bool, int, str]
 
@@ -116,3 +116,15 @@ class BaseMcpServer:
 
     def add_tool_with_callback(self, name: str, description: str, props: PropertyList, cb: Callable[[PropertyList], ReturnValue]):
         self.tools[name] = McpTool(name, description, props, cb)
+
+    def _reply_result(self, msg_id: int, result: any):
+        """回复结果"""
+        payload = {"jsonrpc": "2.0", "id": msg_id, "result": result}
+        logging.info(f"Replying with MCP result: {payload}")
+        self.send_mcp_response(payload)
+
+    def _reply_error(self, msg_id: int, message: str):
+        """回复错误"""
+        payload = {"jsonrpc": "2.0", "id": msg_id, "error": {"message": message}}
+        logging.error(f"Replying with MCP error: {payload}")
+        self.send_mcp_response(payload)

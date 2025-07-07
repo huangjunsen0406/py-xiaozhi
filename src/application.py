@@ -1219,7 +1219,7 @@ class Application:
     def _initialize_iot_devices(self):
         """初始化物联网设备."""
         from src.iot.thing_manager import ThingManager
-        from src.iot.things.CameraVL.Camera import Camera
+        # from src.iot.things.CameraVL.Camera import Camera
 
         # 导入新的倒计时器设备
         from src.iot.things.countdown_timer import CountdownTimer
@@ -1235,7 +1235,7 @@ class Application:
         thing_manager.add_thing(Speaker())
         thing_manager.add_thing(MusicPlayer())
         # 默认不启用以下示例
-        thing_manager.add_thing(Camera())
+        # thing_manager.add_thing(Camera())
 
         # 添加倒计时器设备
         thing_manager.add_thing(CountdownTimer())

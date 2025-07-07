@@ -1,8 +1,9 @@
-import requests
 import logging
 import threading
+
 import cv2
-import base64
+import requests
+
 from src.utils.config_manager import ConfigManager
 
 
@@ -63,7 +64,9 @@ class Camera:
             if scale < 1.0:
                 new_width = int(width * scale)
                 new_height = int(height * scale)
-                frame = cv2.resize(frame, (new_width, new_height), interpolation=cv2.INTER_AREA)
+                frame = cv2.resize(
+                    frame, (new_width, new_height), interpolation=cv2.INTER_AREA
+                )
 
             # 保存图像为 JPEG 格式
             image = "camera.jpg"
@@ -92,13 +95,16 @@ class Camera:
 
     def explain(self, question: str) -> str:
         if not self.explain_url:
-            return '{"success": false, "message": "Image explain URL or token is not set"}'
+            return (
+                '{"success": false, "message": "Image explain URL or token is not set"}'
+            )
 
         if not self.jpeg_data['buf']:
             return '{"success": false, "message": "Camera buffer is empty"}'
 
+        device_id = ConfigManager.get_instance().get_config("SYSTEM_OPTIONS.DEVICE_ID")
         headers = {
-            "Device-Id": ConfigManager.get_instance().get_device_id(),
+            "Device-Id": device_id,
             "Client-Id": self.get_uuid()
         }
 
@@ -123,8 +129,13 @@ class Camera:
             return '{"success": false, "message": "Failed to connect to explain URL"}'
 
         if response.status_code != 200:
-            logging.error(f"Failed to upload photo, status code: {response.status_code}")
+            logging.error(
+                f"Failed to upload photo, status code: {response.status_code}"
+            )
             return '{"success": false, "message": "Failed to upload photo"}'
 
-        logging.info(f"Explain image size={self.jpeg_data['len']}, question={question}\n{response.text}")
+        logging.info(
+            f"Explain image size={self.jpeg_data['len']}, "
+            f"question={question}\n{response.text}"
+        )
         return response.text

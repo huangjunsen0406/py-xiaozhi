@@ -73,6 +73,9 @@ class WebsocketProtocol(Protocol):
                 "type": "hello",
                 "version": 1,
                 "transport": "websocket",
+                "features": {
+                    "mcp": True,
+                },
                 "audio_params": {
                     "format": "opus",
                     "sample_rate": AudioConfig.INPUT_SAMPLE_RATE,
@@ -178,6 +181,10 @@ class WebsocketProtocol(Protocol):
                 logger.error(f"不支持的传输方式: {transport}")
                 return
             print("服务链接返回初始化配置", data)
+
+            # 提取并保存session_id
+            self.session_id = data.get("session_id", "")
+            logger.info(f"从服务器获取到session_id: {self.session_id}")
 
             # 设置 hello 接收事件
             self.hello_received.set()

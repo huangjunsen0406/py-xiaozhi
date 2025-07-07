@@ -1,12 +1,18 @@
 # mcp_server.py
 
-import threading
 import json
 import logging
-from src.mcp.mcp_server_util import BaseMcpServer, McpTool, Property, PropertyType, PropertyList
-from typing import Callable, Any, Dict, List
+from typing import Any, Dict
+
 from src.application import Application  # 假设你有类似的模块发送 MCP 响应
 from src.mcp.camera import Camera
+from src.mcp.mcp_server_util import (
+    BaseMcpServer,
+    McpTool,
+    Property,
+    PropertyList,
+    PropertyType,
+)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("MCP")
@@ -28,7 +34,7 @@ class McpServer(BaseMcpServer):
                     Property("question", PropertyType.STRING),
                 ]),
                 callback=lambda args: (
-                    self.camera.explain(args["question"])
+                    json.loads(self.camera.explain(args["question"]))
                     if self.camera.capture()
                     else {"success": False, "message": "Failed to capture photo"}
                 )
@@ -132,7 +138,7 @@ class McpServer(BaseMcpServer):
         """处理tools/call方法"""
         tool_name = params.get("name")
         tool_arguments = params.get("arguments", {})
-        stack_size = params.get("stackSize", 6144)
+        # stack_size = params.get("stackSize", 6144)
 
         if tool_name not in self.tools:
             logger.error(f"Unknown tool: {tool_name}")
@@ -154,6 +160,7 @@ class McpServer(BaseMcpServer):
             "id": msg_id,
             "result": result
         }
+        logger.info(f"Replying with MCP result: {payload}")
         Application.get_instance().send_mcp_message(payload)
 
     def _reply_error(self, msg_id: int, message: str):
@@ -163,4 +170,5 @@ class McpServer(BaseMcpServer):
             "id": msg_id,
             "error": {"message": message}
         }
+        logger.info(f"Replying with MCP error: {payload}")
         Application.get_instance().send_mcp_message(payload)

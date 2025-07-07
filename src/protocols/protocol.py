@@ -1,6 +1,9 @@
 import json
+import logging
 
 from src.constants.constants import AbortReason, ListeningMode
+
+logger = logging.getLogger(__name__)
 
 
 class Protocol:
@@ -101,4 +104,5 @@ class Protocol:
             "type": "mcp",
             "payload": payload
         }
+        logger.info(f"Sending MCP message: {message}")
         await self.send_text(json.dumps(message, ensure_ascii=False))

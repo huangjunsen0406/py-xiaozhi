@@ -367,7 +367,7 @@ class ConfigManager:
             },
             "application": {
                 "name": "xiaozhi",
-                "version": "1.6.0",
+                "version": "1.7.0",
                 "compile_time": "2025-4-16T12:00:00Z",
                 "idf_version": "v5.3.2",
             },
