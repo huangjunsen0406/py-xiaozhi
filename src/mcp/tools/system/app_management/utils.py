@@ -1,8 +1,10 @@
-"""应用程序工具模块.
+"""
+应用程序管理通用工具.
 
 提供统一的应用程序匹配、查找和缓存功能
 """
 
+import platform
 import re
 import time
 from typing import Any, Dict, List, Optional
@@ -34,6 +36,8 @@ class AppMatcher:
         'qqmusic': ['qqmusic', 'qq音乐', 'qq music'],
         'vscode': ['code', 'vscode', 'visual studio code'],
         'pycharm': ['pycharm', 'pycharm64'],
+        'cursor': ['cursor'],
+        'typora': ['typora'],
     }
     
     # 进程分组映射（用于关闭时分组）
@@ -50,8 +54,10 @@ class AppMatcher:
         'feishu': 'feishu',
         'vscode': 'vscode',
         'code': 'vscode',
+        'cursor': 'cursor',
         'pycharm': 'pycharm',
         'pycharm64': 'pycharm',
+        'typora': 'typora',
         'calculatorapp': 'calculator',
         'calc': 'calculator',
     }
@@ -188,7 +194,7 @@ async def get_cached_applications(force_refresh: bool = False) -> List[Dict[str,
     try:
         import json
 
-        from .app_scanner import scan_installed_applications
+        from .scanner import scan_installed_applications
         
         logger.info("[AppUtils] 刷新应用程序缓存")
         result_json = await scan_installed_applications({"force_refresh": force_refresh})
@@ -224,7 +230,7 @@ async def find_best_matching_app(app_name: str, app_type: str = "any") -> Option
             # 获取正在运行的应用程序
             import json
 
-            from .app_killer import list_running_applications
+            from .scanner import list_running_applications
             
             result_json = await list_running_applications({})
             result = json.loads(result_json)
@@ -284,4 +290,27 @@ def get_cache_info() -> Dict[str, Any]:
         "age_seconds": int(cache_age) if cache_age >= 0 else None,
         "valid": cache_age >= 0 and cache_age < _cache_duration,
         "cache_duration": _cache_duration
-    } 
+    }
+
+
+def get_system_scanner():
+    """
+    根据当前系统获取对应的扫描器模块.
+    
+    Returns:
+        对应系统的扫描器模块
+    """
+    system = platform.system()
+    
+    if system == "Darwin":  # macOS
+        from .mac import scanner
+        return scanner
+    elif system == "Windows":  # Windows
+        from .windows import scanner
+        return scanner
+    elif system == "Linux":  # Linux
+        from .linux import scanner
+        return scanner
+    else:
+        logger.warning(f"[AppUtils] 不支持的系统: {system}")
+        return None 

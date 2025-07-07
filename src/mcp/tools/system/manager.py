@@ -7,9 +7,9 @@ from typing import Any, Dict
 
 from src.utils.logging_config import get_logger
 
-from .app_killer import kill_application, list_running_applications
-from .app_launcher import launch_application
-from .app_scanner import scan_installed_applications
+from .app_management.killer import kill_application, list_running_applications
+from .app_management.launcher import launch_application
+from .app_management.scanner import scan_installed_applications
 from .tools import get_system_status, set_volume
 
 logger = get_logger(__name__)
