@@ -380,6 +380,101 @@ class Railway12306Client:
         except Exception:
             return False
     
+    async def query_transfer_tickets(self, date: str, from_station: str, to_station: str,
+                                   middle_station: str = '', show_wz: bool = False,
+                                   train_filters: str = '', sort_by: str = '', 
+                                   reverse: bool = False, limit: int = 10) -> Tuple[bool, List[TransferTicket], str]:
+        """
+        查询中转车票.
+        
+        Args:
+            date: 查询日期 (YYYY-MM-DD)
+            from_station: 出发站编码
+            to_station: 到达站编码
+            middle_station: 中转站编码 (可选)
+            show_wz: 是否显示无座车
+            train_filters: 车次筛选 (G/D/Z/T/K/O/F/S)
+            sort_by: 排序方式 (start_time/arrive_time/duration)
+            reverse: 是否逆序
+            limit: 限制数量
+            
+        Returns:
+            (success, transfer_tickets, message)
+        """
+        try:
+            # 检查日期
+            if not self._check_date(date):
+                return False, [], "日期不能早于今天"
+            
+            # 检查车站
+            if from_station not in self._stations or to_station not in self._stations:
+                return False, [], "车站编码不存在"
+            
+            if middle_station and middle_station not in self._stations:
+                return False, [], "中转站编码不存在"
+            
+            # 获取中转查询路径
+            if not self._lcquery_path:
+                await self._get_lcquery_path()
+                if not self._lcquery_path:
+                    return False, [], "中转查询路径不可用"
+            
+            # 构造请求参数
+            params = {
+                'train_date': date,
+                'from_station_telecode': from_station,
+                'to_station_telecode': to_station,
+                'middle_station': middle_station,
+                'result_index': '0',
+                'can_query': 'Y',
+                'isShowWZ': 'Y' if show_wz else 'N',
+                'purpose_codes': '00',  # 成人票
+                'channel': 'E'
+            }
+            
+            url = f"{self.api_base}{self._lcquery_path}"
+            transfers = []
+            
+            # 循环查询直到获取足够数据或无更多数据
+            while len(transfers) < limit:
+                data = await self._make_request(url, params)
+                
+                if not data:
+                    return False, [], "中转票查询API不可用"
+                
+                # 检查查询结果
+                if isinstance(data.get('data'), str):
+                    # 查询失败
+                    error_msg = data.get('errorMsg', '未查到相关的列车余票')
+                    return False, [], f"未查到相关的中转票: {error_msg}"
+                
+                # 解析中转数据
+                data_dict = data.get('data', {})
+                middle_list = data_dict.get('middleList', [])
+                
+                if not middle_list:
+                    break
+                    
+                # 解析并添加中转票信息
+                parsed_transfers = self._parse_transfer_data(middle_list)
+                transfers.extend(parsed_transfers)
+                
+                # 检查是否可以继续查询
+                if data_dict.get('can_query') != 'Y':
+                    break
+                    
+                # 更新查询索引
+                params['result_index'] = str(data_dict.get('result_index', 0))
+            
+            # 过滤和排序
+            transfers = self._filter_and_sort_transfers(transfers, train_filters, sort_by, reverse, limit)
+            
+            return True, transfers, "查询成功"
+            
+        except Exception as e:
+            logger.error(f"查询中转票失败: {e}", exc_info=True)
+            return False, [], f"查询失败: {str(e)}"
+
     async def query_tickets(self, date: str, from_station: str, to_station: str,
                            train_filters: str = '', sort_by: str = '', 
                            reverse: bool = False, limit: int = 0) -> Tuple[bool, List[TrainTicket], str]:
@@ -419,9 +514,9 @@ class Railway12306Client:
             data = await self._make_request(url, params)
             
             if not data or not data.get('status'):
-                # 当12306 API不可用时，返回演示数据
-                logger.warning("12306 API不可用，返回演示数据")
-                return self._get_demo_tickets(date, from_station, to_station, train_filters, limit)
+                # 当12306 API不可用时，返回错误信息
+                logger.warning("12306 API不可用")
+                return False, [], "12306服务不可用，请稍后再试"
             
             # 解析数据
             tickets = self._parse_tickets_data(data.get('data', {}))
@@ -433,114 +528,7 @@ class Railway12306Client:
             
         except Exception as e:
             logger.error(f"查询车票失败: {e}", exc_info=True)
-            # 返回演示数据作为fallback
-            logger.info("返回演示数据作为fallback")
-            return self._get_demo_tickets(date, from_station, to_station, train_filters, limit)
-    
-    def _get_demo_tickets(self, date: str, from_station: str, to_station: str, 
-                         train_filters: str, limit: int) -> Tuple[bool, List[TrainTicket], str]:
-        """
-        获取演示车票数据.
-        """
-        from_station_info = self._stations.get(from_station)
-        to_station_info = self._stations.get(to_station)
-        
-        if not from_station_info or not to_station_info:
-            return False, [], "车站信息不完整"
-            
-        # 创建一些演示数据
-        demo_tickets = [
-            TrainTicket(
-                train_no="240000G1001",
-                start_train_code="G1001", 
-                start_date=date,
-                start_time="08:00",
-                arrive_date=date,
-                arrive_time="10:30",
-                duration="02:30",
-                from_station=from_station_info.station_name,
-                to_station=to_station_info.station_name,
-                from_station_code=from_station,
-                to_station_code=to_station,
-                prices=[
-                    SeatPrice(
-                        seat_name="二等座",
-                        short="ze",
-                        seat_type_code="O",
-                        num="有",
-                        price=200.5,
-                        discount=None
-                    ),
-                    SeatPrice(
-                        seat_name="一等座", 
-                        short="zy",
-                        seat_type_code="M",
-                        num="5",
-                        price=320.0,
-                        discount=None
-                    )
-                ],
-                features=["复兴号"]
-            ),
-            TrainTicket(
-                train_no="240000G1003",
-                start_train_code="G1003",
-                start_date=date,
-                start_time="09:15",
-                arrive_date=date,
-                arrive_time="11:45", 
-                duration="02:30",
-                from_station=from_station_info.station_name,
-                to_station=to_station_info.station_name,
-                from_station_code=from_station,
-                to_station_code=to_station,
-                prices=[
-                    SeatPrice(
-                        seat_name="二等座",
-                        short="ze", 
-                        seat_type_code="O",
-                        num="充足",
-                        price=200.5,
-                        discount=None
-                    ),
-                    SeatPrice(
-                        seat_name="一等座",
-                        short="zy",
-                        seat_type_code="M", 
-                        num="13",
-                        price=320.0,
-                        discount=None
-                    ),
-                    SeatPrice(
-                        seat_name="商务座",
-                        short="swz",
-                        seat_type_code="9",
-                        num="2", 
-                        price=650.0,
-                        discount=None
-                    )
-                ],
-                features=["复兴号", "静音车厢"]
-            )
-        ]
-        
-        # 应用筛选
-        if train_filters:
-            filtered_tickets = []
-            for ticket in demo_tickets:
-                for filter_char in train_filters:
-                    if filter_char in self.train_filters:
-                        if self.train_filters[filter_char](ticket.start_train_code):
-                            filtered_tickets.append(ticket)
-                            break
-            demo_tickets = filtered_tickets
-        
-        # 应用限制
-        if limit > 0:
-            demo_tickets = demo_tickets[:limit]
-            
-        message = f"演示数据: 查询到{len(demo_tickets)}个车次 (注意: 这是演示数据，非实时车票信息)"
-        return True, demo_tickets, message
+            return False, [], f"查询失败: {str(e)}"
     
     def _parse_tickets_data(self, data: dict) -> List[TrainTicket]:
         """
@@ -750,101 +738,257 @@ class Railway12306Client:
             result = result[:limit]
         
         return result
-
-    def _get_demo_transfers(
-        self, date: str, from_station: str, to_station: str, 
-        middle_station: str, limit: int
-    ) -> List[Dict]:
+    
+    def _parse_transfer_data(self, middle_list: List[dict]) -> List[TransferTicket]:
         """
-        获取演示中转数据.
+        解析中转数据.
         """
-        from_info = self._stations.get(from_station)
-        to_info = self._stations.get(to_station)
+        transfers = []
         
-        if not from_info or not to_info:
-            return []
+        try:
+            for transfer_data in middle_list:
+                # 解析基本信息
+                duration = self._extract_duration(transfer_data.get('all_lishi', ''))
+                start_time = transfer_data.get('start_time', '')
+                start_date = transfer_data.get('train_date', '')
+                middle_date = transfer_data.get('middle_date', '')
+                arrive_date = transfer_data.get('arrive_date', '')
+                arrive_time = transfer_data.get('arrive_time', '')
+                
+                from_station_code = transfer_data.get('from_station_code', '')
+                from_station_name = transfer_data.get('from_station_name', '')
+                middle_station_code = transfer_data.get('middle_station_code', '')
+                middle_station_name = transfer_data.get('middle_station_name', '')
+                end_station_code = transfer_data.get('end_station_code', '')
+                end_station_name = transfer_data.get('end_station_name', '')
+                
+                first_train_no = transfer_data.get('first_train_no', '')
+                second_train_no = transfer_data.get('second_train_no', '')
+                train_count = int(transfer_data.get('train_count', 2))
+                
+                same_station = transfer_data.get('same_station') == '0'
+                same_train = transfer_data.get('same_train') == 'Y'
+                wait_time = transfer_data.get('wait_time', '')
+                
+                # 解析车票列表
+                full_list = transfer_data.get('fullList', [])
+                ticket_list = self._parse_transfer_tickets(full_list)
+                
+                # 获取第一个车次代码
+                start_train_code = ticket_list[0].start_train_code if ticket_list else ''
+                
+                transfer = TransferTicket(
+                    duration=duration,
+                    start_time=start_time,
+                    start_date=start_date,
+                    middle_date=middle_date,
+                    arrive_date=arrive_date,
+                    arrive_time=arrive_time,
+                    from_station_code=from_station_code,
+                    from_station_name=from_station_name,
+                    middle_station_code=middle_station_code,
+                    middle_station_name=middle_station_name,
+                    end_station_code=end_station_code,
+                    end_station_name=end_station_name,
+                    start_train_code=start_train_code,
+                    first_train_no=first_train_no,
+                    second_train_no=second_train_no,
+                    train_count=train_count,
+                    ticket_list=ticket_list,
+                    same_station=same_station,
+                    same_train=same_train,
+                    wait_time=wait_time
+                )
+                
+                transfers.append(transfer)
+                
+        except Exception as e:
+            logger.error(f"解析中转数据失败: {e}")
+            
+        return transfers
+    
+    def _parse_transfer_tickets(self, full_list: List[dict]) -> List[TrainTicket]:
+        """
+        解析中转车票列表.
+        """
+        tickets = []
         
-        # 创建演示中转数据
-        demo_transfers = [
-            {
-                "start_date": date,
-                "start_time": "08:00",
-                "arrive_date": date, 
-                "arrive_time": "14:30",
-                "duration": "06:30",
-                "from_station": from_info.station_name,
-                "to_station": to_info.station_name,
-                "middle_station": "武汉",
-                "transfer_type": "同站换乘",
-                "wait_time": "45分钟",
-                "segments": [
-                    {
-                        "train_code": "G1001",
-                        "from_station": from_info.station_name,
-                        "to_station": "武汉",
-                        "start_time": "08:00",
-                        "arrive_time": "11:15",
-                        "duration": "03:15",
-                        "prices": [
-                            {"seat_name": "二等座", "price": 180.5, "num": "有"},
-                            {"seat_name": "一等座", "price": 290.0, "num": "3"}
-                        ]
-                    },
-                    {
-                        "train_code": "G1025", 
-                        "from_station": "武汉",
-                        "to_station": to_info.station_name,
-                        "start_time": "12:00",
-                        "arrive_time": "14:30",
-                        "duration": "02:30",
-                        "prices": [
-                            {"seat_name": "二等座", "price": 160.0, "num": "有"},
-                            {"seat_name": "一等座", "price": 260.0, "num": "7"}
-                        ]
-                    }
-                ]
-            },
-            {
-                "start_date": date,
-                "start_time": "10:30", 
-                "arrive_date": date,
-                "arrive_time": "17:45",
-                "duration": "07:15",
-                "from_station": from_info.station_name,
-                "to_station": to_info.station_name,
-                "middle_station": "长沙南",
-                "transfer_type": "同站换乘",
-                "wait_time": "1小时20分钟",
-                "segments": [
-                    {
-                        "train_code": "G1007",
-                        "from_station": from_info.station_name,
-                        "to_station": "长沙南", 
-                        "start_time": "10:30",
-                        "arrive_time": "13:50",
-                        "duration": "03:20",
-                        "prices": [
-                            {"seat_name": "二等座", "price": 200.0, "num": "有"},
-                            {"seat_name": "一等座", "price": 320.0, "num": "2"}
-                        ]
-                    },
-                    {
-                        "train_code": "G1047",
-                        "from_station": "长沙南",
-                        "to_station": to_info.station_name,
-                        "start_time": "15:10", 
-                        "arrive_time": "17:45",
-                        "duration": "02:35",
-                        "prices": [
-                            {"seat_name": "二等座", "price": 145.5, "num": "有"},
-                            {"seat_name": "一等座", "price": 235.0, "num": "5"}
-                        ]
-                    }
-                ]
-            }
-        ]
+        try:
+            for ticket_data in full_list:
+                # 解析基本信息
+                train_no = ticket_data.get('train_no', '')
+                train_code = ticket_data.get('station_train_code', '')
+                start_time = ticket_data.get('start_time', '')
+                arrive_time = ticket_data.get('arrive_time', '')
+                duration = ticket_data.get('lishi', '')
+                start_date_str = ticket_data.get('start_train_date', '')
+                
+                from_station_name = ticket_data.get('from_station_name', '')
+                to_station_name = ticket_data.get('to_station_name', '')
+                from_station_code = ticket_data.get('from_station_telecode', '')
+                to_station_code = ticket_data.get('to_station_telecode', '')
+                
+                # 计算日期
+                try:
+                    start_date = datetime.strptime(start_date_str, '%Y%m%d')
+                    start_hour, start_minute = map(int, start_time.split(':'))
+                    duration_hour, duration_minute = map(int, duration.split(':'))
+                    
+                    start_datetime = start_date.replace(hour=start_hour, minute=start_minute)
+                    arrive_datetime = start_datetime + timedelta(hours=duration_hour, minutes=duration_minute)
+                    
+                    formatted_start_date = start_datetime.strftime('%Y-%m-%d')
+                    formatted_arrive_date = arrive_datetime.strftime('%Y-%m-%d')
+                    
+                except (ValueError, IndexError) as e:
+                    logger.warning(f"中转票时间解析失败: {e}")
+                    formatted_start_date = start_date_str
+                    formatted_arrive_date = start_date_str
+                
+                # 解析价格信息
+                yp_info = ticket_data.get('yp_info', '')
+                discount_info = ticket_data.get('seat_discount_info', '')
+                prices = self._parse_transfer_prices(yp_info, discount_info, ticket_data)
+                
+                # 解析特性标记
+                features = self._parse_features(ticket_data.get('dw_flag', ''))
+                
+                ticket = TrainTicket(
+                    train_no=train_no,
+                    start_train_code=train_code,
+                    start_date=formatted_start_date,
+                    start_time=start_time,
+                    arrive_date=formatted_arrive_date,
+                    arrive_time=arrive_time,
+                    duration=duration,
+                    from_station=from_station_name,
+                    to_station=to_station_name,
+                    from_station_code=from_station_code,
+                    to_station_code=to_station_code,
+                    prices=prices,
+                    features=features
+                )
+                
+                tickets.append(ticket)
+                
+        except Exception as e:
+            logger.error(f"解析中转车票失败: {e}")
+            
+        return tickets
+    
+    def _parse_transfer_prices(self, yp_info: str, discount_info: str, ticket_data: dict) -> List[SeatPrice]:
+        """
+        解析中转车票价格信息.
+        """
+        prices = []
         
-        return demo_transfers[:limit]
+        try:
+            # 解析折扣信息
+            discounts = {}
+            for i in range(0, len(discount_info), 5):
+                if i + 4 < len(discount_info):
+                    seat_code = discount_info[i]
+                    discount_val = int(discount_info[i+1:i+5])
+                    discounts[seat_code] = discount_val
+            
+            # 解析价格信息
+            for i in range(0, len(yp_info), 10):
+                if i + 9 < len(yp_info):
+                    price_str = yp_info[i:i+10]
+                    seat_code = price_str[0]
+                    
+                    # 特殊处理无座
+                    if int(price_str[6:10]) >= 3000:
+                        seat_code = 'W'
+                    elif seat_code not in self.seat_types:
+                        seat_code = 'H'
+                    
+                    seat_info = self.seat_types.get(seat_code, {'name': '其他', 'short': 'qt'})
+                    price_value = int(price_str[1:6]) / 10
+                    
+                    # 从ticket_data中获取余票数量
+                    seat_short = seat_info['short']
+                    num_field = f"{seat_short}_num"
+                    num = ticket_data.get(num_field, "--")
+                    
+                    price = SeatPrice(
+                        seat_name=seat_info['name'],
+                        short=seat_info['short'],
+                        seat_type_code=seat_code,
+                        num=num,
+                        price=price_value,
+                        discount=discounts.get(seat_code)
+                    )
+                    
+                    prices.append(price)
+                    
+        except Exception as e:
+            logger.error(f"解析中转价格信息失败: {e}")
+            
+        return prices
+    
+    def _extract_duration(self, all_lishi: str) -> str:
+        """
+        提取历时信息，格式化为 HH:MM.
+        """
+        try:
+            # 匹配 "X小时Y分钟" 或 "Y分钟" 格式
+            import re
+            match = re.search(r'(?:(\d+)小时)?(\d+)分钟', all_lishi)
+            if match:
+                hours = int(match.group(1)) if match.group(1) else 0
+                minutes = int(match.group(2))
+                return f"{hours:02d}:{minutes:02d}"
+            return all_lishi
+            
+        except Exception as e:
+            logger.error(f"解析历时失败: {e}")
+            return all_lishi
+    
+    def _filter_and_sort_transfers(self, transfers: List[TransferTicket], train_filters: str,
+                                 sort_by: str, reverse: bool, limit: int) -> List[TransferTicket]:
+        """
+        过滤和排序中转票.
+        """
+        result = transfers
+        
+        # 过滤车次类型
+        if train_filters:
+            filtered = []
+            for transfer in result:
+                for filter_char in train_filters:
+                    if filter_char in self.train_filters:
+                        # 检查是否有车次符合筛选条件
+                        if any(self.train_filters[filter_char](ticket.start_train_code) 
+                               for ticket in transfer.ticket_list):
+                            filtered.append(transfer)
+                            break
+                    elif filter_char == 'F':  # 复兴号
+                        if any('复兴号' in ticket.features for ticket in transfer.ticket_list):
+                            filtered.append(transfer)
+                            break
+                    elif filter_char == 'S':  # 智能动车组
+                        if any('智能动车组' in ticket.features for ticket in transfer.ticket_list):
+                            filtered.append(transfer)
+                            break
+            result = filtered
+        
+        # 排序
+        if sort_by == 'start_time':
+            result.sort(key=lambda t: (t.start_date, t.start_time))
+        elif sort_by == 'arrive_time':
+            result.sort(key=lambda t: (t.arrive_date, t.arrive_time))
+        elif sort_by == 'duration':
+            result.sort(key=lambda t: t.duration)
+        
+        if reverse:
+            result.reverse()
+        
+        # 限制数量
+        if limit > 0:
+            result = result[:limit]
+        
+        return result
 
 
 # 全局客户端实例

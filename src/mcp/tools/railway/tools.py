@@ -193,10 +193,6 @@ async def query_train_tickets(args: Dict[str, Any]) -> str:
         # 格式化输出
         result = _format_tickets(tickets)
         
-        # 如果是演示数据，添加说明
-        if "演示数据" in message:
-            result = f"⚠️ {message}\n\n{result}\n\n💡 由于12306反爬虫限制，当前显示的是演示数据。实际查票请访问12306官网或官方App。"
-        
         logger.info(f"查询车票: {date} {from_station}->{to_station}, {message}")
         return result
         
@@ -210,10 +206,37 @@ async def query_transfer_tickets(args: Dict[str, Any]) -> str:
     查询中转车票.
     """
     try:
-        # 暂时返回不支持的信息
-        return "中转车票查询功能正在开发中，请稍后再试或使用直达车票查询"
-
-
+        date = args.get('date', '')
+        from_station = args.get('from_station', '')
+        to_station = args.get('to_station', '')
+        middle_station = args.get('middle_station', '')
+        show_wz = args.get('show_wz', False)
+        train_filters = args.get('train_filters', '')
+        sort_by = args.get('sort_by', '')
+        reverse = args.get('reverse', False)
+        limit = args.get('limit', 10)
+        
+        if not all([date, from_station, to_station]):
+            return "错误: 日期、出发站和到达站都是必需参数"
+            
+        client = await get_railway_client()
+        success, transfers, message = await client.query_transfer_tickets(
+            date, from_station, to_station, middle_station, show_wz,
+            train_filters, sort_by, reverse, limit
+        )
+        
+        if not success:
+            return f"查询失败: {message}"
+            
+        if not transfers:
+            return "未找到符合条件的中转方案"
+            
+        # 格式化输出
+        result = _format_transfer_tickets(transfers)
+        
+        logger.info(f"查询中转票: {date} {from_station}->{to_station}, {message}")
+        return result
+        
     except Exception as e:
         logger.error(f"查询中转车票失败: {e}", exc_info=True)
         return f"查询失败: {str(e)}"
@@ -264,6 +287,78 @@ def _format_tickets(tickets: list) -> str:
             features_info = f"  - 特性: {', '.join(ticket.features)}"
             result_lines.append(features_info)
             
+        result_lines.append("")  # 空行分隔
+        
+    return "\n".join(result_lines)
+
+
+def _format_ticket_status(num: str) -> str:
+    """
+    格式化票量信息.
+    """
+    if num.isdigit():
+        count = int(num)
+        if count == 0:
+            return "无票"
+        else:
+            return f"剩余{count}张票"
+    
+    # 处理特殊状态
+    status_map = {
+        '有': '有票',
+        '充足': '有票',
+        '无': '无票',
+        '--': '无票',
+        '': '无票',
+        '候补': '无票需候补'
+    }
+    
+    return status_map.get(num, f"{num}票")
+
+
+def _format_transfer_tickets(transfers: list) -> str:
+    """
+    格式化中转车票信息.
+    """
+    if not transfers:
+        return "没有查询到相关中转方案"
+        
+    result_lines = []
+    result_lines.append("出发时间 -> 到达时间 | 出发车站 -> 中转车站 -> 到达车站 | 换乘标志 | 换乘等待时间 | 总历时")
+    result_lines.append("=" * 120)
+    
+    for transfer in transfers:
+        # 基本信息
+        basic_info = (
+            f"{transfer.start_date} {transfer.start_time} -> {transfer.arrive_date} {transfer.arrive_time} | "
+            f"{transfer.from_station_name} -> {transfer.middle_station_name} -> {transfer.end_station_name} | "
+            f"{'Same_Train' if transfer.same_train else 'Same_Station' if transfer.same_station else 'Different_Station'} | "
+            f"{transfer.wait_time} | {transfer.duration}"
+        )
+        result_lines.append(basic_info)
+        result_lines.append("-" * 80)
+        
+        # 车次详情
+        for i, ticket in enumerate(transfer.ticket_list, 1):
+            segment_info = (
+                f"  第{i}程: {ticket.start_train_code} | "
+                f"{ticket.from_station} -> {ticket.to_station} | "
+                f"{ticket.start_time} -> {ticket.arrive_time} | "
+                f"{ticket.duration}"
+            )
+            result_lines.append(segment_info)
+            
+            # 座位和价格信息
+            for price in ticket.prices:
+                ticket_status = _format_ticket_status(price.num)
+                price_info = f"    - {price.seat_name}: {ticket_status} {price.price}元"
+                result_lines.append(price_info)
+                
+            # 特性标记
+            if ticket.features:
+                features_info = f"    - 特性: {', '.join(ticket.features)}"
+                result_lines.append(features_info)
+                
         result_lines.append("")  # 空行分隔
         
     return "\n".join(result_lines)

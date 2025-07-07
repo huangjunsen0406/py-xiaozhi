@@ -9,14 +9,14 @@ from typing import Any, Dict
 from src.utils.logging_config import get_logger
 
 from .tools import (
+    get_city_station_code,
     get_current_date,
     get_station_by_code,
     get_station_by_name,
     get_stations_in_city,
-    get_city_station_code,
+    query_train_route,
     query_train_tickets,
     query_transfer_tickets,
-    query_train_route,
 )
 
 logger = get_logger(__name__)
@@ -32,14 +32,14 @@ class RailwayManager:
         初始化铁路工具管理器.
         """
         self._initialized = False
-        logger.info("[铁路管理器] 初始化")
+        logger.info("[12306_mcp] 初始化")
 
     def init_tools(self, add_tool, PropertyList, Property, PropertyType):
         """
         初始化并注册所有铁路查询工具.
         """
         try:
-            logger.info("[铁路管理器] 开始注册工具")
+            logger.info("[12306_mcp] 开始注册工具")
 
             # 注册基础工具
             self._register_basic_tools(add_tool, PropertyList, Property, PropertyType)
@@ -48,10 +48,10 @@ class RailwayManager:
             self._register_query_tools(add_tool, PropertyList, Property, PropertyType)
 
             self._initialized = True
-            logger.info("[铁路管理器] 工具注册完成")
+            logger.info("[12306_mcp] 工具注册完成")
 
         except Exception as e:
-            logger.error(f"[铁路管理器] 工具注册失败: {e}", exc_info=True)
+            logger.error(f"[12306_mcp] 工具注册失败: {e}", exc_info=True)
             raise
 
     def _register_basic_tools(self, add_tool, PropertyList, Property, PropertyType):
@@ -167,7 +167,7 @@ class RailwayManager:
             )
         )
 
-        logger.debug("[铁路管理器] 注册基础工具成功")
+        logger.debug("[12306_mcp] 注册基础工具成功")
 
     def _register_query_tools(self, add_tool, PropertyList, Property, PropertyType):
         """
@@ -229,7 +229,7 @@ class RailwayManager:
                 Property("from_station", PropertyType.STRING),
                 Property("to_station", PropertyType.STRING),
                 Property("middle_station", PropertyType.STRING, default_value=""),
-                Property("show_no_seat", PropertyType.BOOLEAN, default_value=False),
+                Property("show_wz", PropertyType.BOOLEAN, default_value=False),
                 Property("train_filters", PropertyType.STRING, default_value=""),
                 Property("sort_by", PropertyType.STRING, default_value=""),
                 Property("reverse", PropertyType.BOOLEAN, default_value=False),
@@ -256,7 +256,7 @@ class RailwayManager:
                 "  from_station: Departure station code\n"
                 "  to_station: Final destination station code\n"
                 "  middle_station: Preferred transfer station code (optional)\n"
-                "  show_no_seat: Include trains with no seats available (default: false)\n"
+                "  show_wz: Include trains with no seats available (default: false)\n"
                 "  train_filters: Train type filters (same as direct tickets)\n"
                 "  sort_by: Sort method (start_time/arrive_time/duration)\n"
                 "  reverse: Reverse sort order\n"
@@ -305,7 +305,7 @@ class RailwayManager:
             )
         )
 
-        logger.debug("[铁路管理器] 注册查询工具成功")
+        logger.debug("[12306_mcp] 注册查询工具成功")
 
     def is_initialized(self) -> bool:
         """
@@ -344,5 +344,5 @@ def get_railway_manager() -> RailwayManager:
     global _railway_manager
     if _railway_manager is None:
         _railway_manager = RailwayManager()
-        logger.debug("[铁路管理器] 创建管理器实例")
+        logger.debug("[12306_mcp] 创建管理器实例")
     return _railway_manager
