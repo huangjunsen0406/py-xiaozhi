@@ -263,17 +263,26 @@ def extract_verification_code(text: str) -> Optional[str]:
 
         # 激活相关关键词列表
         activation_keywords = [
-            "登录", "控制面板", "激活", "验证码", "绑定设备", "添加设备",
-            "输入验证码", "输入", "面板", "xiaozhi.me", "激活码"
+            "登录",
+            "控制面板",
+            "激活",
+            "验证码",
+            "绑定设备",
+            "添加设备",
+            "输入验证码",
+            "输入",
+            "面板",
+            "xiaozhi.me",
+            "激活码",
         ]
-        
+
         # 检查文本是否包含激活相关关键词
         has_activation_keyword = any(keyword in text for keyword in activation_keywords)
-        
+
         if not has_activation_keyword:
             logger.debug(f"文本不包含激活关键词，跳过验证码提取: {text}")
             return None
-        
+
         # 更精确的验证码匹配模式
         # 匹配6位数字的验证码，可能有空格分隔
         patterns = [
@@ -285,14 +294,14 @@ def extract_verification_code(text: str) -> Optional[str]:
             r"(\d{6})[，,。.]",  # 123456，或123456。
             r"[，,。.]\s*(\d{6})",  # ，123456
         ]
-        
+
         for pattern in patterns:
             match = re.search(pattern, text)
             if match:
                 code = match.group(1)
                 logger.info(f"已从文本中提取验证码: {code}")
                 return code
-        
+
         # 如果有激活关键词但没有匹配到精确模式，尝试原始模式
         # 但要求数字周围有特定的上下文
         match = re.search(r"((?:\d\s*){6,})", text)
@@ -302,7 +311,7 @@ def extract_verification_code(text: str) -> Optional[str]:
             if len(code) == 6 and code.isdigit():
                 logger.info(f"已从文本中提取验证码（通用模式）: {code}")
                 return code
-        
+
         logger.warning(f"未能从文本中找到验证码: {text}")
         return None
     except Exception as e:

@@ -1,20 +1,24 @@
 """
-高德地图 MCP 工具定义
+高德地图 MCP 工具定义.
 """
-import json
-from typing import Any, Dict, List, Optional
+
+from typing import Any, Dict, List
 
 from .manager import AmapManager
 
 
 class AmapTools:
-    """高德地图工具集"""
-    
+    """
+    高德地图工具集.
+    """
+
     def __init__(self, api_key: str):
         self.manager = AmapManager(api_key)
-    
+
     def get_tools(self) -> List[Dict[str, Any]]:
-        """获取所有工具定义"""
+        """
+        获取所有工具定义.
+        """
         return [
             {
                 "name": "maps_regeocode",
@@ -24,11 +28,11 @@ class AmapTools:
                     "properties": {
                         "location": {
                             "type": "string",
-                            "description": "经纬度坐标，格式为：经度,纬度"
+                            "description": "经纬度坐标，格式为：经度,纬度",
                         }
                     },
-                    "required": ["location"]
-                }
+                    "required": ["location"],
+                },
             },
             {
                 "name": "maps_geo",
@@ -38,29 +42,24 @@ class AmapTools:
                     "properties": {
                         "address": {
                             "type": "string",
-                            "description": "待解析的结构化地址信息"
+                            "description": "待解析的结构化地址信息",
                         },
                         "city": {
                             "type": "string",
-                            "description": "指定查询的城市（可选）"
-                        }
+                            "description": "指定查询的城市（可选）",
+                        },
                     },
-                    "required": ["address"]
-                }
+                    "required": ["address"],
+                },
             },
             {
                 "name": "maps_ip_location",
                 "description": "IP定位根据用户输入的IP地址，定位IP的所在位置",
                 "inputSchema": {
                     "type": "object",
-                    "properties": {
-                        "ip": {
-                            "type": "string",
-                            "description": "IP地址"
-                        }
-                    },
-                    "required": ["ip"]
-                }
+                    "properties": {"ip": {"type": "string", "description": "IP地址"}},
+                    "required": ["ip"],
+                },
             },
             {
                 "name": "maps_weather",
@@ -68,13 +67,10 @@ class AmapTools:
                 "inputSchema": {
                     "type": "object",
                     "properties": {
-                        "city": {
-                            "type": "string",
-                            "description": "城市名称或者adcode"
-                        }
+                        "city": {"type": "string", "description": "城市名称或者adcode"}
                     },
-                    "required": ["city"]
-                }
+                    "required": ["city"],
+                },
             },
             {
                 "name": "maps_search_detail",
@@ -84,11 +80,11 @@ class AmapTools:
                     "properties": {
                         "id": {
                             "type": "string",
-                            "description": "关键词搜索或者周边搜索获取到的POI ID"
+                            "description": "关键词搜索或者周边搜索获取到的POI ID",
                         }
                     },
-                    "required": ["id"]
-                }
+                    "required": ["id"],
+                },
             },
             {
                 "name": "maps_direction_walking",
@@ -98,15 +94,15 @@ class AmapTools:
                     "properties": {
                         "origin": {
                             "type": "string",
-                            "description": "出发点经纬度，坐标格式为：经度,纬度"
+                            "description": "出发点经纬度，坐标格式为：经度,纬度",
                         },
                         "destination": {
                             "type": "string",
-                            "description": "目的地经纬度，坐标格式为：经度,纬度"
-                        }
+                            "description": "目的地经纬度，坐标格式为：经度,纬度",
+                        },
                     },
-                    "required": ["origin", "destination"]
-                }
+                    "required": ["origin", "destination"],
+                },
             },
             {
                 "name": "maps_direction_driving",
@@ -116,15 +112,15 @@ class AmapTools:
                     "properties": {
                         "origin": {
                             "type": "string",
-                            "description": "出发点经纬度，坐标格式为：经度,纬度"
+                            "description": "出发点经纬度，坐标格式为：经度,纬度",
                         },
                         "destination": {
                             "type": "string",
-                            "description": "目的地经纬度，坐标格式为：经度,纬度"
-                        }
+                            "description": "目的地经纬度，坐标格式为：经度,纬度",
+                        },
                     },
-                    "required": ["origin", "destination"]
-                }
+                    "required": ["origin", "destination"],
+                },
             },
             {
                 "name": "maps_bicycling",
@@ -134,15 +130,15 @@ class AmapTools:
                     "properties": {
                         "origin": {
                             "type": "string",
-                            "description": "出发点经纬度，坐标格式为：经度,纬度"
+                            "description": "出发点经纬度，坐标格式为：经度,纬度",
                         },
                         "destination": {
                             "type": "string",
-                            "description": "目的地经纬度，坐标格式为：经度,纬度"
-                        }
+                            "description": "目的地经纬度，坐标格式为：经度,纬度",
+                        },
                     },
-                    "required": ["origin", "destination"]
-                }
+                    "required": ["origin", "destination"],
+                },
             },
             {
                 "name": "maps_direction_transit_integrated",
@@ -152,23 +148,23 @@ class AmapTools:
                     "properties": {
                         "origin": {
                             "type": "string",
-                            "description": "出发点经纬度，坐标格式为：经度,纬度"
+                            "description": "出发点经纬度，坐标格式为：经度,纬度",
                         },
                         "destination": {
                             "type": "string",
-                            "description": "目的地经纬度，坐标格式为：经度,纬度"
+                            "description": "目的地经纬度，坐标格式为：经度,纬度",
                         },
                         "city": {
                             "type": "string",
-                            "description": "公共交通规划起点城市"
+                            "description": "公共交通规划起点城市",
                         },
                         "cityd": {
                             "type": "string",
-                            "description": "公共交通规划终点城市"
-                        }
+                            "description": "公共交通规划终点城市",
+                        },
                     },
-                    "required": ["origin", "destination", "city", "cityd"]
-                }
+                    "required": ["origin", "destination", "city", "cityd"],
+                },
             },
             {
                 "name": "maps_distance",
@@ -178,19 +174,19 @@ class AmapTools:
                     "properties": {
                         "origins": {
                             "type": "string",
-                            "description": "起点经纬度，可以传多个坐标，使用分号隔离，比如120,30;120,31"
+                            "description": "起点经纬度，可以传多个坐标，使用分号隔离，比如120,30;120,31",
                         },
                         "destination": {
                             "type": "string",
-                            "description": "终点经纬度，坐标格式为：经度,纬度"
+                            "description": "终点经纬度，坐标格式为：经度,纬度",
                         },
                         "type": {
                             "type": "string",
-                            "description": "距离测量类型，1代表驾车距离测量，0代表直线距离测量，3代表步行距离测量"
-                        }
+                            "description": "距离测量类型，1代表驾车距离测量，0代表直线距离测量，3代表步行距离测量",
+                        },
                     },
-                    "required": ["origins", "destination"]
-                }
+                    "required": ["origins", "destination"],
+                },
             },
             {
                 "name": "maps_text_search",
@@ -198,21 +194,15 @@ class AmapTools:
                 "inputSchema": {
                     "type": "object",
                     "properties": {
-                        "keywords": {
-                            "type": "string",
-                            "description": "搜索关键词"
-                        },
-                        "city": {
-                            "type": "string",
-                            "description": "查询城市（可选）"
-                        },
+                        "keywords": {"type": "string", "description": "搜索关键词"},
+                        "city": {"type": "string", "description": "查询城市（可选）"},
                         "types": {
                             "type": "string",
-                            "description": "POI类型，比如加油站（可选）"
-                        }
+                            "description": "POI类型，比如加油站（可选）",
+                        },
                     },
-                    "required": ["keywords"]
-                }
+                    "required": ["keywords"],
+                },
             },
             {
                 "name": "maps_around_search",
@@ -222,102 +212,95 @@ class AmapTools:
                     "properties": {
                         "location": {
                             "type": "string",
-                            "description": "中心点经纬度，格式为：经度,纬度"
+                            "description": "中心点经纬度，格式为：经度,纬度",
                         },
-                        "radius": {
-                            "type": "string",
-                            "description": "搜索半径（米）"
-                        },
+                        "radius": {"type": "string", "description": "搜索半径（米）"},
                         "keywords": {
                             "type": "string",
-                            "description": "搜索关键词（可选）"
-                        }
+                            "description": "搜索关键词（可选）",
+                        },
                     },
-                    "required": ["location"]
-                }
-            }
+                    "required": ["location"],
+                },
+            },
         ]
-    
-    async def execute_tool(self, tool_name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
-        """执行工具"""
+
+    async def execute_tool(
+        self, tool_name: str, arguments: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        执行工具.
+        """
         try:
             if tool_name == "maps_regeocode":
                 return await self.manager.regeocode(arguments["location"])
-            
+
             elif tool_name == "maps_geo":
                 return await self.manager.geocode(
-                    arguments["address"],
-                    arguments.get("city")
+                    arguments["address"], arguments.get("city")
                 )
-            
+
             elif tool_name == "maps_ip_location":
                 return await self.manager.ip_location(arguments["ip"])
-            
+
             elif tool_name == "maps_weather":
                 return await self.manager.weather(arguments["city"])
-            
+
             elif tool_name == "maps_search_detail":
                 return await self.manager.search_detail(arguments["id"])
-            
+
             elif tool_name == "maps_direction_walking":
                 return await self.manager.direction_walking(
-                    arguments["origin"],
-                    arguments["destination"]
+                    arguments["origin"], arguments["destination"]
                 )
-            
+
             elif tool_name == "maps_direction_driving":
                 return await self.manager.direction_driving(
-                    arguments["origin"],
-                    arguments["destination"]
+                    arguments["origin"], arguments["destination"]
                 )
-            
+
             elif tool_name == "maps_bicycling":
                 return await self.manager.direction_bicycling(
-                    arguments["origin"],
-                    arguments["destination"]
+                    arguments["origin"], arguments["destination"]
                 )
-            
+
             elif tool_name == "maps_direction_transit_integrated":
                 return await self.manager.direction_transit(
                     arguments["origin"],
                     arguments["destination"],
                     arguments["city"],
-                    arguments["cityd"]
+                    arguments["cityd"],
                 )
-            
+
             elif tool_name == "maps_distance":
                 return await self.manager.distance(
                     arguments["origins"],
                     arguments["destination"],
-                    arguments.get("type", "1")
+                    arguments.get("type", "1"),
                 )
-            
+
             elif tool_name == "maps_text_search":
                 return await self.manager.text_search(
                     arguments["keywords"],
                     arguments.get("city", ""),
-                    arguments.get("types", "")
+                    arguments.get("types", ""),
                 )
-            
+
             elif tool_name == "maps_around_search":
                 return await self.manager.around_search(
                     arguments["location"],
                     arguments.get("radius", "1000"),
-                    arguments.get("keywords", "")
+                    arguments.get("keywords", ""),
                 )
-            
+
             else:
-                return {
-                    "success": False,
-                    "error": f"Unknown tool: {tool_name}"
-                }
-        
+                return {"success": False, "error": f"Unknown tool: {tool_name}"}
+
         except Exception as e:
-            return {
-                "success": False,
-                "error": f"Tool execution failed: {str(e)}"
-            }
-    
+            return {"success": False, "error": f"Tool execution failed: {str(e)}"}
+
     async def close(self):
-        """关闭资源"""
+        """
+        关闭资源.
+        """
         await self.manager.close()

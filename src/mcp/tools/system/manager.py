@@ -112,9 +112,7 @@ class SystemToolsManager:
         """
         注册应用程序启动工具.
         """
-        app_props = PropertyList(
-            [Property("app_name", PropertyType.STRING)]
-        )
+        app_props = PropertyList([Property("app_name", PropertyType.STRING)])
         add_tool(
             (
                 "self.application.launch",
@@ -181,51 +179,57 @@ class SystemToolsManager:
         注册应用程序关闭工具.
         """
         # 注册应用程序关闭工具
-        killer_props = PropertyList([
-            Property("app_name", PropertyType.STRING),
-            Property("force", PropertyType.BOOLEAN, default_value=False)
-        ])
-        add_tool((
-            "self.application.kill",
-            "Close or terminate running applications by name. This tool can gracefully "
-            "close applications or force-kill them if needed. It automatically finds "
-            "running processes matching the application name and terminates them.\n"
-            "Use this tool when:\n"
-            "1. User asks to close, quit, or exit an application\n"
-            "2. User wants to stop or terminate a running program\n"
-            "3. Application is unresponsive and needs to be force-closed\n"
-            "4. User says 'close QQ', 'quit Chrome', 'stop music player', etc.\n\n"
-            "Parameters:\n"
-            "- app_name: Name of the application to close (e.g., 'QQ', 'Chrome', 'Calculator')\n"
-            "- force: Set to true for force-kill unresponsive applications (default: false)\n\n"
-            "The tool will find all running processes matching the application name and "
-            "attempt to close them gracefully. If force=true, it will use system kill "
-            "commands to immediately terminate the processes.",
-            killer_props,
-            kill_application,
-        ))
+        killer_props = PropertyList(
+            [
+                Property("app_name", PropertyType.STRING),
+                Property("force", PropertyType.BOOLEAN, default_value=False),
+            ]
+        )
+        add_tool(
+            (
+                "self.application.kill",
+                "Close or terminate running applications by name. This tool can gracefully "
+                "close applications or force-kill them if needed. It automatically finds "
+                "running processes matching the application name and terminates them.\n"
+                "Use this tool when:\n"
+                "1. User asks to close, quit, or exit an application\n"
+                "2. User wants to stop or terminate a running program\n"
+                "3. Application is unresponsive and needs to be force-closed\n"
+                "4. User says 'close QQ', 'quit Chrome', 'stop music player', etc.\n\n"
+                "Parameters:\n"
+                "- app_name: Name of the application to close (e.g., 'QQ', 'Chrome', 'Calculator')\n"
+                "- force: Set to true for force-kill unresponsive applications (default: false)\n\n"
+                "The tool will find all running processes matching the application name and "
+                "attempt to close them gracefully. If force=true, it will use system kill "
+                "commands to immediately terminate the processes.",
+                killer_props,
+                kill_application,
+            )
+        )
 
         # 注册运行中应用程序列表工具
-        list_props = PropertyList([
-            Property("filter_name", PropertyType.STRING, default_value="")
-        ])
-        add_tool((
-            "self.application.list_running",
-            "List all currently running applications and processes. This tool provides "
-            "real-time information about active applications on the system, including "
-            "process IDs, names, and commands.\n"
-            "Use this tool when:\n"
-            "1. User asks what applications are currently running\n"
-            "2. You need to check if a specific application is running before closing it\n"
-            "3. User wants to see active processes or programs\n"
-            "4. Troubleshooting application issues\n\n"
-            "Parameters:\n"
-            "- filter_name: Optional filter to show only applications containing this name\n\n"
-            "Returns detailed information about running applications including process IDs "
-            "which can be useful for targeted application management.",
-            list_props,
-            list_running_applications,
-        ))
+        list_props = PropertyList(
+            [Property("filter_name", PropertyType.STRING, default_value="")]
+        )
+        add_tool(
+            (
+                "self.application.list_running",
+                "List all currently running applications and processes. This tool provides "
+                "real-time information about active applications on the system, including "
+                "process IDs, names, and commands.\n"
+                "Use this tool when:\n"
+                "1. User asks what applications are currently running\n"
+                "2. You need to check if a specific application is running before closing it\n"
+                "3. User wants to see active processes or programs\n"
+                "4. Troubleshooting application issues\n\n"
+                "Parameters:\n"
+                "- filter_name: Optional filter to show only applications containing this name\n\n"
+                "Returns detailed information about running applications including process IDs "
+                "which can be useful for targeted application management.",
+                list_props,
+                list_running_applications,
+            )
+        )
         logger.debug("[SystemManager] 注册应用程序关闭工具成功")
 
     def is_initialized(self) -> bool:
@@ -242,12 +246,12 @@ class SystemToolsManager:
             "initialized": self._initialized,
             "tools_count": 6,  # 当前注册的工具数量
             "available_tools": [
-                "get_device_status", 
-                "set_volume", 
-                "launch_application", 
+                "get_device_status",
+                "set_volume",
+                "launch_application",
                 "scan_installed_applications",
                 "kill_application",
-                "list_running_applications"
+                "list_running_applications",
             ],
         }
 

@@ -106,7 +106,7 @@ class Ota:
         activation_version = self.config.get_config(
             "SYSTEM_OPTIONS.NETWORK.ACTIVATION_VERSION", "v1"
         )
-        
+
         # 只有v2协议才添加Activation-Version头部
         if activation_version == "v2":
             headers["Activation-Version"] = app_version

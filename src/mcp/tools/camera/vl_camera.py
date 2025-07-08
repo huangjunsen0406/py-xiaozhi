@@ -1,4 +1,7 @@
-"""VL camera implementation using Zhipu AI."""
+"""
+VL camera implementation using Zhipu AI.
+"""
+
 import base64
 
 import cv2
@@ -13,29 +16,35 @@ logger = get_logger(__name__)
 
 
 class VLCamera(BaseCamera):
-    """智普AI摄像头实现."""
-    
+    """
+    智普AI摄像头实现.
+    """
+
     _instance = None
 
     def __init__(self):
-        """初始化智普AI摄像头."""
+        """
+        初始化智普AI摄像头.
+        """
         super().__init__()
         config = ConfigManager.get_instance()
-        
+
         # 初始化OpenAI客户端
         self.client = OpenAI(
             api_key=config.get_config("CAMERA.VLapi_key"),
             base_url=config.get_config(
                 "CAMERA.Local_VL_url",
-                "https://open.bigmodel.cn/api/paas/v4/chat/completions"
-            )
+                "https://open.bigmodel.cn/api/paas/v4/chat/completions",
+            ),
         )
         self.model = config.get_config("CAMERA.models", "glm-4v-plus")
         logger.info(f"VL Camera initialized with model: {self.model}")
 
     @classmethod
     def get_instance(cls):
-        """获取单例实例."""
+        """
+        获取单例实例.
+        """
         if cls._instance is None:
             with cls._lock:
                 if cls._instance is None:
@@ -43,10 +52,12 @@ class VLCamera(BaseCamera):
         return cls._instance
 
     def capture(self) -> bool:
-        """捕获图像."""
+        """
+        捕获图像.
+        """
         try:
             logger.info("Accessing camera...")
-            
+
             # 尝试打开摄像头
             cap = cv2.VideoCapture(self.camera_index)
             if not cap.isOpened():
@@ -81,15 +92,17 @@ class VLCamera(BaseCamera):
                 )
 
             # 直接将图像编码为JPEG字节流
-            success, jpeg_data = cv2.imencode('.jpg', frame)
-            
+            success, jpeg_data = cv2.imencode(".jpg", frame)
+
             if not success:
                 logger.error("Failed to encode image to JPEG")
                 return False
 
             # 保存字节数据
             self.set_jpeg_data(jpeg_data.tobytes())
-            logger.info(f"Image captured successfully (size: {self.jpeg_data['len']} bytes)")
+            logger.info(
+                f"Image captured successfully (size: {self.jpeg_data['len']} bytes)"
+            )
             return True
 
         except Exception as e:
@@ -97,20 +110,19 @@ class VLCamera(BaseCamera):
             return False
 
     def analyze(self, question: str) -> str:
-        """使用智普AI分析图像."""
+        """
+        使用智普AI分析图像.
+        """
         try:
-            if not self.jpeg_data['buf']:
+            if not self.jpeg_data["buf"]:
                 return '{"success": false, "message": "Camera buffer is empty"}'
 
             # 将图像转换为Base64
-            image_base64 = base64.b64encode(self.jpeg_data['buf']).decode('utf-8')
+            image_base64 = base64.b64encode(self.jpeg_data["buf"]).decode("utf-8")
 
             # 准备消息
             messages = [
-                {
-                    "role": "system",
-                    "content": "You are a helpful assistant."
-                },
+                {"role": "system", "content": "You are a helpful assistant."},
                 {
                     "role": "user",
                     "content": [
@@ -118,14 +130,18 @@ class VLCamera(BaseCamera):
                             "type": "image_url",
                             "image_url": {
                                 "url": f"data:image/jpeg;base64,{image_base64}"
-                            }
+                            },
                         },
                         {
                             "type": "text",
-                            "text": question if question else "图中描绘的是什么景象？请详细描述。"
-                        }
-                    ]
-                }
+                            "text": (
+                                question
+                                if question
+                                else "图中描绘的是什么景象？请详细描述。"
+                            ),
+                        },
+                    ],
+                },
             ]
 
             # 发送请求
@@ -134,7 +150,7 @@ class VLCamera(BaseCamera):
                 messages=messages,
                 modalities=["text"],
                 stream=True,
-                stream_options={"include_usage": True}
+                stream_options={"include_usage": True},
             )
 
             # 收集响应
@@ -150,4 +166,4 @@ class VLCamera(BaseCamera):
         except Exception as e:
             error_msg = f"Failed to analyze image with VL: {str(e)}"
             logger.error(error_msg)
-            return f'{{"success": false, "message": "{error_msg}"}}' 
+            return f'{{"success": false, "message": "{error_msg}"}}'

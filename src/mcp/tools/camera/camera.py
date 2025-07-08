@@ -16,11 +16,8 @@ class Camera:
     def __init__(self):
         self.explain_url = ""
         self.explain_token = ""
-        self.jpeg_data = {
-            'buf': b'',  # 图像的JPEG字节数据
-            'len': 0     # 字节数据长度
-        }
-        
+        self.jpeg_data = {"buf": b"", "len": 0}  # 图像的JPEG字节数据  # 字节数据长度
+
         # 从配置中读取相机参数
         config = ConfigManager.get_instance()
         self.camera_index = config.get_config("CAMERA.camera_index", 0)
@@ -36,26 +33,34 @@ class Camera:
         return cls._instance
 
     def set_explain_url(self, url):
-        """设置解释服务的URL"""
+        """
+        设置解释服务的URL.
+        """
         self.explain_url = url
         logger.info(f"Vision service URL set to: {url}")
 
     def set_explain_token(self, token):
-        """设置解释服务的token"""
+        """
+        设置解释服务的token.
+        """
         self.explain_token = token
         if token:
             logger.info("Vision service token has been set")
 
     def set_jpeg_data(self, data_bytes):
-        """设置JPEG图像数据"""
-        self.jpeg_data['buf'] = data_bytes
-        self.jpeg_data['len'] = len(data_bytes)
+        """
+        设置JPEG图像数据.
+        """
+        self.jpeg_data["buf"] = data_bytes
+        self.jpeg_data["len"] = len(data_bytes)
 
     def capture(self) -> bool:
-        """捕获图像"""
+        """
+        捕获图像.
+        """
         try:
             logger.info("Accessing camera...")
-            
+
             # 尝试打开摄像头
             cap = cv2.VideoCapture(self.camera_index)
             if not cap.isOpened():
@@ -90,16 +95,18 @@ class Camera:
                 )
 
             # 直接将图像编码为JPEG字节流
-            success, jpeg_data = cv2.imencode('.jpg', frame)
-            
+            success, jpeg_data = cv2.imencode(".jpg", frame)
+
             if not success:
                 logger.error("Failed to encode image to JPEG")
                 return False
 
             # 获取字节数据
-            self.jpeg_data['buf'] = jpeg_data.tobytes()
-            self.jpeg_data['len'] = len(self.jpeg_data['buf'])
-            logger.info(f"Image captured successfully (size: {self.jpeg_data['len']} bytes)")
+            self.jpeg_data["buf"] = jpeg_data.tobytes()
+            self.jpeg_data["len"] = len(self.jpeg_data["buf"])
+            logger.info(
+                f"Image captured successfully (size: {self.jpeg_data['len']} bytes)"
+            )
             return True
 
         except Exception as e:
@@ -107,26 +114,29 @@ class Camera:
             return False
 
     def get_device_id(self):
-        """获取设备ID"""
+        """
+        获取设备ID.
+        """
         return ConfigManager.get_instance().get_config("SYSTEM_OPTIONS.DEVICE_ID")
 
     def get_client_id(self):
-        """获取客户端ID"""
+        """
+        获取客户端ID.
+        """
         return ConfigManager.get_instance().get_config("SYSTEM_OPTIONS.CLIENT_ID")
 
     def explain(self, question: str) -> str:
-        """发送图像分析请求"""
+        """
+        发送图像分析请求.
+        """
         if not self.explain_url:
             return '{"success": false, "message": "Image explain URL is not set"}'
 
-        if not self.jpeg_data['buf']:
+        if not self.jpeg_data["buf"]:
             return '{"success": false, "message": "Camera buffer is empty"}'
 
         # 准备请求头
-        headers = {
-            "Device-Id": self.get_device_id(),
-            "Client-Id": self.get_client_id()
-        }
+        headers = {"Device-Id": self.get_device_id(), "Client-Id": self.get_client_id()}
 
         if self.explain_token:
             headers["Authorization"] = f"Bearer {self.explain_token}"
@@ -134,21 +144,20 @@ class Camera:
         # 准备文件数据
         files = {
             "question": (None, question),
-            "file": ("camera.jpg", self.jpeg_data['buf'], "image/jpeg")
+            "file": ("camera.jpg", self.jpeg_data["buf"], "image/jpeg"),
         }
 
         try:
             # 发送请求
             response = requests.post(
-                self.explain_url,
-                headers=headers,
-                files=files,
-                timeout=10
+                self.explain_url, headers=headers, files=files, timeout=10
             )
 
             # 检查响应状态
             if response.status_code != 200:
-                error_msg = f"Failed to upload photo, status code: {response.status_code}"
+                error_msg = (
+                    f"Failed to upload photo, status code: {response.status_code}"
+                )
                 logger.error(error_msg)
                 return f'{{"success": false, "message": "{error_msg}"}}'
 
@@ -166,7 +175,9 @@ class Camera:
 
 
 def take_photo(arguments: dict) -> str:
-    """拍照并解释的工具函数"""
+    """
+    拍照并解释的工具函数.
+    """
     camera = Camera.get_instance()
     question = arguments.get("question", "")
 

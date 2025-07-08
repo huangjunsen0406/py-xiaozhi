@@ -11,6 +11,7 @@ class StationInfo:
     """
     车站信息.
     """
+
     station_id: str
     station_name: str
     station_code: str  # 3位字母编码
@@ -25,6 +26,7 @@ class SeatPrice:
     """
     座位价格信息.
     """
+
     seat_name: str  # 座位名称
     short: str  # 短名称
     seat_type_code: str  # 座位类型编码
@@ -38,6 +40,7 @@ class TrainTicket:
     """
     火车票信息.
     """
+
     train_no: str  # 车次编号
     start_train_code: str  # 车次代码
     start_date: str  # 出发日期
@@ -58,6 +61,7 @@ class TransferTicket:
     """
     中转车票信息.
     """
+
     duration: str  # 总历时
     start_time: str  # 出发时间
     start_date: str  # 出发日期
@@ -85,6 +89,7 @@ class RouteStation:
     """
     经停站信息.
     """
+
     arrive_time: str  # 到达时间
     station_name: str  # 站名
     stopover_time: str  # 停车时间

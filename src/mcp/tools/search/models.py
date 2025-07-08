@@ -11,7 +11,7 @@ class SearchResult:
     """
     搜索结果数据模型.
     """
-    
+
     def __init__(
         self,
         title: str,
@@ -29,7 +29,7 @@ class SearchResult:
         self.content = content
         self.source = source
         self.created_at = created_at or datetime.now().isoformat()
-    
+
     def to_dict(self) -> Dict[str, Any]:
         """
         转换为字典.
@@ -43,7 +43,7 @@ class SearchResult:
             "source": self.source,
             "created_at": self.created_at,
         }
-    
+
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "SearchResult":
         """
@@ -64,7 +64,7 @@ class SearchQuery:
     """
     搜索查询模型.
     """
-    
+
     def __init__(
         self,
         query: str,
@@ -81,7 +81,7 @@ class SearchQuery:
         self.region = region
         self.safe_search = safe_search
         self.created_at = datetime.now().isoformat()
-    
+
     def to_dict(self) -> Dict[str, Any]:
         """
         转换为字典.
@@ -95,7 +95,7 @@ class SearchQuery:
             "safe_search": self.safe_search,
             "created_at": self.created_at,
         }
-    
+
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "SearchQuery":
         """
@@ -115,42 +115,42 @@ class SearchSession:
     """
     搜索会话模型，用于缓存搜索结果.
     """
-    
+
     def __init__(self, session_id: str = None):
         self.id = session_id or str(uuid.uuid4())
         self.results: Dict[str, SearchResult] = {}
         self.queries: List[SearchQuery] = []
         self.created_at = datetime.now().isoformat()
         self.last_accessed = datetime.now().isoformat()
-    
+
     def add_result(self, result: SearchResult) -> None:
         """
         添加搜索结果到会话.
         """
         self.results[result.id] = result
         self.last_accessed = datetime.now().isoformat()
-    
+
     def get_result(self, result_id: str) -> Optional[SearchResult]:
         """
         从会话中获取搜索结果.
         """
         self.last_accessed = datetime.now().isoformat()
         return self.results.get(result_id)
-    
+
     def add_query(self, query: SearchQuery) -> None:
         """
         添加搜索查询到会话.
         """
         self.queries.append(query)
         self.last_accessed = datetime.now().isoformat()
-    
+
     def clear_results(self) -> None:
         """
         清空搜索结果.
         """
         self.results.clear()
         self.last_accessed = datetime.now().isoformat()
-    
+
     def to_dict(self) -> Dict[str, Any]:
         """
         转换为字典.

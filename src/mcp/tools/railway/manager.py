@@ -1,5 +1,4 @@
-"""
-12306铁路查询工具管理器.
+"""12306铁路查询工具管理器.
 
 负责注册和管理所有12306相关工具.
 """
@@ -78,9 +77,7 @@ class RailwayManager:
         )
 
         # 查询城市中的车站
-        city_stations_props = PropertyList(
-            [Property("city", PropertyType.STRING)]
-        )
+        city_stations_props = PropertyList([Property("city", PropertyType.STRING)])
         add_tool(
             (
                 "self.railway.get_stations_in_city",
@@ -100,9 +97,7 @@ class RailwayManager:
         )
 
         # 获取城市主要车站编码
-        city_code_props = PropertyList(
-            [Property("cities", PropertyType.STRING)]
-        )
+        city_code_props = PropertyList([Property("cities", PropertyType.STRING)])
         add_tool(
             (
                 "self.railway.get_city_station_codes",
@@ -182,7 +177,13 @@ class RailwayManager:
                 Property("train_filters", PropertyType.STRING, default_value=""),
                 Property("sort_by", PropertyType.STRING, default_value=""),
                 Property("reverse", PropertyType.BOOLEAN, default_value=False),
-                Property("limit", PropertyType.INTEGER, default_value=0, min_value=0, max_value=50),
+                Property(
+                    "limit",
+                    PropertyType.INTEGER,
+                    default_value=0,
+                    min_value=0,
+                    max_value=50,
+                ),
             ]
         )
         add_tool(
@@ -233,7 +234,13 @@ class RailwayManager:
                 Property("train_filters", PropertyType.STRING, default_value=""),
                 Property("sort_by", PropertyType.STRING, default_value=""),
                 Property("reverse", PropertyType.BOOLEAN, default_value=False),
-                Property("limit", PropertyType.INTEGER, default_value=10, min_value=1, max_value=20),
+                Property(
+                    "limit",
+                    PropertyType.INTEGER,
+                    default_value=10,
+                    min_value=1,
+                    max_value=20,
+                ),
             ]
         )
         add_tool(

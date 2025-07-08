@@ -54,7 +54,7 @@ class SystemInitializer:
             activation_version = self.config_manager.get_config(
                 "SYSTEM_OPTIONS.NETWORK.ACTIVATION_VERSION", "v1"
             )
-            
+
             logger.info(f"激活版本: {activation_version}")
 
             # 根据激活版本决定是否需要激活流程

@@ -300,21 +300,27 @@ class McpServer:
         from src.mcp.tools.camera import take_photo
 
         # 注册take_photo工具
-        properties = PropertyList([
-            Property("question", PropertyType.STRING)
-        ])
-        self.add_tool(McpTool(
-            "take_photo",
-            "Take photo and answer a question about it.",
-            properties,
-            take_photo
-        ))
+        properties = PropertyList([Property("question", PropertyType.STRING)])
+        self.add_tool(
+            McpTool(
+                "take_photo",
+                "Take photo and answer a question about it.",
+                properties,
+                take_photo,
+            )
+        )
 
         # 添加高德地图工具
         from src.mcp.tools.amap import get_amap_manager
-        
+
         amap_manager = get_amap_manager()
         amap_manager.init_tools(self.add_tool, PropertyList, Property, PropertyType)
+
+        # 添加八字命理工具
+        from src.mcp.tools.bazi import get_bazi_manager
+
+        bazi_manager = get_bazi_manager()
+        bazi_manager.init_tools(self.add_tool, PropertyList, Property, PropertyType)
 
         # 恢复原有工具
         self.tools.extend(original_tools)
@@ -469,17 +475,20 @@ class McpServer:
             await self._reply_error(id, str(e))
 
     async def _parse_capabilities(self, capabilities):
-        """解析capabilities"""
+        """
+        解析capabilities.
+        """
         vision = capabilities.get("vision", {})
         if vision and isinstance(vision, dict):
             url = vision.get("url")
             token = vision.get("token")
             if url:
                 from src.mcp.tools.camera import get_camera_instance
+
                 camera = get_camera_instance()
-                if hasattr(camera, 'set_explain_url'):
+                if hasattr(camera, "set_explain_url"):
                     camera.set_explain_url(url)
-                if token and hasattr(camera, 'set_explain_token'):
+                if token and hasattr(camera, "set_explain_token"):
                     camera.set_explain_token(token)
                 logger.info(f"Vision service configured with URL: {url}")
 
