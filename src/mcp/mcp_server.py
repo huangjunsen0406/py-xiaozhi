@@ -290,6 +290,12 @@ class McpServer:
         search_manager = get_search_manager()
         search_manager.init_tools(self.add_tool, PropertyList, Property, PropertyType)
 
+        # 添加菜谱工具
+        from src.mcp.tools.recipe import get_recipe_manager
+
+        recipe_manager = get_recipe_manager()
+        recipe_manager.init_tools(self.add_tool, PropertyList, Property, PropertyType)
+
         # 添加摄像头工具
         from src.mcp.tools.camera import take_photo
 
@@ -303,6 +309,12 @@ class McpServer:
             properties,
             take_photo
         ))
+
+        # 添加高德地图工具
+        from src.mcp.tools.amap import get_amap_manager
+        
+        amap_manager = get_amap_manager()
+        amap_manager.init_tools(self.add_tool, PropertyList, Property, PropertyType)
 
         # 恢复原有工具
         self.tools.extend(original_tools)
