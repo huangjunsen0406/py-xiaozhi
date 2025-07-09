@@ -304,7 +304,7 @@ class McpServer:
         self.add_tool(
             McpTool(
                 "take_photo",
-                "Take photo and answer a question about it.",
+                "拍照并分析图像内容。可以进行物体识别、文字识别、场景分析、问题解答等。适用于：看看这是什么、拍照识别、读取文字、分析场景、解答问题等需求。Take photo and analyze image content including object recognition, text recognition, scene analysis, and question answering.",
                 properties,
                 take_photo,
             )
