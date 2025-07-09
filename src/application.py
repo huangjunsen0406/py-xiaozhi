@@ -400,34 +400,39 @@ class Application:
         return task
 
     async def _audio_input_processor(self):
-        """
-        音频输入处理器.
-        """
+        """优化后的音频输入处理器"""
+        consecutive_empty = 0
+
         while self.running:
             try:
-                if (
-                    self.device_state == DeviceState.LISTENING
-                    and self.audio_codec
-                    and self.protocol
-                    and self.protocol.is_audio_channel_opened()
-                ):
-                    # 批量读取和发送音频数据，提高实时性
+                if (self.device_state == DeviceState.LISTENING
+                        and self.audio_codec
+                        and self.protocol
+                        and self.protocol.is_audio_channel_opened()
+                        and not getattr(self, '_transitioning', False)):  # 检查转换状态
+
+                    # 动态批量大小
+                    batch_size = 3 if consecutive_empty < 5 else 5
                     audio_sent = False
-                    for _ in range(5):  # 一次循环最多处理5帧音频
+
+                    for _ in range(batch_size):
                         encoded_data = await self.audio_codec.read_audio()
                         if encoded_data:
                             await self.protocol.send_audio(encoded_data)
                             audio_sent = True
+                            consecutive_empty = 0
                         else:
+                            consecutive_empty += 1
                             break
 
-                    # 如果发送了音频数据，稍微降低睡眠时间
+                    # 动态睡眠时间
                     if audio_sent:
-                        await asyncio.sleep(0.005)  # 5ms
+                        await asyncio.sleep(0.003)  # 3ms for active audio
                     else:
-                        await asyncio.sleep(0.01)  # 10ms
+                        await asyncio.sleep(0.01)  # 10ms for idle
                 else:
-                    await asyncio.sleep(0.02)  # 20ms
+                    consecutive_empty = 0
+                    await asyncio.sleep(0.02)
 
             except asyncio.CancelledError:
                 break
@@ -461,7 +466,7 @@ class Application:
                 # 等待命令，超时后继续循环检查running状态
                 try:
                     command = await asyncio.wait_for(
-                        self.command_queue.get(), timeout=1.0
+                        self.command_queue.get(), timeout=0.1
                     )
                     # 检查命令是否有效
                     if command is None:
