@@ -50,9 +50,9 @@ class AudioCodec:
         self.input_stream = None
         self.output_stream = None
 
-        # 音频缓冲区
+        # 音频缓冲区 - 增加输出缓冲区大小以避免丢失尾音
         self._input_buffer = asyncio.Queue(maxsize=300)
-        self._output_buffer = asyncio.Queue(maxsize=200)
+        self._output_buffer = asyncio.Queue(maxsize=500)  # 增加到500帧
 
     async def initialize(self):
         """
@@ -452,17 +452,30 @@ class AudioCodec:
         """
         self._put_audio_data_safe(self.audio_decode_queue, opus_data)
 
-    async def wait_for_audio_complete(self, timeout=5.0):
+    async def wait_for_audio_complete(self, timeout=10.0):
         """
         等待音频播放完成.
         """
         start = time.time()
+        
+        # 1. 首先等待解码队列清空
         while not self.audio_decode_queue.empty() and time.time() - start < timeout:
-            await asyncio.sleep(0.1)
-
-        if not self.audio_decode_queue.empty():
-            remaining = self.audio_decode_queue.qsize()
-            logger.warning(f"音频播放超时，剩余队列: {remaining} 帧")
+            await asyncio.sleep(0.05)
+        
+        # 2. 然后等待输出缓冲区清空（最重要的改进）
+        while not self._output_buffer.empty() and time.time() - start < timeout:
+            await asyncio.sleep(0.05)
+        
+        # 3. 额外等待一小段时间，确保最后的音频数据被播放
+        await asyncio.sleep(0.3)  # 300ms额外缓冲时间
+        
+        # 检查是否超时
+        if not self.audio_decode_queue.empty() or not self._output_buffer.empty():
+            decode_remaining = self.audio_decode_queue.qsize()
+            output_remaining = self._output_buffer.qsize()
+            logger.warning(
+                f"音频播放超时，剩余队列 - 解码: {decode_remaining} 帧, 输出: {output_remaining} 帧"
+            )
 
     async def clear_audio_queue(self):
         """

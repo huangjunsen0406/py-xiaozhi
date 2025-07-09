@@ -2,6 +2,7 @@ import asyncio
 import json
 import signal
 import sys
+import threading
 from typing import Set
 
 from src.constants.constants import AbortReason, DeviceState, ListeningMode
@@ -55,15 +56,14 @@ class Application:
     """
 
     _instance = None
+    _lock = threading.Lock()
 
     @classmethod
     def get_instance(cls):
-        """
-        获取单例实例.
-        """
         if cls._instance is None:
-            logger.debug("创建Application单例实例")
-            cls._instance = Application()
+            with cls._lock:
+                if cls._instance is None:
+                    cls._instance = Application()
         return cls._instance
 
     def __init__(self):
@@ -393,6 +393,9 @@ class Application:
         self._main_tasks.add(task)
 
         def done_callback(t):
+            # 任务完成后从集合中移除，防止内存泄漏
+            self._main_tasks.discard(t)
+            
             if not t.cancelled() and t.exception():
                 logger.error(f"任务 {name} 异常结束: {t.exception()}", exc_info=True)
 
@@ -444,17 +447,34 @@ class Application:
         """
         音频输出处理器.
         """
+        consecutive_errors = 0
+        max_consecutive_errors = 5
+        
         while self.running:
             try:
                 if self.device_state == DeviceState.SPEAKING and self.audio_codec:
                     await self.audio_codec.play_audio()
+                    consecutive_errors = 0  # 重置错误计数
+                else:
+                    consecutive_errors = 0
 
                 await asyncio.sleep(0.02)
 
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                logger.error(f"音频输出处理错误: {e}", exc_info=True)
+                consecutive_errors += 1
+                logger.error(f"音频输出处理错误 ({consecutive_errors}/{max_consecutive_errors}): {e}")
+                
+                if consecutive_errors >= max_consecutive_errors:
+                    logger.error("音频输出处理连续错误过多，尝试重新初始化音频流")
+                    try:
+                        if self.audio_codec:
+                            await self.audio_codec.reinitialize_stream(is_input=False)
+                        consecutive_errors = 0
+                    except Exception as reinit_error:
+                        logger.error(f"重新初始化音频输出流失败: {reinit_error}")
+                
                 await asyncio.sleep(0.1)
 
     async def _command_processor(self):
@@ -508,7 +528,18 @@ class Application:
         """
         调度命令到命令队列.
         """
-        await self.command_queue.put(command)
+        try:
+            # 使用 put_nowait 避免阻塞，如果队列满则记录警告
+            self.command_queue.put_nowait(command)
+        except asyncio.QueueFull:
+            logger.warning("命令队列已满，丢弃命令")
+            # 可选：清理一些旧命令
+            try:
+                self.command_queue.get_nowait()
+                self.command_queue.put_nowait(command)
+                logger.info("清理旧命令后重新添加")
+            except:
+                pass
 
     async def _start_listening_common(self, listening_mode, keep_listening_flag):
         """
@@ -803,12 +834,18 @@ class Application:
         处理TTS停止事件.
         """
         if self.device_state == DeviceState.SPEAKING:
-            # 等待音频播放完成
+            # 等待音频播放完成（改进：增加等待时间并移除过早的清空操作）
             if self.audio_codec:
+                logger.debug("等待TTS音频播放完成...")
                 await self.audio_codec.wait_for_audio_complete()
+                logger.debug("TTS音频播放完成")
 
-            # 清空输入缓冲区确保干净的状态
-            if self.audio_codec:
+            # 仅在非打断情况下，等待一小段时间让缓冲区稳定
+            if not self.aborted:
+                await asyncio.sleep(0.2)  # 额外200ms确保尾音播放完整
+            
+            # 只在需要继续聆听或被打断时清空缓冲区
+            if self.audio_codec and (self.keep_listening or self.aborted):
                 try:
                     # 清空可能录制的TTS声音和环境音
                     await self.audio_codec.clear_audio_queue()
