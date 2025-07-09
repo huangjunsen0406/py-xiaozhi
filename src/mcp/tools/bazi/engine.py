@@ -3,7 +3,7 @@
 """
 
 from datetime import datetime
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 import pendulum
 from lunar_python import Lunar, Solar
@@ -17,40 +17,48 @@ from .models import (
     SixtyCycle,
     SolarTime,
 )
+from .professional_data import (
+    GAN,
+    ZHI,
+    GAN_WUXING,
+    ZHI_WUXING,
+    GAN_YINYANG,
+    ZHI_YINYANG,
+    SHENG_XIAO,
+    ZHI_CANG_GAN,
+    GANZHI_60,
+)
 
 
 class BaziEngine:
-    """八字计算引擎 - 使用lunar-python专业实现"""
+    """八字计算引擎"""
 
-    # 天干映射 - 与lunar-python兼容
-    HEAVEN_STEMS = {
-        "甲": HeavenStem("甲", "木", 1),
-        "乙": HeavenStem("乙", "木", -1),
-        "丙": HeavenStem("丙", "火", 1),
-        "丁": HeavenStem("丁", "火", -1),
-        "戊": HeavenStem("戊", "土", 1),
-        "己": HeavenStem("己", "土", -1),
-        "庚": HeavenStem("庚", "金", 1),
-        "辛": HeavenStem("辛", "金", -1),
-        "壬": HeavenStem("壬", "水", 1),
-        "癸": HeavenStem("癸", "水", -1),
-    }
+    # 动态构建天干映射 - 基于 professional_data.py 的数据
+    HEAVEN_STEMS = {}
+    for gan in GAN:
+        HEAVEN_STEMS[gan] = HeavenStem(
+            name=gan,
+            element=GAN_WUXING[gan],
+            yin_yang=GAN_YINYANG[gan]
+        )
 
-    # 地支映射 - 与lunar-python兼容
-    EARTH_BRANCHES = {
-        "子": EarthBranch("子", "水", 1, "鼠", "癸", None, None),
-        "丑": EarthBranch("丑", "土", -1, "牛", "己", "癸", "辛"),
-        "寅": EarthBranch("寅", "木", 1, "虎", "甲", "丙", "戊"),
-        "卯": EarthBranch("卯", "木", -1, "兔", "乙", None, None),
-        "辰": EarthBranch("辰", "土", 1, "龙", "戊", "乙", "癸"),
-        "巳": EarthBranch("巳", "火", -1, "蛇", "丙", "庚", "戊"),
-        "午": EarthBranch("午", "火", 1, "马", "丁", "己", None),
-        "未": EarthBranch("未", "土", -1, "羊", "己", "丁", "乙"),
-        "申": EarthBranch("申", "金", 1, "猴", "庚", "壬", "戊"),
-        "酉": EarthBranch("酉", "金", -1, "鸡", "辛", None, None),
-        "戌": EarthBranch("戌", "土", 1, "狗", "戊", "辛", "丁"),
-        "亥": EarthBranch("亥", "水", -1, "猪", "壬", "甲", None),
-    }
+    # 动态构建地支映射 - 基于 professional_data.py 的数据
+    EARTH_BRANCHES = {}
+    for i, zhi in enumerate(ZHI):
+        # 获取地支的藏干
+        cang_gan = ZHI_CANG_GAN.get(zhi, {})
+        cang_gan_list = list(cang_gan.keys())
+        
+        # 构建 EarthBranch 对象
+        EARTH_BRANCHES[zhi] = EarthBranch(
+            name=zhi,
+            element=ZHI_WUXING[zhi],
+            yin_yang=ZHI_YINYANG[zhi],
+            zodiac=SHENG_XIAO[i],
+            hide_heaven_main=cang_gan_list[0] if len(cang_gan_list) > 0 else None,
+            hide_heaven_middle=cang_gan_list[1] if len(cang_gan_list) > 1 else None,
+            hide_heaven_residual=cang_gan_list[2] if len(cang_gan_list) > 2 else None,
+        )
 
     def __init__(self):
         """
@@ -59,13 +67,18 @@ class BaziEngine:
 
     def parse_solar_time(self, iso_date: str) -> SolarTime:
         """
-        解析公历时间字符串（支持多种格式）- 使用pendulum优化.
+        解析公历时间字符串（支持多种格式）- 使用pendulum优化，增强时区处理.
         """
         try:
             # 使用pendulum解析时间，支持更多格式
             dt = pendulum.parse(iso_date)
-            # 转换为北京时间
-            if dt.timezone_name != "Asia/Shanghai":
+
+            # 智能时区处理
+            if dt.timezone_name is None:
+                # 如果没有时区信息，假设为北京时间
+                dt = dt.in_timezone("Asia/Shanghai")
+            elif dt.timezone_name != "Asia/Shanghai":
+                # 转换为北京时间
                 dt = dt.in_timezone("Asia/Shanghai")
 
             return SolarTime(
@@ -76,17 +89,25 @@ class BaziEngine:
                 minute=dt.minute,
                 second=dt.second,
             )
-        except Exception:
+        except Exception as e:
             # 如果pendulum解析失败，尝试其他格式
             formats = [
                 "%Y-%m-%dT%H:%M:%S+08:00",
+                "%Y-%m-%dT%H:%M:%S+0800",
+                "%Y-%m-%dT%H:%M:%S.%f+08:00",
+                "%Y-%m-%dT%H:%M:%S.%f",
+                "%Y-%m-%dT%H:%M:%S",
                 "%Y-%m-%dT%H:%M+08:00",
+                "%Y-%m-%dT%H:%M",
                 "%Y-%m-%d %H:%M:%S",
                 "%Y-%m-%d %H:%M",
                 "%Y-%m-%d",
                 "%Y/%m/%d %H:%M:%S",
                 "%Y/%m/%d %H:%M",
                 "%Y/%m/%d",
+                "%Y年%m月%d日 %H时%M分%S秒",
+                "%Y年%m月%d日 %H时%M分",
+                "%Y年%m月%d日",
             ]
 
             dt = None
@@ -98,7 +119,9 @@ class BaziEngine:
                     continue
 
             if dt is None:
-                raise ValueError(f"无法解析时间格式: {iso_date}")
+                raise ValueError(
+                    f"无法解析时间格式: {iso_date}，支持的格式包括ISO8601、中文格式等"
+                )
 
             return SolarTime(
                 year=dt.year,
@@ -111,7 +134,7 @@ class BaziEngine:
 
     def solar_to_lunar(self, solar_time: SolarTime) -> LunarTime:
         """
-        公历转农历.
+        公历转农历 - 增强闰月处理.
         """
         try:
             # 使用lunar-python进行真正的公历农历转换
@@ -125,6 +148,15 @@ class BaziEngine:
             )
             lunar = solar.getLunar()
 
+            # 判断是否为闰月
+            is_leap = lunar.isLeap() if hasattr(lunar, "isLeap") else False
+
+            # 如果lunar-python没有isLeap方法，使用其他方式判断
+            if not hasattr(lunar, "isLeap"):
+                # 通过月份字符串判断（如果包含"闰"字）
+                month_str = lunar.getMonthInChinese()
+                is_leap = "闰" in month_str
+
             return LunarTime(
                 year=lunar.getYear(),
                 month=lunar.getMonth(),
@@ -132,25 +164,38 @@ class BaziEngine:
                 hour=lunar.getHour(),
                 minute=lunar.getMinute(),
                 second=lunar.getSecond(),
-                is_leap=False,  # lunar-python中需要其他方式判断闰月
+                is_leap=is_leap,
             )
         except Exception as e:
             raise ValueError(f"公历转农历失败: {e}")
 
     def lunar_to_solar(self, lunar_time: LunarTime) -> SolarTime:
         """
-        农历转公历.
+        农历转公历 - 增强闰月处理.
         """
         try:
-            # 使用lunar-python进行真正的农历公历转换
-            lunar = Lunar.fromYmdHms(
-                lunar_time.year,
-                lunar_time.month,
-                lunar_time.day,
-                lunar_time.hour,
-                lunar_time.minute,
-                lunar_time.second,
-            )
+            # 处理闰月
+            if lunar_time.is_leap:
+                # 如果是闰月，使用特殊方法创建农历对象
+                lunar = Lunar.fromYmdHms(
+                    lunar_time.year,
+                    -lunar_time.month,  # 闰月用负数表示
+                    lunar_time.day,
+                    lunar_time.hour,
+                    lunar_time.minute,
+                    lunar_time.second,
+                )
+            else:
+                # 普通月份
+                lunar = Lunar.fromYmdHms(
+                    lunar_time.year,
+                    lunar_time.month,
+                    lunar_time.day,
+                    lunar_time.hour,
+                    lunar_time.minute,
+                    lunar_time.second,
+                )
+
             solar = lunar.getSolar()
 
             return SolarTime(
@@ -214,11 +259,13 @@ class BaziEngine:
         heaven_stem = self.HEAVEN_STEMS[gan_name]
         earth_branch = self.EARTH_BRANCHES[zhi_name]
 
-        # 计算纳音 - 使用lunar-python的纳音计算
+        # 计算纳音
         try:
-            # 这里可以使用lunar-python的纳音计算
+            # 使用纳音数据
             sound = self._get_nayin(gan_name, zhi_name)
-        except:
+        except Exception as e:
+            # 记录具体错误，但不影响整体功能
+            print(f"纳音计算失败: {gan_name}{zhi_name} - {e}")
             sound = "未知"
 
         # 计算旬和空亡 - 简化实现
@@ -234,54 +281,74 @@ class BaziEngine:
         )
 
     def _get_nayin(self, gan: str, zhi: str) -> str:
-        """获取纳音 - 使用完整专业数据"""
+        """获取纳音"""
         from .professional_data import get_nayin
 
         return get_nayin(gan, zhi)
 
     def _get_ten(self, gan: str, zhi: str) -> str:
-        """获取旬 - 使用专业算法"""
+        """获取旬 - 使用六十甲子旬空算法"""
         from .professional_data import GAN, ZHI
 
-        # 使用专业的六十甲子旬空算法
-        gan_idx = GAN.index(gan) if gan in GAN else 0
-        zhi_idx = ZHI.index(zhi) if zhi in ZHI else 0
+        try:
+            # 使用标准的六十甲子计算方法
+            gan_idx = GAN.index(gan)
+            zhi_idx = ZHI.index(zhi)
 
-        # 计算干支在六十甲子中的位置
-        # 六十甲子每10个为一旬
-        jiazi_position = (gan_idx * 6 + zhi_idx * 5) % 60
+            # 计算在六十甲子中的序号（从1开始）
+            jiazi_number = (gan_idx * 6 + zhi_idx * 5) % 60
+            if jiazi_number == 0:
+                jiazi_number = 60
 
-        # 确定所在旬（每10个为一旬）
-        xun_number = jiazi_position // 10
+            # 六旬的旬首
+            xun_starts = ["甲子", "甲戌", "甲申", "甲午", "甲辰", "甲寅"]
 
-        # 旬首干支组合：甲子、甲戌、甲申、甲午、甲辰、甲寅
-        xun_stems = ["甲", "甲", "甲", "甲", "甲", "甲"]
-        xun_branches = ["子", "戌", "申", "午", "辰", "寅"]
+            # 确定所在旬（每10个为一旬）
+            xun_index = (jiazi_number - 1) // 10
 
-        if xun_number < len(xun_stems):
-            return f"{xun_stems[xun_number]}{xun_branches[xun_number]}"
-        else:
-            return "甲子"  # 默认
+            if 0 <= xun_index < len(xun_starts):
+                return xun_starts[xun_index]
+            else:
+                # 使用更精确的计算方法
+                return self._calculate_xun_by_position(jiazi_number)
+        except (ValueError, IndexError) as e:
+            print(f"旬计算失败: {gan}{zhi} - {e}")
+            return "甲子"
 
     def _get_kong_wang(self, gan: str, zhi: str) -> List[str]:
-        """获取空亡 - 使用专业算法"""
+        """获取空亡 - 使用传统旬空算法"""
         from .professional_data import GAN, ZHI
 
-        # 使用专业旬空算法
-        gan_idx = GAN.index(gan) if gan in GAN else 0
-        zhi_idx = ZHI.index(zhi) if zhi in ZHI else 0
+        try:
+            gan_idx = GAN.index(gan)
+            zhi_idx = ZHI.index(zhi)
 
-        # 计算所在旬
-        jiazi_position = (gan_idx * 6 + zhi_idx * 5) % 60
-        xun_start = (jiazi_position // 10) * 10
+            # 计算在六十甲子中的序号
+            jiazi_number = (gan_idx * 6 + zhi_idx * 5) % 60
+            if jiazi_number == 0:
+                jiazi_number = 60
 
-        # 每旬10个干支，地支只有12个，所以有两个地支空亡
-        # 空亡的地支是每旬最后两个位置
-        kong_wang_positions = [(xun_start + 10) % 12, (xun_start + 11) % 12]
+            # 确定所在旬
+            xun_index = (jiazi_number - 1) // 10
 
-        kong_wang_branches = [ZHI[pos] for pos in kong_wang_positions]
+            # 六旬的空亡地支
+            kong_wang_table = [
+                ["戌", "亥"],  # 甲子旬
+                ["申", "酉"],  # 甲戌旬
+                ["午", "未"],  # 甲申旬
+                ["辰", "巳"],  # 甲午旬
+                ["寅", "卯"],  # 甲辰旬
+                ["子", "丑"],  # 甲寅旬
+            ]
 
-        return kong_wang_branches
+            if 0 <= xun_index < len(kong_wang_table):
+                return kong_wang_table[xun_index]
+            else:
+                # 备用计算方法
+                return self._calculate_kong_wang_by_position(jiazi_number)
+        except (ValueError, IndexError) as e:
+            print(f"空亡计算失败: {gan}{zhi} - {e}")
+            return ["戌", "亥"]  # 默认返回甲子旬空亡
 
     def format_solar_time(self, solar_time: SolarTime) -> str:
         """
@@ -346,6 +413,81 @@ class BaziEngine:
             )
         except Exception as e:
             raise ValueError(f"获取黄历信息失败: {e}")
+
+    def _calculate_xun_by_position(self, jiazi_number: int) -> str:
+        """根据六十甲子序号计算旬"""
+        # 从 professional_data.py 使用 GANZHI_60
+        # 每旬的旬首
+        xun_starts = ["甲子", "甲戌", "甲申", "甲午", "甲辰", "甲寅"]
+
+        xun_index = (jiazi_number - 1) // 10
+        if 0 <= xun_index < len(xun_starts):
+            return xun_starts[xun_index]
+        else:
+            return "甲子"
+
+    def _calculate_kong_wang_by_position(self, jiazi_number: int) -> List[str]:
+        """根据六十甲子序号计算空亡"""
+        # 六旬的空亡地支
+        kong_wang_table = [
+            ["戌", "亥"],  # 甲子旬
+            ["申", "酉"],  # 甲戌旬
+            ["午", "未"],  # 甲申旬
+            ["辰", "巳"],  # 甲午旬
+            ["寅", "卯"],  # 甲辰旬
+            ["子", "丑"],  # 甲寅旬
+        ]
+
+        xun_index = (jiazi_number - 1) // 10
+        if 0 <= xun_index < len(kong_wang_table):
+            return kong_wang_table[xun_index]
+        else:
+            return ["戌", "亥"]
+
+    def get_detailed_lunar_info(self, solar_time: SolarTime) -> Dict[str, Any]:
+        """获取详细的农历信息"""
+        try:
+            solar = Solar.fromYmdHms(
+                solar_time.year,
+                solar_time.month,
+                solar_time.day,
+                solar_time.hour,
+                solar_time.minute,
+                solar_time.second,
+            )
+            lunar = solar.getLunar()
+
+            # 获取节气信息
+            current_jieqi = lunar.getJieQi()
+            next_jieqi = lunar.getNextJieQi()
+            prev_jieqi = lunar.getPrevJieQi()
+
+            # 获取更多传统信息
+            return {
+                "current_jieqi": current_jieqi,
+                "next_jieqi": next_jieqi.toString() if next_jieqi else None,
+                "prev_jieqi": prev_jieqi.toString() if prev_jieqi else None,
+                "lunar_festivals": lunar.getFestivals(),
+                "solar_festivals": solar.getFestivals(),
+                "twenty_eight_star": lunar.getXiu(),
+                "day_position": {
+                    "xi": lunar.getPositionXi(),
+                    "yang_gui": lunar.getPositionYangGui(),
+                    "yin_gui": lunar.getPositionYinGui(),
+                    "fu": lunar.getPositionFu(),
+                    "cai": lunar.getPositionCai(),
+                },
+                "pengzu_taboo": {
+                    "gan": lunar.getPengZuGan(),
+                    "zhi": lunar.getPengZuZhi(),
+                },
+                "day_suitable": lunar.getDayYi(),
+                "day_avoid": lunar.getDayJi(),
+                "day_clash": lunar.getDayChongDesc(),
+            }
+        except Exception as e:
+            print(f"获取详细农历信息失败: {e}")
+            return {}
 
 
 # 全局引擎实例

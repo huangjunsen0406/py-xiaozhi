@@ -9,6 +9,7 @@ from .professional_data import (
     WUXING_RELATIONS,
     ZHI_CANG_GAN,
     ZHI_WUXING,
+    WUXING,
     analyze_zhi_combinations,
     get_changsheng_state,
     get_nayin,
@@ -155,7 +156,7 @@ class ProfessionalAnalyzer:
         """
         分析五行平衡.
         """
-        wuxing_count = {"金": 0, "木": 0, "水": 0, "火": 0, "土": 0}
+        wuxing_count = {element: 0 for element in WUXING}
 
         # 天干五行
         for gan in gan_list:
@@ -205,7 +206,7 @@ class ProfessionalAnalyzer:
         self, gan_list: List[str], zhi_list: List[str]
     ) -> Dict[str, List[str]]:
         """
-        分析神煞.
+        分析神煞 - 修复版本，正确区分以日干查和以日支查的神煞.
         """
         shensha = {
             "天乙贵人": [],
@@ -216,23 +217,34 @@ class ProfessionalAnalyzer:
         }
 
         day_gan = gan_list[2] if len(gan_list) > 2 else ""
+        day_zhi = zhi_list[2] if len(zhi_list) > 2 else ""
+        pillar_names = ["年支", "月支", "日支", "时支"]
 
-        # 分析各种神煞
-        shensha_types = [
+        # 以日干查的神煞
+        day_gan_shensha = [
             ("tianyi", "天乙贵人"),
             ("wenchang", "文昌贵人"),
+        ]
+
+        for shensha_type, shensha_name in day_gan_shensha:
+            shensha_zhi = get_shensha(day_gan, shensha_type)
+            if shensha_zhi:
+                for i, zhi in enumerate(zhi_list):
+                    if zhi in shensha_zhi:
+                        shensha[shensha_name].append(f"{pillar_names[i]}{zhi}")
+
+        # 以日支查的神煞
+        day_zhi_shensha = [
             ("yima", "驿马星"),
             ("taohua", "桃花星"),
             ("huagai", "华盖星"),
         ]
 
-        for shensha_type, shensha_name in shensha_types:
-            # 以日干查神煞
-            shensha_zhi = get_shensha(day_gan, shensha_type)
+        for shensha_type, shensha_name in day_zhi_shensha:
+            shensha_zhi = get_shensha(day_zhi, shensha_type)
             if shensha_zhi:
                 for i, zhi in enumerate(zhi_list):
-                    pillar_names = ["年支", "月支", "日支", "时支"]
-                    if zhi in shensha_zhi:
+                    if zhi == shensha_zhi:  # 这些神煞返回的是单个地支
                         shensha[shensha_name].append(f"{pillar_names[i]}{zhi}")
 
         return shensha
@@ -310,7 +322,7 @@ class ProfessionalAnalyzer:
 
         if strength_analysis["level"] in ["偏强", "很强"]:
             # 身强用克泄耗
-            for element in ["金", "木", "水", "火", "土"]:
+            for element in WUXING:
                 relation = WUXING_RELATIONS.get((day_element, element), "")
                 if relation == "→":  # 我克者为财
                     useful_gods.append(f"{element}（财星）")
@@ -320,7 +332,7 @@ class ProfessionalAnalyzer:
                     useful_gods.append(f"{element}（官杀）")
         else:
             # 身弱用生扶
-            for element in ["金", "木", "水", "火", "土"]:
+            for element in WUXING:
                 relation = WUXING_RELATIONS.get((element, day_element), "")
                 if relation == "↓":  # 生我者为印
                     useful_gods.append(f"{element}（印星）")
