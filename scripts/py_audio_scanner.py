@@ -4,7 +4,9 @@ import pyaudio
 
 
 def detect_audio_devices():
-    """检测并列出所有音频设备."""
+    """
+    检测并列出所有音频设备.
+    """
     p = pyaudio.PyAudio()
 
     print("\n===== 音频设备检测 =====\n")

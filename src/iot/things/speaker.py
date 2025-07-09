@@ -1,36 +1,55 @@
-from src.application import Application
+import asyncio
+
 from src.iot.thing import Parameter, Thing, ValueType
+from src.utils.volume_controller import VolumeController
 
 
 class Speaker(Thing):
     def __init__(self):
         super().__init__("Speaker", "当前 AI 机器人的扬声器")
 
-        # 获取当前显示实例的音量作为初始值
+        # 初始化音量控制器
+        self.volume_controller = None
         try:
-            app = Application.get_instance()
-            self.volume = app.display.current_volume
+            if VolumeController.check_dependencies():
+                self.volume_controller = VolumeController()
+                self.volume = self.volume_controller.get_volume()
+            else:
+                self.volume = 70  # 默认音量
         except Exception:
-            # 如果获取失败，使用默认值
-            self.volume = 100  # 默认音量
+            self.volume = 70  # 默认音量
 
         # 定义属性
-        self.add_property("volume", "当前音量值", lambda: self.volume)
+        self.add_property("volume", "当前音量值", self.get_volume)
 
         # 定义方法
         self.add_method(
             "SetVolume",
             "设置音量",
             [Parameter("volume", "0到100之间的整数", ValueType.NUMBER, True)],
-            lambda params: self._set_volume(params["volume"].get_value()),
+            self._set_volume,
         )
 
-    def _set_volume(self, volume):
+    async def get_volume(self):
+        # 尝试从音量控制器获取实时音量
+        if self.volume_controller:
+            try:
+                self.volume = self.volume_controller.get_volume()
+            except Exception:
+                pass
+        return self.volume
+
+    async def _set_volume(self, params):
+        volume = params["volume"].get_value()
         if 0 <= volume <= 100:
             self.volume = volume
             try:
-                app = Application.get_instance()
-                app.display.update_volume(volume)
+                # 直接使用VolumeController设置系统音量
+                if self.volume_controller:
+                    await asyncio.to_thread(self.volume_controller.set_volume, volume)
+                else:
+                    raise Exception("音量控制器未初始化")
+
                 return {"success": True, "message": f"音量已设置为: {volume}"}
             except Exception as e:
                 print(f"设置音量失败: {e}")

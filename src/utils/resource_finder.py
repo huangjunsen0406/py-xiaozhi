@@ -1,13 +1,16 @@
-import logging
 import sys
 from pathlib import Path
 from typing import List, Optional, Union
 
-logger = logging.getLogger(__name__)
+from src.utils.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
 class ResourceFinder:
-    """统一的资源查找器 支持开发环境、PyInstaller目录模式和单文件模式下的资源查找."""
+    """
+    统一的资源查找器 支持开发环境、PyInstaller目录模式和单文件模式下的资源查找.
+    """
 
     _instance = None
     _base_paths = None
@@ -18,7 +21,9 @@ class ResourceFinder:
         return cls._instance
 
     def __init__(self):
-        """初始化资源查找器."""
+        """
+        初始化资源查找器.
+        """
         if self._base_paths is None:
             self._base_paths = self._get_base_paths()
             logger.debug(
@@ -26,7 +31,9 @@ class ResourceFinder:
             )
 
     def _get_base_paths(self) -> List[Path]:
-        """获取所有可能的基础路径 按优先级排序：项目根目录 > 当前工作目录 > 可执行文件目录 > _MEIPASS."""
+        """
+        获取所有可能的基础路径 按优先级排序：项目根目录 > 当前工作目录 > 可执行文件目录 > _MEIPASS.
+        """
         base_paths = []
 
         # 1. 项目根目录（开发环境）
@@ -228,40 +235,56 @@ resource_finder = ResourceFinder()
 
 # 便捷函数
 def find_file(file_path: Union[str, Path]) -> Optional[Path]:
-    """查找文件的便捷函数."""
+    """
+    查找文件的便捷函数.
+    """
     return resource_finder.find_file(file_path)
 
 
 def find_directory(dir_path: Union[str, Path]) -> Optional[Path]:
-    """查找目录的便捷函数."""
+    """
+    查找目录的便捷函数.
+    """
     return resource_finder.find_directory(dir_path)
 
 
 def find_models_dir() -> Optional[Path]:
-    """查找models目录的便捷函数."""
+    """
+    查找models目录的便捷函数.
+    """
     return resource_finder.find_models_dir()
 
 
 def find_config_dir() -> Optional[Path]:
-    """查找config目录的便捷函数."""
+    """
+    查找config目录的便捷函数.
+    """
     return resource_finder.find_config_dir()
 
 
 def find_assets_dir() -> Optional[Path]:
-    """查找assets目录的便捷函数."""
+    """
+    查找assets目录的便捷函数.
+    """
     return resource_finder.find_assets_dir()
 
 
 def find_libs_dir(system: str = None, arch: str = None) -> Optional[Path]:
-    """查找libs目录的便捷函数."""
+    """
+    查找libs目录的便捷函数.
+    """
     return resource_finder.find_libs_dir(system, arch)
 
 
 def get_project_root() -> Path:
-    """获取项目根目录的便捷函数."""
+    """
+    获取项目根目录的便捷函数.
+    """
     return resource_finder.get_project_root()
 
 
 def get_app_path() -> Path:
-    """获取应用程序基础路径的便捷函数."""
+    """
+    获取应用程序基础路径的便捷函数.
+    """
     return resource_finder.get_app_path()

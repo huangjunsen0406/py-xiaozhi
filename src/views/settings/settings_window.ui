@@ -1,0 +1,590 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>SettingsWindow</class>
+ <widget class="QDialog" name="SettingsWindow">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>600</width>
+    <height>700</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>参数配置</string>
+  </property>
+  <property name="modal">
+   <bool>true</bool>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayout">
+   <item>
+    <widget class="QTabWidget" name="tabWidget">
+     <property name="currentIndex">
+      <number>0</number>
+     </property>
+     <widget class="QWidget" name="system_tab">
+      <attribute name="title">
+       <string>系统选项</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="system_layout">
+       <item>
+        <widget class="QScrollArea" name="system_scroll">
+         <property name="widgetResizable">
+          <bool>true</bool>
+         </property>
+         <widget class="QWidget" name="system_content">
+          <property name="geometry">
+           <rect>
+            <x>0</x>
+            <y>0</y>
+            <width>574</width>
+            <height>474</height>
+           </rect>
+          </property>
+          <layout class="QFormLayout" name="system_form">
+           <property name="labelAlignment">
+            <set>Qt::AlignRight|Qt::AlignVCenter</set>
+           </property>
+           <property name="fieldGrowthPolicy">
+            <enum>QFormLayout::ExpandingFieldsGrow</enum>
+           </property>
+           <item row="0" column="0">
+            <widget class="QLabel" name="client_id_label">
+             <property name="text">
+              <string>客户端ID:</string>
+             </property>
+             <property name="alignment">
+              <set>Qt::AlignRight|Qt::AlignVCenter</set>
+             </property>
+            </widget>
+           </item>
+           <item row="0" column="1">
+            <widget class="QLineEdit" name="client_id_edit">
+             <property name="readOnly">
+              <bool>true</bool>
+             </property>
+             <property name="styleSheet">
+              <string>background-color: #f5f5f5;</string>
+             </property>
+            </widget>
+           </item>
+           <item row="1" column="0">
+            <widget class="QLabel" name="device_id_label">
+             <property name="text">
+              <string>设备ID:</string>
+             </property>
+             <property name="alignment">
+              <set>Qt::AlignRight|Qt::AlignVCenter</set>
+             </property>
+            </widget>
+           </item>
+           <item row="1" column="1">
+            <widget class="QLineEdit" name="device_id_edit">
+             <property name="readOnly">
+              <bool>true</bool>
+             </property>
+             <property name="styleSheet">
+              <string>background-color: #f5f5f5;</string>
+             </property>
+            </widget>
+           </item>
+           <item row="2" column="0">
+            <widget class="QLabel" name="ota_url_label">
+             <property name="text">
+              <string>OTA版本URL:</string>
+             </property>
+             <property name="alignment">
+              <set>Qt::AlignRight|Qt::AlignVCenter</set>
+             </property>
+            </widget>
+           </item>
+           <item row="2" column="1">
+            <widget class="QLineEdit" name="ota_url_edit"/>
+           </item>
+           <item row="3" column="0">
+            <widget class="QLabel" name="websocket_url_label">
+             <property name="text">
+              <string>WebSocket URL:</string>
+             </property>
+             <property name="alignment">
+              <set>Qt::AlignRight|Qt::AlignVCenter</set>
+             </property>
+            </widget>
+           </item>
+           <item row="3" column="1">
+            <widget class="QLineEdit" name="websocket_url_edit"/>
+           </item>
+           <item row="4" column="0">
+            <widget class="QLabel" name="websocket_token_label">
+             <property name="text">
+              <string>WebSocket Token:</string>
+             </property>
+             <property name="alignment">
+              <set>Qt::AlignRight|Qt::AlignVCenter</set>
+             </property>
+            </widget>
+           </item>
+           <item row="4" column="1">
+            <widget class="QLineEdit" name="websocket_token_edit"/>
+           </item>
+           <item row="5" column="0">
+            <widget class="QLabel" name="authorization_url_label">
+             <property name="text">
+              <string>授权URL:</string>
+             </property>
+             <property name="alignment">
+              <set>Qt::AlignRight|Qt::AlignVCenter</set>
+             </property>
+            </widget>
+           </item>
+           <item row="5" column="1">
+            <widget class="QLineEdit" name="authorization_url_edit"/>
+           </item>
+           <item row="6" column="0">
+            <widget class="QLabel" name="activation_version_label">
+             <property name="text">
+              <string>激活版本:</string>
+             </property>
+             <property name="alignment">
+              <set>Qt::AlignRight|Qt::AlignVCenter</set>
+             </property>
+            </widget>
+           </item>
+           <item row="6" column="1">
+            <widget class="QComboBox" name="activation_version_combo">
+             <item>
+              <property name="text">
+               <string>v1</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>v2</string>
+              </property>
+             </item>
+            </widget>
+           </item>
+           <item row="7" column="0" colspan="2">
+            <widget class="QGroupBox" name="mqtt_group">
+             <property name="title">
+              <string>MQTT配置</string>
+             </property>
+             <layout class="QFormLayout" name="mqtt_form">
+              <property name="labelAlignment">
+               <set>Qt::AlignRight|Qt::AlignVCenter</set>
+              </property>
+              <property name="fieldGrowthPolicy">
+               <enum>QFormLayout::ExpandingFieldsGrow</enum>
+              </property>
+              <item row="0" column="0">
+               <widget class="QLabel" name="mqtt_endpoint_label">
+                <property name="text">
+                 <string>端点:</string>
+                </property>
+                <property name="alignment">
+                 <set>Qt::AlignRight|Qt::AlignVCenter</set>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="1">
+               <widget class="QLineEdit" name="mqtt_endpoint_edit"/>
+              </item>
+              <item row="1" column="0">
+               <widget class="QLabel" name="mqtt_client_id_label">
+                <property name="text">
+                 <string>客户端ID:</string>
+                </property>
+                <property name="alignment">
+                 <set>Qt::AlignRight|Qt::AlignVCenter</set>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="1">
+               <widget class="QLineEdit" name="mqtt_client_id_edit"/>
+              </item>
+              <item row="2" column="0">
+               <widget class="QLabel" name="mqtt_username_label">
+                <property name="text">
+                 <string>用户名:</string>
+                </property>
+                <property name="alignment">
+                 <set>Qt::AlignRight|Qt::AlignVCenter</set>
+                </property>
+               </widget>
+              </item>
+              <item row="2" column="1">
+               <widget class="QLineEdit" name="mqtt_username_edit"/>
+              </item>
+              <item row="3" column="0">
+               <widget class="QLabel" name="mqtt_password_label">
+                <property name="text">
+                 <string>密码:</string>
+                </property>
+                <property name="alignment">
+                 <set>Qt::AlignRight|Qt::AlignVCenter</set>
+                </property>
+               </widget>
+              </item>
+              <item row="3" column="1">
+               <widget class="QLineEdit" name="mqtt_password_edit">
+                <property name="echoMode">
+                 <enum>QLineEdit::Password</enum>
+                </property>
+               </widget>
+              </item>
+              <item row="4" column="0">
+               <widget class="QLabel" name="mqtt_publish_topic_label">
+                <property name="text">
+                 <string>发布主题:</string>
+                </property>
+                <property name="alignment">
+                 <set>Qt::AlignRight|Qt::AlignVCenter</set>
+                </property>
+               </widget>
+              </item>
+              <item row="4" column="1">
+               <widget class="QLineEdit" name="mqtt_publish_topic_edit"/>
+              </item>
+              <item row="5" column="0">
+               <widget class="QLabel" name="mqtt_subscribe_topic_label">
+                <property name="text">
+                 <string>订阅主题:</string>
+                </property>
+                <property name="alignment">
+                 <set>Qt::AlignRight|Qt::AlignVCenter</set>
+                </property>
+               </widget>
+              </item>
+              <item row="5" column="1">
+               <widget class="QLineEdit" name="mqtt_subscribe_topic_edit"/>
+              </item>
+             </layout>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+     <widget class="QWidget" name="wake_word_tab">
+      <attribute name="title">
+       <string>唤醒词</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="wake_word_layout">
+       <item>
+        <widget class="QScrollArea" name="wake_word_scroll">
+         <property name="widgetResizable">
+          <bool>true</bool>
+         </property>
+         <widget class="QWidget" name="wake_word_content">
+          <property name="geometry">
+           <rect>
+            <x>0</x>
+            <y>0</y>
+            <width>574</width>
+            <height>262</height>
+           </rect>
+          </property>
+          <layout class="QFormLayout" name="wake_word_form">
+           <property name="labelAlignment">
+            <set>Qt::AlignRight|Qt::AlignVCenter</set>
+           </property>
+           <property name="fieldGrowthPolicy">
+            <enum>QFormLayout::ExpandingFieldsGrow</enum>
+           </property>
+           <item row="0" column="0">
+            <widget class="QLabel" name="use_wake_word_label">
+             <property name="text">
+              <string>启用唤醒词:</string>
+             </property>
+             <property name="alignment">
+              <set>Qt::AlignRight|Qt::AlignVCenter</set>
+             </property>
+            </widget>
+           </item>
+           <item row="0" column="1">
+            <widget class="QCheckBox" name="use_wake_word_check"/>
+           </item>
+           <item row="1" column="0">
+            <widget class="QLabel" name="model_path_label">
+             <property name="text">
+              <string>模型路径:</string>
+             </property>
+             <property name="alignment">
+              <set>Qt::AlignRight|Qt::AlignVCenter</set>
+             </property>
+            </widget>
+           </item>
+           <item row="1" column="1">
+            <layout class="QHBoxLayout" name="model_path_layout">
+             <item>
+              <widget class="QLineEdit" name="model_path_edit"/>
+             </item>
+             <item>
+              <widget class="QPushButton" name="model_path_btn">
+               <property name="text">
+                <string>浏览</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </item>
+           <item row="2" column="0">
+            <widget class="QLabel" name="wake_words_label">
+             <property name="text">
+              <string>唤醒词列表:</string>
+             </property>
+             <property name="alignment">
+              <set>Qt::AlignRight|Qt::AlignTop</set>
+             </property>
+            </widget>
+           </item>
+           <item row="2" column="1">
+            <layout class="QVBoxLayout" name="wake_words_layout">
+             <item>
+              <widget class="QTextEdit" name="wake_words_edit">
+               <property name="maximumSize">
+                <size>
+                 <width>16777215</width>
+                 <height>100</height>
+                </size>
+               </property>
+               <property name="placeholderText">
+                <string>每行一个唤醒词</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QLabel" name="wake_words_hint">
+               <property name="text">
+                <string>提示: 每行输入一个唤醒词，如"小智"、"小美"</string>
+               </property>
+               <property name="styleSheet">
+                <string>color: #666; font-size: 11px;</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </item>
+          </layout>
+         </widget>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+     <widget class="QWidget" name="camera_tab">
+      <attribute name="title">
+       <string>摄像头</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="camera_layout">
+       <item>
+        <widget class="QScrollArea" name="camera_scroll">
+         <property name="widgetResizable">
+          <bool>true</bool>
+         </property>
+         <widget class="QWidget" name="camera_content">
+          <property name="geometry">
+           <rect>
+            <x>0</x>
+            <y>0</y>
+            <width>574</width>
+            <height>345</height>
+           </rect>
+          </property>
+          <layout class="QFormLayout" name="camera_form">
+           <property name="labelAlignment">
+            <set>Qt::AlignRight|Qt::AlignVCenter</set>
+           </property>
+           <property name="fieldGrowthPolicy">
+            <enum>QFormLayout::ExpandingFieldsGrow</enum>
+           </property>
+           <item row="0" column="0">
+            <widget class="QLabel" name="camera_index_label">
+             <property name="text">
+              <string>摄像头索引:</string>
+             </property>
+             <property name="alignment">
+              <set>Qt::AlignRight|Qt::AlignVCenter</set>
+             </property>
+            </widget>
+           </item>
+           <item row="0" column="1">
+            <widget class="QSpinBox" name="camera_index_spin">
+             <property name="minimum">
+              <number>0</number>
+             </property>
+             <property name="maximum">
+              <number>10</number>
+             </property>
+            </widget>
+           </item>
+           <item row="1" column="0">
+            <widget class="QLabel" name="frame_width_label">
+             <property name="text">
+              <string>画面宽度:</string>
+             </property>
+             <property name="alignment">
+              <set>Qt::AlignRight|Qt::AlignVCenter</set>
+             </property>
+            </widget>
+           </item>
+           <item row="1" column="1">
+            <widget class="QSpinBox" name="frame_width_spin">
+             <property name="minimum">
+              <number>320</number>
+             </property>
+             <property name="maximum">
+              <number>1920</number>
+             </property>
+             <property name="singleStep">
+              <number>10</number>
+             </property>
+             <property name="value">
+              <number>640</number>
+             </property>
+            </widget>
+           </item>
+           <item row="2" column="0">
+            <widget class="QLabel" name="frame_height_label">
+             <property name="text">
+              <string>画面高度:</string>
+             </property>
+             <property name="alignment">
+              <set>Qt::AlignRight|Qt::AlignVCenter</set>
+             </property>
+            </widget>
+           </item>
+           <item row="2" column="1">
+            <widget class="QSpinBox" name="frame_height_spin">
+             <property name="minimum">
+              <number>240</number>
+             </property>
+             <property name="maximum">
+              <number>1080</number>
+             </property>
+             <property name="singleStep">
+              <number>10</number>
+             </property>
+             <property name="value">
+              <number>480</number>
+             </property>
+            </widget>
+           </item>
+           <item row="3" column="0">
+            <widget class="QLabel" name="fps_label">
+             <property name="text">
+              <string>帧率:</string>
+             </property>
+             <property name="alignment">
+              <set>Qt::AlignRight|Qt::AlignVCenter</set>
+             </property>
+            </widget>
+           </item>
+           <item row="3" column="1">
+            <widget class="QSpinBox" name="fps_spin">
+             <property name="minimum">
+              <number>1</number>
+             </property>
+             <property name="maximum">
+              <number>60</number>
+             </property>
+             <property name="value">
+              <number>30</number>
+             </property>
+            </widget>
+           </item>
+           <item row="4" column="0">
+            <widget class="QLabel" name="local_vl_url_label">
+             <property name="text">
+              <string>本地VL URL:</string>
+             </property>
+             <property name="alignment">
+              <set>Qt::AlignRight|Qt::AlignVCenter</set>
+             </property>
+            </widget>
+           </item>
+           <item row="4" column="1">
+            <widget class="QLineEdit" name="local_vl_url_edit"/>
+           </item>
+           <item row="5" column="0">
+            <widget class="QLabel" name="vl_api_key_label">
+             <property name="text">
+              <string>VL API Key:</string>
+             </property>
+             <property name="alignment">
+              <set>Qt::AlignRight|Qt::AlignVCenter</set>
+             </property>
+            </widget>
+           </item>
+           <item row="5" column="1">
+            <widget class="QLineEdit" name="vl_api_key_edit">
+             <property name="echoMode">
+              <enum>QLineEdit::Password</enum>
+             </property>
+            </widget>
+           </item>
+           <item row="6" column="0">
+            <widget class="QLabel" name="models_label">
+             <property name="text">
+              <string>模型:</string>
+             </property>
+             <property name="alignment">
+              <set>Qt::AlignRight|Qt::AlignVCenter</set>
+             </property>
+            </widget>
+           </item>
+           <item row="6" column="1">
+            <widget class="QLineEdit" name="models_edit"/>
+           </item>
+          </layout>
+         </widget>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </widget>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="button_layout">
+     <item>
+      <spacer name="button_spacer">
+       <property name="orientation">
+        <enum>Qt::Horizontal</enum>
+       </property>
+       <property name="sizeHint" stdset="0">
+        <size>
+         <width>40</width>
+         <height>20</height>
+        </size>
+       </property>
+      </spacer>
+     </item>
+     <item>
+      <widget class="QPushButton" name="reset_btn">
+       <property name="text">
+        <string>重置</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="save_btn">
+       <property name="text">
+        <string>保存</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="cancel_btn">
+       <property name="text">
+        <string>取消</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

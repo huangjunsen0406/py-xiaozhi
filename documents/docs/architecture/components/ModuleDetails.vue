@@ -41,69 +41,80 @@ const modules = [
     name: 'src/application.py',
     icon: CogIcon,
     features: [
-      '应用主类，负责协调所有子系统',
-      '实现了单例模式，管理全局状态',
-      '处理事件调度和状态转换'
+      '应用主类，采用单例模式管理全局状态',
+      '使用asyncio.Task池进行任务管理',
+      '实现设备状态机(IDLE/CONNECTING/LISTENING/SPEAKING)',
+      '通过命令队列实现线程安全的异步操作'
+    ]
+  },
+  {
+    name: 'src/core/resource_manager.py',
+    icon: ServerIcon,
+    features: [
+      '中央化资源生命周期管理',
+      '依赖关系跟踪和优先级清理',
+      '资源健康监控和统计',
+      '自动清理和错误恢复'
+    ]
+  },
+  {
+    name: 'src/mcp/mcp_server.py',
+    icon: WrenchIcon,
+    features: [
+      '基于JSON-RPC 2.0的MCP服务器',
+      '可扩展的工具插件系统',
+      '类型安全的参数验证',
+      '支持系统、日历、定时器、音乐等多种工具'
     ]
   },
   {
     name: 'src/protocols/',
     icon: ArrowsRightLeftIcon,
     features: [
-      '通信协议的抽象接口和具体实现',
-      'WebSocket协议：用于实时双向通信',
-      'MQTT协议：用于物联网设备通信'
+      '抽象协议接口设计',
+      'WebSocket协议：实时双向通信',
+      'MQTT协议：IoT设备通信',
+      'TLS加密和自动重连机制'
     ]
   },
   {
     name: 'src/audio_codecs/',
     icon: DocumentIcon,
     features: [
-      '音频编解码器，处理音频数据压缩/解压缩',
-      '支持Opus编码格式'
+      '基于Opus的实时音频编解码',
+      'SoXR高质量音频重采样',
+      '异步音频流处理',
+      '低延迟音频缓冲管理'
     ]
   },
   {
     name: 'src/audio_processing/',
     icon: SpeakerXMarkIcon,
     features: [
-      '语音活动检测：判断用户是否在说话',
-      '唤醒词检测：识别指定的唤醒词'
+      '基于Vosk的语音活动检测(VAD)',
+      '多语言唤醒词检测',
+      '相似度算法和拼音匹配',
+      '实时音频处理回调'
     ]
   },
   {
     name: 'src/display/',
     icon: ComputerDesktopIcon,
     features: [
-      '用户界面抽象和实现',
-      'GUI界面：基于PyQt5的图形界面',
-      'CLI界面：命令行交互界面'
+      '策略模式的UI系统架构',
+      'PyQt5 + qasync的GUI实现',
+      '异步CLI界面支持',
+      '情感表情和状态显示'
     ]
   },
   {
     name: 'src/iot/',
-    icon: ServerIcon,
-    features: [
-      'IoT设备管理框架',
-      '设备抽象类和具体实现',
-      '支持智能家居设备控制'
-    ]
-  },
-  {
-    name: 'src/iot/things/',
     icon: LightBulbIcon,
     features: [
-      '具体IoT设备的实现',
-      '音乐播放器、温度传感器',
-      '灯光控制、摄像头等'
-    ]
-  },
-  {
-    name: 'src/utils/',
-    icon: WrenchIcon,
-    features: [
-      '各类工具函数和辅助类',
-      '日志管理、配置管理等'
+      '基于Thing抽象的IoT设备框架',
+      '统一设备管理器和状态同步',
+      '属性和方法的动态发现',
+      '支持智能家居设备控制'
     ]
   }
 ];

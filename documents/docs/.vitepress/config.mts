@@ -1,6 +1,5 @@
-import { defineConfig } from 'vitepress'
-import { getGuideSideBarItems } from './guide'
 import tailwindcss from '@tailwindcss/vite'
+import { defineConfig } from 'vitepress'
 // https://vitepress.dev/reference/site-config
 export default defineConfig({
   title: "PY-XIAOZHI",
@@ -10,30 +9,50 @@ export default defineConfig({
     // https://vitepress.dev/reference/default-theme-config
     nav: [
       { text: '主页', link: '/' },
-      { text: '指南', link: '/guide/00_文档目录' },
+      {
+        text: '指南',
+        items: [
+          { text: '文档目录', link: '/guide/文档目录' },
+          { text: '系统依赖安装', link: '/guide/系统依赖安装' },
+          { text: '配置说明', link: '/guide/配置说明' },
+          { text: '语音交互模式说明', link: '/guide/语音交互模式说明' },
+          { text: '语音唤醒', link: '/guide/语音唤醒' },
+          { text: '设备激活流程', link: '/guide/设备激活流程' },
+          { text: '打包教程', link: '/guide/打包教程' },
+          { text: '异常汇总', link: '/guide/异常汇总' },
+          { text: '旧版文档', link: '/guide/old_docs/使用文档' },
+        ]
+      },
       { text: '系统架构', link: '/architecture/' },
       { text: '相关生态', link: '/ecosystem/' },
+      {
+        text: 'IoT',
+        items: [
+          { text: '开发指南', link: '/iot/' },
+        ]
+      },
+      {
+        text: 'MCP',
+        items: [
+          { text: '开发指南', link: '/mcp/' },
+          { text: '高德地图 (Amap)', link: '/mcp/amap' },
+          { text: '八字 (Bazi)', link: '/mcp/bazi' },
+          { text: '日历 (Calendar)', link: '/mcp/calendar' },
+          { text: '相机 (Camera)', link: '/mcp/camera' },
+          { text: '音乐 (Music)', link: '/mcp/music' },
+          { text: '火车票 (Railway)', link: '/mcp/railway' },
+          { text: '菜谱 (Recipe)', link: '/mcp/recipe' },
+          { text: '搜索 (Search)', link: '/mcp/search' },
+          { text: '系统 (System)', link: '/mcp/system' },
+          { text: '计时器 (Timer)', link: '/mcp/timer' }
+        ]
+      },
       { text: '团队', link: '/about/team' },
       { text: '贡献指南', link: '/contributing' },
       { text: '赞助', link: '/sponsors/' }
     ],
 
     sidebar: {
-      '/guide/': [
-        {
-          text: '指南',
-          // 默认展开
-          collapsed: false,
-          items: getGuideSideBarItems(),
-        },
-        {
-          text: '旧版文档',
-          collapsed: true,
-          items: [
-            { text: '使用文档', link: '/guide/old_docs/使用文档' }
-          ]
-        }
-      ],
       '/ecosystem/': [
         {
           text: '生态系统概览',
@@ -52,6 +71,10 @@ export default defineConfig({
         },
       ],
       '/about/': [],
+      // MCP 页面不显示侧边栏
+      '/mcp/': [],
+      // IoT 页面不显示侧边栏
+      '/iot/': [],
       // 赞助页面不显示侧边栏
       '/sponsors/': [],
       // 贡献指南页面不显示侧边栏

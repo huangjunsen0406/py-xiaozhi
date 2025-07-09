@@ -6,15 +6,19 @@ config = ConfigManager.get_instance()
 
 
 class ListeningMode:
-    """监听模式."""
+    """
+    监听模式.
+    """
 
-    ALWAYS_ON = "always_on"
+    REALTIME = "realtime"
     AUTO_STOP = "auto_stop"
     MANUAL = "manual"
 
 
 class AbortReason:
-    """中止原因."""
+    """
+    中止原因.
+    """
 
     NONE = "none"
     WAKE_WORD_DETECTED = "wake_word_detected"
@@ -22,7 +26,9 @@ class AbortReason:
 
 
 class DeviceState:
-    """设备状态."""
+    """
+    设备状态.
+    """
 
     IDLE = "idle"
     CONNECTING = "connecting"
@@ -31,7 +37,9 @@ class DeviceState:
 
 
 class EventType:
-    """事件类型."""
+    """
+    事件类型.
+    """
 
     SCHEDULE_EVENT = "schedule_event"
     AUDIO_INPUT_READY_EVENT = "audio_input_ready_event"
@@ -51,7 +59,7 @@ def is_official_server(ws_addr: str) -> bool:
 
 
 def get_frame_duration() -> int:
-    """获取设备的帧长度（优化版：避免独立PyAudio实例创建）
+    """获取设备的帧长度.
 
     返回:
         int: 帧长度(毫秒)
@@ -62,27 +70,28 @@ def get_frame_duration() -> int:
         if not is_official_server(ota_url):
             return 60
 
-        system = platform.system()
+        # 检测ARM架构设备（如树莓派）
+        machine = platform.machine().lower()
+        arm_archs = ["arm", "aarch64", "armv7l", "armv6l"]
+        is_arm_device = any(arch in machine for arch in arm_archs)
 
-        if system == "Windows":
-            # Windows通常支持较小的缓冲区
-            return 20
-        elif system == "Linux":
-            # Linux可能需要稍大的缓冲区以减少延迟(如果发现不行改为60)
+        if is_arm_device:
+            # ARM设备（如树莓派）使用较大帧长以减少CPU负载
             return 60
-        elif system == "Darwin":  # macOS
-            # macOS通常有良好的音频性能
-            return 20
         else:
-            # 其他系统使用保守值
-            return 60
+            # 其他设备（Windows/macOS/Linux x86）都有足够性能，使用低延迟
+            return 20
 
     except Exception:
-        return 20  # 如果获取失败，返回默认值20ms
+        # 如果获取失败，返回默认值20ms（适合大多数现代设备）
+        return 20
 
 
 class AudioConfig:
-    """音频配置类."""
+    """
+    音频配置类.
+    """
+
     # 固定配置
     INPUT_SAMPLE_RATE = 16000  # 输入采样率16kHz
     # 输出采样率：官方服务器使用24kHz，其他使用16kHz

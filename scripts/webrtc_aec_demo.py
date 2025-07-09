@@ -338,7 +338,9 @@ reference_lock = threading.Lock()
 
 
 def record_playback_audio(chunk_size, sample_rate, channels):
-    """录制扬声器输出的音频（更准确的参考信号）"""
+    """
+    录制扬声器输出的音频（更准确的参考信号）
+    """
     global reference_buffer
 
     # 注：这是理想情况下的实现，但Windows下PyAudio通常无法直接录制扬声器输出
@@ -384,7 +386,9 @@ def record_playback_audio(chunk_size, sample_rate, channels):
 
 
 def aec_demo(audio_file):
-    """WebRTC回声消除演示主函数."""
+    """
+    WebRTC回声消除演示主函数.
+    """
     # 检查音频文件是否存在
     if not os.path.exists(audio_file):
         print(f"错误: 找不到音频文件 {audio_file}")
@@ -619,7 +623,9 @@ def aec_demo(audio_file):
 
 
 def save_wav(file_path, frames, sample_rate, channels):
-    """将音频帧保存为WAV文件."""
+    """
+    将音频帧保存为WAV文件.
+    """
     with wave.open(file_path, "wb") as wf:
         wf.setnchannels(channels)
         wf.setsampwidth(2)  # 2字节(16位)

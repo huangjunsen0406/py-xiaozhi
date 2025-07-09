@@ -59,7 +59,9 @@ class MqttClient:
             self.client.on_disconnect = self._on_disconnect
 
     def _on_connect(self, client, userdata, flags, rc, properties=None):
-        """默认的连接回调函数。"""
+        """
+        默认的连接回调函数。
+        """
         if rc == 0:
             print("✅ 成功连接到 MQTT 服务器")
             # 连接成功后，自动订阅主题
@@ -69,21 +71,29 @@ class MqttClient:
             print(f"❌ 连接失败，错误码：{rc}")
 
     def _on_message(self, client, userdata, msg):
-        """默认的消息接收回调函数。"""
+        """
+        默认的消息接收回调函数。
+        """
         topic = msg.topic
         content = msg.payload.decode()
         print(f"📩 收到消息 - 主题: {topic}，内容: {content}")
 
     def _on_publish(self, client, userdata, mid, properties=None):
-        """默认的消息发布回调函数。"""
+        """
+        默认的消息发布回调函数。
+        """
         print(f"📤 消息已发布，消息 ID：{mid}")
 
     def _on_disconnect(self, client, userdata, rc, properties=None):
-        """默认的断开连接回调函数。"""
+        """
+        默认的断开连接回调函数。
+        """
         print("🔌 与 MQTT 服务器的连接已断开")
 
     def connect(self):
-        """连接到 MQTT 服务器。"""
+        """
+        连接到 MQTT 服务器。
+        """
         try:
             self.client.connect(self.server, self.port, 60)
             print(f"🔗 正在连接到服务器 {self.server}:{self.port}")
@@ -91,11 +101,15 @@ class MqttClient:
             print(f"❌ 连接失败，错误: {e}")
 
     def start(self):
-        """启动客户端并开始网络循环。"""
+        """
+        启动客户端并开始网络循环。
+        """
         self.client.loop_start()
 
     def publish(self, message):
-        """发布消息到指定主题。"""
+        """
+        发布消息到指定主题。
+        """
         result = self.client.publish(self.publish_topic, message)
         status = result.rc
         if status == 0:
@@ -104,7 +118,9 @@ class MqttClient:
             print(f"❌ 发布失败，错误码：{status}")
 
     def stop(self):
-        """停止网络循环并断开连接。"""
+        """
+        停止网络循环并断开连接。
+        """
         self.client.loop_stop()
         self.client.disconnect()
         print("🛑 客户端已停止连接")

@@ -1,3 +1,5 @@
+import inspect
+import json
 from typing import Any, Callable, Dict, List
 
 
@@ -6,6 +8,9 @@ class ValueType:
     NUMBER = "number"
     STRING = "string"
     FLOAT = "float"
+    ARRAY = "array"  # 新增
+    OBJECT = "object"  # 新增
+    LIST = "array"  # LIST 作为 ARRAY 的别名
 
 
 class Property:
@@ -14,22 +19,44 @@ class Property:
         self.description = description
         self.getter = getter
 
-        # 根据 getter 返回值类型确定属性类型
-        test_value = getter()
-        if isinstance(test_value, bool):
+        if not inspect.iscoroutinefunction(getter):
+            raise TypeError(f"Property getter for '{name}' must be an async function.")
+
+        self.type = ValueType.STRING  # 默认类型
+        self._type_determined = False
+
+    def _determine_type(self, value: Any):
+        """
+        根据值确定属性类型.
+        """
+        if isinstance(value, bool):
             self.type = ValueType.BOOLEAN
-        elif isinstance(test_value, (int, float)):
+        elif isinstance(value, int):
             self.type = ValueType.NUMBER
-        elif isinstance(test_value, str):
+        elif isinstance(value, float):
+            self.type = ValueType.FLOAT
+        elif isinstance(value, str):
             self.type = ValueType.STRING
+        elif isinstance(value, (list, tuple)):
+            self.type = ValueType.ARRAY
+        elif isinstance(value, dict):
+            self.type = ValueType.OBJECT
         else:
-            raise TypeError(f"不支持的属性类型: {type(test_value)}")
+            raise TypeError(f"不支持的属性类型: {type(value)}")
 
     def get_descriptor_json(self) -> Dict:
         return {"description": self.description, "type": self.type}
 
-    def get_state_value(self):
-        return self.getter()
+    async def get_state_value(self):
+        """
+        获取属性值.
+        """
+        value = await self.getter()
+        # 如果是第一次调用 getter，确定类型
+        if not self._type_determined:
+            self._determine_type(value)
+            self._type_determined = True
+        return value
 
 
 class Parameter:
@@ -63,6 +90,10 @@ class Method:
         self.parameters = {param.name: param for param in parameters}
         self.callback = callback
 
+        # 强制要求回调函数必须是异步函数
+        if not inspect.iscoroutinefunction(callback):
+            raise TypeError(f"Method callback for '{name}' must be an async function.")
+
     def get_descriptor_json(self) -> Dict:
         return {
             "description": self.description,
@@ -72,19 +103,27 @@ class Method:
             },
         }
 
-    def invoke(self, params: Dict[str, Any]) -> Any:
-        # 设置参数值
+    async def invoke(self, params: Dict[str, Any]) -> Any:
+        """
+        调用方法.
+        """
+        # 设置参数值，处理复杂类型
         for name, value in params.items():
             if name in self.parameters:
-                self.parameters[name].set_value(value)
+                param = self.parameters[name]
+                # 如果参数类型是STRING，但值是dict或list，转换为JSON字符串（类似C++版本）
+                if param.type == ValueType.STRING and isinstance(value, (dict, list)):
+                    param.set_value(json.dumps(value, ensure_ascii=False))
+                else:
+                    param.set_value(value)
 
         # 检查必需参数
         for name, param in self.parameters.items():
             if param.required and param.get_value() is None:
                 raise ValueError(f"缺少必需参数: {name}")
 
-        # 调用回调函数
-        return self.callback(self.parameters)
+        # 调用异步回调函数
+        return await self.callback(self.parameters)
 
 
 class Thing:
@@ -120,18 +159,26 @@ class Thing:
             },
         }
 
-    def get_state_json(self) -> Dict:
+    async def get_state_json(self) -> Dict:
+        """
+        获取设备状态.
+        """
+        state = {}
+        for name, prop in self.properties.items():
+            state[name] = await prop.get_state_value()
+
         return {
             "name": self.name,
-            "state": {
-                name: prop.get_state_value() for name, prop in self.properties.items()
-            },
+            "state": state,
         }
 
-    def invoke(self, command: Dict) -> Any:
+    async def invoke(self, command: Dict) -> Any:
+        """
+        调用方法.
+        """
         method_name = command.get("method")
         if method_name not in self.methods:
             raise ValueError(f"方法不存在: {method_name}")
 
         parameters = command.get("parameters", {})
-        return self.methods[method_name].invoke(parameters)
+        return await self.methods[method_name].invoke(parameters)

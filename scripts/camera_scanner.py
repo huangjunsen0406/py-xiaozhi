@@ -25,7 +25,9 @@ logger = logging.getLogger("CameraScanner")
 
 
 def get_camera_capabilities(cam):
-    """获取摄像头的参数和能力."""
+    """
+    获取摄像头的参数和能力.
+    """
     capabilities = {}
 
     # 获取可用的分辨率
@@ -76,7 +78,9 @@ def get_camera_capabilities(cam):
 
 
 def detect_cameras():
-    """检测并列出所有可用摄像头."""
+    """
+    检测并列出所有可用摄像头.
+    """
     print("\n===== 摄像头设备检测 =====\n")
 
     # 获取ConfigManager实例
