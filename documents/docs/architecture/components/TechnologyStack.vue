@@ -35,23 +35,43 @@ const techStack = [
     icon: CodeBracketIcon
   },
   {
+    name: 'AsyncIO',
+    description: '异步编程框架',
+    icon: ArrowPathIcon
+  },
+  {
     name: 'PyQt5',
     description: 'GUI框架',
     icon: WindowIcon
   },
   {
-    name: 'OpusLib',
-    description: '音频编解码',
+    name: 'qasync',
+    description: 'Qt异步集成',
+    icon: ArrowsUpDownIcon
+  },
+  {
+    name: 'Vosk',
+    description: '语音识别',
     icon: DocumentIcon
   },
   {
-    name: 'PyAudio',
-    description: '音频处理',
+    name: 'OpusLib',
+    description: '音频编解码',
+    icon: MusicIcon
+  },
+  {
+    name: 'SoXR',
+    description: '高质量重采样',
     icon: AudioIcon
   },
   {
-    name: 'WebSocket',
-    description: '通信协议',
+    name: 'SoundDevice',
+    description: '音频设备',
+    icon: SignalIcon
+  },
+  {
+    name: 'WebSockets',
+    description: '实时通信',
     icon: PuzzlePieceIcon
   },
   {
@@ -60,19 +80,14 @@ const techStack = [
     icon: SignalIcon
   },
   {
-    name: 'AsyncIO',
-    description: '异步处理',
-    icon: ArrowPathIcon
+    name: 'Paho-MQTT',
+    description: 'MQTT客户端',
+    icon: PuzzlePieceIcon
   },
   {
-    name: 'Threading',
-    description: '并发处理',
-    icon: ArrowsUpDownIcon
-  },
-  {
-    name: 'Pygame',
-    description: '音乐播放',
-    icon: MusicIcon
+    name: 'Cryptography',
+    description: '加密库',
+    icon: DocumentIcon
   }
 ];
 

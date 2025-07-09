@@ -279,9 +279,9 @@ class McpServer:
         music_manager.init_tools(self.add_tool, PropertyList, Property, PropertyType)
 
         # 添加12306铁路查询工具
-        from src.mcp.tools.railway import get_railway_manager
+        from src.mcp.tools.railway import get_railway_tools_manager
 
-        railway_manager = get_railway_manager()
+        railway_manager = get_railway_tools_manager()
         railway_manager.init_tools(self.add_tool, PropertyList, Property, PropertyType)
 
         # 添加搜索工具

@@ -9,29 +9,34 @@ import {
 // 架构特点
 const architectureFeatures = [
   {
-    title: '模块化设计',
-    description: '各功能模块高度解耦，便于维护和扩展',
+    title: '单例模式',
+    description: '应用核心采用线程安全的单例模式，保证全局唯一实例',
     icon: CubeIcon
   },
   {
-    title: '协议抽象',
-    description: '通过抽象接口支持多种通信协议',
-    icon: ArrowsRightLeftIcon
-  },
-  {
-    title: '事件驱动',
-    description: '基于事件的异步处理机制',
+    title: '异步架构',
+    description: '全面采用asyncio异步编程，支持高并发和高性能',
     icon: BoltIcon
   },
   {
-    title: '状态机模式',
-    description: '清晰的状态转换逻辑',
+    title: '资源管理',
+    description: '中央化资源管理器，依赖跟踪和优雅清理',
     icon: ShareIcon
   },
   {
-    title: '插件式IoT设备',
-    description: '统一设备接口，支持动态加载设备',
+    title: '状态机模式',
+    description: '设备状态管理采用状态机模式，清晰的状态转换逻辑',
+    icon: ArrowsRightLeftIcon
+  },
+  {
+    title: '插件化设计',
+    description: 'MCP工具和IoT设备采用插件化设计，支持动态扩展',
     icon: PuzzlePieceIcon
+  },
+  {
+    title: '跨平台兼容',
+    description: '支持Windows、macOS、Linux多平台，优雅降级处理',
+    icon: CubeIcon
   }
 ];
 
