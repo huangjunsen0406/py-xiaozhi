@@ -1,4 +1,5 @@
 import asyncio
+import time
 from dataclasses import dataclass
 from typing import Dict, Optional, Set
 
@@ -37,6 +38,38 @@ class ShortcutManager:
         self.pressed_keys: Set[str] = set()
         self.manual_press_active = False
         self.running = False
+        
+        # 按键状态跟踪
+        self.key_states = {
+            "MANUAL_PRESS": False,  # 按住说话的状态
+            "last_manual_press_time": 0,  # 上次触发时间
+            "ABORT": False  # 打断状态
+        }
+
+        # Windows按键映射
+        self.key_mapping = {
+            '\x17': 'w',  # Ctrl+W
+            '\x01': 'a',  # Ctrl+A 
+            '\x13': 's',  # Ctrl+S
+            '\x04': 'd',  # Ctrl+D
+            '\x05': 'e',  # Ctrl+E
+            '\x12': 'r',  # Ctrl+R
+            '\x14': 't',  # Ctrl+T
+            '\x06': 'f',  # Ctrl+F
+            '\x07': 'g',  # Ctrl+G
+            '\x08': 'h',  # Ctrl+H
+            '\x0A': 'j',  # Ctrl+J
+            '\x0B': 'k',  # Ctrl+K
+            '\x0C': 'l',  # Ctrl+L
+            '\x1A': 'z',  # Ctrl+Z
+            '\x18': 'x',  # Ctrl+X
+            '\x03': 'c',  # Ctrl+C
+            '\x16': 'v',  # Ctrl+V
+            '\x02': 'b',  # Ctrl+B
+            '\x0E': 'n',  # Ctrl+N
+            '\x0D': 'm',  # Ctrl+M
+            '\x11': 'q',  # Ctrl+Q
+        }
 
         # 组件引用
         self.application = None
@@ -178,12 +211,18 @@ class ShortcutManager:
 
         try:
             # 更新活动时间
-            import time
             self._last_activity_time = time.time()
             
             key_name = self._get_key_name(key)
             if key_name:
                 logger.debug(f"按键按下: {key_name}")
+                # 如果是特殊字符且ctrl被按下，直接处理打断功能
+                if (hasattr(key, 'char') and key.char == '\x11' and 
+                    any(k in self.pressed_keys for k in ["ctrl", "ctrl_l", "ctrl_r"])):
+                    logger.debug("检测到Ctrl+Q组合，触发打断")
+                    self._handle_abort()
+                    return
+                    
                 self.pressed_keys.add(key_name)
                 logger.debug(f"当前按下的键: {sorted(self.pressed_keys)}")
                 self._check_shortcuts(True)
@@ -200,7 +239,6 @@ class ShortcutManager:
 
         try:
             # 更新活动时间
-            import time
             self._last_activity_time = time.time()
             
             key_name = self._get_key_name(key)
@@ -209,6 +247,16 @@ class ShortcutManager:
                 if key_name in self.pressed_keys:
                     self.pressed_keys.remove(key_name)
                 logger.debug(f"当前按下的键: {sorted(self.pressed_keys)}")
+                
+                # 检查是否需要停止按住说话
+                if (self.key_states["MANUAL_PRESS"] and 
+                    len(self.pressed_keys) == 0):  # 所有按键都已释放
+                    self.key_states["MANUAL_PRESS"] = False
+                    self.manual_press_active = False
+                    if self.application:
+                        logger.debug("强制停止监听")
+                        self._run_coroutine_threadsafe(self.application.stop_listening())
+                
                 self._check_shortcuts(False)
         except Exception as e:
             logger.error(f"释放键处理错误: {e}", exc_info=True)
@@ -219,26 +267,49 @@ class ShortcutManager:
         获取按键名称.
         """
         try:
+            # 处理特殊按键
             if hasattr(key, "name"):
+                # 处理修饰键
+                if key.name in ["ctrl_l", "ctrl_r"]:
+                    return "ctrl"
+                if key.name in ["alt_l", "alt_r"]:
+                    return "alt"
+                if key.name in ["shift_l", "shift_r"]:
+                    return "shift"
+                if key.name == "cmd":  # Windows键/Command键
+                    return "cmd"
+                if key.name == "esc":
+                    return "esc"
+                if key.name == "enter":
+                    return "enter"
                 return key.name.lower()
+            # 处理字符按键
             elif hasattr(key, "char") and key.char:
+                # 处理回车键
+                if key.char == '\n':
+                    return "enter"
+                # 检查是否是Windows特殊字符映射
+                if key.char in self.key_mapping:
+                    return self.key_mapping[key.char]
+                # 统一转换为小写
                 return key.char.lower()
             return None
-        except Exception:
+        except Exception as e:
+            logger.error(f"获取按键名称时出错: {e}")
             return None
 
     def _check_shortcuts(self, is_press: bool):
         """
         检查快捷键组合.
         """
-        # 检查修饰键状态 - 支持更多平台的修饰键名称
+        # 检查修饰键状态
         ctrl_pressed = any(
             key in self.pressed_keys for key in [
                 "ctrl", "ctrl_l", "ctrl_r", "control", "control_l", "control_r"
             ]
         )
         
-        # 检查Alt键（为将来扩展做准备）
+        # 检查Alt键
         alt_pressed = any(
             key in self.pressed_keys for key in [
                 "alt", "alt_l", "alt_r", "option", "option_l", "option_r"
@@ -252,19 +323,15 @@ class ShortcutManager:
             ]
         )
 
-        # 当前只处理Ctrl修饰键
-        if not ctrl_pressed:
-            # 如果Ctrl键被释放，且按住说话功能处于激活状态，则停止监听
-            if not is_press and self.manual_press_active:
-                self._handle_manual_press(False)
-            return
+        # 检查Windows/Command键
+        cmd_pressed = "cmd" in self.pressed_keys
 
         # 检查各个快捷键
         for shortcut_type, config in self.shortcuts.items():
-            if self._is_shortcut_match(config, ctrl_pressed, alt_pressed, shift_pressed):
+            if self._is_shortcut_match(config, ctrl_pressed, alt_pressed, shift_pressed, cmd_pressed):
                 self._handle_shortcut(shortcut_type, is_press)
                 
-    def _is_shortcut_match(self, config: ShortcutConfig, ctrl_pressed: bool, alt_pressed: bool, shift_pressed: bool) -> bool:
+    def _is_shortcut_match(self, config: ShortcutConfig, ctrl_pressed: bool, alt_pressed: bool, shift_pressed: bool, cmd_pressed: bool) -> bool:
         """
         检查快捷键是否匹配.
         """
@@ -276,13 +343,17 @@ class ShortcutManager:
             modifier_check = False
         elif config.modifier == "shift" and not shift_pressed:
             modifier_check = False
+        elif config.modifier == "cmd" and not cmd_pressed:
+            modifier_check = False
         elif config.modifier == "ctrl+alt" and not (ctrl_pressed and alt_pressed):
             modifier_check = False
         elif config.modifier == "ctrl+shift" and not (ctrl_pressed and shift_pressed):
             modifier_check = False
+        elif config.modifier == "alt+shift" and not (alt_pressed and shift_pressed):
+            modifier_check = False
             
-        # 检查主键是否按下
-        key_pressed = config.key.lower() in self.pressed_keys
+        # 检查主键是否按下（不区分大小写）
+        key_pressed = config.key.lower() in {k.lower() for k in self.pressed_keys}
         
         return modifier_check and key_pressed
 
@@ -290,12 +361,41 @@ class ShortcutManager:
         """
         处理快捷键动作.
         """
+        # 特殊处理按住说话功能
+        if shortcut_type == "MANUAL_PRESS":
+            current_time = time.time()
+            # 如果是按下状态
+            if is_press:
+                # 如果之前不是按下状态，才触发start_listening
+                if not self.key_states["MANUAL_PRESS"]:
+                    self.key_states["MANUAL_PRESS"] = True
+                    self.key_states["last_manual_press_time"] = current_time
+                    logger.info(f"触发快捷键: {shortcut_type}, 按下状态: {is_press}")
+                    self._handle_manual_press(True)
+            else:
+                # 如果之前是按下状态，才触发stop_listening
+                if self.key_states["MANUAL_PRESS"]:
+                    self.key_states["MANUAL_PRESS"] = False
+                    logger.info(f"触发快捷键: {shortcut_type}, 按下状态: {is_press}")
+                    self._handle_manual_press(False)
+            return
+            
+        # 特殊处理打断功能
+        if shortcut_type == "ABORT":
+            # 只在按下时触发一次
+            if is_press and not self.key_states["ABORT"]:
+                self.key_states["ABORT"] = True
+                logger.info(f"触发快捷键: {shortcut_type}, 按下状态: {is_press}")
+                self._handle_abort()
+            elif not is_press:
+                self.key_states["ABORT"] = False
+            return
+
+        # 其他快捷键的处理保持不变
         logger.info(f"触发快捷键: {shortcut_type}, 按下状态: {is_press}")
         
         handlers = {
-            "MANUAL_PRESS": lambda: self._handle_manual_press(is_press),
             "AUTO_TOGGLE": lambda: self._handle_auto_toggle() if is_press else None,
-            "ABORT": lambda: self._handle_abort() if is_press else None,
             "MODE_TOGGLE": lambda: self._handle_mode_toggle() if is_press else None,
             "WINDOW_TOGGLE": lambda: self._handle_window_toggle() if is_press else None,
         }
@@ -331,14 +431,21 @@ class ShortcutManager:
         if not self.application:
             return
 
-        if is_press and not self.manual_press_active:
-            logger.debug("快捷键：开始监听")
-            self._run_coroutine_threadsafe(self.application.start_listening())
-            self.manual_press_active = True
-        elif not is_press and self.manual_press_active:
-            logger.debug("快捷键：停止监听")
-            self._run_coroutine_threadsafe(self.application.stop_listening())
+        try:
+            if is_press and not self.manual_press_active:
+                logger.debug("快捷键：开始监听")
+                self._run_coroutine_threadsafe(self.application.start_listening())
+                self.manual_press_active = True
+            elif not is_press:  # 不管之前状态如何，只要是释放就停止
+                logger.debug("快捷键：停止监听")
+                self._run_coroutine_threadsafe(self.application.stop_listening())
+                self.manual_press_active = False
+                self.key_states["MANUAL_PRESS"] = False
+        except Exception as e:
+            logger.error(f"处理按住说话时出错: {e}", exc_info=True)
+            # 发生错误时重置状态
             self.manual_press_active = False
+            self.key_states["MANUAL_PRESS"] = False
 
     def _handle_auto_toggle(self):
         """
@@ -352,9 +459,13 @@ class ShortcutManager:
         处理中断对话快捷键.
         """
         if self.application:
-            self._run_coroutine_threadsafe(
-                self.application.abort_speaking(AbortReason.NONE)
-            )
+            logger.debug("快捷键：中断对话")
+            try:
+                self._run_coroutine_threadsafe(
+                    self.application.abort_speaking(AbortReason.NONE)
+                )
+            except Exception as e:
+                logger.error(f"执行打断操作时出错: {e}", exc_info=True)
 
     def _handle_mode_toggle(self):
         """

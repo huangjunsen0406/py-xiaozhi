@@ -14,7 +14,7 @@ from PyInstaller.utils.hooks import (
     copy_metadata,
 )
 
-from utils.resource_finder import find_models_dir
+from src.utils.resource_finder import find_models_dir
 
 # 添加src目录到Python路径，以便导入资源查找器
 src_path = Path(__file__).parent.parent / "src"
