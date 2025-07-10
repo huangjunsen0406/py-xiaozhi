@@ -83,14 +83,27 @@ class ShortcutManager:
             # 保存主事件循环引用
             self._main_loop = asyncio.get_running_loop()
 
-            # 导入pynput库
-            from pynput import keyboard
+            # 导入pynput库并检查平台兼容性
+            try:
+                from pynput import keyboard
+                logger.info(f"pynput库导入成功，当前平台: {self._get_platform_info()}")
+            except ImportError as e:
+                logger.error(f"未安装pynput库: {e}")
+                logger.error("请安装pynput: pip install pynput")
+                return False
+
+            # 检查平台权限
+            if not self._check_platform_permissions():
+                return False
 
             # 获取Application实例
             from src.application import Application
 
             self.application = Application.get_instance()
             self.display = self.application.display
+
+            # 记录配置的快捷键
+            self._log_shortcut_config()
 
             # 设置按键回调
             self._listener = keyboard.Listener(
@@ -106,8 +119,45 @@ class ShortcutManager:
             logger.error("未安装pynput库，无法使用全局快捷键功能")
             return False
         except Exception as e:
-            logger.error(f"启动全局快捷键监听失败: {e}")
+            logger.error(f"启动全局快捷键监听失败: {e}", exc_info=True)
             return False
+            
+    def _check_platform_permissions(self) -> bool:
+        """检查平台权限"""
+        import platform
+        
+        system = platform.system()
+        
+        if system == "Darwin":  # macOS
+            logger.info("检测到 macOS 系统，请确认以下权限:")
+            logger.info("1. 系统偏好设置 > 安全性与隐私 > 隐私 > 辅助功能")
+            logger.info("2. 确保应用程序已添加到辅助功能列表并启用")
+            logger.info("3. 如果使用终端运行，需要给终端辅助功能权限")
+            
+        elif system == "Linux":
+            logger.info("检测到 Linux 系统，请确认:")
+            logger.info("1. 用户在 input 组中: sudo usermod -a -G input $USER")
+            logger.info("2. X11 或 Wayland 环境正常运行")
+            
+        elif system == "Windows":
+            logger.info("检测到 Windows 系统，请确认:")
+            logger.info("1. 以管理员权限运行（某些情况下需要）")
+            logger.info("2. 防病毒软件未阻止键盘监听")
+            
+        return True
+            
+    def _get_platform_info(self) -> str:
+        """获取平台信息"""
+        import platform
+        return f"{platform.system()} {platform.release()}"
+        
+    def _log_shortcut_config(self):
+        """记录快捷键配置"""
+        logger.info("已配置的快捷键:")
+        for shortcut_type, config in self.shortcuts.items():
+            logger.info(f"  {shortcut_type}: {config.modifier}+{config.key} - {config.description}")
+        if not self.shortcuts:
+            logger.warning("未配置任何快捷键")
 
     def _on_key_press(self, key):
         """
@@ -119,10 +169,12 @@ class ShortcutManager:
         try:
             key_name = self._get_key_name(key)
             if key_name:
+                logger.debug(f"按键按下: {key_name}")
                 self.pressed_keys.add(key_name)
+                logger.debug(f"当前按下的键: {sorted(self.pressed_keys)}")
                 self._check_shortcuts(True)
         except Exception as e:
-            logger.error(f"按键处理错误: {e}")
+            logger.error(f"按键处理错误: {e}", exc_info=True)
 
     def _on_key_release(self, key):
         """
@@ -134,11 +186,13 @@ class ShortcutManager:
         try:
             key_name = self._get_key_name(key)
             if key_name:
+                logger.debug(f"按键释放: {key_name}")
                 if key_name in self.pressed_keys:
                     self.pressed_keys.remove(key_name)
+                logger.debug(f"当前按下的键: {sorted(self.pressed_keys)}")
                 self._check_shortcuts(False)
         except Exception as e:
-            logger.error(f"释放键处理错误: {e}")
+            logger.error(f"释放键处理错误: {e}", exc_info=True)
 
     def _get_key_name(self, key) -> Optional[str]:
         """
@@ -157,11 +211,28 @@ class ShortcutManager:
         """
         检查快捷键组合.
         """
-        # 检查修饰键状态
+        # 检查修饰键状态 - 支持更多平台的修饰键名称
         ctrl_pressed = any(
-            key in self.pressed_keys for key in ["ctrl", "ctrl_l", "ctrl_r"]
+            key in self.pressed_keys for key in [
+                "ctrl", "ctrl_l", "ctrl_r", "control", "control_l", "control_r"
+            ]
+        )
+        
+        # 检查Alt键（为将来扩展做准备）
+        alt_pressed = any(
+            key in self.pressed_keys for key in [
+                "alt", "alt_l", "alt_r", "option", "option_l", "option_r"
+            ]
+        )
+        
+        # 检查Shift键
+        shift_pressed = any(
+            key in self.pressed_keys for key in [
+                "shift", "shift_l", "shift_r"
+            ]
         )
 
+        # 当前只处理Ctrl修饰键
         if not ctrl_pressed:
             # 如果Ctrl键被释放，且按住说话功能处于激活状态，则停止监听
             if not is_press and self.manual_press_active:
@@ -170,13 +241,37 @@ class ShortcutManager:
 
         # 检查各个快捷键
         for shortcut_type, config in self.shortcuts.items():
-            if config.key in self.pressed_keys:
+            if self._is_shortcut_match(config, ctrl_pressed, alt_pressed, shift_pressed):
                 self._handle_shortcut(shortcut_type, is_press)
+                
+    def _is_shortcut_match(self, config: ShortcutConfig, ctrl_pressed: bool, alt_pressed: bool, shift_pressed: bool) -> bool:
+        """
+        检查快捷键是否匹配.
+        """
+        # 检查修饰键
+        modifier_check = True
+        if config.modifier == "ctrl" and not ctrl_pressed:
+            modifier_check = False
+        elif config.modifier == "alt" and not alt_pressed:
+            modifier_check = False
+        elif config.modifier == "shift" and not shift_pressed:
+            modifier_check = False
+        elif config.modifier == "ctrl+alt" and not (ctrl_pressed and alt_pressed):
+            modifier_check = False
+        elif config.modifier == "ctrl+shift" and not (ctrl_pressed and shift_pressed):
+            modifier_check = False
+            
+        # 检查主键是否按下
+        key_pressed = config.key.lower() in self.pressed_keys
+        
+        return modifier_check and key_pressed
 
     def _handle_shortcut(self, shortcut_type: str, is_press: bool):
         """
         处理快捷键动作.
         """
+        logger.info(f"触发快捷键: {shortcut_type}, 按下状态: {is_press}")
+        
         handlers = {
             "MANUAL_PRESS": lambda: self._handle_manual_press(is_press),
             "AUTO_TOGGLE": lambda: self._handle_auto_toggle() if is_press else None,
@@ -187,7 +282,14 @@ class ShortcutManager:
 
         handler = handlers.get(shortcut_type)
         if handler:
-            handler()
+            try:
+                result = handler()
+                if result is not None:
+                    logger.debug(f"快捷键 {shortcut_type} 处理完成")
+            except Exception as e:
+                logger.error(f"处理快捷键 {shortcut_type} 时出错: {e}", exc_info=True)
+        else:
+            logger.warning(f"未找到快捷键处理器: {shortcut_type}")
 
     def _run_coroutine_threadsafe(self, coro):
         """
