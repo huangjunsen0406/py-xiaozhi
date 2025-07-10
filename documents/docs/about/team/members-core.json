@@ -86,5 +86,25 @@
     "socials": {
       "github": "gaochuang"
     }
+  },
+  {
+    "name": "wupengya",
+    "company": "南方电网人工智能有限公司 后端工程师",
+    "projects": [],
+    "location": "中国",
+    "languages": ["中文"],
+    "socials": {
+      "github": "wupengya"
+    }
+  },
+  {
+    "name": "pengzhenglong001",
+    "company": "南方电网人工智能有限公司 算法工程师",
+    "projects": [],
+    "location": "中国",
+    "languages": ["中文"],
+    "socials": {
+      "github": "pengzhenglong001"
+    }
   }
 ]

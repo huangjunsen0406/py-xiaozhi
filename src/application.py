@@ -284,7 +284,7 @@ class Application:
 
     async def _initialize_audio(self):
         """
-        初始化音频编解码器.
+        初始化音频设备和编解码器.
         """
         try:
             logger.debug("开始初始化音频编解码器")
@@ -293,12 +293,53 @@ class Application:
             self.audio_codec = AudioCodec()
             await self.audio_codec.initialize()
 
+            # 设置实时编码回调
+            self.audio_codec.set_encoded_audio_callback(self._on_encoded_audio)
+
             logger.info("音频编解码器初始化成功")
 
         except Exception as e:
             logger.error("初始化音频设备失败: %s", e, exc_info=True)
             # 确保初始化失败时audio_codec为None
             self.audio_codec = None
+
+    def _on_encoded_audio(self, encoded_data: bytes):
+        """
+        处理编码后的音频数据回调.
+        
+        注意：这个回调在音频驱动线程中被调用，需要线程安全地调度到主事件循环。
+        """
+        try:
+            # 只在监听状态且音频通道打开时发送数据
+            if (self.device_state == DeviceState.LISTENING 
+                    and self.protocol 
+                    and self.protocol.is_audio_channel_opened()
+                    and not getattr(self, '_transitioning', False)):
+                
+                # 线程安全地调度到主事件循环
+                if self._main_loop and not self._main_loop.is_closed():
+                    self._main_loop.call_soon_threadsafe(
+                        self._schedule_audio_send, encoded_data
+                    )
+                
+        except Exception as e:
+            logger.error(f"处理编码音频数据回调失败: {e}")
+
+    def _schedule_audio_send(self, encoded_data: bytes):
+        """
+        在主事件循环中调度音频发送任务.
+        """
+        try:
+            # 再次检查状态（可能在调度期间状态已改变）
+            if (self.device_state == DeviceState.LISTENING 
+                    and self.protocol 
+                    and self.protocol.is_audio_channel_opened()):
+                
+                # 创建异步任务发送音频数据
+                asyncio.create_task(self.protocol.send_audio(encoded_data))
+                
+        except Exception as e:
+            logger.error(f"调度音频发送失败: {e}")
 
     def _set_protocol_type(self, protocol_type: str):
         """
@@ -378,10 +419,6 @@ class Application:
         """
         logger.debug("启动核心任务")
 
-        # 音频处理任务
-        self._create_task(self._audio_input_processor(), "音频输入处理")
-        self._create_task(self._audio_output_processor(), "音频输出处理")
-
         # 命令处理任务
         self._create_task(self._command_processor(), "命令处理")
 
@@ -401,81 +438,6 @@ class Application:
 
         task.add_done_callback(done_callback)
         return task
-
-    async def _audio_input_processor(self):
-        """优化后的音频输入处理器"""
-        consecutive_empty = 0
-
-        while self.running:
-            try:
-                if (self.device_state == DeviceState.LISTENING
-                        and self.audio_codec
-                        and self.protocol
-                        and self.protocol.is_audio_channel_opened()
-                        and not getattr(self, '_transitioning', False)):  # 检查转换状态
-
-                    # 动态批量大小
-                    batch_size = 3 if consecutive_empty < 5 else 5
-                    audio_sent = False
-
-                    for _ in range(batch_size):
-                        encoded_data = await self.audio_codec.read_audio()
-                        if encoded_data:
-                            await self.protocol.send_audio(encoded_data)
-                            audio_sent = True
-                            consecutive_empty = 0
-                        else:
-                            consecutive_empty += 1
-                            break
-
-                    # 动态睡眠时间
-                    if audio_sent:
-                        await asyncio.sleep(0.003)  # 3ms for active audio
-                    else:
-                        await asyncio.sleep(0.01)  # 10ms for idle
-                else:
-                    consecutive_empty = 0
-                    await asyncio.sleep(0.02)
-
-            except asyncio.CancelledError:
-                break
-            except Exception as e:
-                logger.error(f"音频输入处理错误: {e}", exc_info=True)
-                await asyncio.sleep(0.1)
-
-    async def _audio_output_processor(self):
-        """
-        音频输出处理器.
-        """
-        consecutive_errors = 0
-        max_consecutive_errors = 5
-        
-        while self.running:
-            try:
-                if self.device_state == DeviceState.SPEAKING and self.audio_codec:
-                    await self.audio_codec.play_audio()
-                    consecutive_errors = 0  # 重置错误计数
-                else:
-                    consecutive_errors = 0
-
-                await asyncio.sleep(0.02)
-
-            except asyncio.CancelledError:
-                break
-            except Exception as e:
-                consecutive_errors += 1
-                logger.error(f"音频输出处理错误 ({consecutive_errors}/{max_consecutive_errors}): {e}")
-                
-                if consecutive_errors >= max_consecutive_errors:
-                    logger.error("音频输出处理连续错误过多，尝试重新初始化音频流")
-                    try:
-                        if self.audio_codec:
-                            await self.audio_codec.reinitialize_stream(is_input=False)
-                        consecutive_errors = 0
-                    except Exception as reinit_error:
-                        logger.error(f"重新初始化音频输出流失败: {reinit_error}")
-                
-                await asyncio.sleep(0.1)
 
     async def _command_processor(self):
         """
@@ -538,7 +500,7 @@ class Application:
                 self.command_queue.get_nowait()
                 self.command_queue.put_nowait(command)
                 logger.info("清理旧命令后重新添加")
-            except:
+            except asyncio.QueueEmpty:
                 pass
 
     async def _start_listening_common(self, listening_mode, keep_listening_flag):
@@ -629,7 +591,7 @@ class Application:
         try:
             await self.protocol.send_abort_speaking(reason)
             await self._set_device_state(DeviceState.IDLE)
-
+            self.aborted = False
             if (
                 reason == AbortReason.WAKE_WORD_DETECTED
                 and self.keep_listening
@@ -822,10 +784,6 @@ class Application:
         async with self._abort_lock:
             self.aborted = False
 
-        # 清空音频队列避免录制TTS声音，但不暂停输入（保持唤醒词检测工作）
-        if self.audio_codec:
-            await self.audio_codec.clear_audio_queue()
-
         if self.device_state in [DeviceState.IDLE, DeviceState.LISTENING]:
             await self._set_device_state(DeviceState.SPEAKING)
 
@@ -843,17 +801,6 @@ class Application:
             # 仅在非打断情况下，等待一小段时间让缓冲区稳定
             if not self.aborted:
                 await asyncio.sleep(0.2)  # 额外200ms确保尾音播放完整
-            
-            # 只在需要继续聆听或被打断时清空缓冲区
-            if self.audio_codec and (self.keep_listening or self.aborted):
-                try:
-                    # 清空可能录制的TTS声音和环境音
-                    await self.audio_codec.clear_audio_queue()
-                    # 等待一小段时间让缓冲区稳定
-                    await asyncio.sleep(0.1)
-                except Exception as e:
-                    logger.warning(f"清空音频缓冲区失败: {e}")
-                    await self.audio_codec.reinitialize_stream(is_input=True)
 
             # 状态转换
             if self.keep_listening:

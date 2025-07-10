@@ -39,10 +39,6 @@ class AudioCodec:
         self._device_input_frame_size = None
         self._device_output_frame_size = None
 
-        # 异步队列
-        max_queue_size = int(10 * 1000 / AudioConfig.FRAME_DURATION)
-        self.audio_decode_queue = asyncio.Queue(maxsize=max_queue_size)
-
         # 状态管理
         self._is_closing = False
 
@@ -50,9 +46,12 @@ class AudioCodec:
         self.input_stream = None
         self.output_stream = None
 
-        # 音频缓冲区 - 增加输出缓冲区大小以避免丢失尾音
-        self._input_buffer = asyncio.Queue(maxsize=300)
-        self._output_buffer = asyncio.Queue(maxsize=500)  # 增加到500帧
+        # 音频缓冲区 - 只保留必要的队列
+        self._wakeword_buffer = asyncio.Queue(maxsize=100)  # 唤醒词检测专用
+        self._output_buffer = asyncio.Queue(maxsize=500)  # 播放专用
+        
+        # 实时编码回调机制
+        self._encoded_audio_callback = None  # 编码后音频数据回调
 
     async def initialize(self):
         """
@@ -136,8 +135,12 @@ class AudioCodec:
                 quality="QQ",
             )
             logger.info(
-                f"创建输出重采样器: {AudioConfig.OUTPUT_SAMPLE_RATE}Hz -> "
-                f"{self.device_output_sample_rate}Hz"
+                f"✓ 创建输出重采样器: {AudioConfig.OUTPUT_SAMPLE_RATE}Hz (Opus) -> "
+                f"{self.device_output_sample_rate}Hz (设备) - 支持非24kHz设备"
+            )
+        else:
+            logger.info(
+                f"✓ 设备支持24kHz输出，无需重采样 (设备采样率: {self.device_output_sample_rate}Hz)"
             )
 
     async def _create_streams(self):
@@ -178,6 +181,7 @@ class AudioCodec:
     def _input_callback(self, indata, frames, time_info, status):
         """
         输入流回调函数.
+        实时处理：重采样 → Opus编码 → 回调传递，同时为唤醒词检测提供数据.
         """
         if status and "overflow" not in str(status).lower():
             logger.warning(f"输入流状态: {status}")
@@ -194,8 +198,22 @@ class AudioCodec:
                 if audio_data is None:
                     return
 
-            # 使用统一的队列操作方法
-            self._put_audio_data_safe(self._input_buffer, audio_data)
+            # ✅ 新方案：实时编码录音数据
+            if self._encoded_audio_callback and len(audio_data) == AudioConfig.INPUT_FRAME_SIZE:
+                try:
+                    # 转换为bytes并编码
+                    pcm_data = audio_data.astype(np.int16).tobytes()
+                    encoded_data = self.opus_encoder.encode(pcm_data, AudioConfig.INPUT_FRAME_SIZE)
+                    
+                    # 通过回调立即传递编码数据（非阻塞）
+                    if encoded_data:
+                        self._encoded_audio_callback(encoded_data)
+                        
+                except Exception as e:
+                    logger.warning(f"实时录音编码失败: {e}")
+
+            # 唤醒词检测队列（独立处理）
+            self._put_audio_data_safe(self._wakeword_buffer, audio_data.copy())
 
         except Exception as e:
             logger.error(f"输入回调错误: {e}")
@@ -243,6 +261,7 @@ class AudioCodec:
     def _output_callback(self, outdata: np.ndarray, frames: int, time_info, status):
         """
         输出流回调函数.
+        从缓冲区取出24kHz音频数据，根据需要重采样到设备采样率后播放.
         """
         if status:
             if "underflow" not in str(status).lower():
@@ -250,22 +269,25 @@ class AudioCodec:
 
         try:
             try:
+                # 从输出缓冲区获取24kHz音频数据
                 audio_data = self._output_buffer.get_nowait()
 
-                # 如果需要重采样到设备采样率
+                # 如果设备采样率与24kHz不同，需要重采样
                 if self.output_resampler is not None and len(audio_data) > 0:
                     audio_data = self._process_output_resampling(audio_data)
                     if audio_data is None:
                         outdata.fill(0)
                         return
 
+                # 将音频数据写入输出缓冲区
                 if len(audio_data) >= frames:
-                    outdata[:] = audio_data[:frames].reshape(-1, 1)
+                    outdata[:] = audio_data[:frames].reshape(-1, AudioConfig.CHANNELS)
                 else:
-                    outdata[: len(audio_data)] = audio_data.reshape(-1, 1)
+                    outdata[: len(audio_data)] = audio_data.reshape(-1, AudioConfig.CHANNELS)
                     outdata[len(audio_data) :] = 0
 
             except asyncio.QueueEmpty:
+                # 没有音频数据时输出静音
                 outdata.fill(0)
 
         except Exception as e:
@@ -274,18 +296,26 @@ class AudioCodec:
 
     def _process_output_resampling(self, audio_data):
         """
-        处理输出重采样.
+        处理输出重采样：从24kHz重采样到设备采样率.
         """
         try:
+            # 确保输入数据格式正确
+            if not isinstance(audio_data, np.ndarray):
+                audio_data = np.array(audio_data, dtype=np.int16)
+            
+            # 进行重采样：24kHz -> 设备采样率
             resampled_data = self.output_resampler.resample_chunk(
                 audio_data, last=False
             )
+            
             if len(resampled_data) > 0:
                 return resampled_data.astype(np.int16)
             else:
+                # 重采样器可能还在累积数据，返回None等待更多数据
                 return None
+                
         except Exception as e:
-            logger.error(f"输出重采样失败: {e}")
+            logger.error(f"输出重采样失败 ({AudioConfig.OUTPUT_SAMPLE_RATE}Hz -> {self.device_output_sample_rate}Hz): {e}")
             return None
 
     def _input_finished_callback(self):
@@ -354,14 +384,18 @@ class AudioCodec:
 
     async def get_raw_audio_for_detection(self) -> Optional[bytes]:
         """为唤醒词检测获取原始音频数据.
+        
+        从专用的唤醒词检测队列获取数据，与录音编码完全独立，
+        避免数据竞争，确保唤醒词检测的准确性。
 
-        返回PCM格式的音频数据，如果没有数据则返回None.
+        Returns:
+            Optional[bytes]: PCM格式的音频数据，如果没有数据则返回None.
         """
         try:
-            if self._input_buffer.empty():
+            if self._wakeword_buffer.empty():
                 return None
 
-            audio_data = self._input_buffer.get_nowait()
+            audio_data = self._wakeword_buffer.get_nowait()
 
             # 转换为bytes格式
             if hasattr(audio_data, "tobytes"):
@@ -374,83 +408,53 @@ class AudioCodec:
         except asyncio.QueueEmpty:
             return None
         except Exception as e:
-            logger.error(f"获取原始音频数据失败: {e}")
+            logger.error(f"获取唤醒词音频数据失败: {e}")
             return None
 
-    async def read_audio(self) -> Optional[bytes]:
+    def set_encoded_audio_callback(self, callback):
         """
-        读取音频数据并编码.
+        设置编码后音频数据的回调函数.
+        
+        启用实时编码模式：录音回调中直接编码并通过回调传递，
+        消除轮询延迟，提升录音实时性。
+        
+        Args:
+            callback: 回调函数，接收 (encoded_data: bytes) 参数
+                     如果为None，则禁用实时编码
         """
-        try:
-            # 直接处理单帧数据，避免浪费
-            try:
-                audio_data = self._input_buffer.get_nowait()
-
-                # 严格验证数据长度
-                if len(audio_data) != AudioConfig.INPUT_FRAME_SIZE:
-                    expected = AudioConfig.INPUT_FRAME_SIZE
-                    actual = len(audio_data)
-                    logger.warning(f"音频数据长度异常: {actual}, 期望: {expected}")
-                    return None
-
-                # 转换为bytes并编码
-                pcm_data = audio_data.astype(np.int16).tobytes()
-                return self.opus_encoder.encode(pcm_data, AudioConfig.INPUT_FRAME_SIZE)
-
-            except asyncio.QueueEmpty:
-                return None
-
-        except Exception as e:
-            logger.error(f"音频读取失败: {e}")
-
-        return None
-
-    async def play_audio(self):
-        """
-        播放音频（处理解码队列中的数据）
-        """
-        try:
-            if self.audio_decode_queue.empty():
-                return
-
-            processed_count = 0
-            max_process_per_call = 3
-
-            while (
-                not self.audio_decode_queue.empty()
-                and processed_count < max_process_per_call
-            ):
-                try:
-                    opus_data = self.audio_decode_queue.get_nowait()
-
-                    try:
-                        # Opus解码输出24kHz
-                        pcm_data = self.opus_decoder.decode(
-                            opus_data, AudioConfig.OUTPUT_FRAME_SIZE
-                        )
-
-                        audio_array = np.frombuffer(pcm_data, dtype=np.int16)
-
-                        self._put_audio_data_safe(self._output_buffer, audio_array)
-
-                    except opuslib.OpusError as e:
-                        logger.warning(f"音频解码失败，丢弃此帧: {e}")
-                    except Exception as e:
-                        logger.warning(f"音频处理失败，丢弃此帧: {e}")
-
-                    processed_count += 1
-
-                except asyncio.QueueEmpty:
-                    break
-
-        except Exception as e:
-            logger.error(f"播放音频时发生未预期错误: {e}")
+        self._encoded_audio_callback = callback
+        
+        if callback:
+            logger.info("✓ 启用实时录音编码模式 - 录音回调直接编码传递")
+        else:
+            logger.info("✓ 禁用录音编码回调")
 
     async def write_audio(self, opus_data: bytes):
         """
-        将Opus数据写入播放队列.
+        将Opus数据直接解码并放入播放队列.
+        解码输出为24kHz，将在播放回调中根据设备采样率进行重采样.
         """
-        self._put_audio_data_safe(self.audio_decode_queue, opus_data)
+        try:
+            # Opus解码输出24kHz PCM数据
+            pcm_data = self.opus_decoder.decode(
+                opus_data, AudioConfig.OUTPUT_FRAME_SIZE
+            )
+
+            audio_array = np.frombuffer(pcm_data, dtype=np.int16)
+
+            # 验证解码数据长度
+            expected_length = AudioConfig.OUTPUT_FRAME_SIZE * AudioConfig.CHANNELS
+            if len(audio_array) != expected_length:
+                logger.warning(f"解码音频长度异常: {len(audio_array)}, 期望: {expected_length}")
+                return
+
+            # 直接放入输出缓冲区，重采样将在输出回调中处理
+            self._put_audio_data_safe(self._output_buffer, audio_array)
+
+        except opuslib.OpusError as e:
+            logger.warning(f"Opus解码失败，丢弃此帧: {e}")
+        except Exception as e:
+            logger.warning(f"音频写入失败，丢弃此帧: {e}")
 
     async def wait_for_audio_complete(self, timeout=10.0):
         """
@@ -459,22 +463,17 @@ class AudioCodec:
         start = time.time()
         
         # 1. 首先等待解码队列清空
-        while not self.audio_decode_queue.empty() and time.time() - start < timeout:
-            await asyncio.sleep(0.05)
-        
-        # 2. 然后等待输出缓冲区清空（最重要的改进）
         while not self._output_buffer.empty() and time.time() - start < timeout:
             await asyncio.sleep(0.05)
         
-        # 3. 额外等待一小段时间，确保最后的音频数据被播放
+        # 2. 额外等待一小段时间，确保最后的音频数据被播放
         await asyncio.sleep(0.3)  # 300ms额外缓冲时间
         
         # 检查是否超时
-        if not self.audio_decode_queue.empty() or not self._output_buffer.empty():
-            decode_remaining = self.audio_decode_queue.qsize()
+        if not self._output_buffer.empty():
             output_remaining = self._output_buffer.qsize()
             logger.warning(
-                f"音频播放超时，剩余队列 - 解码: {decode_remaining} 帧, 输出: {output_remaining} 帧"
+                f"音频播放超时，剩余队列 - 输出: {output_remaining} 帧"
             )
 
     async def clear_audio_queue(self):
@@ -485,8 +484,7 @@ class AudioCodec:
 
         # 清空所有队列
         queues_to_clear = [
-            self.audio_decode_queue,
-            self._input_buffer,
+            self._wakeword_buffer,
             self._output_buffer,
         ]
 

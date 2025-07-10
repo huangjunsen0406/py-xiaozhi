@@ -49,6 +49,13 @@ class ShortcutManager:
         # 快捷键配置映射
         self.shortcuts: Dict[str, ShortcutConfig] = {}
         self._load_shortcuts()
+        
+        # 错误恢复机制
+        self._last_activity_time = 0
+        self._listener_error_count = 0
+        self._max_error_count = 3
+        self._health_check_task = None
+        self._restart_in_progress = False
 
     def _load_shortcuts(self):
         """
@@ -111,6 +118,9 @@ class ShortcutManager:
             )
             self._listener.start()
             self.running = True
+            
+            # 启动健康检查任务
+            self._start_health_check_task()
 
             logger.info("全局快捷键监听已启动")
             return True
@@ -167,6 +177,10 @@ class ShortcutManager:
             return
 
         try:
+            # 更新活动时间
+            import time
+            self._last_activity_time = time.time()
+            
             key_name = self._get_key_name(key)
             if key_name:
                 logger.debug(f"按键按下: {key_name}")
@@ -175,6 +189,7 @@ class ShortcutManager:
                 self._check_shortcuts(True)
         except Exception as e:
             logger.error(f"按键处理错误: {e}", exc_info=True)
+            self._handle_listener_error()
 
     def _on_key_release(self, key):
         """
@@ -184,6 +199,10 @@ class ShortcutManager:
             return
 
         try:
+            # 更新活动时间
+            import time
+            self._last_activity_time = time.time()
+            
             key_name = self._get_key_name(key)
             if key_name:
                 logger.debug(f"按键释放: {key_name}")
@@ -193,6 +212,7 @@ class ShortcutManager:
                 self._check_shortcuts(False)
         except Exception as e:
             logger.error(f"释放键处理错误: {e}", exc_info=True)
+            self._handle_listener_error()
 
     def _get_key_name(self, key) -> Optional[str]:
         """
@@ -350,12 +370,129 @@ class ShortcutManager:
         if self.display:
             self._run_coroutine_threadsafe(self.display.toggle_window_visibility())
 
+    def _start_health_check_task(self):
+        """
+        启动健康检查任务.
+        """
+        if self._main_loop and not self._health_check_task:
+            self._health_check_task = asyncio.run_coroutine_threadsafe(
+                self._health_check_loop(), self._main_loop
+            )
+            logger.debug("快捷键健康检查任务已启动")
+
+    async def _health_check_loop(self):
+        """
+        健康检查循环 - 检测键盘监听器是否正常工作.
+        """
+        import time
+        while self.running and not self._restart_in_progress:
+            try:
+                await asyncio.sleep(30)  # 每30秒检查一次
+                
+                if not self.running:
+                    break
+                    
+                # 检查监听器是否存在且正在运行
+                if not self._listener or not self._listener.running:
+                    logger.warning("检测到键盘监听器已停止，尝试重启")
+                    await self._restart_listener()
+                    continue
+                
+                # 检查是否长时间没有按键活动（可能表示监听器失效）
+                current_time = time.time()
+                if (self._last_activity_time > 0 and 
+                    current_time - self._last_activity_time > 300):  # 5分钟无活动
+                    logger.info("长时间无按键活动，执行监听器健康检查")
+                    # 重置活动时间，避免频繁检查
+                    self._last_activity_time = current_time
+                    
+            except Exception as e:
+                logger.error(f"健康检查错误: {e}", exc_info=True)
+                await asyncio.sleep(10)
+
+    def _handle_listener_error(self):
+        """
+        处理监听器错误.
+        """
+        self._listener_error_count += 1
+        logger.warning(f"键盘监听器错误计数: {self._listener_error_count}/{self._max_error_count}")
+        
+        if self._listener_error_count >= self._max_error_count:
+            logger.error(f"键盘监听器错误次数超限，尝试重启")
+            if self._main_loop:
+                asyncio.run_coroutine_threadsafe(
+                    self._restart_listener(), self._main_loop
+                )
+
+    async def _restart_listener(self):
+        """
+        重启键盘监听器.
+        """
+        if self._restart_in_progress:
+            logger.debug("监听器重启已在进行中，跳过")
+            return
+            
+        self._restart_in_progress = True
+        logger.info("开始重启键盘监听器...")
+        
+        try:
+            # 停止当前监听器
+            if self._listener:
+                try:
+                    self._listener.stop()
+                    await asyncio.sleep(1)  # 等待停止完成
+                except Exception as e:
+                    logger.warning(f"停止监听器时出错: {e}")
+                finally:
+                    self._listener = None
+            
+            # 清理状态
+            self.pressed_keys.clear()
+            self.manual_press_active = False
+            self._listener_error_count = 0
+            
+            # 重新导入pynput并创建新的监听器
+            try:
+                from pynput import keyboard
+                
+                self._listener = keyboard.Listener(
+                    on_press=self._on_key_press, 
+                    on_release=self._on_key_release
+                )
+                self._listener.start()
+                
+                # 更新活动时间
+                import time
+                self._last_activity_time = time.time()
+                
+                logger.info("键盘监听器重启成功")
+                
+            except Exception as e:
+                logger.error(f"重启监听器失败: {e}", exc_info=True)
+                # 等待一段时间后再次尝试
+                await asyncio.sleep(5)
+                
+        except Exception as e:
+            logger.error(f"重启监听器过程中发生错误: {e}", exc_info=True)
+        finally:
+            self._restart_in_progress = False
+
     async def stop(self):
         """
         停止快捷键监听.
         """
         self.running = False
         self.manual_press_active = False
+        
+        # 停止健康检查任务
+        if self._health_check_task and not self._health_check_task.done():
+            self._health_check_task.cancel()
+            try:
+                await asyncio.wrap_future(self._health_check_task)
+            except (asyncio.CancelledError, Exception):
+                pass
+            self._health_check_task = None
+        
         if self._listener:
             self._listener.stop()
             self._listener = None
