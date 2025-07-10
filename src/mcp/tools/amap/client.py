@@ -119,6 +119,74 @@ class AmapClient:
 
         return results
 
+    async def ip_location_with_coordinates(self, ip: str) -> IPLocationResult:
+        """
+        IP定位并获取经纬度坐标.
+        """
+        params = {"ip": ip}
+        data = await self._request("/v3/ip", params)
+
+        if data.get("status") != "1":
+            raise Exception(
+                f"IP Location failed: {data.get('info', data.get('infocode'))}"
+            )
+
+        # 处理返回的数据格式（可能是字符串或数组）
+        province_data = data.get("province", [])
+        city_data = data.get("city", [])
+        
+        # 格式化省份和城市数据
+        if isinstance(province_data, list):
+            province = province_data[0] if province_data else ""
+        else:
+            province = province_data or ""
+            
+        if isinstance(city_data, list):
+            city = city_data[0] if city_data else ""
+        else:
+            city = city_data or ""
+        
+        # 如果数据为空，表示无法定位
+        if not province and not city:
+            raise Exception("IP地址无法定位，可能是海外IP或内网IP")
+        
+        location = None
+        
+        # 尝试从rectangle中提取中心坐标
+        rectangle = data.get("rectangle", "")
+        if rectangle and isinstance(rectangle, str) and ";" in rectangle:
+            try:
+                # rectangle格式: "左下角经度,左下角纬度;右上角经度,右上角纬度"
+                parts = rectangle.split(";")
+                if len(parts) == 2:
+                    left_bottom = parts[0].split(",")
+                    right_top = parts[1].split(",")
+                    
+                    if len(left_bottom) == 2 and len(right_top) == 2:
+                        # 计算中心点坐标
+                        center_lon = (float(left_bottom[0]) + float(right_top[0])) / 2
+                        center_lat = (float(left_bottom[1]) + float(right_top[1])) / 2
+                        location = Location(longitude=center_lon, latitude=center_lat)
+            except (ValueError, IndexError):
+                pass
+        
+        # 如果无法从rectangle获取坐标，则通过地理编码获取城市中心坐标
+        if not location and city:
+            try:
+                geocode_results = await self.geocode(f"{city}市中心", province or "")
+                if geocode_results:
+                    location = geocode_results[0].location
+            except Exception:
+                pass
+
+        return IPLocationResult(
+            province=province,
+            city=city,
+            adcode=data.get("adcode", "") if isinstance(data.get("adcode"), str) else (data.get("adcode", [""])[0] if data.get("adcode") else ""),
+            rectangle=rectangle if isinstance(rectangle, str) else (rectangle[0] if rectangle else ""),
+            location=location
+        )
+
     async def ip_location(self, ip: str) -> IPLocationResult:
         """
         IP定位.

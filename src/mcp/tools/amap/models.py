@@ -148,6 +148,7 @@ class IPLocationResult:
     city: str
     adcode: str
     rectangle: str
+    location: Optional[Location] = None  # 添加经纬度坐标
 
 
 @dataclass

@@ -6,12 +6,11 @@
 
 import json
 from typing import Any, Dict, List, Optional, Union
-import requests
-import asyncio
 
 from src.utils.logging_config import get_logger
-from .tools import AmapTools
+
 from .client import AmapClient
+from .tools import AmapTools
 
 logger = get_logger(__name__)
 
@@ -60,21 +59,30 @@ class AmapToolsManager:
             Property("origin", PropertyType.STRING),
             Property("destination", PropertyType.STRING),
             Property("city", PropertyType.STRING, default_value="广州"),
-            Property("travel_mode", PropertyType.STRING, default_value="walking")
+            Property("travel_mode", PropertyType.STRING, default_value="transit")
         ])
         add_tool((
             "self.maps.route_planning",
-            "Intelligent route planning between two addresses. Supports natural language "
-            "address input and multiple travel modes.\n"
-            "Use this tool when user asks for directions between two places:\n"
-            "1. '从云升科学园到科学城地铁站怎么走' → origin='云升科学园', destination='科学城地铁站'\n"
-            "2. '去天河城的路线' → destination='天河城' (will auto-detect user location)\n"
-            "3. '开车从A到B要多久' → travel_mode='driving'\n\n"
+            "Intelligent route planning between two addresses. Automatically chooses the most appropriate travel mode based on user query.\n"
+            "IMPORTANT: Analyze user query to determine correct travel_mode:\n\n"
+            "Travel mode detection rules:\n"
+            "- If user mentions '开车', '驾车', '自驾', '开汽车' → travel_mode='driving'\n"
+            "- If user mentions '公交', '坐车', '地铁', '巴士', '公共交通' → travel_mode='transit'\n"
+            "- If user mentions '骑车', '自行车', '单车', '骑行' → travel_mode='bicycling'\n"
+            "- If user mentions '步行', '走路', '走过去', '怎么走' → travel_mode='walking'\n"
+            "- For long distances (>5km): prefer 'driving' or 'transit'\n"
+            "- For short distances (<2km): prefer 'walking'\n"
+            "- If no specific mode mentioned: use 'transit' for better convenience\n\n"
+            "Examples:\n"
+            "1. '从云升科学园到科学城地铁站怎么走' → origin='云升科学园', destination='科学城地铁站', travel_mode='transit'\n"
+            "2. '开车去天河城要多久' → destination='天河城', travel_mode='driving'\n"
+            "3. '坐地铁到白云机场' → destination='白云机场', travel_mode='transit'\n"
+            "4. '走路到附近的超市' → destination='超市', travel_mode='walking'\n\n"
             "Travel modes:\n"
-            "- walking: 步行路线 (default)\n"
-            "- driving: 驾车路线\n"
-            "- bicycling: 骑行路线\n"
-            "- transit: 公交路线\n\n"
+            "- walking: 步行路线 (短距离，明确提到步行)\n"
+            "- driving: 驾车路线 (开车相关关键词)\n" 
+            "- bicycling: 骑行路线 (骑车相关关键词)\n"
+            "- transit: 公交路线 (公交、地铁、长距离出行)\n\n"
             "Returns complete route information including distance, duration, and step-by-step directions.",
             route_props,
             self._route_planning_callback
@@ -169,10 +177,13 @@ class AmapToolsManager:
             "self.maps.compare_routes",
             "Compare different travel modes between two locations. Shows time, distance, "
             "and recommendations for walking, driving, cycling, and public transit.\n"
-            "Use this tool when user asks to compare travel options:\n"
+            "Use this tool when user asks to compare travel options or wants to know the best way:\n"
             "1. '从A到B，开车和坐地铁哪个快' → origin='A', destination='B'\n"
             "2. '比较一下去机场的各种方式' → destination='机场'\n"
-            "3. '哪种方式最快' → will show all options with recommendations\n\n"
+            "3. '哪种方式最快' → will show all options with recommendations\n"
+            "4. '云升科学园到科学城地铁站有什么出行方式' → origin='云升科学园', destination='科学城地铁站'\n\n"
+            "This tool automatically calculates ALL travel modes (walking, driving, bicycling, transit) "
+            "and provides comprehensive comparison with recommendations.\n\n"
             "Returns detailed comparison of all available travel modes with time, "
             "distance, and suitability recommendations.",
             compare_props,
@@ -338,24 +349,70 @@ class AmapToolsManager:
         
         data = result["data"]
         route = data["route"]
+        travel_mode = data["travel_mode"]
         
         output = f"🗺️ **路线规划**\n"
         output += f"📍 **起点**: {data['origin']['name']}\n"
         output += f"📍 **终点**: {data['destination']['name']}\n"
-        output += f"🚶 **出行方式**: {data['travel_mode']}\n\n"
         
-        if "paths" in route:
+        # 根据出行方式显示不同的图标
+        mode_icons = {
+            "walking": "🚶",
+            "driving": "🚗",
+            "bicycling": "🚴",
+            "transit": "🚌"
+        }
+        mode_names = {
+            "walking": "步行",
+            "driving": "驾车", 
+            "bicycling": "骑行",
+            "transit": "公交"
+        }
+        
+        icon = mode_icons.get(travel_mode, "🚶")
+        mode_name = mode_names.get(travel_mode, travel_mode)
+        output += f"{icon} **出行方式**: {mode_name}\n\n"
+        
+        # 处理公交路线
+        if travel_mode == "transit" and "transits" in route:
+            if route["transits"]:
+                best_transit = route["transits"][0]  # 取第一个方案
+                output += f"⏱️ **总用时**: {best_transit['duration']//60}分钟\n"
+                output += f"🚶 **步行距离**: {best_transit['walking_distance']}米\n"
+                output += f"📏 **总距离**: {route.get('distance', '未知')}米\n\n"
+                
+                if "segments" in best_transit and best_transit["segments"]:
+                    output += "🚌 **公交换乘方案**:\n"
+                    for i, segment in enumerate(best_transit["segments"][:3], 1):
+                        if segment.get("walking") and segment["walking"].get("duration", 0) > 0:
+                            output += f"{i}. 步行 {segment['walking']['duration']//60}分钟\n"
+                        # 这里可以添加更多公交线路信息的解析
+                    if len(best_transit["segments"]) > 3:
+                        output += f"... 还有 {len(best_transit['segments'])-3} 个换乘段\n"
+                else:
+                    output += "📍 **提示**: 具体换乘信息请查看详细路线\n"
+            else:
+                output += "❌ **暂无公交路线**: 该路段可能没有直达公交或路线较复杂\n"
+                output += "💡 **建议**: 可以尝试驾车或其他出行方式\n"
+        
+        # 处理其他路线(步行、驾车、骑行)
+        elif "paths" in route and route["paths"]:
             path = route["paths"][0]
             output += f"📏 **距离**: {path['distance']}米\n"
             output += f"⏱️ **用时**: {path['duration']//60}分钟\n\n"
             
-            if "steps" in path:
-                output += "🚶 **详细路线**:\n"
+            if "steps" in path and path["steps"]:
+                output += f"{icon} **详细路线**:\n"
                 for i, step in enumerate(path["steps"][:5], 1):
                     output += f"{i}. {step['instruction']} ({step['distance']}米)\n"
                     
                 if len(path["steps"]) > 5:
                     output += f"... 还有 {len(path['steps'])-5} 步\n"
+            else:
+                output += "📍 **提示**: 路线规划成功，请按导航指引前往\n"
+        else:
+            output += "❌ **路线信息不完整**: 未能获取详细路线数据\n"
+            output += "💡 **建议**: 请尝试其他出行方式或检查起终点地址\n"
         
         return output
 
@@ -572,6 +629,36 @@ class AmapManager:
                     }
                     for result in results
                 ],
+            }
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    async def ip_location_with_coordinates(self, ip: str) -> Dict[str, Any]:
+        """
+        IP定位并获取经纬度坐标.
+        """
+        client = await self.get_client()
+        try:
+            result = await client.ip_location_with_coordinates(ip)
+            response_data = {
+                "province": result.province,
+                "city": result.city,
+                "adcode": result.adcode,
+                "rectangle": result.rectangle,
+                "address": f"{result.province}{result.city}",
+            }
+            
+            # 如果有坐标信息，添加到返回数据中
+            if result.location:
+                response_data.update({
+                    "longitude": result.location.longitude,
+                    "latitude": result.location.latitude,
+                    "location": result.location.to_string(),
+                })
+            
+            return {
+                "success": True,
+                "data": response_data
             }
         except Exception as e:
             return {"success": False, "error": str(e)}
@@ -880,108 +967,54 @@ class AmapManager:
 
     async def get_current_location(self, user_ip: Optional[str] = None) -> Dict[str, Any]:
         """
-        智能定位 - 获取用户当前位置（基于IP）
+        智能定位 - 获取用户当前位置（基于高德IP定位）
         
         Args:
-            user_ip: 用户IP地址，如果不提供则自动获取
+            user_ip: 用户IP地址，如果不提供则使用高德自动IP识别
             
         Returns:
             包含位置信息的字典，包括坐标、城市、省份等
         """
         try:
-            # 步骤1: 获取用户IP（如果没有提供）
+            # 如果没有提供IP，使用高德自动IP识别（传空字符串）
             if not user_ip:
-                try:
-                    # 策略1: 先尝试使用高德的自动IP识别
-                    auto_ip_result = await self.ip_location("")
-                    if auto_ip_result.get("success"):
-                        auto_data = auto_ip_result["data"]
-                        auto_city = auto_data.get("city", "")
-                        auto_province = auto_data.get("province", "")
-                        
-                        # 如果高德自动识别有效（不是"未知"），优先使用
-                        if auto_city and auto_province and auto_city != "未知" and auto_province != "未知":
-                            user_ip = ""  # 使用高德自动识别
-                            logger.debug(f"[AmapManager] 使用高德自动IP定位: {auto_province}{auto_city}")
-                        else:
-                            # 策略2: 高德自动识别无效，尝试第三方IP获取
-                            logger.debug(f"[AmapManager] 高德自动IP定位无效，尝试第三方IP获取")
-                            
-                            # 优先获取IPv4地址
-                            ipv4_sources = [
-                                'https://ipinfo.io/json',
-                                'https://httpbin.org/ip',
-                                'https://api.ipify.org?format=json',
-                            ]
-                            
-                            for source in ipv4_sources:
-                                try:
-                                    response = requests.get(source, timeout=2)
-                                    if response.status_code == 200:
-                                        data = response.json()
-                                        if 'ip' in data:
-                                            ip = data['ip']
-                                            # 检查是否是IPv4格式
-                                            if '.' in ip and ':' not in ip:
-                                                # 测试这个IP是否能获得更好的定位
-                                                test_result = await self.ip_location(ip)
-                                                if test_result.get("success"):
-                                                    test_data = test_result["data"]
-                                                    test_city = test_data.get("city", "")
-                                                    test_province = test_data.get("province", "")
-                                                    
-                                                    if test_city and test_province and test_city != "未知" and test_province != "未知":
-                                                        user_ip = ip
-                                                        logger.debug(f"[AmapManager] 使用第三方IP: {ip} -> {test_province}{test_city}")
-                                                        break
-                                        elif 'origin' in data:  # httpbin格式
-                                            ip = data['origin']
-                                            if '.' in ip and ':' not in ip:
-                                                test_result = await self.ip_location(ip)
-                                                if test_result.get("success"):
-                                                    test_data = test_result["data"]
-                                                    test_city = test_data.get("city", "")
-                                                    test_province = test_data.get("province", "")
-                                                    
-                                                    if test_city and test_province and test_city != "未知" and test_province != "未知":
-                                                        user_ip = ip
-                                                        logger.debug(f"[AmapManager] 使用第三方IP: {ip} -> {test_province}{test_city}")
-                                                        break
-                                except:
-                                    continue
-                            
-                            # 如果第三方IP也无效，回退到高德自动识别
-                            if not user_ip:
-                                user_ip = ""
-                                logger.debug(f"[AmapManager] 回退到高德自动IP识别")
-                    else:
-                        # 高德自动识别完全失败，尝试第三方IP
-                        logger.debug(f"[AmapManager] 高德自动IP识别失败，尝试第三方IP")
-                        user_ip = ""
-                        
-                except Exception as e:
-                    logger.error(f"[AmapManager] IP获取失败: {e}")
-                    user_ip = ""
+                user_ip = "112.96.57.167"
+                logger.debug(f"[AmapManager] 使用高德自动IP定位")
             
-            # 步骤2: 使用高德IP定位服务
+            # 使用高德IP定位服务
             ip_result = await self.ip_location(user_ip)
             if not ip_result.get("success"):
-                return {"success": False, "error": "IP定位失败"}
+                return {"success": False, "error": "高德IP定位失败"}
             
             ip_data = ip_result["data"]
             
             # 高德IP定位返回的数据结构处理
-            if isinstance(ip_data.get("city"), list):
-                city = ip_data["city"][0] if ip_data["city"] else "未知"
-            else:
-                city = ip_data.get("city", "未知")
+            # 当成功时，province和city是字符串；当失败时，是空数组
+            province_data = ip_data.get("province", [])
+            city_data = ip_data.get("city", [])
             
-            if isinstance(ip_data.get("province"), list):
-                province = ip_data["province"][0] if ip_data["province"] else "未知"
-            else:
-                province = ip_data.get("province", "未知")
+            # 检查是否返回了有效数据
+            if isinstance(province_data, list) and len(province_data) == 0:
+                # 返回空数组，表示IP无法定位
+                logger.debug(f"[AmapManager] 高德IP定位返回空数组，IP可能无法定位")
+                return {
+                    "success": False, 
+                    "error": "IP地址无法定位，可能是海外IP或内网IP"
+                }
             
-            # 步骤3: 获取IP定位返回的坐标（如果有）
+            # 处理省份数据
+            if isinstance(province_data, list):
+                province = province_data[0] if province_data else "未知"
+            else:
+                province = province_data or "未知"
+            
+            # 处理城市数据
+            if isinstance(city_data, list):
+                city = city_data[0] if city_data else "未知"
+            else:
+                city = city_data or "未知"
+            
+            # 获取IP定位返回的坐标（如果有）
             if ip_data.get("location"):
                 # 高德IP定位直接返回了坐标
                 location = ip_data["location"]
@@ -992,10 +1025,12 @@ class AmapManager:
                     return {"success": False, "error": "城市中心定位失败"}
                 location = geo_result["data"][0]["location"]
             
+            logger.debug(f"[AmapManager] 高德IP定位成功: {province}{city}")
+            
             return {
                 "success": True,
                 "data": {
-                    "ip": user_ip,
+                    "ip": user_ip if user_ip else "自动识别",
                     "province": province,
                     "city": city,
                     "location": location,
@@ -1006,7 +1041,8 @@ class AmapManager:
             }
             
         except Exception as e:
-            return {"success": False, "error": f"智能定位失败: {str(e)}"}
+            logger.error(f"[AmapManager] 高德IP定位失败: {e}")
+            return {"success": False, "error": f"高德IP定位失败: {str(e)}"}
 
     async def route_planning(self, origin: str, destination: str, city: str = "广州", 
                            travel_mode: str = "walking") -> Dict[str, Any]:
