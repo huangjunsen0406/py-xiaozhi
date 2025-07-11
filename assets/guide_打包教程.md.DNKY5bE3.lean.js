@@ -1,0 +1,1 @@
+import{_ as i,c as a,o as n,ae as l}from"./chunks/framework.BGWP4WZ_.js";const g=JSON.parse('{"title":"项目打包教程","description":"","frontmatter":{},"headers":[],"relativePath":"guide/打包教程.md","filePath":"guide/打包教程.md"}'),t={name:"guide/打包教程.md"};function h(p,s,e,k,d,o){return n(),a("div",null,s[0]||(s[0]=[l("",70)]))}const F=i(t,[["render",h]]);export{g as __pageData,F as default};
