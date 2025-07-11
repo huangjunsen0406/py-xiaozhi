@@ -1,528 +1,700 @@
+"""高德地图MCP工具函数.
+
+提供给MCP服务器调用的异步工具函数，包括地理编码、路径规划、搜索等功能
 """
-高德地图 MCP 工具定义.
-"""
 
-from typing import Any, Dict, List
+import asyncio
+import json
+import os
+from typing import Any, Dict
+
+import aiohttp
+
+from src.utils.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
-class AmapTools:
+def get_amap_api_key() -> str:
+    """获取高德地图API密钥."""
+    # api_key = os.getenv("AMAP_API_KEY")
+    # if not api_key:
+    #     raise ValueError("AMAP_API_KEY environment variable is not set")
+    return ''
+
+
+async def maps_regeocode(args: Dict[str, Any]) -> str:
+    """将经纬度坐标转换为地址信息.
+    
+    Args:
+        args: 包含以下参数的字典
+            - location: 经纬度坐标（格式：经度,纬度）
+            
+    Returns:
+        str: JSON格式的地址信息
     """
-    高德地图工具集.
+    try:
+        location = args["location"]
+        api_key = get_amap_api_key()
+        
+        url = "https://restapi.amap.com/v3/geocode/regeo"
+        params = {
+            "location": location,
+            "key": api_key,
+            "source": "py_xiaozhi"
+        }
+        
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, params=params) as response:
+                data = await response.json()
+                
+        if data.get("status") != "1":
+            error_msg = f"逆地理编码失败: {data.get('info', data.get('infocode'))}"
+            logger.error(f"[AmapTools] {error_msg}")
+            return json.dumps({"success": False, "message": error_msg}, ensure_ascii=False)
+            
+        result = {
+            "success": True,
+            "data": {
+                "province": data["regeocode"]["addressComponent"]["province"],
+                "city": data["regeocode"]["addressComponent"]["city"], 
+                "district": data["regeocode"]["addressComponent"]["district"],
+                "formatted_address": data["regeocode"]["formatted_address"]
+            }
+        }
+        
+        logger.info(f"[AmapTools] 逆地理编码成功: {location}")
+        return json.dumps(result, ensure_ascii=False, indent=2)
+        
+    except KeyError as e:
+        error_msg = f"缺少必需参数: {e}"
+        logger.error(f"[AmapTools] {error_msg}")
+        return json.dumps({"success": False, "message": error_msg}, ensure_ascii=False)
+    except Exception as e:
+        error_msg = f"逆地理编码失败: {str(e)}"
+        logger.error(f"[AmapTools] {error_msg}", exc_info=True)
+        return json.dumps({"success": False, "message": error_msg}, ensure_ascii=False)
+
+
+async def maps_geo(args: Dict[str, Any]) -> str:
+    """将地址转换为经纬度坐标.
+    
+    Args:
+        args: 包含以下参数的字典
+            - address: 待解析的地址
+            - city: 指定查询的城市（可选）
+            
+    Returns:
+        str: JSON格式的坐标信息
     """
-
-    def __init__(self, api_key: str):
-        # 延迟导入避免循环导入
-        from .manager import AmapManager
-        self.manager = AmapManager(api_key)
-
-    def get_tools(self) -> List[Dict[str, Any]]:
-        """
-        获取所有工具定义.
-        """
-        # 原子工具
-        atomic_tools = [
-            {
-                "name": "maps_regeocode",
-                "description": "将一个高德经纬度坐标转换为行政区划地址信息",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "location": {
-                            "type": "string",
-                            "description": "经纬度坐标，格式为：经度,纬度",
-                        }
-                    },
-                    "required": ["location"],
-                },
-            },
-            {
-                "name": "maps_geo",
-                "description": "将详细的结构化地址转换为经纬度坐标。支持对地标性名胜景区、建筑物名称解析为经纬度坐标",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "address": {
-                            "type": "string",
-                            "description": "待解析的结构化地址信息",
-                        },
-                        "city": {
-                            "type": "string",
-                            "description": "指定查询的城市（可选）",
-                        },
-                    },
-                    "required": ["address"],
-                },
-            },
-            {
-                "name": "maps_ip_location",
-                "description": "IP定位根据用户输入的IP地址，定位IP的所在位置",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {"ip": {"type": "string", "description": "IP地址"}},
-                    "required": ["ip"],
-                },
-            },
-            {
-                "name": "maps_weather",
-                "description": "根据城市名称或者标准adcode查询指定城市的天气",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "city": {"type": "string", "description": "城市名称或者adcode"}
-                    },
-                    "required": ["city"],
-                },
-            },
-            {
-                "name": "maps_search_detail",
-                "description": "查询关键词搜索或者周边搜索获取到的POI ID的详细信息",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "id": {
-                            "type": "string",
-                            "description": "关键词搜索或者周边搜索获取到的POI ID",
-                        }
-                    },
-                    "required": ["id"],
-                },
-            },
-            {
-                "name": "maps_direction_walking",
-                "description": "步行路径规划API可以根据输入起点终点经纬度坐标规划100km以内的步行通勤方案",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "origin": {
-                            "type": "string",
-                            "description": "出发点经纬度，坐标格式为：经度,纬度",
-                        },
-                        "destination": {
-                            "type": "string",
-                            "description": "目的地经纬度，坐标格式为：经度,纬度",
-                        },
-                    },
-                    "required": ["origin", "destination"],
-                },
-            },
-            {
-                "name": "maps_direction_driving",
-                "description": "驾车路径规划API可以根据用户起终点经纬度坐标规划以小客车、轿车通勤出行的方案",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "origin": {
-                            "type": "string",
-                            "description": "出发点经纬度，坐标格式为：经度,纬度",
-                        },
-                        "destination": {
-                            "type": "string",
-                            "description": "目的地经纬度，坐标格式为：经度,纬度",
-                        },
-                    },
-                    "required": ["origin", "destination"],
-                },
-            },
-            {
-                "name": "maps_bicycling",
-                "description": "骑行路径规划用于规划骑行通勤方案，规划时会考虑天桥、单行线、封路等情况。最大支持500km的骑行路线规划",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "origin": {
-                            "type": "string",
-                            "description": "出发点经纬度，坐标格式为：经度,纬度",
-                        },
-                        "destination": {
-                            "type": "string",
-                            "description": "目的地经纬度，坐标格式为：经度,纬度",
-                        },
-                    },
-                    "required": ["origin", "destination"],
-                },
-            },
-            {
-                "name": "maps_direction_transit_integrated",
-                "description": "公交路径规划API可以根据用户起终点经纬度坐标规划综合各类公共交通方式的通勤方案",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "origin": {
-                            "type": "string",
-                            "description": "出发点经纬度，坐标格式为：经度,纬度",
-                        },
-                        "destination": {
-                            "type": "string",
-                            "description": "目的地经纬度，坐标格式为：经度,纬度",
-                        },
-                        "city": {
-                            "type": "string",
-                            "description": "公共交通规划起点城市",
-                        },
-                        "cityd": {
-                            "type": "string",
-                            "description": "公共交通规划终点城市",
-                        },
-                    },
-                    "required": ["origin", "destination", "city", "cityd"],
-                },
-            },
-            {
-                "name": "maps_distance",
-                "description": "距离测量API可以测量两个经纬度坐标之间的距离，支持驾车、步行以及球面距离测量",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "origins": {
-                            "type": "string",
-                            "description": "起点经纬度，可以传多个坐标，使用分号隔离，比如120,30;120,31",
-                        },
-                        "destination": {
-                            "type": "string",
-                            "description": "终点经纬度，坐标格式为：经度,纬度",
-                        },
-                        "type": {
-                            "type": "string",
-                            "description": "距离测量类型，1代表驾车距离测量，0代表直线距离测量，3代表步行距离测量",
-                        },
-                    },
-                    "required": ["origins", "destination"],
-                },
-            },
-            {
-                "name": "maps_text_search",
-                "description": "关键词搜索，根据用户传入关键词，搜索出相关的POI",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "keywords": {"type": "string", "description": "搜索关键词"},
-                        "city": {"type": "string", "description": "查询城市（可选）"},
-                        "types": {
-                            "type": "string",
-                            "description": "POI类型，比如加油站（可选）",
-                        },
-                    },
-                    "required": ["keywords"],
-                },
-            },
-            {
-                "name": "maps_around_search",
-                "description": "周边搜索，根据用户传入关键词以及坐标location，搜索出radius半径范围的POI",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "location": {
-                            "type": "string",
-                            "description": "中心点经纬度，格式为：经度,纬度",
-                        },
-                        "radius": {"type": "string", "description": "搜索半径（米）"},
-                        "keywords": {
-                            "type": "string",
-                            "description": "搜索关键词（可选）",
-                        },
-                    },
-                    "required": ["location"],
-                },
-            },
-        ]
+    try:
+        address = args["address"]
+        city = args.get("city", "")
+        api_key = get_amap_api_key()
         
-        # 智能组合工具
-        smart_tools = [
-            {
-                "name": "smart_get_current_location",
-                "description": "智能定位 - 自动获取用户当前位置，支持IP定位和地理编码",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "user_ip": {
-                            "type": "string",
-                            "description": "用户IP地址（可选，不提供则自动获取）",
-                        }
-                    },
-                    "required": [],
-                },
-            },
-            {
-                "name": "smart_route_planning",
-                "description": "智能路线规划 - 支持地址名称到地址名称的路线规划。例如：'云升科学园到科学城地铁站步行方案'",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "origin": {
-                            "type": "string",
-                            "description": "起点地址名称",
-                        },
-                        "destination": {
-                            "type": "string",
-                            "description": "终点地址名称",
-                        },
-                        "city": {
-                            "type": "string",
-                            "description": "所在城市（可选，默认广州）",
-                        },
-                        "travel_mode": {
-                            "type": "string",
-                            "description": "出行方式：walking(步行)、driving(驾车)、bicycling(骑行)、transit(公交)，默认walking",
-                        },
-                    },
-                    "required": ["origin", "destination"],
-                },
-            },
-            {
-                "name": "smart_find_nearby_places",
-                "description": "附近地点搜索 - 自动定位并搜索附近的地点。例如：'附近有哪些奶茶店'",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "keywords": {
-                            "type": "string",
-                            "description": "搜索关键词，如'奶茶店'、'餐厅'、'超市'、'银行'等",
-                        },
-                        "radius": {
-                            "type": "string",
-                            "description": "搜索半径（米），默认2000米",
-                        },
-                        "user_location": {
-                            "type": "string",
-                            "description": "用户位置坐标（可选，不提供则自动定位）",
-                        },
-                    },
-                    "required": ["keywords"],
-                },
-            },
-            {
-                "name": "smart_find_nearest_place",
-                "description": "最近的XX查找 - 找到最近的某类地点并规划路线。例如：'最近的奶茶店怎么走'、'最近的餐厅在哪里'",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "keywords": {
-                            "type": "string",
-                            "description": "搜索关键词，如'奶茶店'、'餐厅'、'地铁站'、'银行'等",
-                        },
-                        "radius": {
-                            "type": "string",
-                            "description": "搜索半径（米），默认5000米",
-                        },
-                        "user_location": {
-                            "type": "string",
-                            "description": "用户位置坐标（可选，不提供则自动定位）",
-                        },
-                    },
-                    "required": ["keywords"],
-                },
-            },
-            {
-                "name": "smart_find_nearest_subway",
-                "description": "最近地铁站查找 - 找到最近的地铁站并规划路线。例如：'最近的地铁站怎么走'",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "user_location": {
-                            "type": "string",
-                            "description": "用户位置坐标（可选，不提供则自动定位）",
-                        },
-                    },
-                    "required": [],
-                },
-            },
-            {
-                "name": "smart_find_nearby_subway_stations",
-                "description": "附近地铁站列表 - 获取附近所有地铁站信息。例如：'附近有哪些地铁站'",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "radius": {
-                            "type": "string",
-                            "description": "搜索半径（米），默认3000米",
-                        },
-                        "user_location": {
-                            "type": "string",
-                            "description": "用户位置坐标（可选，不提供则自动定位）",
-                        },
-                    },
-                    "required": [],
-                },
-            },
-            {
-                "name": "smart_navigation_to_place",
-                "description": "导航到指定地点 - 智能选择最佳路线并提供多种出行方式对比",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "destination": {
-                            "type": "string",
-                            "description": "目的地名称",
-                        },
-                        "city": {
-                            "type": "string",
-                            "description": "所在城市（可选，默认广州）",
-                        },
-                        "user_location": {
-                            "type": "string",
-                            "description": "用户位置坐标（可选，不提供则自动定位）",
-                        },
-                    },
-                    "required": ["destination"],
-                },
-            },
-            {
-                "name": "smart_compare_routes",
-                "description": "多种出行方式对比 - 比较不同出行方式的时间和距离",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "origin": {
-                            "type": "string",
-                            "description": "起点地址名称",
-                        },
-                        "destination": {
-                            "type": "string",
-                            "description": "终点地址名称",
-                        },
-                        "city": {
-                            "type": "string",
-                            "description": "所在城市（可选，默认广州）",
-                        },
-                    },
-                    "required": ["origin", "destination"],
-                },
-            },
-        ]
+        url = "https://restapi.amap.com/v3/geocode/geo"
+        params = {
+            "address": address,
+            "key": api_key,
+            "source": "py_xiaozhi"
+        }
+        if city:
+            params["city"] = city
+            
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, params=params) as response:
+                data = await response.json()
+                
+        if data.get("status") != "1":
+            error_msg = f"地理编码失败: {data.get('info', data.get('infocode'))}"
+            logger.error(f"[AmapTools] {error_msg}")
+            return json.dumps({"success": False, "message": error_msg}, ensure_ascii=False)
+            
+        geocodes = data.get("geocodes", [])
+        result_data = []
         
-        # 合并所有工具
-        return atomic_tools + smart_tools
+        for geo in geocodes:
+            result_data.append({
+                "country": geo.get("country"),
+                "province": geo.get("province"),
+                "city": geo.get("city"),
+                "citycode": geo.get("citycode"),
+                "district": geo.get("district"),
+                "street": geo.get("street"),
+                "number": geo.get("number"),
+                "adcode": geo.get("adcode"),
+                "location": geo.get("location"),
+                "level": geo.get("level"),
+                "formatted_address": geo.get("formatted_address")
+            })
+            
+        result = {
+            "success": True,
+            "data": result_data
+        }
+        
+        logger.info(f"[AmapTools] 地理编码成功: {address}")
+        return json.dumps(result, ensure_ascii=False, indent=2)
+        
+    except KeyError as e:
+        error_msg = f"缺少必需参数: {e}"
+        logger.error(f"[AmapTools] {error_msg}")
+        return json.dumps({"success": False, "message": error_msg}, ensure_ascii=False)
+    except Exception as e:
+        error_msg = f"地理编码失败: {str(e)}"
+        logger.error(f"[AmapTools] {error_msg}", exc_info=True)
+        return json.dumps({"success": False, "message": error_msg}, ensure_ascii=False)
 
-    async def execute_tool(
-        self, tool_name: str, arguments: Dict[str, Any]
-    ) -> Dict[str, Any]:
-        """
-        执行工具.
-        """
-        try:
-            # 原子工具
-            if tool_name == "maps_regeocode":
-                return await self.manager.regeocode(arguments["location"])
 
-            elif tool_name == "maps_geo":
-                return await self.manager.geocode(
-                    arguments["address"], arguments.get("city")
-                )
+async def maps_ip_location(args: Dict[str, Any]) -> str:
+    """根据IP地址获取位置信息.
+    
+    Args:
+        args: 包含以下参数的字典
+            - ip: IP地址
+            
+    Returns:
+        str: JSON格式的位置信息
+    """
+    try:
+        ip = args["ip"]
+        api_key = get_amap_api_key()
+        
+        url = "https://restapi.amap.com/v3/ip"
+        params = {
+            "ip": ip,
+            "key": api_key,
+            "source": "py_xiaozhi"
+        }
+        
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, params=params) as response:
+                data = await response.json()
+                
+        if data.get("status") != "1":
+            error_msg = f"IP定位失败: {data.get('info', data.get('infocode'))}"
+            logger.error(f"[AmapTools] {error_msg}")
+            return json.dumps({"success": False, "message": error_msg}, ensure_ascii=False)
+            
+        result = {
+            "success": True,
+            "data": {
+                "province": data.get("province"),
+                "city": data.get("city"),
+                "adcode": data.get("adcode"),
+                "rectangle": data.get("rectangle")
+            }
+        }
+        
+        logger.info(f"[AmapTools] IP定位成功: {ip}")
+        return json.dumps(result, ensure_ascii=False, indent=2)
+        
+    except KeyError as e:
+        error_msg = f"缺少必需参数: {e}"
+        logger.error(f"[AmapTools] {error_msg}")
+        return json.dumps({"success": False, "message": error_msg}, ensure_ascii=False)
+    except Exception as e:
+        error_msg = f"IP定位失败: {str(e)}"
+        logger.error(f"[AmapTools] {error_msg}", exc_info=True)
+        return json.dumps({"success": False, "message": error_msg}, ensure_ascii=False)
 
-            elif tool_name == "maps_ip_location":
-                return await self.manager.ip_location(arguments["ip"])
 
-            elif tool_name == "maps_weather":
-                return await self.manager.weather(arguments["city"])
+async def maps_weather(args: Dict[str, Any]) -> str:
+    """查询城市天气信息.
+    
+    Args:
+        args: 包含以下参数的字典
+            - city: 城市名称或adcode
+            
+    Returns:
+        str: JSON格式的天气信息
+    """
+    try:
+        city = args["city"]
+        api_key = get_amap_api_key()
+        
+        url = "https://restapi.amap.com/v3/weather/weatherInfo"
+        params = {
+            "city": city,
+            "key": api_key,
+            "source": "py_xiaozhi",
+            "extensions": "all"
+        }
+        
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, params=params) as response:
+                data = await response.json()
+                
+        if data.get("status") != "1":
+            error_msg = f"天气查询失败: {data.get('info', data.get('infocode'))}"
+            logger.error(f"[AmapTools] {error_msg}")
+            return json.dumps({"success": False, "message": error_msg}, ensure_ascii=False)
+            
+        forecasts = data.get("forecasts", [])
+        if not forecasts:
+            error_msg = "未找到天气数据"
+            return json.dumps({"success": False, "message": error_msg}, ensure_ascii=False)
+            
+        forecast = forecasts[0]
+        result = {
+            "success": True,
+            "data": {
+                "city": forecast.get("city"),
+                "reporttime": forecast.get("reporttime"),
+                "casts": forecast.get("casts", [])
+            }
+        }
+        
+        logger.info(f"[AmapTools] 天气查询成功: {city}")
+        return json.dumps(result, ensure_ascii=False, indent=2)
+        
+    except KeyError as e:
+        error_msg = f"缺少必需参数: {e}"
+        logger.error(f"[AmapTools] {error_msg}")
+        return json.dumps({"success": False, "message": error_msg}, ensure_ascii=False)
+    except Exception as e:
+        error_msg = f"天气查询失败: {str(e)}"
+        logger.error(f"[AmapTools] {error_msg}", exc_info=True)
+        return json.dumps({"success": False, "message": error_msg}, ensure_ascii=False)
 
-            elif tool_name == "maps_search_detail":
-                return await self.manager.search_detail(arguments["id"])
 
-            elif tool_name == "maps_direction_walking":
-                return await self.manager.direction_walking(
-                    arguments["origin"], arguments["destination"]
-                )
+async def maps_direction_walking(args: Dict[str, Any]) -> str:
+    """步行路径规划.
+    
+    Args:
+        args: 包含以下参数的字典
+            - origin: 出发点经纬度（格式：经度,纬度）
+            - destination: 目的地经纬度（格式：经度,纬度）
+            
+    Returns:
+        str: JSON格式的步行路径信息
+    """
+    try:
+        origin = args["origin"]
+        destination = args["destination"]
+        api_key = get_amap_api_key()
+        
+        url = "https://restapi.amap.com/v3/direction/walking"
+        params = {
+            "origin": origin,
+            "destination": destination,
+            "key": api_key,
+            "source": "py_xiaozhi"
+        }
+        
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, params=params) as response:
+                data = await response.json()
+                
+        if data.get("status") != "1":
+            error_msg = f"步行路径规划失败: {data.get('info', data.get('infocode'))}"
+            logger.error(f"[AmapTools] {error_msg}")
+            return json.dumps({"success": False, "message": error_msg}, ensure_ascii=False)
+            
+        route = data.get("route", {})
+        paths = route.get("paths", [])
+        
+        result_paths = []
+        for path in paths:
+            steps_data = []
+            for step in path.get("steps", []):
+                steps_data.append({
+                    "instruction": step.get("instruction"),
+                    "road": step.get("road"),
+                    "distance": step.get("distance"),
+                    "orientation": step.get("orientation"),
+                    "duration": step.get("duration")
+                })
+                
+            result_paths.append({
+                "distance": path.get("distance"),
+                "duration": path.get("duration"),
+                "steps": steps_data
+            })
+            
+        result = {
+            "success": True,
+            "data": {
+                "origin": route.get("origin"),
+                "destination": route.get("destination"),
+                "paths": result_paths
+            }
+        }
+        
+        logger.info(f"[AmapTools] 步行路径规划成功: {origin} -> {destination}")
+        return json.dumps(result, ensure_ascii=False, indent=2)
+        
+    except KeyError as e:
+        error_msg = f"缺少必需参数: {e}"
+        logger.error(f"[AmapTools] {error_msg}")
+        return json.dumps({"success": False, "message": error_msg}, ensure_ascii=False)
+    except Exception as e:
+        error_msg = f"步行路径规划失败: {str(e)}"
+        logger.error(f"[AmapTools] {error_msg}", exc_info=True)
+        return json.dumps({"success": False, "message": error_msg}, ensure_ascii=False)
 
-            elif tool_name == "maps_direction_driving":
-                return await self.manager.direction_driving(
-                    arguments["origin"], arguments["destination"]
-                )
 
-            elif tool_name == "maps_bicycling":
-                return await self.manager.direction_bicycling(
-                    arguments["origin"], arguments["destination"]
-                )
+async def maps_direction_driving(args: Dict[str, Any]) -> str:
+    """驾车路径规划.
+    
+    Args:
+        args: 包含以下参数的字典
+            - origin: 出发点经纬度（格式：经度,纬度）
+            - destination: 目的地经纬度（格式：经度,纬度）
+            
+    Returns:
+        str: JSON格式的驾车路径信息
+    """
+    try:
+        origin = args["origin"]
+        destination = args["destination"]
+        api_key = get_amap_api_key()
+        
+        url = "https://restapi.amap.com/v3/direction/driving"
+        params = {
+            "origin": origin,
+            "destination": destination,
+            "key": api_key,
+            "source": "py_xiaozhi"
+        }
+        
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, params=params) as response:
+                data = await response.json()
+                
+        if data.get("status") != "1":
+            error_msg = f"驾车路径规划失败: {data.get('info', data.get('infocode'))}"
+            logger.error(f"[AmapTools] {error_msg}")
+            return json.dumps({"success": False, "message": error_msg}, ensure_ascii=False)
+            
+        route = data.get("route", {})
+        paths = route.get("paths", [])
+        
+        result_paths = []
+        for path in paths:
+            steps_data = []
+            for step in path.get("steps", []):
+                steps_data.append({
+                    "instruction": step.get("instruction"),
+                    "road": step.get("road"),
+                    "distance": step.get("distance"),
+                    "orientation": step.get("orientation"),
+                    "duration": step.get("duration")
+                })
+                
+            result_paths.append({
+                "distance": path.get("distance"),
+                "duration": path.get("duration"),
+                "tolls": path.get("tolls"),
+                "toll_distance": path.get("toll_distance"),
+                "steps": steps_data
+            })
+            
+        result = {
+            "success": True,
+            "data": {
+                "origin": route.get("origin"),
+                "destination": route.get("destination"),
+                "taxi_cost": route.get("taxi_cost"),
+                "paths": result_paths
+            }
+        }
+        
+        logger.info(f"[AmapTools] 驾车路径规划成功: {origin} -> {destination}")
+        return json.dumps(result, ensure_ascii=False, indent=2)
+        
+    except KeyError as e:
+        error_msg = f"缺少必需参数: {e}"
+        logger.error(f"[AmapTools] {error_msg}")
+        return json.dumps({"success": False, "message": error_msg}, ensure_ascii=False)
+    except Exception as e:
+        error_msg = f"驾车路径规划失败: {str(e)}"
+        logger.error(f"[AmapTools] {error_msg}", exc_info=True)
+        return json.dumps({"success": False, "message": error_msg}, ensure_ascii=False)
 
-            elif tool_name == "maps_direction_transit_integrated":
-                return await self.manager.direction_transit(
-                    arguments["origin"],
-                    arguments["destination"],
-                    arguments["city"],
-                    arguments["cityd"],
-                )
 
-            elif tool_name == "maps_distance":
-                return await self.manager.distance(
-                    arguments["origins"],
-                    arguments["destination"],
-                    arguments.get("type", "1"),
-                )
+async def maps_text_search(args: Dict[str, Any]) -> str:
+    """关键词搜索POI.
+    
+    Args:
+        args: 包含以下参数的字典
+            - keywords: 搜索关键词
+            - city: 查询城市（可选）
+            - types: POI类型（可选）
+            
+    Returns:
+        str: JSON格式的搜索结果
+    """
+    try:
+        keywords = args["keywords"]
+        city = args.get("city", "")
+        types = args.get("types", "")
+        api_key = get_amap_api_key()
+        
+        url = "https://restapi.amap.com/v3/place/text"
+        params = {
+            "keywords": keywords,
+            "key": api_key,
+            "source": "py_xiaozhi",
+            "citylimit": "false"
+        }
+        if city:
+            params["city"] = city
+        if types:
+            params["types"] = types
+            
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, params=params) as response:
+                data = await response.json()
+                
+        if data.get("status") != "1":
+            error_msg = f"搜索失败: {data.get('info', data.get('infocode'))}"
+            logger.error(f"[AmapTools] {error_msg}")
+            return json.dumps({"success": False, "message": error_msg}, ensure_ascii=False)
+            
+        pois = data.get("pois", [])
+        result_pois = []
+        
+        for poi in pois:
+            result_pois.append({
+                "id": poi.get("id"),
+                "name": poi.get("name"),
+                "address": poi.get("address"),
+                "location": poi.get("location"),
+                "typecode": poi.get("typecode"),
+                "type": poi.get("type"),
+                "tel": poi.get("tel"),
+                "distance": poi.get("distance")
+            })
+            
+        result = {
+            "success": True,
+            "data": {
+                "count": data.get("count"),
+                "pois": result_pois
+            }
+        }
+        
+        logger.info(f"[AmapTools] 搜索成功: {keywords}, 结果数量: {len(result_pois)}")
+        return json.dumps(result, ensure_ascii=False, indent=2)
+        
+    except KeyError as e:
+        error_msg = f"缺少必需参数: {e}"
+        logger.error(f"[AmapTools] {error_msg}")
+        return json.dumps({"success": False, "message": error_msg}, ensure_ascii=False)
+    except Exception as e:
+        error_msg = f"搜索失败: {str(e)}"
+        logger.error(f"[AmapTools] {error_msg}", exc_info=True)
+        return json.dumps({"success": False, "message": error_msg}, ensure_ascii=False)
 
-            elif tool_name == "maps_text_search":
-                return await self.manager.text_search(
-                    arguments["keywords"],
-                    arguments.get("city", ""),
-                    arguments.get("types", ""),
-                )
 
-            elif tool_name == "maps_around_search":
-                return await self.manager.around_search(
-                    arguments["location"],
-                    arguments.get("radius", "1000"),
-                    arguments.get("keywords", ""),
-                )
+async def maps_around_search(args: Dict[str, Any]) -> str:
+    """周边搜索POI.
+    
+    Args:
+        args: 包含以下参数的字典
+            - location: 中心点经纬度（格式：经度,纬度）
+            - keywords: 搜索关键词（可选）
+            - radius: 搜索半径，单位米（可选，默认1000）
+            
+    Returns:
+        str: JSON格式的周边搜索结果
+    """
+    try:
+        location = args["location"]
+        keywords = args.get("keywords", "")
+        radius = args.get("radius", "1000")
+        api_key = get_amap_api_key()
+        
+        url = "https://restapi.amap.com/v3/place/around"
+        params = {
+            "location": location,
+            "radius": radius,
+            "key": api_key,
+            "source": "py_xiaozhi"
+        }
+        if keywords:
+            params["keywords"] = keywords
+            
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, params=params) as response:
+                data = await response.json()
+                
+        if data.get("status") != "1":
+            error_msg = f"周边搜索失败: {data.get('info', data.get('infocode'))}"
+            logger.error(f"[AmapTools] {error_msg}")
+            return json.dumps({"success": False, "message": error_msg}, ensure_ascii=False)
+            
+        pois = data.get("pois", [])
+        result_pois = []
+        
+        for poi in pois:
+            result_pois.append({
+                "id": poi.get("id"),
+                "name": poi.get("name"),
+                "address": poi.get("address"),
+                "location": poi.get("location"),
+                "typecode": poi.get("typecode"),
+                "type": poi.get("type"),
+                "tel": poi.get("tel"),
+                "distance": poi.get("distance")
+            })
+            
+        result = {
+            "success": True,
+            "data": {
+                "count": data.get("count"),
+                "pois": result_pois
+            }
+        }
+        
+        logger.info(f"[AmapTools] 周边搜索成功: {location}, 结果数量: {len(result_pois)}")
+        return json.dumps(result, ensure_ascii=False, indent=2)
+        
+    except KeyError as e:
+        error_msg = f"缺少必需参数: {e}"
+        logger.error(f"[AmapTools] {error_msg}")
+        return json.dumps({"success": False, "message": error_msg}, ensure_ascii=False)
+    except Exception as e:
+        error_msg = f"周边搜索失败: {str(e)}"
+        logger.error(f"[AmapTools] {error_msg}", exc_info=True)
+        return json.dumps({"success": False, "message": error_msg}, ensure_ascii=False)
 
-            # 智能组合工具
-            elif tool_name == "smart_get_current_location":
-                return await self.manager.get_current_location(
-                    arguments.get("user_ip")
-                )
 
-            elif tool_name == "smart_route_planning":
-                return await self.manager.route_planning(
-                    arguments["origin"],
-                    arguments["destination"],
-                    arguments.get("city", "广州"),
-                    arguments.get("travel_mode", "walking")
-                )
+async def maps_search_detail(args: Dict[str, Any]) -> str:
+    """查询POI详细信息.
+    
+    Args:
+        args: 包含以下参数的字典
+            - id: POI的ID
+            
+    Returns:
+        str: JSON格式的详细信息
+    """
+    try:
+        poi_id = args["id"]
+        api_key = get_amap_api_key()
+        
+        url = "https://restapi.amap.com/v3/place/detail"
+        params = {
+            "id": poi_id,
+            "key": api_key,
+            "source": "py_xiaozhi"
+        }
+        
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, params=params) as response:
+                data = await response.json()
+                
+        if data.get("status") != "1":
+            error_msg = f"POI详情查询失败: {data.get('info', data.get('infocode'))}"
+            logger.error(f"[AmapTools] {error_msg}")
+            return json.dumps({"success": False, "message": error_msg}, ensure_ascii=False)
+            
+        pois = data.get("pois", [])
+        if not pois:
+            error_msg = "未找到POI详情"
+            return json.dumps({"success": False, "message": error_msg}, ensure_ascii=False)
+            
+        poi = pois[0]
+        biz_ext = poi.get("biz_ext", {})
+        
+        result = {
+            "success": True,
+            "data": {
+                "id": poi.get("id"),
+                "name": poi.get("name"),
+                "location": poi.get("location"),
+                "address": poi.get("address"),
+                "business_area": poi.get("business_area"),
+                "cityname": poi.get("cityname"),
+                "type": poi.get("type"),
+                "alias": poi.get("alias"),
+                "tel": poi.get("tel"),
+                "website": poi.get("website"),
+                "email": poi.get("email"),
+                "postcode": poi.get("postcode"),
+                "rating": biz_ext.get("rating"),
+                "cost": biz_ext.get("cost"),
+                "opentime": biz_ext.get("opentime")
+            }
+        }
+        
+        logger.info(f"[AmapTools] POI详情查询成功: {poi_id}")
+        return json.dumps(result, ensure_ascii=False, indent=2)
+        
+    except KeyError as e:
+        error_msg = f"缺少必需参数: {e}"
+        logger.error(f"[AmapTools] {error_msg}")
+        return json.dumps({"success": False, "message": error_msg}, ensure_ascii=False)
+    except Exception as e:
+        error_msg = f"POI详情查询失败: {str(e)}"
+        logger.error(f"[AmapTools] {error_msg}", exc_info=True)
+        return json.dumps({"success": False, "message": error_msg}, ensure_ascii=False)
 
-            elif tool_name == "smart_find_nearby_places":
-                return await self.manager.find_nearby_places(
-                    arguments["keywords"],
-                    arguments.get("radius", "2000"),
-                    arguments.get("user_location")
-                )
 
-            elif tool_name == "smart_find_nearest_place":
-                return await self.manager.find_nearest_place(
-                    arguments["keywords"],
-                    arguments.get("user_location"),
-                    arguments.get("radius", "5000")
-                )
-
-            elif tool_name == "smart_find_nearest_subway":
-                return await self.manager.find_nearest_subway(
-                    arguments.get("user_location")
-                )
-
-            elif tool_name == "smart_find_nearby_subway_stations":
-                return await self.manager.find_nearby_subway_stations(
-                    arguments.get("user_location"),
-                    arguments.get("radius", "3000")
-                )
-
-            elif tool_name == "smart_navigation_to_place":
-                return await self.manager.navigation_to_place(
-                    arguments["destination"],
-                    arguments.get("city", "广州"),
-                    arguments.get("user_location")
-                )
-
-            elif tool_name == "smart_compare_routes":
-                return await self.manager.compare_routes(
-                    arguments["origin"],
-                    arguments["destination"],
-                    arguments.get("city", "广州")
-                )
-
-            else:
-                return {"success": False, "error": f"Unknown tool: {tool_name}"}
-
-        except Exception as e:
-            return {"success": False, "error": f"Tool execution failed: {str(e)}"}
-
-    async def close(self):
-        """
-        关闭资源.
-        """
-        await self.manager.close()
+async def maps_distance(args: Dict[str, Any]) -> str:
+    """距离测量.
+    
+    Args:
+        args: 包含以下参数的字典
+            - origins: 起点经纬度，可多个，用分号分隔
+            - destination: 终点经纬度
+            - type: 距离测量类型（可选，默认1：驾车距离，0：直线距离，3：步行距离）
+            
+    Returns:
+        str: JSON格式的距离信息
+    """
+    try:
+        origins = args["origins"]
+        destination = args["destination"]
+        distance_type = args.get("type", "1")
+        api_key = get_amap_api_key()
+        
+        url = "https://restapi.amap.com/v3/distance"
+        params = {
+            "origins": origins,
+            "destination": destination,
+            "type": distance_type,
+            "key": api_key,
+            "source": "py_xiaozhi"
+        }
+        
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, params=params) as response:
+                data = await response.json()
+                
+        if data.get("status") != "1":
+            error_msg = f"距离测量失败: {data.get('info', data.get('infocode'))}"
+            logger.error(f"[AmapTools] {error_msg}")
+            return json.dumps({"success": False, "message": error_msg}, ensure_ascii=False)
+            
+        results = data.get("results", [])
+        result_data = []
+        
+        for result_item in results:
+            result_data.append({
+                "origin_id": result_item.get("origin_id"),
+                "dest_id": result_item.get("dest_id"),
+                "distance": result_item.get("distance"),
+                "duration": result_item.get("duration")
+            })
+            
+        result = {
+            "success": True,
+            "data": {
+                "results": result_data
+            }
+        }
+        
+        logger.info(f"[AmapTools] 距离测量成功: {origins} -> {destination}")
+        return json.dumps(result, ensure_ascii=False, indent=2)
+        
+    except KeyError as e:
+        error_msg = f"缺少必需参数: {e}"
+        logger.error(f"[AmapTools] {error_msg}")
+        return json.dumps({"success": False, "message": error_msg}, ensure_ascii=False)
+    except Exception as e:
+        error_msg = f"距离测量失败: {str(e)}"
+        logger.error(f"[AmapTools] {error_msg}", exc_info=True)
+        return json.dumps({"success": False, "message": error_msg}, ensure_ascii=False)

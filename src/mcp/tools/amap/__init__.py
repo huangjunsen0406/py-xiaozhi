@@ -1,48 +1,8 @@
+"""高德地图MCP工具模块.
+
+提供高德地图API功能的MCP工具集，包括地理编码、路径规划、POI搜索、天气查询等
 """
-高德地图 MCP 工具模块.
-"""
 
-from .client import AmapClient
-from .manager import AmapManager, AmapToolsManager, get_amap_tools_manager
-from .models import *
-from .tools import AmapTools
+from .manager import get_amap_manager
 
-# 硬编码的API Key (临时解决方案)
-AMAP_API_KEY = "your_api_key_here"
-
-# 全局管理器实例
-_amap_manager = None
-
-
-def get_amap_manager():
-    """
-    获取高德地图管理器实例 (兼容性保持).
-    """
-    return get_amap_tools_manager()
-
-
-__all__ = [
-    "AmapTools",
-    "AmapManager",
-    "AmapClient",
-    "AmapToolsManager",
-    "get_amap_manager",
-    "get_amap_tools_manager",
-    "Location",
-    "AddressComponent",
-    "GeocodeResult",
-    "POI",
-    "RouteStep",
-    "RoutePath",
-    "RouteResult",
-    "WeatherInfo",
-    "WeatherForecast",
-    "DistanceResult",
-    "IPLocationResult",
-    "BusLine",
-    "TransitSegment",
-    "TransitRoute",
-    "TransitResult",
-    "SearchSuggestion",
-    "SearchResult",
-]
+__all__ = ["get_amap_manager"]

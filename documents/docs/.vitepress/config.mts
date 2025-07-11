@@ -12,7 +12,7 @@ export default defineConfig({
       {
         text: '指南',
         items: [
-          { text: '文档目录', link: '/guide/文档目录' },
+          { text: '文档目录（重要）', link: '/guide/文档目录' },
           { text: '系统依赖安装', link: '/guide/系统依赖安装' },
           { text: '配置说明', link: '/guide/配置说明' },
           { text: '语音交互模式说明', link: '/guide/语音交互模式说明' },

@@ -19,14 +19,14 @@ from .models import (
 )
 from .professional_data import (
     GAN,
-    ZHI,
     GAN_WUXING,
-    ZHI_WUXING,
     GAN_YINYANG,
-    ZHI_YINYANG,
-    SHENG_XIAO,
-    ZHI_CANG_GAN,
     GANZHI_60,
+    SHENG_XIAO,
+    ZHI,
+    ZHI_CANG_GAN,
+    ZHI_WUXING,
+    ZHI_YINYANG,
 )
 
 
@@ -74,9 +74,12 @@ class BaziEngine:
             dt = pendulum.parse(iso_date)
 
             # 智能时区处理
-            if dt.timezone_name is None:
-                # 如果没有时区信息，假设为北京时间
-                dt = dt.in_timezone("Asia/Shanghai")
+            if dt.timezone_name == "UTC":
+                # 如果pendulum解析为UTC（说明原始输入没有时区），将其当作北京时间处理
+                dt = dt.replace(tzinfo=pendulum.timezone("Asia/Shanghai"))
+            elif dt.timezone_name is None:
+                # 如果没有时区信息，将其设置为北京时间
+                dt = dt.replace(tzinfo=pendulum.timezone("Asia/Shanghai"))
             elif dt.timezone_name != "Asia/Shanghai":
                 # 转换为北京时间
                 dt = dt.in_timezone("Asia/Shanghai")
