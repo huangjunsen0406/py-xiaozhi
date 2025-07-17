@@ -90,6 +90,15 @@ def detect_cameras():
     current_camera_config = config_manager.get_config("CAMERA", {})
     logger.info(f"当前相机配置: {current_camera_config}")
 
+    # 显示当前配置
+    if current_camera_config:
+        print("当前摄像头配置:")
+        print(f"  - 索引: {current_camera_config.get('camera_index', '未设置')}")
+        print(f"  - 分辨率: {current_camera_config.get('frame_width', '未设置')}x{current_camera_config.get('frame_height', '未设置')}")
+        print(f"  - 帧率: {current_camera_config.get('fps', '未设置')}")
+        print(f"  - VL模型: {current_camera_config.get('models', '未设置')}")
+        print("")
+
     # 存储找到的设备
     camera_devices = []
 
@@ -131,6 +140,12 @@ def detect_cameras():
                 print(f"  - 支持分辨率: {resolutions_str}")
                 print(f"  - 帧率: {capabilities['fps']}")
                 print(f"  - 后端: {capabilities['backend']}")
+                
+                # 标记当前配置使用的摄像头
+                current_index = current_camera_config.get('camera_index')
+                if current_index == i:
+                    print(f"  - 📹 当前配置使用的摄像头")
+                
                 print("")
 
                 # 添加到设备列表
@@ -138,18 +153,45 @@ def detect_cameras():
                     {"index": i, "name": device_name, "capabilities": capabilities}
                 )
 
-                # 显示预览画面
-                print(f"正在显示设备 {i} 的预览画面，按 'q' 键继续...")
-                preview_start = time.time()
-
-                while time.time() - preview_start < 3:  # 预览3秒
-                    ret, frame = cap.read()
-                    if ret:
-                        cv2.imshow(f"Camera {i} Preview", frame)
-                        if cv2.waitKey(1) & 0xFF == ord("q"):
+                # 测试摄像头功能
+                print(f"正在测试设备 {i} 的摄像头功能...")
+                try:
+                    # 快速测试 - 读取几帧
+                    test_frames = 0
+                    start_time = time.time()
+                    
+                    while test_frames < 10 and time.time() - start_time < 2:
+                        ret, frame = cap.read()
+                        if ret:
+                            test_frames += 1
+                        else:
                             break
+                    
+                    if test_frames >= 5:
+                        print(f"  ✓ 摄像头功能正常 (测试读取 {test_frames} 帧)")
+                    else:
+                        print(f"  ⚠ 摄像头功能可能异常 (仅读取 {test_frames} 帧)")
+                        
+                except Exception as e:
+                    print(f"  ✗ 摄像头功能测试失败: {e}")
 
-                cv2.destroyAllWindows()
+                # 询问是否显示预览
+                print(f"是否显示设备 {i} 的预览画面？(y/n，默认n): ", end="")
+                show_preview = input().strip().lower()
+                
+                if show_preview == 'y':
+                    print(f"正在显示设备 {i} 的预览画面，按 'q' 键或等待3秒继续...")
+                    preview_start = time.time()
+
+                    while time.time() - preview_start < 3:
+                        ret, frame = cap.read()
+                        if ret:
+                            cv2.imshow(f"Camera {i} Preview", frame)
+                            if cv2.waitKey(1) & 0xFF == ord("q"):
+                                break
+
+                    cv2.destroyAllWindows()
+                
                 cap.release()
 
             else:
@@ -220,35 +262,67 @@ def detect_cameras():
     # 生成配置文件示例
     print("\n===== 配置文件示例 =====\n")
 
-    new_camera_config = {
-        "camera_index": recommended_camera["index"],
-        "frame_width": r_width,
-        "frame_height": r_height,
-        "fps": recommended_camera["capabilities"]["fps"],
-        "Loacl_VL_url": vl_url,  # 保留原有值
-        "VLapi_key": vl_api_key,  # 保留原有值
-        "models": model,  # 保留原有值
-    }
+    if recommended_camera:
+        new_camera_config = {
+            "camera_index": recommended_camera["index"],
+            "frame_width": r_width,
+            "frame_height": r_height,
+            "fps": recommended_camera["capabilities"]["fps"],
+            "Local_VL_url": vl_url,  # 保留原有值
+            "VLapi_key": vl_api_key,  # 保留原有值
+            "models": model,  # 保留原有值
+        }
 
-    print(json.dumps(new_camera_config, indent=2, ensure_ascii=False))
+        print("推荐的摄像头配置:")
+        print(json.dumps(new_camera_config, indent=2, ensure_ascii=False))
 
-    # 询问是否更新配置文件
-    print("\n是否要更新配置文件中的摄像头配置？(y/n)")
-    choice = input().strip().lower()
+        # 比较配置变化
+        print("\n===== 配置变化对比 =====\n")
+        current_index = current_camera_config.get('camera_index')
+        current_width = current_camera_config.get('frame_width')
+        current_height = current_camera_config.get('frame_height')
+        current_fps = current_camera_config.get('fps')
+        
+        changes = []
+        if current_index != recommended_camera["index"]:
+            changes.append(f"摄像头索引: {current_index} → {recommended_camera['index']}")
+        if current_width != r_width or current_height != r_height:
+            changes.append(f"分辨率: {current_width}x{current_height} → {r_width}x{r_height}")
+        if current_fps != recommended_camera["capabilities"]["fps"]:
+            changes.append(f"帧率: {current_fps} → {recommended_camera['capabilities']['fps']}")
+        
+        if changes:
+            print("检测到以下配置变化:")
+            for change in changes:
+                print(f"  - {change}")
+        else:
+            print("推荐配置与当前配置相同，无需更新")
 
-    if choice == "y":
-        try:
-            # 使用ConfigManager更新配置
-            success = config_manager.update_config("CAMERA", new_camera_config)
+        # 询问是否更新配置文件
+        if changes:
+            print("\n是否要更新配置文件中的摄像头配置？(y/n): ", end="")
+            choice = input().strip().lower()
 
-            if success:
-                print("\n摄像头配置已成功更新到config.json!")
+            if choice == "y":
+                try:
+                    # 使用ConfigManager更新配置
+                    success = config_manager.update_config("CAMERA", new_camera_config)
+
+                    if success:
+                        print("\n✓ 摄像头配置已成功更新到config.json!")
+                        print("\n===== 最新配置 =====\n")
+                        updated_config = config_manager.get_config("CAMERA", {})
+                        print(json.dumps(updated_config, indent=2, ensure_ascii=False))
+                    else:
+                        print("\n✗ 更新摄像头配置失败!")
+
+                except Exception as e:
+                    logger.error(f"更新配置时出错: {e}")
+                    print(f"\n✗ 更新配置时出错: {e}")
             else:
-                print("\n更新摄像头配置失败!")
-
-        except Exception as e:
-            logger.error(f"更新配置时出错: {e}")
-            print(f"\n更新配置时出错: {e}")
+                print("\n配置未更新")
+    else:
+        print("未找到推荐的摄像头配置")
 
     return camera_devices
 
