@@ -26,10 +26,11 @@ def handle_sigint(signum, frame):
     app = Application.get_instance()
     if app:
         # 使用事件循环运行shutdown
-        loop = asyncio.get_event_loop()
-        if loop and loop.is_running():
+        try:
+            loop = asyncio.get_running_loop()
             loop.create_task(app.shutdown())
-        else:
+        except RuntimeError:
+            # 没有运行中的事件循环，直接退出
             sys.exit(0)
 
 
@@ -95,13 +96,11 @@ class Application:
         self.running = False
         self._main_tasks: Set[asyncio.Task] = set()
 
-        # 事件队列
-        self.audio_input_queue: asyncio.Queue = asyncio.Queue()
-        self.audio_output_queue: asyncio.Queue = asyncio.Queue()
-        self.command_queue: asyncio.Queue = asyncio.Queue()
+        # 命令队列 - 延迟到事件循环运行时初始化
+        self.command_queue: asyncio.Queue = None
 
-        # 任务取消事件
-        self._shutdown_event = asyncio.Event()
+        # 任务取消事件 - 延迟到事件循环运行时初始化
+        self._shutdown_event = None
 
         # 保存主线程的事件循环（稍后在run方法中设置）
         self._main_loop = None
@@ -160,9 +159,20 @@ class Application:
             else:
                 logger.info("使用已存在的QApplication实例")
 
-            # 创建qasync事件循环
+            # 确保清理之前的事件循环
+            try:
+                current_loop = asyncio.get_event_loop()
+                if current_loop and not current_loop.is_closed():
+                    logger.debug("发现现有事件循环，准备关闭")
+                    # 不强制关闭，让它自然完成
+            except RuntimeError:
+                # 没有现有循环，这是正常的
+                pass
+
+            # 创建新的qasync事件循环
             loop = qasync.QEventLoop(app)
             asyncio.set_event_loop(loop)
+            logger.info("已设置qasync事件循环")
 
             # 在qasync环境中运行应用程序
             with loop:
@@ -200,6 +210,14 @@ class Application:
             logger.error(f"CLI应用程序异常退出: {e}", exc_info=True)
             return 1
 
+    def _initialize_async_objects(self):
+        """
+        初始化异步对象 - 必须在事件循环运行后调用.
+        """
+        logger.debug("初始化异步对象")
+        self.command_queue = asyncio.Queue()
+        self._shutdown_event = asyncio.Event()
+
     async def _run_application_core(self, protocol: str, mode: str):
         """
         应用程序核心运行逻辑.
@@ -209,6 +227,9 @@ class Application:
 
             # 保存主线程的事件循环
             self._main_loop = asyncio.get_running_loop()
+
+            # 初始化异步对象 - 必须在事件循环运行后创建
+            self._initialize_async_objects()
 
             # 初始化组件
             await self._initialize_components(mode, protocol)
@@ -445,6 +466,11 @@ class Application:
         """
         while self.running:
             try:
+                # 检查队列是否已初始化
+                if self.command_queue is None:
+                    await asyncio.sleep(0.1)
+                    continue
+                    
                 # 等待命令，超时后继续循环检查running状态
                 try:
                     command = await asyncio.wait_for(
@@ -490,6 +516,11 @@ class Application:
         """
         调度命令到命令队列.
         """
+        # 检查队列是否已初始化
+        if self.command_queue is None:
+            logger.warning("命令队列未初始化，丢弃命令")
+            return
+            
         try:
             # 使用 put_nowait 避免阻塞，如果队列满则记录警告
             self.command_queue.put_nowait(command)
@@ -1011,7 +1042,8 @@ class Application:
         self.running = False
 
         # 设置关闭事件
-        self._shutdown_event.set()
+        if self._shutdown_event is not None:
+            self._shutdown_event.set()
 
         try:
             # 2. 关闭唤醒词检测器
@@ -1054,8 +1086,6 @@ class Application:
             # 7. 清理队列
             try:
                 for q in [
-                    self.audio_input_queue,
-                    self.audio_output_queue,
                     self.command_queue,
                 ]:
                     while not q.empty():
