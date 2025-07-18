@@ -53,6 +53,12 @@ class ConfigManager:
                 "description": "显示/隐藏窗口",
             },
         },
+        "GPIO": {
+            "button_pin": 6,
+            "led_pin": 5,
+            "pull_up": True,
+            "debounce_time": 0.05,
+        },
     }
 
     def __new__(cls):
@@ -172,11 +178,7 @@ class ConfigManager:
         """
         result = default.copy()
         for key, value in custom.items():
-            if (
-                key in result
-                and isinstance(result[key], dict)
-                and isinstance(value, dict)
-            ):
+            if key in result and isinstance(result[key], dict) and isinstance(value, dict):
                 result[key] = ConfigManager._merge_configs(result[key], value)
             else:
                 result[key] = value
@@ -250,9 +252,7 @@ class ConfigManager:
                 # 从efuse.json获取MAC地址作为DEVICE_ID
                 mac_address = device_fingerprint.get_mac_address_from_efuse()
                 if mac_address:
-                    success = self.update_config(
-                        "SYSTEM_OPTIONS.DEVICE_ID", mac_address
-                    )
+                    success = self.update_config("SYSTEM_OPTIONS.DEVICE_ID", mac_address)
                     if success:
                         logger.info(f"从efuse.json获取DEVICE_ID: {mac_address}")
                     else:
@@ -268,8 +268,7 @@ class ConfigManager:
                         )
                         if success:
                             logger.info(
-                                f"使用指纹中的MAC地址作为DEVICE_ID: "
-                                f"{mac_from_fingerprint}"
+                                f"使用指纹中的MAC地址作为DEVICE_ID: " f"{mac_from_fingerprint}"
                             )
                         else:
                             logger.error("保存备用DEVICE_ID失败")
