@@ -15,29 +15,40 @@ from src.utils.config_manager import ConfigManager
 from src.utils.logging_config import get_logger
 from src.utils.opus_loader import setup_opus
 
-# 忽略SIGTRAP信号
-try:
-    signal.signal(signal.SIGTRAP, signal.SIG_IGN)
-except (AttributeError, ValueError) as e:
-    print(f"注意: 无法设置SIGTRAP处理器: {e}")
+import platform
+import signal
+import sys
+import asyncio
 
+# 检查是否为 macOS 系统
+if platform.system() == "Darwin":
 
-def handle_sigint(signum, frame):
-    app = Application.get_instance()
-    if app:
-        # 使用事件循环运行shutdown
+    def setup_signal_handler(sig, handler, description):
+        """统一的信号处理器设置函数"""
         try:
-            loop = asyncio.get_running_loop()
-            loop.create_task(app.shutdown())
-        except RuntimeError:
-            # 没有运行中的事件循环，直接退出
-            sys.exit(0)
+            signal.signal(sig, handler)
+        except (AttributeError, ValueError) as e:
+            print(f"注意: 无法设置{description}处理器: {e}")
 
 
-try:
-    signal.signal(signal.SIGINT, handle_sigint)
-except (AttributeError, ValueError) as e:
-    print(f"注意: 无法设置SIGINT处理器: {e}")
+    def handle_sigint(signum, frame):
+        app = Application.get_instance()
+        if app:
+            # 使用事件循环运行shutdown
+            try:
+                loop = asyncio.get_running_loop()
+                loop.create_task(app.shutdown())
+            except RuntimeError:
+                # 没有运行中的事件循环，直接退出
+                sys.exit(0)
+
+
+    # 设置信号处理器
+    setup_signal_handler(signal.SIGTRAP, signal.SIG_IGN, "SIGTRAP")
+    setup_signal_handler(signal.SIGINT, handle_sigint, "SIGINT")
+
+else:
+    print("非 macOS 系统，跳过信号处理器设置")
 
 setup_opus()
 
