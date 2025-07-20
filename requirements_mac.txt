@@ -30,3 +30,4 @@ opencv-python-headless==4.11.0.86
 pendulum==3.1.0
 lunar_python==1.4.4
 tzdata
+pyaec==1.0.1
