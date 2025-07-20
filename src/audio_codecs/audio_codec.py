@@ -11,6 +11,7 @@ import soxr
 
 from src.constants.constants import AudioConfig
 from src.utils.logging_config import get_logger
+from src.audio_processing.aec_processor import AECProcessor
 
 logger = get_logger(__name__)
 
@@ -50,6 +51,9 @@ class AudioCodec:
         
         # 实时编码回调
         self._encoded_audio_callback = None
+        
+        # AEC处理器
+        self.aec_processor = AECProcessor()
 
     async def initialize(self):
         """
@@ -97,6 +101,13 @@ class AudioCodec:
             self.opus_decoder = opuslib.Decoder(
                 AudioConfig.OUTPUT_SAMPLE_RATE, AudioConfig.CHANNELS
             )
+            
+            # 初始化AEC处理器，参考pyaec示例配置
+            await self.aec_processor.initialize()
+            if self.aec_processor.is_available():
+                logger.info("✓ AEC回声消除处理器初始化成功，参考信号来源：服务端解码PCM")
+            else:
+                logger.warning("⚠ AEC处理器初始化失败，将不使用回声消除功能")
 
             logger.info("音频设备和编解码器初始化成功")
         except Exception as e:
@@ -180,6 +191,14 @@ class AudioCodec:
                 if audio_data is None:
                     return
 
+            # AEC处理 - 对录音信号应用回声消除
+            # 参考pyaec示例：cancel_echo(麦克风录音, 服务端音频参考信号)
+            if len(audio_data) == AudioConfig.INPUT_FRAME_SIZE:
+                try:
+                    audio_data = self.aec_processor.process_audio(audio_data)
+                except Exception as e:
+                    logger.warning(f"AEC处理失败: {e}")
+
             # 实时编码录音数据
             if self._encoded_audio_callback and len(audio_data) == AudioConfig.INPUT_FRAME_SIZE:
                 try:
@@ -255,10 +274,15 @@ class AudioCodec:
 
                 # 写入音频数据
                 if len(audio_data) >= frames:
-                    outdata[:] = audio_data[:frames].reshape(-1, AudioConfig.CHANNELS)
+                    output_frames = audio_data[:frames]
+                    outdata[:] = output_frames.reshape(-1, AudioConfig.CHANNELS)
                 else:
+                    output_frames = audio_data
                     outdata[: len(audio_data)] = audio_data.reshape(-1, AudioConfig.CHANNELS)
                     outdata[len(audio_data) :] = 0
+                
+                # 注意: 不再在播放回调中添加参考信号
+                # 参考信号现在直接从服务端解码的音频数据中获取，在write_audio方法中处理
 
             except asyncio.QueueEmpty:
                 # 无数据时输出静音
@@ -383,7 +407,9 @@ class AudioCodec:
     async def write_audio(self, opus_data: bytes):
         """
         解码Opus音频数据并放入播放队列
-        输出24kHz PCM数据，直接用于播放
+        同时将解码后的PCM数据作为AEC参考信号
+        
+        参考pyaec示例：使用服务端下发的音频作为echo_buffer参考信号
         """
         try:
             # Opus解码为24kHz PCM数据
@@ -398,6 +424,14 @@ class AudioCodec:
             if len(audio_array) != expected_length:
                 logger.warning(f"解码音频长度异常: {len(audio_array)}, 期望: {expected_length}")
                 return
+
+            # 将解码后的音频数据作为AEC参考信号
+            # 关键实现：参考pyaec示例，使用服务端音频作为echo_buffer
+            # 这比使用本地播放音频更准确，因为避免了播放链路的延迟和失真
+            try:
+                self.aec_processor.add_reference_audio(audio_array.copy())
+            except Exception as e:
+                logger.debug(f"添加AEC参考信号失败: {e}")
 
             # 放入播放缓冲区
             self._put_audio_data_safe(self._output_buffer, audio_array)
@@ -451,6 +485,12 @@ class AudioCodec:
         if self._resample_input_buffer:
             cleared_count += len(self._resample_input_buffer)
             self._resample_input_buffer.clear()
+
+        # 重置AEC处理器状态
+        try:
+            self.aec_processor.clear_reference_buffer()
+        except Exception as e:
+            logger.debug(f"重置AEC处理器失败: {e}")
 
         # 等待正在处理的音频数据完成
         await asyncio.sleep(0.01)
@@ -558,6 +598,12 @@ class AudioCodec:
             # 清理编解码器
             self.opus_encoder = None
             self.opus_decoder = None
+            
+            # 关闭AEC处理器
+            try:
+                await self.aec_processor.close()
+            except Exception as e:
+                logger.warning(f"关闭AEC处理器失败: {e}")
 
             gc.collect()  # 强制释放 nanobind 的 C++ 对象
 

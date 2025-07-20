@@ -106,3 +106,7 @@ class AudioConfig:
     INPUT_FRAME_SIZE = int(INPUT_SAMPLE_RATE * (FRAME_DURATION / 1000))
     # Linux系统使用固定帧大小以减少PCM打印，其他系统动态计算
     OUTPUT_FRAME_SIZE = int(OUTPUT_SAMPLE_RATE * (FRAME_DURATION / 1000))
+    
+    # AEC配置
+    AEC_ENABLED = config.get_config("AUDIO.AEC_ENABLED", True)  # 默认启用AEC
+    AEC_FILTER_LENGTH = int(INPUT_SAMPLE_RATE * 0.4)  # 0.4秒的滤波器长度，适用于房间回声

@@ -98,6 +98,10 @@ class Application:
         self.keep_listening = False
         self.aborted = False
 
+        # 监听模式和AEC模式
+        self.listening_mode = ListeningMode.AUTO_STOP
+        self.aec_mode = "device"  # "off", "device", "server"
+
         # 异步组件
         self.audio_codec = None
         self.protocol = None
@@ -325,7 +329,7 @@ class Application:
             self.audio_codec = AudioCodec()
             await self.audio_codec.initialize()
 
-            # 设置实时编码回调
+            # 设置实时编码回调 - 关键：确保麦克风数据实时发送
             self.audio_codec.set_encoded_audio_callback(self._on_encoded_audio)
 
             logger.info("音频编解码器初始化成功")
@@ -338,22 +342,30 @@ class Application:
     def _on_encoded_audio(self, encoded_data: bytes):
         """
         处理编码后的音频数据回调.
-        
+
         注意：这个回调在音频驱动线程中被调用，需要线程安全地调度到主事件循环。
+        关键逻辑：只在LISTENING状态或SPEAKING+REALTIME模式下发送音频数据
         """
         try:
-            # 只在监听状态且音频通道打开时发送数据
-            if (self.device_state == DeviceState.LISTENING 
-                    and self.protocol 
-                    and self.protocol.is_audio_channel_opened()
-                    and not getattr(self, '_transitioning', False)):
-                
+            # 核心判断逻辑（优化版，基于C++版本）：
+            # 1. LISTENING状态：总是发送（包括实时模式下TTS播放期间）
+            # 2. SPEAKING状态：只有在REALTIME模式下才发送（向后兼容）
+            should_send = (
+                    (self.device_state == DeviceState.LISTENING) or
+                    (self.device_state == DeviceState.SPEAKING and
+                     self.listening_mode == ListeningMode.REALTIME)
+            )
+
+            if (should_send
+                    and self.protocol
+                    and self.protocol.is_audio_channel_opened()):
+
                 # 线程安全地调度到主事件循环
                 if self._main_loop and not self._main_loop.is_closed():
                     self._main_loop.call_soon_threadsafe(
                         self._schedule_audio_send, encoded_data
                     )
-                
+
         except Exception as e:
             logger.error(f"处理编码音频数据回调失败: {e}")
 
@@ -363,13 +375,19 @@ class Application:
         """
         try:
             # 再次检查状态（可能在调度期间状态已改变）
-            if (self.device_state == DeviceState.LISTENING 
-                    and self.protocol 
+            # 核心逻辑：LISTENING状态或SPEAKING+REALTIME模式下发送音频
+            should_send = (
+                    (self.device_state == DeviceState.LISTENING) or
+                    (self.device_state == DeviceState.SPEAKING and
+                     self.listening_mode == ListeningMode.REALTIME)
+            )
+
+            if (should_send
+                    and self.protocol
                     and self.protocol.is_audio_channel_opened()):
-                
-                # 创建异步任务发送音频数据
+                # 创建异步任务发送音频数据 - 支持实时模式持续发送
                 asyncio.create_task(self.protocol.send_audio(encoded_data))
-                
+
         except Exception as e:
             logger.error(f"调度音频发送失败: {e}")
 
@@ -464,7 +482,7 @@ class Application:
         def done_callback(t):
             # 任务完成后从集合中移除，防止内存泄漏
             self._main_tasks.discard(t)
-            
+
             if not t.cancelled() and t.exception():
                 logger.error(f"任务 {name} 异常结束: {t.exception()}", exc_info=True)
 
@@ -481,7 +499,7 @@ class Application:
                 if self.command_queue is None:
                     await asyncio.sleep(0.1)
                     continue
-                    
+
                 # 等待命令，超时后继续循环检查running状态
                 try:
                     command = await asyncio.wait_for(
@@ -531,7 +549,7 @@ class Application:
         if self.command_queue is None:
             logger.warning("命令队列未初始化，丢弃命令")
             return
-            
+
         try:
             # 使用 put_nowait 避免阻塞，如果队列满则记录警告
             self.command_queue.put_nowait(command)
@@ -563,6 +581,8 @@ class Application:
 
         await self._set_device_state(DeviceState.CONNECTING)
 
+        # 保存监听模式（重要：用于音频发送判断）
+        self.listening_mode = listening_mode
         self.keep_listening = keep_listening_flag
         await self.protocol.send_start_listening(listening_mode)
         await self._set_device_state(DeviceState.LISTENING)
@@ -609,7 +629,11 @@ class Application:
         切换聊天状态的实现.
         """
         if self.device_state == DeviceState.IDLE:
-            await self._start_listening_common(ListeningMode.AUTO_STOP, True)
+            # 根据AEC模式决定监听模式（对应C++逻辑）
+            listening_mode = (ListeningMode.REALTIME
+                              if self.aec_mode != "off"
+                              else ListeningMode.AUTO_STOP)
+            await self._start_listening_common(listening_mode, True)
 
         elif self.device_state == DeviceState.SPEAKING:
             await self.abort_speaking(AbortReason.NONE)
@@ -635,12 +659,14 @@ class Application:
             await self._set_device_state(DeviceState.IDLE)
             self.aborted = False
             if (
-                reason == AbortReason.WAKE_WORD_DETECTED
-                and self.keep_listening
-                and self.protocol.is_audio_channel_opened()
+                    reason == AbortReason.WAKE_WORD_DETECTED
+                    and self.keep_listening
+                    and self.protocol.is_audio_channel_opened()
             ):
                 await asyncio.sleep(0.1)
-                await self.toggle_chat_state()
+                # 打断后重新启动监听（使用当前模式）
+                await self.protocol.send_start_listening(self.listening_mode)
+                await self._set_device_state(DeviceState.LISTENING)
 
         except Exception as e:
             logger.error(f"中止语音时出错: {e}")
@@ -747,7 +773,14 @@ class Application:
         """
         接收音频数据回调.
         """
-        if self.device_state == DeviceState.SPEAKING and self.audio_codec:
+        # 修复：在实时模式下，TTS播放时设备状态可能保持LISTENING，也需要播放音频
+        should_play_audio = (
+                (self.device_state == DeviceState.SPEAKING) or
+                (self.device_state == DeviceState.LISTENING and
+                 self.listening_mode == ListeningMode.REALTIME)
+        )
+
+        if should_play_audio and self.audio_codec:
             try:
                 # 音频数据处理需要实时性，直接创建任务但添加异常处理
                 task = asyncio.create_task(self.audio_codec.write_audio(data))
@@ -821,35 +854,50 @@ class Application:
         """
         处理TTS开始事件.
         """
-        logger.info(f"TTS开始，当前状态: {self.device_state}")
+        logger.info(f"TTS开始，当前状态: {self.device_state}，监听模式: {self.listening_mode}")
 
         async with self._abort_lock:
             self.aborted = False
 
-        if self.device_state in [DeviceState.IDLE, DeviceState.LISTENING]:
+        # 在实时模式下，如果当前处于LISTENING状态，保持LISTENING状态以支持双向对话
+        # 只有在IDLE状态或非实时模式下才转换到SPEAKING状态
+        if self.device_state == DeviceState.IDLE:
             await self._set_device_state(DeviceState.SPEAKING)
+        elif (self.device_state == DeviceState.LISTENING and
+              self.listening_mode != ListeningMode.REALTIME):
+            await self._set_device_state(DeviceState.SPEAKING)
+        elif (self.device_state == DeviceState.LISTENING and
+              self.listening_mode == ListeningMode.REALTIME):
+            logger.info("实时模式下TTS开始，保持LISTENING状态以支持双向对话")
 
     async def _handle_tts_stop(self):
         """
         处理TTS停止事件.
         """
+        logger.info(f"TTS停止，当前状态: {self.device_state}，监听模式: {self.listening_mode}")
+
+        # 等待音频播放完成
+        if self.audio_codec:
+            logger.debug("等待TTS音频播放完成...")
+            await self.audio_codec.wait_for_audio_complete()
+            logger.debug("TTS音频播放完成")
+
+        # 仅在非打断情况下，等待一小段时间让缓冲区稳定
+        if not self.aborted:
+            await asyncio.sleep(0.2)  # 额外200ms确保尾音播放完整
+
+        # 状态转换逻辑优化
         if self.device_state == DeviceState.SPEAKING:
-            # 等待音频播放完成（改进：增加等待时间并移除过早的清空操作）
-            if self.audio_codec:
-                logger.debug("等待TTS音频播放完成...")
-                await self.audio_codec.wait_for_audio_complete()
-                logger.debug("TTS音频播放完成")
-
-            # 仅在非打断情况下，等待一小段时间让缓冲区稳定
-            if not self.aborted:
-                await asyncio.sleep(0.2)  # 额外200ms确保尾音播放完整
-
-            # 状态转换
+            # 传统模式：从SPEAKING转换到LISTENING或IDLE
             if self.keep_listening:
-                await self.protocol.send_start_listening(ListeningMode.AUTO_STOP)
+                await self.protocol.send_start_listening(self.listening_mode)
                 await self._set_device_state(DeviceState.LISTENING)
             else:
                 await self._set_device_state(DeviceState.IDLE)
+        elif (self.device_state == DeviceState.LISTENING and
+              self.listening_mode == ListeningMode.REALTIME):
+            # 实时模式：已经在LISTENING状态，无需状态转换，音频流继续
+            logger.info("实时模式TTS结束，保持LISTENING状态，音频流继续")
 
     async def _handle_stt_message(self, data):
         """
@@ -946,7 +994,12 @@ class Application:
 
             await self.protocol.send_wake_word_detected("唤醒")
             self.keep_listening = True
-            await self.protocol.send_start_listening(ListeningMode.AUTO_STOP)
+            # 根据AEC模式决定监听模式（对应C++逻辑）
+            listening_mode = (ListeningMode.REALTIME
+                              if self.aec_mode != "off"
+                              else ListeningMode.AUTO_STOP)
+            self.listening_mode = listening_mode
+            await self.protocol.send_start_listening(listening_mode)
             await self._set_device_state(DeviceState.LISTENING)
 
         except Exception as e:
@@ -1025,7 +1078,7 @@ class Application:
             return False
 
     async def _safe_close_resource(
-        self, resource, resource_name: str, close_method: str = "close"
+            self, resource, resource_name: str, close_method: str = "close"
     ):
         """
         安全关闭资源的辅助方法.
