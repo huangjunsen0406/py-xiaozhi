@@ -57,6 +57,37 @@ class MqttProtocol(Protocol):
         # 事件
         self.server_hello_event = asyncio.Event()
 
+    def _parse_endpoint(self, endpoint: str) -> tuple[str, int]:
+        """
+        解析endpoint字符串，提取主机和端口.
+        
+        Args:
+            endpoint: endpoint字符串，格式可以是:
+                     - "hostname" (使用默认端口8883)
+                     - "hostname:port" (使用指定端口)
+        
+        Returns:
+            tuple: (host, port) 主机名和端口号
+        """
+        if not endpoint:
+            raise ValueError("endpoint不能为空")
+        
+        # 检查是否包含端口
+        if ":" in endpoint:
+            host, port_str = endpoint.rsplit(":", 1)
+            try:
+                port = int(port_str)
+                if port < 1 or port > 65535:
+                    raise ValueError(f"端口号必须在1-65535之间: {port}")
+            except ValueError as e:
+                raise ValueError(f"无效的端口号: {port_str}") from e
+        else:
+            # 没有指定端口，使用默认端口8883
+            host = endpoint
+            port = 8883
+        
+        return host, port
+
     async def connect(self):
         """
         连接到MQTT服务器.
@@ -112,24 +143,40 @@ class MqttProtocol(Protocol):
             except Exception as e:
                 logger.warning(f"断开MQTT客户端连接时出错: {e}")
 
+        # 解析endpoint，提取主机和端口
+        try:
+            host, port = self._parse_endpoint(self.endpoint)
+            use_tls = port == 8883  # 只有使用8883端口时才使用TLS
+            
+            logger.info(f"解析endpoint: {self.endpoint} -> 主机: {host}, 端口: {port}, 使用TLS: {use_tls}")
+        except ValueError as e:
+            logger.error(f"解析endpoint失败: {e}")
+            if self._on_network_error:
+                await self._on_network_error(f"解析endpoint失败: {e}")
+            return False
+
         # 创建新的MQTT客户端
         self.mqtt_client = mqtt.Client(client_id=self.client_id)
         self.mqtt_client.username_pw_set(self.username, self.password)
 
-        # 配置TLS加密连接
-        try:
-            self.mqtt_client.tls_set(
-                ca_certs=None,
-                certfile=None,
-                keyfile=None,
-                cert_reqs=mqtt.ssl.CERT_REQUIRED,
-                tls_version=mqtt.ssl.PROTOCOL_TLS,
-            )
-        except Exception as e:
-            logger.error(f"TLS配置失败，无法安全连接到MQTT服务器: {e}")
-            if self._on_network_error:
-                await self._on_network_error(f"TLS配置失败: {str(e)}")
-            return False
+        # 根据端口决定是否配置TLS加密连接
+        if use_tls:
+            try:
+                self.mqtt_client.tls_set(
+                    ca_certs=None,
+                    certfile=None,
+                    keyfile=None,
+                    cert_reqs=mqtt.ssl.CERT_REQUIRED,
+                    tls_version=mqtt.ssl.PROTOCOL_TLS,
+                )
+                logger.info("已配置TLS加密连接")
+            except Exception as e:
+                logger.error(f"TLS配置失败，无法安全连接到MQTT服务器: {e}")
+                if self._on_network_error:
+                    await self._on_network_error(f"TLS配置失败: {str(e)}")
+                return False
+        else:
+            logger.info("使用非TLS连接")
 
         # 创建连接Future
         connect_future = self.loop.create_future()
@@ -239,9 +286,9 @@ class MqttProtocol(Protocol):
 
         try:
             # 连接MQTT服务器，配置保活间隔
-            logger.info(f"正在连接MQTT服务器: {self.endpoint}")
+            logger.info(f"正在连接MQTT服务器: {host}:{port}")
             self.mqtt_client.connect_async(
-                self.endpoint, 8883, keepalive=self._keep_alive_interval
+                host, port, keepalive=self._keep_alive_interval
             )
             self.mqtt_client.loop_start()
 
