@@ -40,10 +40,12 @@ class AudioCodec:
 
         # 重采样器：统一采样率
         self.input_resampler = None  # 设备采样率 -> 16kHz
+        self.output_resampler = None  # 24kHz -> 设备采样率(播放用)
         self.aec_reference_resampler = None  # 24kHz -> 16kHz(AEC用)
 
         # 重采样缓冲区
         self._resample_input_buffer = deque()
+        self._resample_output_buffer = deque()
         self._aec_reference_buffer = deque()
 
         self._device_input_frame_size = None
@@ -108,7 +110,8 @@ class AudioCodec:
 
     async def _create_resamplers(self):
         """
-        创建重采样器 输入：设备采样率 -> 16kHz（录音用） AEC参考：24kHz -> 16kHz（参考信号与录音采样率一致）
+        创建重采样器 输入：设备采样率 -> 16kHz（录音用） 输出：24kHz -> 设备采样率（播放用） AEC参考：24kHz ->
+        16kHz（参考信号与录音采样率一致）
         """
         if self.device_input_sample_rate != AudioConfig.INPUT_SAMPLE_RATE:
             self.input_resampler = soxr.ResampleStream(
@@ -119,6 +122,19 @@ class AudioCodec:
                 quality="QQ",
             )
             logger.info(f"输入重采样: {self.device_input_sample_rate}Hz -> 16kHz")
+
+        # 输出重采样器：24kHz -> 设备采样率
+        if self.device_output_sample_rate != AudioConfig.OUTPUT_SAMPLE_RATE:
+            self.output_resampler = soxr.ResampleStream(
+                AudioConfig.OUTPUT_SAMPLE_RATE,
+                self.device_output_sample_rate,
+                AudioConfig.CHANNELS,
+                dtype="int16",
+                quality="QQ",
+            )
+            logger.info(
+                f"输出重采样: {AudioConfig.OUTPUT_SAMPLE_RATE}Hz -> {self.device_output_sample_rate}Hz"
+            )
 
         self.aec_reference_resampler = soxr.ResampleStream(
             AudioConfig.OUTPUT_SAMPLE_RATE,
@@ -144,11 +160,23 @@ class AudioCodec:
                 latency="low",
             )
 
+            # 根据设备支持的采样率选择输出采样率
+            if self.device_output_sample_rate == AudioConfig.OUTPUT_SAMPLE_RATE:
+                # 设备支持24kHz，直接使用
+                output_sample_rate = AudioConfig.OUTPUT_SAMPLE_RATE
+                device_output_frame_size = AudioConfig.OUTPUT_FRAME_SIZE
+            else:
+                # 设备不支持24kHz，使用设备默认采样率并启用重采样
+                output_sample_rate = self.device_output_sample_rate
+                device_output_frame_size = int(
+                    self.device_output_sample_rate * (AudioConfig.FRAME_DURATION / 1000)
+                )
+
             self.output_stream = sd.OutputStream(
-                samplerate=AudioConfig.OUTPUT_SAMPLE_RATE,
+                samplerate=output_sample_rate,
                 channels=AudioConfig.CHANNELS,
                 dtype=np.int16,
-                blocksize=AudioConfig.OUTPUT_FRAME_SIZE,
+                blocksize=device_output_frame_size,
                 callback=self._output_callback,
                 finished_callback=self._output_finished_callback,
                 latency="low",
@@ -284,26 +312,74 @@ class AudioCodec:
                 logger.warning(f"输出流状态: {status}")
 
         try:
-            try:
-                # 从播放队列获取音频数据
-                audio_data = self._output_buffer.get_nowait()
-
-                if len(audio_data) >= frames:
-                    output_frames = audio_data[:frames]
-                    outdata[:] = output_frames.reshape(-1, AudioConfig.CHANNELS)
-                else:
-                    output_frames = audio_data
-                    outdata[: len(audio_data)] = audio_data.reshape(
-                        -1, AudioConfig.CHANNELS
-                    )
-                    outdata[len(audio_data) :] = 0
-
-            except asyncio.QueueEmpty:
-                # 无数据时输出静音
-                outdata.fill(0)
+            if self.output_resampler is not None:
+                # 需要重采样：24kHz -> 设备采样率
+                self._output_callback_with_resample(outdata, frames)
+            else:
+                # 直接播放：24kHz
+                self._output_callback_direct(outdata, frames)
 
         except Exception as e:
             logger.error(f"输出回调错误: {e}")
+            outdata.fill(0)
+
+    def _output_callback_direct(self, outdata: np.ndarray, frames: int):
+        """
+        直接播放24kHz数据（设备支持24kHz时）
+        """
+        try:
+            # 从播放队列获取音频数据
+            audio_data = self._output_buffer.get_nowait()
+
+            if len(audio_data) >= frames:
+                output_frames = audio_data[:frames]
+                outdata[:] = output_frames.reshape(-1, AudioConfig.CHANNELS)
+            else:
+                outdata[: len(audio_data)] = audio_data.reshape(
+                    -1, AudioConfig.CHANNELS
+                )
+                outdata[len(audio_data) :] = 0
+
+        except asyncio.QueueEmpty:
+            # 无数据时输出静音
+            outdata.fill(0)
+
+    def _output_callback_with_resample(self, outdata: np.ndarray, frames: int):
+        """
+        重采样播放（24kHz -> 设备采样率）
+        """
+        try:
+            # 持续处理24kHz数据进行重采样
+            while len(self._resample_output_buffer) < frames:
+                try:
+                    audio_data = self._output_buffer.get_nowait()
+
+                    # 24kHz -> 设备采样率重采样
+                    resampled_data = self.output_resampler.resample_chunk(
+                        audio_data, last=False
+                    )
+                    if len(resampled_data) > 0:
+                        self._resample_output_buffer.extend(
+                            resampled_data.astype(np.int16)
+                        )
+
+                except asyncio.QueueEmpty:
+                    break
+
+            # 从重采样缓冲区取数据
+            if len(self._resample_output_buffer) >= frames:
+                frame_data = []
+                for _ in range(frames):
+                    frame_data.append(self._resample_output_buffer.popleft())
+
+                output_array = np.array(frame_data, dtype=np.int16)
+                outdata[:] = output_array.reshape(-1, AudioConfig.CHANNELS)
+            else:
+                # 数据不足时输出静音
+                outdata.fill(0)
+
+        except Exception as e:
+            logger.warning(f"重采样输出失败: {e}")
             outdata.fill(0)
 
     def _input_finished_callback(self):
@@ -348,11 +424,24 @@ class AudioCodec:
                     self.output_stream.stop()
                     self.output_stream.close()
 
+                # 根据设备支持的采样率选择输出采样率
+                if self.device_output_sample_rate == AudioConfig.OUTPUT_SAMPLE_RATE:
+                    # 设备支持24kHz，直接使用
+                    output_sample_rate = AudioConfig.OUTPUT_SAMPLE_RATE
+                    device_output_frame_size = AudioConfig.OUTPUT_FRAME_SIZE
+                else:
+                    # 设备不支持24kHz，使用设备默认采样率并启用重采样
+                    output_sample_rate = self.device_output_sample_rate
+                    device_output_frame_size = int(
+                        self.device_output_sample_rate
+                        * (AudioConfig.FRAME_DURATION / 1000)
+                    )
+
                 self.output_stream = sd.OutputStream(
-                    samplerate=AudioConfig.OUTPUT_SAMPLE_RATE,
+                    samplerate=output_sample_rate,
                     channels=AudioConfig.CHANNELS,
                     dtype=np.int16,
-                    blocksize=AudioConfig.OUTPUT_FRAME_SIZE,
+                    blocksize=device_output_frame_size,
                     callback=self._output_callback,
                     finished_callback=self._output_finished_callback,
                     latency="low",
@@ -470,6 +559,10 @@ class AudioCodec:
             cleared_count += len(self._resample_input_buffer)
             self._resample_input_buffer.clear()
 
+        if self._resample_output_buffer:
+            cleared_count += len(self._resample_output_buffer)
+            self._resample_output_buffer.clear()
+
         if self._aec_reference_buffer:
             cleared_count += len(self._aec_reference_buffer)
             self._aec_reference_buffer.clear()
@@ -571,11 +664,14 @@ class AudioCodec:
                     self.output_stream = None
 
             await self._cleanup_resampler(self.input_resampler, "输入")
+            await self._cleanup_resampler(self.output_resampler, "输出")
             await self._cleanup_resampler(self.aec_reference_resampler, "AEC参考")
             self.input_resampler = None
+            self.output_resampler = None
             self.aec_reference_resampler = None
 
             self._resample_input_buffer.clear()
+            self._resample_output_buffer.clear()
             self._aec_reference_buffer.clear()
 
             self.opus_encoder = None
