@@ -1,8 +1,8 @@
 <template>
-  <div class="bg-white rounded-lg  relative mb-10">
+  <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 relative mb-10">
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
       <div v-for="(flow, index) in dataFlows" :key="index"
-        class="data-flow-card bg-white rounded-xl shadow-xl overflow-hidden transform hover:scale-[1.02] transition-all duration-300">
+        class="data-flow-card bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 overflow-hidden transform hover:scale-[1.02] transition-all duration-300">
         <div class="p-5 text-white font-semibold bg-gradient-to-r" :class="[
           index === 0 ? 'from-blue-500 to-blue-600' :
             index === 1 ? 'from-green-500 to-green-600' :
@@ -31,8 +31,8 @@
                 ]">
                 {{ stepIndex + 1 }}
               </div>
-              <div class="flow-step-content ml-3 flex-1 bg-gradient-to-br from-gray-50 to-white rounded-lg p-3 shadow-sm">
-                <p class="text-gray-700">{{ step }}</p>
+              <div class="flow-step-content ml-3 flex-1 bg-gradient-to-br from-gray-50 to-white dark:from-gray-700 dark:to-gray-600 rounded-lg p-3 shadow-sm">
+                <p class="text-gray-700 dark:text-gray-200">{{ step }}</p>
               </div>
             </div>
             <div class="absolute left-5 top-8 bottom-5 w-0.5" :class="[
@@ -54,6 +54,9 @@ import {
   SpeakerWaveIcon, 
   CommandLineIcon
 } from '@heroicons/vue/24/solid';
+import { useData } from 'vitepress';
+
+const { isDark } = useData();
 
 // 数据流
 const dataFlows = [
@@ -63,6 +66,7 @@ const dataFlows = [
     icon: AcademicCapIcon,
     steps: [
       '麦克风捕获音频并进行采样率转换',
+      'AEC处理器消除回声和噪声抑制',
       'VAD检测语音活动判断是否有语音',
       '使用Opus编码器压缩音频数据',
       '通过WebSocket/MQTT协议发送到服务器'
@@ -75,19 +79,21 @@ const dataFlows = [
     steps: [
       '服务器返回经过Opus编码的音频数据',
       '使用Opus解码器解码音频数据',
+      'AEC处理器添加参考音频信号',
       '通过SoXR进行高质量重采样',
       '输出到音频设备进行播放'
     ]
   },
   {
-    title: 'MCP工具执行流程',
-    subtitle: '命令处理与执行',
+    title: 'MCP工具生态系统',
+    subtitle: '智能工具执行',
     icon: CommandLineIcon,
     steps: [
       '用户发送语音或文本命令',
       'MCP服务器解析命令和参数',
-      '路由到相应的工具执行器',
-      '执行结果返回给用户界面'
+      '路由到工具生态系统(系统/日历/地图/八字/铁路/音乐等)',
+      '工具执行并返回结构化结果',
+      '结果格式化后返回给用户界面'
     ]
   }
 ];

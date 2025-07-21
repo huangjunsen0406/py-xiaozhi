@@ -1,5 +1,5 @@
 <template>
-  <div class="bg-white rounded-lg relative mb-10">
+  <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 relative mb-10">
     <div class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
       <div v-for="(module, index) in modules" :key="index" class="module-card">
         <div class="flex items-start">
@@ -8,11 +8,11 @@
             <component :is="module.icon" class="w-6 h-6 text-white" />
           </div>
           <div class="ml-4 flex-1">
-            <h3 class="text-lg font-semibold mb-2">{{ module.name }}</h3>
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-2">{{ module.name }}</h3>
             <ul class="space-y-2">
               <li v-for="(feature, featureIndex) in module.features" :key="featureIndex" class="flex items-start">
                 <CheckCircleIcon class="w-5 h-5 text-green-500 mt-1 mr-2" />
-                <span>{{ feature }}</span>
+                <span class="text-gray-700 dark:text-gray-300">{{ feature }}</span>
               </li>
             </ul>
           </div>
@@ -32,8 +32,13 @@ import {
   ServerIcon,
   LightBulbIcon,
   WrenchIcon,
-  CheckCircleIcon
+  CheckCircleIcon,
+  CpuChipIcon,
+  MapIcon
 } from '@heroicons/vue/24/solid';
+import { useData } from 'vitepress';
+
+const { isDark } = useData();
 
 // 模块详情
 const modules = [
@@ -64,7 +69,23 @@ const modules = [
       '基于JSON-RPC 2.0的MCP服务器',
       '可扩展的工具插件系统',
       '类型安全的参数验证',
-      '支持系统、日历、定时器、音乐等多种工具'
+      '支持丰富的MCP工具生态系统'
+    ]
+  },
+  {
+    name: 'src/mcp/tools/',
+    icon: CpuChipIcon,
+    features: [
+      '系统工具：应用管理、设备状态监控',
+      '日历工具：事件管理、提醒服务',
+      '地图工具：位置查询、路线规划',
+      '八字工具：命理分析、婚配计算',
+      '铁路工具：车次查询、票务信息',
+      '音乐工具：播放控制、播放列表管理',
+      '定时器工具：任务调度、提醒功能',
+      '搜索工具：信息检索、内容查找',
+      '食谱工具：菜谱推荐、营养分析',
+      '摄像头工具：图像采集、视觉处理'
     ]
   },
   {
@@ -91,6 +112,7 @@ const modules = [
     name: 'src/audio_processing/',
     icon: SpeakerXMarkIcon,
     features: [
+      'AEC声学回声消除处理器(基于pyaec)',
       '基于Vosk的语音活动检测(VAD)',
       '多语言唤醒词检测',
       '相似度算法和拼音匹配',
@@ -138,6 +160,9 @@ const moduleColors = [
 
 .module-card:hover {
   transform: translateY(-5px);
-  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+}
+
+.module-card {
+  @apply hover:shadow-xl;
 }
 </style> 
