@@ -53,6 +53,13 @@ class ConfigManager:
                 "description": "显示/隐藏窗口",
             },
         },
+        "AEC_OPTIONS": {
+            "ENABLED": True,
+            "BUFFER_MAX_LENGTH": 200,
+            "FRAME_DELAY": 3,
+            "FILTER_LENGTH_RATIO": 0.4,
+            "ENABLE_PREPROCESS": True,
+        },
     }
 
     def __new__(cls):

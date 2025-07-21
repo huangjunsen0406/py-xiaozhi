@@ -1,14 +1,14 @@
 <template>
-  <div class="bg-white rounded-lg relative mb-10">
+  <div class="tech-container">
       <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
         <div v-for="(tech, index) in techStack" :key="index"
-          class="flex flex-col items-center p-4 rounded-lg hover:bg-gray-100 transition-colors">
+          class="tech-item">
           <div class="w-16 h-16 rounded-full flex items-center justify-center mb-3"
             :class="techColors[index % techColors.length]">
             <component :is="tech.icon" class="w-8 h-8 text-white" />
           </div>
-          <h4 class="font-semibold text-center">{{ tech.name }}</h4>
-          <p class="text-sm text-gray-600 text-center mt-1">{{ tech.description }}</p>
+          <h4 class="tech-name">{{ tech.name }}</h4>
+          <p class="tech-description">{{ tech.description }}</p>
         </div>
       </div>
     </div>
@@ -51,42 +51,57 @@ const techStack = [
   },
   {
     name: 'Vosk',
-    description: '语音识别',
+    description: '语音识别引擎',
     icon: DocumentIcon
+  },
+  {
+    name: 'pyaec',
+    description: 'AEC声学回声消除',
+    icon: MusicIcon
   },
   {
     name: 'OpusLib',
     description: '音频编解码',
-    icon: MusicIcon
+    icon: AudioIcon
   },
   {
     name: 'SoXR',
     description: '高质量重采样',
-    icon: AudioIcon
-  },
-  {
-    name: 'SoundDevice',
-    description: '音频设备',
     icon: SignalIcon
   },
   {
+    name: 'SoundDevice',
+    description: '音频设备管理',
+    icon: AudioIcon
+  },
+  {
     name: 'WebSockets',
-    description: '实时通信',
+    description: '实时通信协议',
     icon: PuzzlePieceIcon
   },
   {
     name: 'MQTT',
-    description: 'IoT通信',
+    description: 'IoT消息传输',
     icon: SignalIcon
   },
   {
-    name: 'Paho-MQTT',
-    description: 'MQTT客户端',
+    name: 'MCP Protocol',
+    description: '模型上下文协议',
     icon: PuzzlePieceIcon
   },
   {
     name: 'Cryptography',
-    description: '加密库',
+    description: '加密安全库',
+    icon: DocumentIcon
+  },
+  {
+    name: 'Thing抽象',
+    description: 'IoT设备抽象',
+    icon: SignalIcon
+  },
+  {
+    name: 'JSON-RPC',
+    description: '远程过程调用',
     icon: DocumentIcon
   }
 ];
@@ -105,12 +120,37 @@ const techColors = [
 </script>
 
 <style scoped>
-/* 技术栈图标优化 */
-.grid-cols-2.md\:grid-cols-3.lg\:grid-cols-6 > div {
+.tech-container {
+  background-color: var(--vp-c-bg);
+  border-radius: 12px;
+  padding: 24px;
+  margin-bottom: 40px;
+}
+
+.tech-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 16px;
+  border-radius: 8px;
   transition: all 0.2s ease;
 }
 
-.grid-cols-2.md\:grid-cols-3.lg\:grid-cols-6 > div:hover {
-  transform: translateY(-3px);
+.tech-item:hover {
+  background-color: var(--vp-c-bg-soft);
+}
+
+.tech-name {
+  font-weight: 600;
+  text-align: center;
+  color: var(--vp-c-text-1);
+  margin-top: 12px;
+}
+
+.tech-description {
+  font-size: 0.875rem;
+  color: var(--vp-c-text-2);
+  text-align: center;
+  margin-top: 4px;
 }
 </style> 

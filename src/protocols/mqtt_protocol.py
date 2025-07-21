@@ -98,7 +98,7 @@ class MqttProtocol(Protocol):
             if self._on_network_error:
                 await self._on_network_error("MQTT配置不完整")
             return False
-        
+
         # subscribe_topic 可以为 "null" 字符串，需要特殊处理
         if self.subscribe_topic == "null":
             self.subscribe_topic = None

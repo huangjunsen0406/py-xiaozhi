@@ -94,7 +94,9 @@ def detect_cameras():
     if current_camera_config:
         print("当前摄像头配置:")
         print(f"  - 索引: {current_camera_config.get('camera_index', '未设置')}")
-        print(f"  - 分辨率: {current_camera_config.get('frame_width', '未设置')}x{current_camera_config.get('frame_height', '未设置')}")
+        print(
+            f"  - 分辨率: {current_camera_config.get('frame_width', '未设置')}x{current_camera_config.get('frame_height', '未设置')}"
+        )
         print(f"  - 帧率: {current_camera_config.get('fps', '未设置')}")
         print(f"  - VL模型: {current_camera_config.get('models', '未设置')}")
         print("")
@@ -140,13 +142,11 @@ def detect_cameras():
                 print(f"  - 支持分辨率: {resolutions_str}")
                 print(f"  - 帧率: {capabilities['fps']}")
                 print(f"  - 后端: {capabilities['backend']}")
-                
+
                 # 标记当前配置使用的摄像头
-                current_index = current_camera_config.get('camera_index')
+                current_index = current_camera_config.get("camera_index")
                 if current_index == i:
-                    print(f"  - 📹 当前配置使用的摄像头")
-                
-                print("")
+                    print("当前配置使用的摄像头")
 
                 # 添加到设备列表
                 camera_devices.append(
@@ -159,27 +159,27 @@ def detect_cameras():
                     # 快速测试 - 读取几帧
                     test_frames = 0
                     start_time = time.time()
-                    
+
                     while test_frames < 10 and time.time() - start_time < 2:
                         ret, frame = cap.read()
                         if ret:
                             test_frames += 1
                         else:
                             break
-                    
+
                     if test_frames >= 5:
                         print(f"  ✓ 摄像头功能正常 (测试读取 {test_frames} 帧)")
                     else:
                         print(f"  ⚠ 摄像头功能可能异常 (仅读取 {test_frames} 帧)")
-                        
+
                 except Exception as e:
                     print(f"  ✗ 摄像头功能测试失败: {e}")
 
                 # 询问是否显示预览
                 print(f"是否显示设备 {i} 的预览画面？(y/n，默认n): ", end="")
                 show_preview = input().strip().lower()
-                
-                if show_preview == 'y':
+
+                if show_preview == "y":
                     print(f"正在显示设备 {i} 的预览画面，按 'q' 键或等待3秒继续...")
                     preview_start = time.time()
 
@@ -191,7 +191,7 @@ def detect_cameras():
                                 break
 
                     cv2.destroyAllWindows()
-                
+
                 cap.release()
 
             else:
@@ -278,19 +278,25 @@ def detect_cameras():
 
         # 比较配置变化
         print("\n===== 配置变化对比 =====\n")
-        current_index = current_camera_config.get('camera_index')
-        current_width = current_camera_config.get('frame_width')
-        current_height = current_camera_config.get('frame_height')
-        current_fps = current_camera_config.get('fps')
-        
+        current_index = current_camera_config.get("camera_index")
+        current_width = current_camera_config.get("frame_width")
+        current_height = current_camera_config.get("frame_height")
+        current_fps = current_camera_config.get("fps")
+
         changes = []
         if current_index != recommended_camera["index"]:
-            changes.append(f"摄像头索引: {current_index} → {recommended_camera['index']}")
+            changes.append(
+                f"摄像头索引: {current_index} → {recommended_camera['index']}"
+            )
         if current_width != r_width or current_height != r_height:
-            changes.append(f"分辨率: {current_width}x{current_height} → {r_width}x{r_height}")
+            changes.append(
+                f"分辨率: {current_width}x{current_height} → {r_width}x{r_height}"
+            )
         if current_fps != recommended_camera["capabilities"]["fps"]:
-            changes.append(f"帧率: {current_fps} → {recommended_camera['capabilities']['fps']}")
-        
+            changes.append(
+                f"帧率: {current_fps} → {recommended_camera['capabilities']['fps']}"
+            )
+
         if changes:
             print("检测到以下配置变化:")
             for change in changes:
@@ -331,9 +337,9 @@ if __name__ == "__main__":
     try:
         cameras = detect_cameras()
         if cameras:
-            print(f"\n检测到 {len(cameras)} 个摄像头设备！")
+            print("\n检测到 {len(cameras)} 个摄像头设备！")
         else:
             print("\n未检测到可用的摄像头设备！")
-    except Exception as e:
-        logger.error(f"检测过程中出错: {e}")
-        print(f"检测过程中出错: {e}")
+    except Exception:
+        logger.error("检测过程中出错: {e}")
+        print("检测过程中出错: {e}")

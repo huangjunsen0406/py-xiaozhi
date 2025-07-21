@@ -70,6 +70,16 @@ export default {
       "name": "985",
       "url": "",
       "image": "https://tuchuang.junsen.online/i/2025/04/27/59h2g1.jpg"
+    },
+    {
+      "name": "章振海",
+      "url": "",
+      "image": "https://tuchuang.junsen.online/i/2025/07/21/mdu5ou.png"
+    },
+    {
+      "name": "汪汪",
+      "url": "",
+      "image": "https://tuchuang.junsen.online/i/2025/07/21/mckypx.png"
     }
   ]
 } 

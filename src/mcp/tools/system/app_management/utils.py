@@ -338,7 +338,6 @@ def get_cache_info() -> Dict[str, Any]:
     """
     获取缓存信息.
     """
-    global _cached_applications, _cache_timestamp
 
     current_time = time.time()
     cache_age = current_time - _cache_timestamp if _cache_timestamp > 0 else -1

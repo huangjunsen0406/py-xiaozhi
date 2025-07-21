@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-import sounddevice as sd
 import numpy as np
+import sounddevice as sd
 
 
 def detect_audio_devices():
@@ -26,7 +26,7 @@ def detect_audio_devices():
         print(f"  - 输入通道: {dev_info['max_input_channels']}")
         print(f"  - 输出通道: {dev_info['max_output_channels']}")
         print(f"  - 默认采样率: {dev_info['default_samplerate']}")
-        
+
         # 标记默认设备
         if i == default_input:
             print("  - 🎤 系统默认输入设备")
@@ -129,18 +129,23 @@ def detect_audio_devices():
         print("    callback=output_callback)")
 
     print("\n===== 设备测试 =====\n")
-    
+
     # 测试推荐设备
     if recommended_mic:
         print(f"正在测试麦克风 (设备 {recommended_mic[0]})...")
         try:
-            test_recording = sd.rec(int(1 * 16000), samplerate=16000, channels=1,
-                                  device=recommended_mic[0], dtype=np.int16)
+            sd.rec(
+                int(1 * 16000),
+                samplerate=16000,
+                channels=1,
+                device=recommended_mic[0],
+                dtype=np.int16,
+            )
             sd.wait()
             print("✓ 麦克风测试成功")
         except Exception as e:
             print(f"✗ 麦克风测试失败: {e}")
-    
+
     if recommended_speaker:
         print(f"正在测试扬声器 (设备 {recommended_speaker[0]})...")
         try:
@@ -149,7 +154,7 @@ def detect_audio_devices():
             sample_rate = 44100
             t = np.linspace(0, duration, int(sample_rate * duration))
             test_audio = (0.3 * np.sin(2 * np.pi * 440 * t)).astype(np.int16)
-            
+
             sd.play(test_audio, samplerate=sample_rate, device=recommended_speaker[0])
             sd.wait()
             print("✓ 扬声器测试成功")

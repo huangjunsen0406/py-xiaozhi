@@ -63,7 +63,6 @@ def _audio_queue_worker():
     """
     音频队列工作线程，确保音频按顺序播放且不被截断.
     """
-    global _audio_worker_running
 
     while _audio_worker_running:
         try:

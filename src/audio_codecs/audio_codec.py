@@ -9,9 +9,10 @@ import opuslib
 import sounddevice as sd
 import soxr
 
-from src.constants.constants import AudioConfig
-from src.utils.logging_config import get_logger
 from src.audio_processing.aec_processor import AECProcessor
+from src.constants.constants import AudioConfig
+from src.utils.config_manager import ConfigManager
+from src.utils.logging_config import get_logger
 
 logger = get_logger(__name__)
 
@@ -19,9 +20,17 @@ logger = get_logger(__name__)
 class AudioCodec:
     """
     音频编解码器，负责录音编码和播放解码
+    主要功能：
+    1. 录音：麦克风 -> 重采样16kHz -> AEC处理 -> Opus编码 -> 发送
+    2. 播放：接收 -> Opus解码24kHz -> 播放队列 -> 扬声器
+    3. AEC：播放信号重采样16kHz作为参考信号，消除回声
     """
 
     def __init__(self):
+        # 获取配置管理器
+        self.config = ConfigManager.get_instance()
+
+        # Opus编解码器：录音16kHz编码，播放24kHz解码
         self.opus_encoder = None
         self.opus_decoder = None
 
@@ -29,70 +38,55 @@ class AudioCodec:
         self.device_input_sample_rate = None
         self.device_output_sample_rate = None
 
-        # 输入重采样器
-        self.input_resampler = None
+        # 重采样器：统一采样率
+        self.input_resampler = None  # 设备采样率 -> 16kHz
+        self.aec_reference_resampler = None  # 24kHz -> 16kHz(AEC用)
 
-        # 重采样缓冲区，用deque提高性能
+        # 重采样缓冲区
         self._resample_input_buffer = deque()
+        self._aec_reference_buffer = deque()
 
-        # 输入帧大小缓存
         self._device_input_frame_size = None
-
-        # 关闭状态标志
         self._is_closing = False
 
         # 音频流对象
-        self.input_stream = None
-        self.output_stream = None
+        self.input_stream = None  # 录音流
+        self.output_stream = None  # 播放流
 
-        # 音频数据队列
-        self._wakeword_buffer = asyncio.Queue(maxsize=100)  # 唤醒词检测
-        self._output_buffer = asyncio.Queue(maxsize=500)  # 音频播放
-        
-        # 实时编码回调
+        # 队列：唤醒词检测和播放缓冲
+        self._wakeword_buffer = asyncio.Queue(maxsize=100)
+        self._output_buffer = asyncio.Queue(maxsize=500)
+
+        # 实时编码回调（直接发送，不走队列）
         self._encoded_audio_callback = None
-        
-        # AEC处理器
+
+        # AEC回声消除处理器 - 从配置读取启用状态
         self.aec_processor = AECProcessor()
 
     async def initialize(self):
         """
-        初始化音频设备和编解码器
+        初始化音频设备.
         """
         try:
-            # 查询设备采样率
             input_device_info = sd.query_devices(sd.default.device[0])
             output_device_info = sd.query_devices(sd.default.device[1])
-
             self.device_input_sample_rate = int(input_device_info["default_samplerate"])
             self.device_output_sample_rate = int(
                 output_device_info["default_samplerate"]
             )
-
-            # 计算输入帧大小
             frame_duration_sec = AudioConfig.FRAME_DURATION / 1000
             self._device_input_frame_size = int(
                 self.device_input_sample_rate * frame_duration_sec
             )
 
-            logger.info(f"设备输入采样率: {self.device_input_sample_rate}Hz")
-            logger.info(f"设备输出采样率: {self.device_output_sample_rate}Hz")
-            logger.info(f"音频输出将使用固定24kHz采样率")
-
-            # 创建重采样器
+            logger.info(
+                f"输入采样率: {self.device_input_sample_rate}Hz, 输出: {self.device_output_sample_rate}Hz"
+            )
             await self._create_resamplers()
-
-            # 设置SoundDevice默认参数
             sd.default.samplerate = None
             sd.default.channels = AudioConfig.CHANNELS
             sd.default.dtype = np.int16
-
-            # 创建音频流
             await self._create_streams()
-
-            # 初始化Opus编解码器
-            # 编码器用于16kHz录音数据
-            # 解码器用于24kHz播放数据
             self.opus_encoder = opuslib.Encoder(
                 AudioConfig.INPUT_SAMPLE_RATE,
                 AudioConfig.CHANNELS,
@@ -101,15 +95,12 @@ class AudioCodec:
             self.opus_decoder = opuslib.Decoder(
                 AudioConfig.OUTPUT_SAMPLE_RATE, AudioConfig.CHANNELS
             )
-            
-            # 初始化AEC处理器，参考pyaec示例配置
             await self.aec_processor.initialize()
             if self.aec_processor.is_available():
-                logger.info("✓ AEC回声消除处理器初始化成功，参考信号来源：服务端解码PCM")
+                logger.info("AEC初始化成功")
             else:
-                logger.warning("⚠ AEC处理器初始化失败，将不使用回声消除功能")
-
-            logger.info("音频设备和编解码器初始化成功")
+                logger.warning("AEC初始化失败")
+            logger.info("音频初始化完成")
         except Exception as e:
             logger.error(f"初始化音频设备失败: {e}")
             await self.close()
@@ -117,8 +108,7 @@ class AudioCodec:
 
     async def _create_resamplers(self):
         """
-        创建输入重采样器，转换设备采样率到16kHz
-        输出固定24kHz，不需要重采样
+        创建重采样器 输入：设备采样率 -> 16kHz（录音用） AEC参考：24kHz -> 16kHz（参考信号与录音采样率一致）
         """
         if self.device_input_sample_rate != AudioConfig.INPUT_SAMPLE_RATE:
             self.input_resampler = soxr.ResampleStream(
@@ -128,20 +118,22 @@ class AudioCodec:
                 dtype="int16",
                 quality="QQ",
             )
-            logger.info(
-                f"创建输入重采样器: {self.device_input_sample_rate}Hz -> "
-                f"{AudioConfig.INPUT_SAMPLE_RATE}Hz"
-            )
+            logger.info(f"输入重采样: {self.device_input_sample_rate}Hz -> 16kHz")
 
-        logger.info(f"输出使用24kHz固定采样率")
+        self.aec_reference_resampler = soxr.ResampleStream(
+            AudioConfig.OUTPUT_SAMPLE_RATE,
+            16000,  # 固定使用16kHz
+            AudioConfig.CHANNELS,
+            dtype="int16",
+            quality="QQ",
+        )
+        logger.info(f"AEC参考重采样: {AudioConfig.OUTPUT_SAMPLE_RATE}Hz -> 16kHz")
 
     async def _create_streams(self):
         """
-        创建音频输入输出流
-        输入流使用设备原生采样率，输出流固定24kHz
+        创建音频流.
         """
         try:
-            # 录音流
             self.input_stream = sd.InputStream(
                 samplerate=self.device_input_sample_rate,
                 channels=AudioConfig.CHANNELS,
@@ -152,7 +144,6 @@ class AudioCodec:
                 latency="low",
             )
 
-            # 播放流
             self.output_stream = sd.OutputStream(
                 samplerate=AudioConfig.OUTPUT_SAMPLE_RATE,
                 channels=AudioConfig.CHANNELS,
@@ -163,7 +154,6 @@ class AudioCodec:
                 latency="low",
             )
 
-            # 启动音频流
             self.input_stream.start()
             self.output_stream.start()
 
@@ -173,8 +163,7 @@ class AudioCodec:
 
     def _input_callback(self, indata, frames, time_info, status):
         """
-        录音回调函数
-        处理录音数据，重采样到16kHz并进行Opus编码
+        录音回调，硬件驱动调用 处理流程：原始音频 -> 重采样 -> AEC -> 编码发送 + 唤醒词检测.
         """
         if status and "overflow" not in str(status).lower():
             logger.warning(f"输入流状态: {status}")
@@ -185,33 +174,37 @@ class AudioCodec:
         try:
             audio_data = indata.copy().flatten()
 
-            # 重采样处理
+            # 重采样到16kHz（如果设备不是16kHz）
             if self.input_resampler is not None:
                 audio_data = self._process_input_resampling(audio_data)
                 if audio_data is None:
                     return
 
-            # AEC处理 - 对录音信号应用回声消除
-            # 参考pyaec示例：cancel_echo(麦克风录音, 服务端音频参考信号)
+            # AEC回声消除处理
             if len(audio_data) == AudioConfig.INPUT_FRAME_SIZE:
                 try:
                     audio_data = self.aec_processor.process_audio(audio_data)
                 except Exception as e:
                     logger.warning(f"AEC处理失败: {e}")
 
-            # 实时编码录音数据
-            if self._encoded_audio_callback and len(audio_data) == AudioConfig.INPUT_FRAME_SIZE:
+            # 实时编码并发送（不走队列，减少延迟）
+            if (
+                self._encoded_audio_callback
+                and len(audio_data) == AudioConfig.INPUT_FRAME_SIZE
+            ):
                 try:
                     pcm_data = audio_data.astype(np.int16).tobytes()
-                    encoded_data = self.opus_encoder.encode(pcm_data, AudioConfig.INPUT_FRAME_SIZE)
-                    
+                    encoded_data = self.opus_encoder.encode(
+                        pcm_data, AudioConfig.INPUT_FRAME_SIZE
+                    )
+
                     if encoded_data:
                         self._encoded_audio_callback(encoded_data)
-                        
+
                 except Exception as e:
                     logger.warning(f"实时录音编码失败: {e}")
 
-            # 提供数据给唤醒词检测
+            # 同时提供给唤醒词检测（走队列）
             self._put_audio_data_safe(self._wakeword_buffer, audio_data.copy())
 
         except Exception as e:
@@ -219,21 +212,17 @@ class AudioCodec:
 
     def _process_input_resampling(self, audio_data):
         """
-        输入音频重采样处理
-        将设备采样率转换为16kHz
+        输入重采样.
         """
         try:
             resampled_data = self.input_resampler.resample_chunk(audio_data, last=False)
             if len(resampled_data) > 0:
-                # 添加到缓冲区
                 self._resample_input_buffer.extend(resampled_data.astype(np.int16))
 
-            # 检查是否有足够数据组成完整帧
             expected_frame_size = AudioConfig.INPUT_FRAME_SIZE
             if len(self._resample_input_buffer) < expected_frame_size:
                 return None
 
-            # 取出一帧数据
             frame_data = []
             for _ in range(expected_frame_size):
                 frame_data.append(self._resample_input_buffer.popleft())
@@ -244,14 +233,42 @@ class AudioCodec:
             logger.error(f"输入重采样失败: {e}")
             return None
 
+    def _process_aec_reference_immediate(self, audio_data):
+        """
+        立即处理AEC参考信号 将24kHz播放数据重采样为16kHz，立即提供给AEC作为参考 这样可以减少延迟，提高回声消除效果.
+        """
+        try:
+            # 24kHz -> 16kHz重采样
+            resampled_data = self.aec_reference_resampler.resample_chunk(
+                audio_data, last=False
+            )
+            if len(resampled_data) > 0:
+                self._aec_reference_buffer.extend(resampled_data.astype(np.int16))
+
+            # 组帧并提供给AEC处理器
+            expected_frame_size = AudioConfig.INPUT_FRAME_SIZE
+            if len(self._aec_reference_buffer) >= expected_frame_size:
+                reference_frame = []
+                for _ in range(expected_frame_size):
+                    reference_frame.append(self._aec_reference_buffer.popleft())
+
+                reference_array = np.array(reference_frame, dtype=np.int16)
+
+                try:
+                    self.aec_processor.add_reference_audio(reference_array)
+                except Exception as e:
+                    logger.debug(f"添加AEC参考信号失败: {e}")
+
+        except Exception as e:
+            logger.warning(f"AEC参考信号处理失败: {e}")
+
     def _put_audio_data_safe(self, queue, audio_data):
         """
-        安全地将音频数据放入队列
+        安全入队，队列满时丢弃最旧数据.
         """
         try:
             queue.put_nowait(audio_data)
         except asyncio.QueueFull:
-            # 队列满时移除最旧数据
             try:
                 queue.get_nowait()
                 queue.put_nowait(audio_data)
@@ -260,8 +277,7 @@ class AudioCodec:
 
     def _output_callback(self, outdata: np.ndarray, frames: int, time_info, status):
         """
-        播放回调函数
-        从缓冲区取出24kHz音频数据进行播放
+        播放回调，硬件驱动调用 从播放队列取数据输出到扬声器.
         """
         if status:
             if "underflow" not in str(status).lower():
@@ -269,20 +285,18 @@ class AudioCodec:
 
         try:
             try:
-                # 从输出缓冲区获取音频数据
+                # 从播放队列获取音频数据
                 audio_data = self._output_buffer.get_nowait()
 
-                # 写入音频数据
                 if len(audio_data) >= frames:
                     output_frames = audio_data[:frames]
                     outdata[:] = output_frames.reshape(-1, AudioConfig.CHANNELS)
                 else:
                     output_frames = audio_data
-                    outdata[: len(audio_data)] = audio_data.reshape(-1, AudioConfig.CHANNELS)
+                    outdata[: len(audio_data)] = audio_data.reshape(
+                        -1, AudioConfig.CHANNELS
+                    )
                     outdata[len(audio_data) :] = 0
-                
-                # 注意: 不再在播放回调中添加参考信号
-                # 参考信号现在直接从服务端解码的音频数据中获取，在write_audio方法中处理
 
             except asyncio.QueueEmpty:
                 # 无数据时输出静音
@@ -292,29 +306,27 @@ class AudioCodec:
             logger.error(f"输出回调错误: {e}")
             outdata.fill(0)
 
-
     def _input_finished_callback(self):
         """
-        输入流结束回调
+        输入流结束.
         """
         logger.info("输入流已结束")
 
     def _output_finished_callback(self):
         """
-        输出流结束回调
+        输出流结束.
         """
         logger.info("输出流已结束")
 
     async def reinitialize_stream(self, is_input=True):
         """
-        重新初始化音频流
+        重建音频流.
         """
         if self._is_closing:
             return False if is_input else None
 
         try:
             if is_input:
-                # 重建录音流
                 if self.input_stream:
                     self.input_stream.stop()
                     self.input_stream.close()
@@ -332,7 +344,6 @@ class AudioCodec:
                 logger.info("输入流重新初始化成功")
                 return True
             else:
-                # 重建播放流
                 if self.output_stream:
                     self.output_stream.stop()
                     self.output_stream.close()
@@ -359,13 +370,7 @@ class AudioCodec:
 
     async def get_raw_audio_for_detection(self) -> Optional[bytes]:
         """
-        获取唤醒词检测用的原始音频数据
-        
-        从专用队列获取数据，与录音编码独立运行，
-        避免数据竞争问题。
-
-        Returns:
-            Optional[bytes]: PCM格式音频数据，无数据时返回None
+        获取唤醒词音频数据.
         """
         try:
             if self._wakeword_buffer.empty():
@@ -373,7 +378,6 @@ class AudioCodec:
 
             audio_data = self._wakeword_buffer.get_nowait()
 
-            # 转换为bytes格式
             if hasattr(audio_data, "tobytes"):
                 return audio_data.tobytes()
             elif hasattr(audio_data, "astype"):
@@ -389,27 +393,18 @@ class AudioCodec:
 
     def set_encoded_audio_callback(self, callback):
         """
-        设置编码后音频数据的回调函数
-        
-        启用实时编码模式，录音回调中直接编码并传递，
-        消除轮询延迟，提升录音实时性。
-        
-        Args:
-            callback: 回调函数，接收编码数据参数，None时禁用实时编码
+        设置编码回调.
         """
         self._encoded_audio_callback = callback
-        
+
         if callback:
-            logger.info("✓ 启用实时录音编码模式 - 录音回调直接编码传递")
+            logger.info("启用实时编码")
         else:
-            logger.info("✓ 禁用录音编码回调")
+            logger.info("禁用编码回调")
 
     async def write_audio(self, opus_data: bytes):
         """
-        解码Opus音频数据并放入播放队列
-        同时将解码后的PCM数据作为AEC参考信号
-        
-        参考pyaec示例：使用服务端下发的音频作为echo_buffer参考信号
+        解码音频并播放 网络接收的Opus数据 -> 解码24kHz -> AEC参考信号 + 播放队列.
         """
         try:
             # Opus解码为24kHz PCM数据
@@ -419,21 +414,17 @@ class AudioCodec:
 
             audio_array = np.frombuffer(pcm_data, dtype=np.int16)
 
-            # 验证数据长度
             expected_length = AudioConfig.OUTPUT_FRAME_SIZE * AudioConfig.CHANNELS
             if len(audio_array) != expected_length:
-                logger.warning(f"解码音频长度异常: {len(audio_array)}, 期望: {expected_length}")
+                logger.warning(
+                    f"解码音频长度异常: {len(audio_array)}, 期望: {expected_length}"
+                )
                 return
 
-            # 将解码后的音频数据作为AEC参考信号
-            # 关键实现：参考pyaec示例，使用服务端音频作为echo_buffer
-            # 这比使用本地播放音频更准确，因为避免了播放链路的延迟和失真
-            try:
-                self.aec_processor.add_reference_audio(audio_array.copy())
-            except Exception as e:
-                logger.debug(f"添加AEC参考信号失败: {e}")
+            # 立即处理AEC参考信号（减少延迟）
+            self._process_aec_reference_immediate(audio_array.copy())
 
-            # 放入播放缓冲区
+            # 放入播放队列
             self._put_audio_data_safe(self._output_buffer, audio_array)
 
         except opuslib.OpusError as e:
@@ -443,31 +434,25 @@ class AudioCodec:
 
     async def wait_for_audio_complete(self, timeout=10.0):
         """
-        等待音频播放完成
+        等待播放完成.
         """
         start = time.time()
-        
-        # 等待播放队列清空
+
         while not self._output_buffer.empty() and time.time() - start < timeout:
             await asyncio.sleep(0.05)
-        
-        # 额外等待确保最后的音频播放完成
+
         await asyncio.sleep(0.3)
-        
-        # 检查超时情况
+
         if not self._output_buffer.empty():
             output_remaining = self._output_buffer.qsize()
-            logger.warning(
-                f"音频播放超时，剩余队列 - 输出: {output_remaining} 帧"
-            )
+            logger.warning(f"音频播放超时，剩余队列 - 输出: {output_remaining} 帧")
 
     async def clear_audio_queue(self):
         """
-        清空音频队列
+        清空音频队列.
         """
         cleared_count = 0
 
-        # 清空所有队列
         queues_to_clear = [
             self._wakeword_buffer,
             self._output_buffer,
@@ -481,31 +466,31 @@ class AudioCodec:
                 except asyncio.QueueEmpty:
                     break
 
-        # 清空重采样缓冲区
         if self._resample_input_buffer:
             cleared_count += len(self._resample_input_buffer)
             self._resample_input_buffer.clear()
 
-        # 重置AEC处理器状态
+        if self._aec_reference_buffer:
+            cleared_count += len(self._aec_reference_buffer)
+            self._aec_reference_buffer.clear()
+
         try:
             self.aec_processor.clear_reference_buffer()
         except Exception as e:
             logger.debug(f"重置AEC处理器失败: {e}")
 
-        # 等待正在处理的音频数据完成
         await asyncio.sleep(0.01)
 
         if cleared_count > 0:
             logger.info(f"清空音频队列，丢弃 {cleared_count} 帧音频数据")
 
-        # 数据量大时执行垃圾回收
         if cleared_count > 100:
             gc.collect()
             logger.debug("执行垃圾回收以释放内存")
 
     async def start_streams(self):
         """
-        启动音频输入输出流
+        启动音频流.
         """
         try:
             if self.input_stream and not self.input_stream.active:
@@ -528,7 +513,7 @@ class AudioCodec:
 
     async def stop_streams(self):
         """
-        停止音频输入输出流
+        停止音频流.
         """
         try:
             if self.input_stream and self.input_stream.active:
@@ -544,11 +529,10 @@ class AudioCodec:
 
     async def _cleanup_resampler(self, resampler, name):
         """
-        清理重采样器资源
+        清理重采样器.
         """
         if resampler:
             try:
-                # 处理完剩余数据
                 if hasattr(resampler, "resample_chunk"):
                     empty_array = np.array([], dtype=np.int16)
                     resampler.resample_chunk(empty_array, last=True)
@@ -557,7 +541,7 @@ class AudioCodec:
 
     async def close(self):
         """
-        关闭音频编解码器，释放所有资源
+        关闭音频编解码器.
         """
         if self._is_closing:
             return
@@ -566,10 +550,8 @@ class AudioCodec:
         logger.info("开始关闭音频编解码器...")
 
         try:
-            # 清空队列
             await self.clear_audio_queue()
 
-            # 关闭流
             if self.input_stream:
                 try:
                     self.input_stream.stop()
@@ -588,24 +570,23 @@ class AudioCodec:
                 finally:
                     self.output_stream = None
 
-            # 清理重采样器
             await self._cleanup_resampler(self.input_resampler, "输入")
+            await self._cleanup_resampler(self.aec_reference_resampler, "AEC参考")
             self.input_resampler = None
+            self.aec_reference_resampler = None
 
-            # 清理重采样缓冲区
             self._resample_input_buffer.clear()
+            self._aec_reference_buffer.clear()
 
-            # 清理编解码器
             self.opus_encoder = None
             self.opus_decoder = None
-            
-            # 关闭AEC处理器
+
             try:
                 await self.aec_processor.close()
             except Exception as e:
                 logger.warning(f"关闭AEC处理器失败: {e}")
 
-            gc.collect()  # 强制释放 nanobind 的 C++ 对象
+            gc.collect()
 
             logger.info("音频资源已完全释放")
         except Exception as e:
@@ -613,8 +594,7 @@ class AudioCodec:
 
     def __del__(self):
         """
-        析构函数，检查资源是否正确释放
+        析构函数.
         """
         if not self._is_closing:
-            # 在析构函数中不能使用asyncio.create_task，改为记录警告
-            logger.warning("AudioCodec对象被销毁但未正确关闭，请确保调用close()方法")
+            logger.warning("AudioCodec未正确关闭，请调用close()")

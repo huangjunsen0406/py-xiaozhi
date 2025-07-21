@@ -239,7 +239,7 @@ class MusicCacheScanner:
                     )
                 else:
                     self.scan_stats["error_count"] += 1
-                    print(f"   ❌ 元数据提取失败")
+                    print("   ❌ 元数据提取失败")
 
             except Exception as e:
                 self.scan_stats["error_count"] += 1
@@ -295,7 +295,7 @@ class MusicCacheScanner:
         打印扫描统计信息.
         """
         stats = self.scan_stats
-        print(f"\n📊 扫描统计:")
+        print("\n📊 扫描统计:")
         print(f"   总文件数: {stats['total_files']}")
         print(f"   成功处理: {stats['success_count']}")
         print(f"   处理失败: {stats['error_count']}")
