@@ -347,6 +347,8 @@ class Application:
             # 2. SPEAKING状态：只有在REALTIME模式下才发送（向后兼容）
             should_send = (self.device_state == DeviceState.LISTENING) or (
                 self.device_state == DeviceState.SPEAKING
+                and self.aec_enabled
+                and self.keep_listening
                 and self.listening_mode == ListeningMode.REALTIME
             )
 
@@ -374,6 +376,8 @@ class Application:
             # 核心逻辑：LISTENING状态或SPEAKING+REALTIME模式下发送音频
             should_send = (self.device_state == DeviceState.LISTENING) or (
                 self.device_state == DeviceState.SPEAKING
+                and self.aec_enabled
+                and self.keep_listening
                 and self.listening_mode == ListeningMode.REALTIME
             )
 

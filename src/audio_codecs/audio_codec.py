@@ -9,7 +9,6 @@ import opuslib
 import sounddevice as sd
 import soxr
 
-from src.audio_processing.aec_processor import AECProcessor
 from src.constants.constants import AudioConfig
 from src.utils.config_manager import ConfigManager
 from src.utils.logging_config import get_logger
@@ -21,9 +20,8 @@ class AudioCodec:
     """
     音频编解码器，负责录音编码和播放解码
     主要功能：
-    1. 录音：麦克风 -> 重采样16kHz -> AEC处理 -> Opus编码 -> 发送
+    1. 录音：麦克风 -> 重采样16kHz -> Opus编码 -> 发送
     2. 播放：接收 -> Opus解码24kHz -> 播放队列 -> 扬声器
-    3. AEC：播放信号重采样16kHz作为参考信号，消除回声
     """
 
     def __init__(self):
@@ -41,12 +39,10 @@ class AudioCodec:
         # 重采样器：统一采样率
         self.input_resampler = None  # 设备采样率 -> 16kHz
         self.output_resampler = None  # 24kHz -> 设备采样率(播放用)
-        self.aec_reference_resampler = None  # 24kHz -> 16kHz(AEC用)
 
         # 重采样缓冲区
         self._resample_input_buffer = deque()
         self._resample_output_buffer = deque()
-        self._aec_reference_buffer = deque()
 
         self._device_input_frame_size = None
         self._is_closing = False
@@ -62,8 +58,6 @@ class AudioCodec:
         # 实时编码回调（直接发送，不走队列）
         self._encoded_audio_callback = None
 
-        # AEC回声消除处理器 - 从配置读取启用状态
-        self.aec_processor = AECProcessor()
 
     async def initialize(self):
         """
@@ -97,11 +91,6 @@ class AudioCodec:
             self.opus_decoder = opuslib.Decoder(
                 AudioConfig.OUTPUT_SAMPLE_RATE, AudioConfig.CHANNELS
             )
-            await self.aec_processor.initialize()
-            if self.aec_processor.is_available():
-                logger.info("AEC初始化成功")
-            else:
-                logger.warning("AEC初始化失败")
             logger.info("音频初始化完成")
         except Exception as e:
             logger.error(f"初始化音频设备失败: {e}")
@@ -136,14 +125,6 @@ class AudioCodec:
                 f"输出重采样: {AudioConfig.OUTPUT_SAMPLE_RATE}Hz -> {self.device_output_sample_rate}Hz"
             )
 
-        self.aec_reference_resampler = soxr.ResampleStream(
-            AudioConfig.OUTPUT_SAMPLE_RATE,
-            16000,  # 固定使用16kHz
-            AudioConfig.CHANNELS,
-            dtype="int16",
-            quality="QQ",
-        )
-        logger.info(f"AEC参考重采样: {AudioConfig.OUTPUT_SAMPLE_RATE}Hz -> 16kHz")
 
     async def _create_streams(self):
         """
@@ -208,12 +189,6 @@ class AudioCodec:
                 if audio_data is None:
                     return
 
-            # AEC回声消除处理
-            if len(audio_data) == AudioConfig.INPUT_FRAME_SIZE:
-                try:
-                    audio_data = self.aec_processor.process_audio(audio_data)
-                except Exception as e:
-                    logger.warning(f"AEC处理失败: {e}")
 
             # 实时编码并发送（不走队列，减少延迟）
             if (
@@ -261,34 +236,6 @@ class AudioCodec:
             logger.error(f"输入重采样失败: {e}")
             return None
 
-    def _process_aec_reference_immediate(self, audio_data):
-        """
-        立即处理AEC参考信号 将24kHz播放数据重采样为16kHz，立即提供给AEC作为参考 这样可以减少延迟，提高回声消除效果.
-        """
-        try:
-            # 24kHz -> 16kHz重采样
-            resampled_data = self.aec_reference_resampler.resample_chunk(
-                audio_data, last=False
-            )
-            if len(resampled_data) > 0:
-                self._aec_reference_buffer.extend(resampled_data.astype(np.int16))
-
-            # 组帧并提供给AEC处理器
-            expected_frame_size = AudioConfig.INPUT_FRAME_SIZE
-            if len(self._aec_reference_buffer) >= expected_frame_size:
-                reference_frame = []
-                for _ in range(expected_frame_size):
-                    reference_frame.append(self._aec_reference_buffer.popleft())
-
-                reference_array = np.array(reference_frame, dtype=np.int16)
-
-                try:
-                    self.aec_processor.add_reference_audio(reference_array)
-                except Exception as e:
-                    logger.debug(f"添加AEC参考信号失败: {e}")
-
-        except Exception as e:
-            logger.warning(f"AEC参考信号处理失败: {e}")
 
     def _put_audio_data_safe(self, queue, audio_data):
         """
@@ -510,8 +457,6 @@ class AudioCodec:
                 )
                 return
 
-            # 立即处理AEC参考信号（减少延迟）
-            self._process_aec_reference_immediate(audio_array.copy())
 
             # 放入播放队列
             self._put_audio_data_safe(self._output_buffer, audio_array)
@@ -563,14 +508,7 @@ class AudioCodec:
             cleared_count += len(self._resample_output_buffer)
             self._resample_output_buffer.clear()
 
-        if self._aec_reference_buffer:
-            cleared_count += len(self._aec_reference_buffer)
-            self._aec_reference_buffer.clear()
 
-        try:
-            self.aec_processor.clear_reference_buffer()
-        except Exception as e:
-            logger.debug(f"重置AEC处理器失败: {e}")
 
         await asyncio.sleep(0.01)
 
@@ -665,22 +603,15 @@ class AudioCodec:
 
             await self._cleanup_resampler(self.input_resampler, "输入")
             await self._cleanup_resampler(self.output_resampler, "输出")
-            await self._cleanup_resampler(self.aec_reference_resampler, "AEC参考")
             self.input_resampler = None
             self.output_resampler = None
-            self.aec_reference_resampler = None
 
             self._resample_input_buffer.clear()
             self._resample_output_buffer.clear()
-            self._aec_reference_buffer.clear()
 
             self.opus_encoder = None
             self.opus_decoder = None
 
-            try:
-                await self.aec_processor.close()
-            except Exception as e:
-                logger.warning(f"关闭AEC处理器失败: {e}")
 
             gc.collect()
 
