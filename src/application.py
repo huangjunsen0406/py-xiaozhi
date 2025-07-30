@@ -92,6 +92,8 @@ class Application:
         self.protocol = None
         self.display = None
         self.wake_word_detector = None
+        self.shortcut_manager = None
+        self.gpio_button_manager = None
         # 任务管理
         self.running = False
         self._main_tasks: Set[asyncio.Task] = set()
@@ -327,22 +329,22 @@ class Application:
     def _on_encoded_audio(self, encoded_data: bytes):
         """
         处理编码后的音频数据回调.
-        
+
         注意：这个回调在音频驱动线程中被调用，需要线程安全地调度到主事件循环。
         """
         try:
             # 只在监听状态且音频通道打开时发送数据
-            if (self.device_state == DeviceState.LISTENING 
-                    and self.protocol 
-                    and self.protocol.is_audio_channel_opened()
-                    and not getattr(self, '_transitioning', False)):
-                
+            if (
+                self.device_state == DeviceState.LISTENING
+                and self.protocol
+                and self.protocol.is_audio_channel_opened()
+                and not getattr(self, '_transitioning', False)
+            ):
+
                 # 线程安全地调度到主事件循环
                 if self._main_loop and not self._main_loop.is_closed():
-                    self._main_loop.call_soon_threadsafe(
-                        self._schedule_audio_send, encoded_data
-                    )
-                
+                    self._main_loop.call_soon_threadsafe(self._schedule_audio_send, encoded_data)
+
         except Exception as e:
             logger.error(f"处理编码音频数据回调失败: {e}")
 
@@ -352,13 +354,15 @@ class Application:
         """
         try:
             # 再次检查状态（可能在调度期间状态已改变）
-            if (self.device_state == DeviceState.LISTENING 
-                    and self.protocol 
-                    and self.protocol.is_audio_channel_opened()):
-                
+            if (
+                self.device_state == DeviceState.LISTENING
+                and self.protocol
+                and self.protocol.is_audio_channel_opened()
+            ):
+
                 # 创建异步任务发送音频数据
                 asyncio.create_task(self.protocol.send_audio(encoded_data))
-                
+
         except Exception as e:
             logger.error(f"调度音频发送失败: {e}")
 
@@ -453,7 +457,7 @@ class Application:
         def done_callback(t):
             # 任务完成后从集合中移除，防止内存泄漏
             self._main_tasks.discard(t)
-            
+
             if not t.cancelled() and t.exception():
                 logger.error(f"任务 {name} 异常结束: {t.exception()}", exc_info=True)
 
@@ -470,12 +474,10 @@ class Application:
                 if self.command_queue is None:
                     await asyncio.sleep(0.1)
                     continue
-                    
+
                 # 等待命令，超时后继续循环检查running状态
                 try:
-                    command = await asyncio.wait_for(
-                        self.command_queue.get(), timeout=0.1
-                    )
+                    command = await asyncio.wait_for(self.command_queue.get(), timeout=0.1)
                     # 检查命令是否有效
                     if command is None:
                         logger.warning("收到空命令，跳过执行")
@@ -520,7 +522,7 @@ class Application:
         if self.command_queue is None:
             logger.warning("命令队列未初始化，丢弃命令")
             return
-            
+
         try:
             # 使用 put_nowait 避免阻塞，如果队列满则记录警告
             self.command_queue.put_nowait(command)
@@ -742,9 +744,7 @@ class Application:
                 task = asyncio.create_task(self.audio_codec.write_audio(data))
                 task.add_done_callback(
                     lambda t: (
-                        logger.error(
-                            f"音频写入任务异常: {t.exception()}", exc_info=True
-                        )
+                        logger.error(f"音频写入任务异常: {t.exception()}", exc_info=True)
                         if not t.cancelled() and t.exception()
                         else None
                     )
@@ -758,9 +758,7 @@ class Application:
         """
         接收JSON数据回调.
         """
-        asyncio.create_task(
-            self.schedule_command(lambda: self._handle_incoming_json(json_data))
-        )
+        asyncio.create_task(self.schedule_command(lambda: self._handle_incoming_json(json_data)))
 
     async def _handle_incoming_json(self, json_data):
         """
@@ -1013,9 +1011,7 @@ class Application:
             logger.error(f"模式变更检查失败: {e}")
             return False
 
-    async def _safe_close_resource(
-        self, resource, resource_name: str, close_method: str = "close"
-    ):
+    async def _safe_close_resource(self, resource, resource_name: str, close_method: str = "close"):
         """
         安全关闭资源的辅助方法.
         """
@@ -1046,12 +1042,14 @@ class Application:
             self._shutdown_event.set()
 
         try:
-            # 2. 关闭唤醒词检测器
-            await self._safe_close_resource(
-                self.wake_word_detector, "唤醒词检测器", "stop"
-            )
+            # 2. 关闭快捷键和GPIO按钮管理器
+            await self._safe_close_resource(self.shortcut_manager, "快捷键管理器", "stop")
+            await self._safe_close_resource(self.gpio_button_manager, "GPIO按钮管理器", "stop")
 
-            # 3. 取消所有长期任务
+            # 3. 关闭唤醒词检测器
+            await self._safe_close_resource(self.wake_word_detector, "唤醒词检测器", "stop")
+
+            # 4. 取消所有长期任务
             if self._main_tasks:
                 logger.info(f"取消 {len(self._main_tasks)} 个主要任务")
                 tasks = list(self._main_tasks)
@@ -1069,7 +1067,7 @@ class Application:
 
                 self._main_tasks.clear()
 
-            # 4. 关闭协议连接
+            # 5. 关闭协议连接
             if self.protocol:
                 try:
                     await self.protocol.close_audio_channel()
@@ -1077,13 +1075,13 @@ class Application:
                 except Exception as e:
                     logger.error(f"关闭协议连接失败: {e}")
 
-            # 5. 关闭音频设备
+            # 6. 关闭音频设备
             await self._safe_close_resource(self.audio_codec, "音频设备")
 
-            # 6. 关闭MCP服务器
+            # 7. 关闭MCP服务器
             await self._safe_close_resource(self.mcp_server, "MCP服务器")
 
-            # 7. 清理队列
+            # 8. 清理队列
             try:
                 for q in [
                     self.command_queue,
@@ -1097,7 +1095,7 @@ class Application:
             except Exception as e:
                 logger.error(f"清空队列失败: {e}")
 
-            # 8. 最后停止UI显示
+            # 9. 最后停止UI显示
             await self._safe_close_resource(self.display, "显示界面")
 
             logger.info("应用程序关闭完成")
@@ -1111,9 +1109,7 @@ class Application:
         """
         logger.info("初始化MCP服务器")
         # 设置发送回调
-        self.mcp_server.set_send_callback(
-            lambda msg: self.protocol.send_mcp_message(msg)
-        )
+        self.mcp_server.set_send_callback(lambda msg: self.protocol.send_mcp_message(msg))
         # 添加通用工具
         self.mcp_server.add_common_tools()
 
@@ -1162,17 +1158,45 @@ class Application:
 
     async def _initialize_shortcuts(self):
         """
-        初始化快捷键管理器.
+        初始化快捷键管理器和GPIO按钮管理器.
         """
         try:
+            # 初始化快捷键管理器
             from src.views.components.shortcut_manager import (
                 start_global_shortcuts_async,
             )
 
-            shortcut_manager = await start_global_shortcuts_async(logger)
-            if shortcut_manager:
+            self.shortcut_manager = await start_global_shortcuts_async(logger)
+            if self.shortcut_manager:
                 logger.info("快捷键管理器初始化成功")
             else:
                 logger.warning("快捷键管理器初始化失败")
+
+            # 初始化GPIO按钮管理器（仅在树莓派上）
+            try:
+                from src.views.components.gpio_button_manager import (
+                    start_gpio_button_async,
+                )
+
+                # 从配置中获取GPIO设置
+                gpio_config = self.config.get_config("GPIO", {})
+                pin = gpio_config.get("button_pin", 6)
+                led_pin = gpio_config.get("led_pin", 5)
+                pull_up = gpio_config.get("pull_up", True)
+                debounce_time = gpio_config.get("debounce_time", 0.05)
+
+                self.gpio_button_manager = await start_gpio_button_async(
+                    pin=pin, pull_up=pull_up, debounce_time=debounce_time, led_pin=led_pin
+                )
+
+                if self.gpio_button_manager:
+                    logger.info(f"GPIO按钮管理器初始化成功，监听引脚: {pin}")
+                else:
+                    logger.info("GPIO按钮管理器初始化跳过（非树莓派环境或初始化失败）")
+
+            except Exception as gpio_e:
+                logger.info(f"GPIO按钮管理器初始化跳过: {gpio_e}")
+                self.gpio_button_manager = None
+
         except Exception as e:
             logger.error(f"初始化快捷键管理器失败: {e}", exc_info=True)
