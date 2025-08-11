@@ -23,8 +23,21 @@ class AppMatcher:
     统一的应用程序匹配器.
     """
 
-    # 特殊应用名称映射
+    # 特殊应用名称映射 - 按长度排序，避免短名称优先匹配
     SPECIAL_MAPPINGS = {
+        "qq音乐": ["qqmusic", "qq音乐", "qq music"],
+        "qqmusic": ["qqmusic", "qq音乐", "qq music"],
+        "qq music": ["qqmusic", "qq音乐", "qq music"],
+        "tencent meeting": ["tencent meeting", "腾讯会议", "voovmeeting"],
+        "腾讯会议": ["tencent meeting", "腾讯会议", "voovmeeting"],
+        "google chrome": ["chrome", "googlechrome", "google chrome"],
+        "microsoft edge": ["msedge", "edge", "microsoft edge"],
+        "microsoft office": ["microsoft office", "office", "word", "excel", "powerpoint"],
+        "microsoft word": ["microsoft word", "word"],
+        "microsoft excel": ["microsoft excel", "excel"],
+        "microsoft powerpoint": ["microsoft powerpoint", "powerpoint"],
+        "visual studio code": ["code", "vscode", "visual studio code"],
+        "wps office": ["wps", "wps office"],
         "qq": ["qq", "qqnt", "tencentqq"],
         "wechat": ["wechat", "weixin", "微信"],
         "dingtalk": ["dingtalk", "钉钉", "ding"],
@@ -37,13 +50,10 @@ class AppMatcher:
         "calculator": ["calc", "calculator", "calculatorapp"],
         "calc": ["calc", "calculator", "calculatorapp"],
         "feishu": ["feishu", "飞书", "lark"],
-        "qqmusic": ["qqmusic", "qq音乐", "qq music"],
         "vscode": ["code", "vscode", "visual studio code"],
         "pycharm": ["pycharm", "pycharm64"],
         "cursor": ["cursor"],
         "typora": ["typora"],
-        "tencent meeting": ["tencent meeting", "腾讯会议", "voovmeeting"],
-        "腾讯会议": ["tencent meeting", "腾讯会议", "voovmeeting"],
         "wps": ["wps", "wps office"],
         "office": ["microsoft office", "office", "word", "excel", "powerpoint"],
         "word": ["microsoft word", "word"],
@@ -66,6 +76,8 @@ class AppMatcher:
         "qqnt": "qq",
         "tencentqq": "qq",
         "qqmusic": "qqmusic",
+        "QQMUSIC": "QQMUSIC",
+        "QQ音乐": "QQ音乐",
         "wechat": "wechat",
         "weixin": "wechat",
         "dingtalk": "dingtalk",
@@ -156,11 +168,27 @@ class AppMatcher:
         if target_lower == app_name or target_lower == display_name:
             return 100
 
-        # 2. 特殊映射匹配 (95分)
-        if target_lower in cls.SPECIAL_MAPPINGS:
-            for alias in cls.SPECIAL_MAPPINGS[target_lower]:
-                if alias in app_name or alias in display_name:
-                    return 95
+        # 2. 特殊映射匹配 (95-98分) - 优先匹配更具体的关键词
+        best_special_score = 0
+        
+        for key in cls.SPECIAL_MAPPINGS:
+            if key in target_lower or target_lower == key:
+                # 检查是否有匹配的别名
+                for alias in cls.SPECIAL_MAPPINGS[key]:
+                    if alias.lower() in app_name or alias.lower() in display_name:
+                        # 计算匹配度：更具体的匹配得分更高
+                        if target_lower == key:
+                            score = 98  # 精确匹配特殊映射键
+                        elif len(key) > len(target_lower) * 0.8:
+                            score = 97  # 长度相近的匹配
+                        else:
+                            score = 95  # 一般特殊映射匹配
+                        
+                        if score > best_special_score:
+                            best_special_score = score
+        
+        if best_special_score > 0:
+            return best_special_score
 
         # 3. 标准化名称匹配 (90分)
         normalized_target = cls.normalize_name(target_name)
@@ -179,6 +207,9 @@ class AppMatcher:
         if target_lower in display_name:
             return 75
         if app_name and app_name in target_lower:
+            # 避免短名称误匹配长名称
+            if len(app_name) < len(target_lower) * 0.5:
+                return 50  # 降低分数
             return 70
 
         # 5. 窗口标题匹配 (60分)
