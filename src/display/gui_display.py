@@ -1,10 +1,10 @@
 import os
-import platform
+from abc import ABCMeta
 from pathlib import Path
 from typing import Callable, Optional
 
 from PyQt5.QtCore import QObject, Qt
-from PyQt5.QtGui import QFont, QMovie
+from PyQt5.QtGui import QFont, QMovie, QPixmap
 from PyQt5.QtWidgets import (
     QApplication,
     QLabel,
@@ -13,19 +13,6 @@ from PyQt5.QtWidgets import (
     QSizePolicy,
     QWidget,
 )
-
-# 根据不同操作系统处理 pynput 导入
-try:
-    if platform.system() == "Windows":
-        from pynput import keyboard as pynput_keyboard
-    elif os.environ.get("DISPLAY"):
-        from pynput import keyboard as pynput_keyboard
-    else:
-        pynput_keyboard = None
-except ImportError:
-    pynput_keyboard = None
-
-from abc import ABCMeta
 
 from src.display.base_display import BaseDisplay
 from src.utils.resource_finder import find_assets_dir
@@ -162,7 +149,7 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             self.auto_btn.hide()
             self.manual_btn.show()
 
-    async def update_status(self, status: str):
+    async def update_status(self, status: str, connected: bool):
         """
         更新状态文本并处理相关逻辑.
         """
@@ -172,8 +159,7 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         if status != self.current_status:
             self.current_status = status
 
-            # 根据状态更新连接状态
-            self._update_connection_status(status)
+            self.is_connected = bool(connected)
 
             # 更新系统托盘
             self._update_system_tray(status)
@@ -192,17 +178,17 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             return
 
         self._last_emotion_name = emotion_name
-        gif_path = self._get_emotion_gif_path(emotion_name)
+        asset_path = self._get_emotion_asset_path(emotion_name)
 
         if self.emotion_label:
             try:
-                self._set_emotion_gif(self.emotion_label, gif_path)
+                self._set_emotion_asset(self.emotion_label, asset_path)
             except Exception as e:
                 self.logger.error(f"设置表情GIF时发生错误: {str(e)}")
 
-    def _get_emotion_gif_path(self, emotion_name: str) -> str:
+    def _get_emotion_asset_path(self, emotion_name: str) -> str:
         """
-        获取表情GIF文件路径.
+        获取表情资源文件路径，自动匹配常见后缀.
         """
         if emotion_name in self._emotion_cache:
             return self._emotion_cache[emotion_name]
@@ -212,57 +198,75 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             path = "😊"
         else:
             emotion_dir = assets_dir / "emojis"
-            gif_file = emotion_dir / f"{emotion_name}.gif"
+            # 支持的后缀优先级：gif > png > jpg > jpeg > webp
+            candidates = [
+                emotion_dir / f"{emotion_name}.gif",
+                emotion_dir / f"{emotion_name}.png",
+                emotion_dir / f"{emotion_name}.jpg",
+                emotion_dir / f"{emotion_name}.jpeg",
+                emotion_dir / f"{emotion_name}.webp",
+            ]
+            # 依次匹配
+            found = next((p for p in candidates if p.exists()), None)
 
-            if gif_file.exists():
-                path = str(gif_file)
-            elif (emotion_dir / "neutral.gif").exists():
-                path = str(emotion_dir / "neutral.gif")
-            else:
-                path = "😊"
+            # 兜底到 neutral 同样规则
+            if not found:
+                neutral_candidates = [
+                    emotion_dir / "neutral.gif",
+                    emotion_dir / "neutral.png",
+                    emotion_dir / "neutral.jpg",
+                    emotion_dir / "neutral.jpeg",
+                    emotion_dir / "neutral.webp",
+                ]
+                found = next((p for p in neutral_candidates if p.exists()), None)
+
+            path = str(found) if found else "😊"
 
         self._emotion_cache[emotion_name] = path
         return path
 
-    def _set_emotion_gif(self, label, gif_path):
+    def _set_emotion_asset(self, label, asset_path: str):
         """
-        设置表情GIF动画.
+        设置表情资源（GIF动图或静态图片）。
         """
         if not label:
             return
 
         # 如果是emoji字符串，直接设置文本
-        if not gif_path.endswith(".gif"):
-            label.setText(gif_path)
+        if not isinstance(asset_path, str) or "." not in asset_path:
+            label.setText(asset_path or "😊")
             return
 
         try:
-            # 检查缓存中是否有该GIF
-            if hasattr(self, "_gif_movies") and gif_path in self._gif_movies:
-                movie = self._gif_movies[gif_path]
+            if asset_path.lower().endswith(".gif"):
+                # GIF 动图
+                if hasattr(self, "_gif_movies") and asset_path in self._gif_movies:
+                    movie = self._gif_movies[asset_path]
+                else:
+                    movie = QMovie(asset_path)
+                    if not movie.isValid():
+                        label.setText("😊")
+                        return
+                    movie.setCacheMode(QMovie.CacheAll)
+                    if not hasattr(self, "_gif_movies"):
+                        self._gif_movies = {}
+                    self._gif_movies[asset_path] = movie
+
+                self.emotion_movie = movie
+                label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+                label.setAlignment(Qt.AlignCenter)
+                label.setMovie(movie)
+                movie.setSpeed(105)
+                movie.start()
             else:
-                movie = QMovie(gif_path)
-                if not movie.isValid():
+                # 静态图片
+                pixmap = QPixmap(asset_path)
+                if pixmap.isNull():
                     label.setText("😊")
                     return
-
-                movie.setCacheMode(QMovie.CacheAll)
-
-                if not hasattr(self, "_gif_movies"):
-                    self._gif_movies = {}
-                self._gif_movies[gif_path] = movie
-
-            # 保存动画对象
-            self.emotion_movie = movie
-
-            # 设置标签属性
-            label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-            label.setAlignment(Qt.AlignCenter)
-            label.setMovie(movie)
-
-            # 设置动画速度并开始播放
-            movie.setSpeed(105)
-            movie.start()
+                label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+                label.setAlignment(Qt.AlignCenter)
+                label.setPixmap(pixmap)
 
         except Exception as e:
             self.logger.error(f"设置GIF动画失败: {e}")
@@ -525,25 +529,6 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
 
         except Exception as e:
             self.logger.error(f"打开设置窗口失败: {e}", exc_info=True)
-
-    def _update_connection_status(self, status: str):
-        """
-        根据状态更新连接状态.
-        """
-        if status in ["连接中...", "聆听中...", "说话中..."]:
-            self.is_connected = True
-        elif status == "待命":
-            # 对于待命状态，需要检查音频通道是否真的开启
-            from src.application import Application
-
-            app = Application.get_instance()
-            if app and app.protocol:
-                self.is_connected = app.protocol.is_audio_channel_opened()
-            else:
-                self.is_connected = False
-        else:
-            # 其他状态（如错误状态）设为未连接
-            self.is_connected = False
 
     async def toggle_mode(self):
         """

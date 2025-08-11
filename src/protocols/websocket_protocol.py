@@ -474,7 +474,6 @@ class WebsocketProtocol(Protocol):
             if not transport or transport != "websocket":
                 logger.error(f"不支持的传输方式: {transport}")
                 return
-            print("服务链接返回初始化配置", data)
 
             # 设置 hello 接收事件
             self.hello_received.set()
