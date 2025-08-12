@@ -243,6 +243,7 @@ class Application:
         """
         try:
             import os as _os
+
             if _os.getenv("XIAOZHI_DISABLE_AUDIO") == "1":
                 logger.warning("已通过环境变量禁用音频初始化 (XIAOZHI_DISABLE_AUDIO=1)")
                 self.audio_codec = None
@@ -349,13 +350,16 @@ class Application:
         """
         创建异步回调函数的辅助方法.
         """
+
         def _callback():
             task = asyncio.create_task(coro_func(*args))
 
             def _on_done(t):
                 if not t.cancelled() and t.exception():
                     logger.error(f"GUI回调任务异常: {t.exception()}", exc_info=True)
+
             task.add_done_callback(_on_done)
+
         return _callback
 
     def _setup_gui_callbacks(self):
@@ -619,7 +623,7 @@ class Application:
         """
         if self.display:
             task = asyncio.create_task(update_func(*args))
-            
+
             # 捕获显示层任务的异常，避免静默失败
             def _on_done(t):
                 if not t.cancelled() and t.exception():
@@ -643,12 +647,16 @@ class Application:
                 await self._handle_idle_state()
             elif state == DeviceState.CONNECTING:
                 # 连接建立中：视为未连接
-                self._update_display_async(self.display.update_status, "连接中...", False)
+                self._update_display_async(
+                    self.display.update_status, "连接中...", False
+                )
             elif state == DeviceState.LISTENING:
                 await self._handle_listening_state()
             elif state == DeviceState.SPEAKING:
                 # 说话中：连接已建立
-                self._update_display_async(self.display.update_status, "说话中...", True)
+                self._update_display_async(
+                    self.display.update_status, "说话中...", True
+                )
 
     async def _handle_idle_state(self):
         """

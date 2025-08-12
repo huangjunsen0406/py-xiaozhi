@@ -32,48 +32,171 @@ class ResourceFinder:
 
     def _get_base_paths(self) -> List[Path]:
         """
-        获取所有可能的基础路径 按优先级排序：项目根目录 > 当前工作目录 > 可执行文件目录 > _MEIPASS.
+        获取所有可能的基础路径，优先级顺序：
+        1. 开发环境：项目根目录
+        2. macOS .app bundle: Contents/Resources (PyInstaller --add-data 目标)
+        3. PyInstaller 其他标准路径
         """
         base_paths = []
 
-        # 1. 项目根目录（开发环境）
-        project_root = Path(__file__).parent.parent.parent
-        base_paths.append(project_root)
+        # 开发环境优先
+        if not getattr(sys, "frozen", False):
+            project_root = Path(__file__).parent.parent.parent
+            base_paths.append(project_root)
 
-        # 2. 当前工作目录
-        cwd = Path.cwd()
-        if cwd != project_root:
-            base_paths.append(cwd)
+            cwd = Path.cwd()
+            if cwd != project_root:
+                base_paths.append(cwd)
 
-        # 3. 如果是打包环境
-        if getattr(sys, "frozen", False):
-            # 可执行文件所在目录
-            exe_dir = Path(sys.executable).parent
+            return base_paths
+
+        # === 打包环境 ===
+        exe_path = Path(sys.executable).resolve()
+        exe_dir = exe_path.parent
+
+        # macOS .app Bundle 支持 (最高优先级)
+        app_root = None
+        if sys.platform == "darwin":
+            # 在 exe 路径及其父路径中寻找以 .app 结尾的目录
+            for p in [exe_path] + list(exe_path.parents):
+                if p.name.endswith(".app"):
+                    app_root = p
+                    break
+
+        if app_root is not None:
+            # Contents/Resources - PyInstaller --add-data 的目标位置
+            resources_dir = app_root / "Contents" / "Resources"
+            if resources_dir.exists():
+                base_paths.append(resources_dir)
+                logger.debug(f"添加 macOS Resources 路径: {resources_dir}")
+
+            # Contents/Frameworks - 动态库位置
+            frameworks_dir = app_root / "Contents" / "Frameworks"
+            if frameworks_dir.exists():
+                base_paths.append(frameworks_dir)
+                logger.debug(f"添加 macOS Frameworks 路径: {frameworks_dir}")
+
+            # Contents/MacOS - 可执行文件目录（兜底）
             if exe_dir not in base_paths:
                 base_paths.append(exe_dir)
 
-            # PyInstaller的_MEIPASS路径（单文件模式）
-            if hasattr(sys, "_MEIPASS"):
-                meipass_dir = Path(sys._MEIPASS)
-                if meipass_dir not in base_paths:
-                    base_paths.append(meipass_dir)
+        # PyInstaller 标准路径
+        if exe_dir not in base_paths:
+            base_paths.append(exe_dir)
 
-                # _MEIPASS的父目录（某些情况下资源在这里）
-                meipass_parent = meipass_dir.parent
-                if meipass_parent not in base_paths:
-                    base_paths.append(meipass_parent)
+        # PyInstaller _MEIPASS (单文件模式)
+        if hasattr(sys, "_MEIPASS"):
+            meipass_dir = Path(sys._MEIPASS)
+            if meipass_dir not in base_paths:
+                base_paths.append(meipass_dir)
 
-            # 可执行文件的父目录（处理某些安装情况）
-            exe_parent = exe_dir.parent
-            if exe_parent not in base_paths:
-                base_paths.append(exe_parent)
+        # PyInstaller _internal 目录 (6.0.0+)
+        internal_dir = exe_dir / "_internal"
+        if internal_dir.exists() and internal_dir not in base_paths:
+            base_paths.append(internal_dir)
 
-            # 支持PyInstaller 6.0.0+：检查_internal目录
-            internal_dir = exe_dir / "_internal"
-            if internal_dir.exists() and internal_dir not in base_paths:
-                base_paths.append(internal_dir)
+        # 标准安装路径支持 (系统级安装)
+        self._add_system_install_paths(base_paths, exe_path)
+        
+        # 用户配置路径 (用于可写配置)
+        self._add_user_config_paths(base_paths)
+        
+        # 环境变量指定路径
+        self._add_env_paths(base_paths)
 
-        return base_paths
+        # 兜底路径
+        exe_parent = exe_dir.parent
+        if exe_parent not in base_paths:
+            base_paths.append(exe_parent)
+
+        # 去重但保持顺序
+        unique_paths = []
+        seen = set()
+        for p in base_paths:
+            if p not in seen:
+                unique_paths.append(p)
+                seen.add(p)
+
+        return unique_paths
+    
+    def _add_system_install_paths(self, base_paths: List[Path], exe_path: Path):
+        """添加系统级安装路径"""
+        if sys.platform == "darwin":
+            # macOS 标准路径
+            candidates = [
+                exe_path.parent / ".." / "share" / "xiaozhi",  # /usr/local/share/xiaozhi
+                exe_path.parent / ".." / "Resources",          # 相对Resources
+                Path("/usr/local/share/xiaozhi"),
+                Path("/opt/xiaozhi"),
+            ]
+        elif sys.platform.startswith("linux"):
+            # Linux 标准路径
+            candidates = [
+                exe_path.parent / ".." / "share" / "xiaozhi",
+                Path("/usr/share/xiaozhi"), 
+                Path("/usr/local/share/xiaozhi"),
+                Path("/opt/xiaozhi"),
+            ]
+        else:
+            # Windows
+            candidates = [
+                exe_path.parent / "data",
+                Path("C:/ProgramData/xiaozhi"),
+            ]
+            
+        for candidate in candidates:
+            try:
+                if candidate.exists() and candidate not in base_paths:
+                    base_paths.append(candidate.resolve())
+            except (OSError, RuntimeError):
+                pass  # 忽略无效路径
+    
+    def _add_user_config_paths(self, base_paths: List[Path]):
+        """添加用户配置路径"""
+        home = Path.home()
+        
+        if sys.platform == "darwin":
+            candidates = [
+                home / "Library" / "Application Support" / "xiaozhi",
+                home / ".config" / "xiaozhi",
+            ]
+        elif sys.platform.startswith("linux"):
+            candidates = [
+                home / ".config" / "xiaozhi",
+                home / ".local" / "share" / "xiaozhi",
+            ]
+        else:
+            candidates = [
+                home / "AppData" / "Local" / "xiaozhi",
+                home / "AppData" / "Roaming" / "xiaozhi",
+            ]
+            
+        for candidate in candidates:
+            try:
+                if candidate.exists() and candidate not in base_paths:
+                    base_paths.append(candidate)
+            except (OSError, RuntimeError):
+                pass
+                
+    def _add_env_paths(self, base_paths: List[Path]):
+        """添加环境变量指定的路径"""
+        import os
+        
+        env_vars = [
+            "XIAOZHI_DATA_DIR", 
+            "XIAOZHI_HOME",
+            "XIAOZHI_RESOURCES_DIR"
+        ]
+        
+        for env_var in env_vars:
+            env_path = os.getenv(env_var)
+            if env_path:
+                try:
+                    path = Path(env_path)
+                    if path.exists() and path not in base_paths:
+                        base_paths.insert(0, path)  # 环境变量最高优先级
+                except (OSError, RuntimeError):
+                    pass
 
     def find_resource(
         self, resource_path: Union[str, Path], resource_type: str = "file"

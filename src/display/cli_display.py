@@ -27,7 +27,7 @@ class CliDisplay(BaseDisplay):
         # 布局：仅两块区域（显示区 + 输入区）
         # 预留两行输入空间（分隔线 + 输入行），并额外多留一行用于中文输入溢出的清理
         self._input_area_lines = 3
-        self._dashboard_lines = 8   # 默认显示区最少行数（会按终端高度动态调整）
+        self._dashboard_lines = 8  # 默认显示区最少行数（会按终端高度动态调整）
 
         # 颜色/样式（仅在 TTY 下生效）
         self._ansi = {
@@ -80,19 +80,25 @@ class CliDisplay(BaseDisplay):
         await self._render_dashboard()
 
     async def update_status(self, status: str, connected: bool):
-        """更新状态（仅更新仪表盘，不追加新行）。"""
+        """
+        更新状态（仅更新仪表盘，不追加新行）。
+        """
         self._dash_status = status
         self._dash_connected = bool(connected)
         await self._render_dashboard()
 
     async def update_text(self, text: str):
-        """更新文本（仅更新仪表盘，不追加新行）。"""
+        """
+        更新文本（仅更新仪表盘，不追加新行）。
+        """
         if text and text.strip():
             self._dash_text = text.strip()
             await self._render_dashboard()
 
     async def update_emotion(self, emotion_name: str):
-        """更新表情（仅更新仪表盘，不追加新行）。"""
+        """
+        更新表情（仅更新仪表盘，不追加新行）。
+        """
         self._dash_emotion = emotion_name
         await self._render_dashboard()
 
@@ -164,7 +170,9 @@ class CliDisplay(BaseDisplay):
                     loop = self.display._loop
                     if loop and self.display._use_ansi:
                         loop.call_soon_threadsafe(
-                            lambda: asyncio.create_task(self.display._render_dashboard())
+                            lambda: asyncio.create_task(
+                                self.display._render_dashboard()
+                            )
                         )
                 except Exception:
                     pass
@@ -172,15 +180,20 @@ class CliDisplay(BaseDisplay):
         root = logging.getLogger()
         # 移除直接写 stdout/stderr 的处理器，避免覆盖渲染
         for h in list(root.handlers):
-            if isinstance(h, logging.StreamHandler) and getattr(h, "stream", None) in (sys.stdout, sys.stderr):
+            if isinstance(h, logging.StreamHandler) and getattr(h, "stream", None) in (
+                sys.stdout,
+                sys.stderr,
+            ):
                 root.removeHandler(h)
 
         handler = _DisplayLogHandler(self)
         handler.setLevel(logging.WARNING)
-        handler.setFormatter(logging.Formatter(
-            fmt="%(asctime)s [%(name)s] - %(levelname)s - %(message)s",
-            datefmt="%Y-%m-%d %H:%M:%S",
-        ))
+        handler.setFormatter(
+            logging.Formatter(
+                fmt="%(asctime)s [%(name)s] - %(levelname)s - %(message)s",
+                datefmt="%Y-%m-%d %H:%M:%S",
+            )
+        )
         root.addHandler(handler)
 
     async def _handle_command(self, cmd: str):
@@ -212,13 +225,13 @@ class CliDisplay(BaseDisplay):
         """
         将帮助信息写入顶部内容显示区，而非直接打印。
         """
-        help_text = (
-            "r: 开始/停止 | x: 打断 | q: 退出 | h: 帮助 | 其他: 发送文本"
-        )
+        help_text = "r: 开始/停止 | x: 打断 | q: 退出 | h: 帮助 | 其他: 发送文本"
         self._dash_text = help_text
 
     async def _init_screen(self):
-        """初始化屏幕并渲染两块区域（显示区 + 输入区）。"""
+        """
+        初始化屏幕并渲染两块区域（显示区 + 输入区）。
+        """
         if self._use_ansi:
             # 清屏并回到左上
             sys.stdout.write("\x1b[2J\x1b[H")
@@ -241,8 +254,7 @@ class CliDisplay(BaseDisplay):
     # ====== 原始输入（Raw mode）支持，避免中文残留 ======
     def _read_line_raw(self) -> str:
         """
-        使用原始模式读取一行：关闭回显、逐字符读取并自行回显，
-        通过整行重绘避免宽字符（中文）删除残留。
+        使用原始模式读取一行：关闭回显、逐字符读取并自行回显， 通过整行重绘避免宽字符（中文）删除残留。
         """
         fd = sys.stdin.fileno()
         old_settings = termios.tcgetattr(fd)
@@ -287,7 +299,9 @@ class CliDisplay(BaseDisplay):
             termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
 
     def _redraw_input_line(self, content: str) -> None:
-        """清空输入行并重写当前内容，确保中文删除无残留。"""
+        """
+        清空输入行并重写当前内容，确保中文删除无残留。
+        """
         cols, rows = self._term_size()
         separator_row = max(1, rows - self._input_area_lines + 1)
         first_input_row = min(rows, separator_row + 1)
@@ -303,7 +317,10 @@ class CliDisplay(BaseDisplay):
         sys.stdout.flush()
 
     async def _render_dashboard(self, full: bool = False):
-        """在顶部固定区域更新内容显示，不触碰底部输入行。"""
+        """
+        在顶部固定区域更新内容显示，不触碰底部输入行。
+        """
+
         # 截断长文本，避免换行撕裂界面
         def trunc(s: str, limit: int = 80) -> str:
             return s if len(s) <= limit else s[: limit - 1] + "…"
@@ -359,21 +376,21 @@ class CliDisplay(BaseDisplay):
 
         # 绘制头部
         self._goto(1, 1)
-        sys.stdout.write("\x1b[2K" + top_bar[: cols])
+        sys.stdout.write("\x1b[2K" + top_bar[:cols])
         self._goto(2, 1)
-        sys.stdout.write("\x1b[2K" + title_line[: cols])
+        sys.stdout.write("\x1b[2K" + title_line[:cols])
         self._goto(3, 1)
-        sys.stdout.write("\x1b[2K" + sep_line[: cols])
+        sys.stdout.write("\x1b[2K" + sep_line[:cols])
 
         # 绘制主体
         for idx in range(body_rows):
             self._goto(4 + idx, 1)
             sys.stdout.write("\x1b[2K")
-            sys.stdout.write(body[idx][: cols])
+            sys.stdout.write(body[idx][:cols])
 
         # 底部框
         self._goto(4 + body_rows, 1)
-        sys.stdout.write("\x1b[2K" + bottom_bar[: cols])
+        sys.stdout.write("\x1b[2K" + bottom_bar[:cols])
 
         # 恢复光标位置
         sys.stdout.write("\x1b8")

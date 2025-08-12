@@ -29,3 +29,4 @@ opencv-python-headless==4.11.0.86
 pendulum==3.1.0
 lunar_python==1.4.4
 pyaec==1.0.1
+sherpa-onnx==1.12.8

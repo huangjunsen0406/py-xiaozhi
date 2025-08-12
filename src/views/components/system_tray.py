@@ -61,6 +61,7 @@ class SystemTray(QObject):
             # 设置初始图标（避免在某些平台第一次绘制引发崩溃，延迟到事件循环空闲时执行）
             try:
                 from PyQt5.QtCore import QTimer
+
                 QTimer.singleShot(0, lambda: self.update_status("待命", connected=True))
             except Exception:
                 self.update_status("待命", connected=True)

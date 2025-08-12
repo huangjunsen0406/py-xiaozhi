@@ -59,7 +59,9 @@ async def handle_activation(mode: str) -> bool:
 
 
 async def start_app(mode: str, protocol: str, skip_activation: bool) -> int:
-    """启动应用的统一入口（在已有事件循环中执行）."""
+    """
+    启动应用的统一入口（在已有事件循环中执行）.
+    """
     logger.info("启动小智AI客户端")
 
     # 处理激活流程

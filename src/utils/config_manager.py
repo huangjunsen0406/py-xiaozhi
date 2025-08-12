@@ -28,9 +28,14 @@ class ConfigManager:
             },
         },
         "WAKE_WORD_OPTIONS": {
-            "USE_WAKE_WORD": False,
-            "MODEL_PATH": "models/vosk-model-small-cn-0.22",
-            "WAKE_WORDS": ["小智", "小美"],
+            "USE_WAKE_WORD": True,
+            "MODEL_PATH": "models",
+            "NUM_THREADS": 4,
+            "PROVIDER": "cpu",
+            "MAX_ACTIVE_PATHS": 2,
+            "KEYWORDS_SCORE": 1.8,
+            "KEYWORDS_THRESHOLD": 0.2,
+            "NUM_TRAILING_BLANKS": 1,
         },
         "CAMERA": {
             "camera_index": 0,
@@ -54,7 +59,7 @@ class ConfigManager:
             },
         },
         "AEC_OPTIONS": {
-            "ENABLED": True,
+            "ENABLED": False,
             "BUFFER_MAX_LENGTH": 200,
             "FRAME_DELAY": 3,
             "FILTER_LENGTH_RATIO": 0.4,

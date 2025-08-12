@@ -32,7 +32,13 @@ class AppMatcher:
         "腾讯会议": ["tencent meeting", "腾讯会议", "voovmeeting"],
         "google chrome": ["chrome", "googlechrome", "google chrome"],
         "microsoft edge": ["msedge", "edge", "microsoft edge"],
-        "microsoft office": ["microsoft office", "office", "word", "excel", "powerpoint"],
+        "microsoft office": [
+            "microsoft office",
+            "office",
+            "word",
+            "excel",
+            "powerpoint",
+        ],
         "microsoft word": ["microsoft word", "word"],
         "microsoft excel": ["microsoft excel", "excel"],
         "microsoft powerpoint": ["microsoft powerpoint", "powerpoint"],
@@ -170,7 +176,7 @@ class AppMatcher:
 
         # 2. 特殊映射匹配 (95-98分) - 优先匹配更具体的关键词
         best_special_score = 0
-        
+
         for key in cls.SPECIAL_MAPPINGS:
             if key in target_lower or target_lower == key:
                 # 检查是否有匹配的别名
@@ -183,10 +189,10 @@ class AppMatcher:
                             score = 97  # 长度相近的匹配
                         else:
                             score = 95  # 一般特殊映射匹配
-                        
+
                         if score > best_special_score:
                             best_special_score = score
-        
+
         if best_special_score > 0:
             return best_special_score
 

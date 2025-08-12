@@ -259,7 +259,10 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
                     self._gif_movies[asset_path] = movie
 
                 # 如切换到新的movie，停止旧的以避免CPU占用
-                if getattr(self, "emotion_movie", None) is not None and self.emotion_movie is not movie:
+                if (
+                    getattr(self, "emotion_movie", None) is not None
+                    and self.emotion_movie is not movie
+                ):
                     try:
                         self.emotion_movie.stop()
                     except Exception:
@@ -383,15 +386,14 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             raise
 
     def eventFilter(self, obj, event):
-        """
-        应用级事件过滤：
+        """应用级事件过滤：
+
         - macOS 点击 Dock 图标会触发 ApplicationActivate 事件
         - 当主窗口处于隐藏/最小化时，自动恢复显示
         """
         try:
             # 延迟导入，避免顶层循环依赖
             from PyQt5.QtCore import QEvent
-            from PyQt5.QtCore import Qt as _Qt
 
             if event and event.type() == QEvent.ApplicationActivate:
                 if self.root and not self.root.isVisible():
@@ -442,8 +444,17 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         # 快捷键：Ctrl+, 与 Cmd+, 打开设置
         try:
             from PyQt5.QtWidgets import QShortcut
-            QShortcut(QKeySequence("Ctrl+,"), self.root, activated=self._on_settings_button_click)
-            QShortcut(QKeySequence("Meta+,"), self.root, activated=self._on_settings_button_click)
+
+            QShortcut(
+                QKeySequence("Ctrl+,"),
+                self.root,
+                activated=self._on_settings_button_click,
+            )
+            QShortcut(
+                QKeySequence("Meta+,"),
+                self.root,
+                activated=self._on_settings_button_click,
+            )
         except Exception:
             pass
 
@@ -454,7 +465,9 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         try:
             # 允许通过环境变量禁用系统托盘用于排障
             if os.getenv("XIAOZHI_DISABLE_TRAY") == "1":
-                self.logger.warning("已通过环境变量禁用系统托盘 (XIAOZHI_DISABLE_TRAY=1)")
+                self.logger.warning(
+                    "已通过环境变量禁用系统托盘 (XIAOZHI_DISABLE_TRAY=1)"
+                )
                 return
             from src.views.components.system_tray import SystemTray
 
@@ -565,6 +578,7 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             # 延迟隐藏，避免在closeEvent中直接操作窗口引发macOS图形栈不稳定
             try:
                 from PyQt5.QtCore import QTimer
+
                 QTimer.singleShot(0, self.root.hide)
             except Exception:
                 try:
@@ -616,7 +630,10 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
 
             def _on_done(t):
                 if not t.cancelled() and t.exception():
-                    self.logger.error(f"发送文本任务异常: {t.exception()}", exc_info=True)
+                    self.logger.error(
+                        f"发送文本任务异常: {t.exception()}", exc_info=True
+                    )
+
             task.add_done_callback(_on_done)
         except Exception as e:
             self.logger.error(f"发送文本时出错: {e}")
