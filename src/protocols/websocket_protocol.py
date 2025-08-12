@@ -23,6 +23,8 @@ class WebsocketProtocol(Protocol):
         self.websocket = None
         self.connected = False
         self.hello_received = None  # 初始化时先设为 None
+        # 消息处理任务引用，便于在关闭时取消
+        self._message_task = None
 
         # 连接健康状态监测
         self._last_ping_time = None
@@ -97,8 +99,8 @@ class WebsocketProtocol(Protocol):
                     compression=None,  # 禁用压缩
                 )
 
-            # 启动消息处理循环
-            asyncio.create_task(self._message_handler())
+            # 启动消息处理循环（保存任务引用，关闭时可取消）
+            self._message_task = asyncio.create_task(self._message_handler())
 
             # 注释掉自定义心跳，使用websockets内置的心跳机制
             # self._start_heartbeat()
@@ -378,6 +380,9 @@ class WebsocketProtocol(Protocol):
                     logger.error(f"处理消息时出错: {e}", exc_info=True)
                     continue
 
+        except asyncio.CancelledError:
+            logger.debug("消息处理任务被取消")
+            return
         except websockets.ConnectionClosed as e:
             if not self._is_closing:
                 logger.info(f"WebSocket连接已关闭: {e}")
@@ -494,6 +499,17 @@ class WebsocketProtocol(Protocol):
         清理连接相关资源.
         """
         self.connected = False
+
+        # 取消消息处理任务，防止事件循环退出后仍有挂起等待
+        if self._message_task and not self._message_task.done():
+            self._message_task.cancel()
+            try:
+                await self._message_task
+            except asyncio.CancelledError:
+                pass
+            except Exception as e:
+                logger.debug(f"等待消息任务取消时异常: {e}")
+        self._message_task = None
 
         # 取消心跳任务
         if self._heartbeat_task and not self._heartbeat_task.done():

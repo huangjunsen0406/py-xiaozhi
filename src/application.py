@@ -242,6 +242,11 @@ class Application:
         初始化音频设备和编解码器.
         """
         try:
+            import os as _os
+            if _os.getenv("XIAOZHI_DISABLE_AUDIO") == "1":
+                logger.warning("已通过环境变量禁用音频初始化 (XIAOZHI_DISABLE_AUDIO=1)")
+                self.audio_codec = None
+                return
             logger.debug("开始初始化音频编解码器")
             from src.audio_codecs.audio_codec import AudioCodec
 
@@ -344,7 +349,14 @@ class Application:
         """
         创建异步回调函数的辅助方法.
         """
-        return lambda: asyncio.create_task(coro_func(*args))
+        def _callback():
+            task = asyncio.create_task(coro_func(*args))
+
+            def _on_done(t):
+                if not t.cancelled() and t.exception():
+                    logger.error(f"GUI回调任务异常: {t.exception()}", exc_info=True)
+            task.add_done_callback(_on_done)
+        return _callback
 
     def _setup_gui_callbacks(self):
         """
@@ -606,7 +618,14 @@ class Application:
         异步更新显示的辅助方法.
         """
         if self.display:
-            asyncio.create_task(update_func(*args))
+            task = asyncio.create_task(update_func(*args))
+            
+            # 捕获显示层任务的异常，避免静默失败
+            def _on_done(t):
+                if not t.cancelled() and t.exception():
+                    logger.error(f"显示更新任务异常: {t.exception()}", exc_info=True)
+
+            task.add_done_callback(_on_done)
 
     async def _set_device_state_impl(self, state):
         """
@@ -1068,7 +1087,7 @@ class Application:
 
                 self._main_tasks.clear()
 
-            # 4. 关闭协议连接
+            # 4. 关闭协议连接（尽早关闭，避免事件循环结束后仍有网络等待）
             if self.protocol:
                 try:
                     await self.protocol.close_audio_channel()
@@ -1076,7 +1095,13 @@ class Application:
                 except Exception as e:
                     logger.error(f"关闭协议连接失败: {e}")
 
-            # 5. 关闭音频设备
+            # 5. 关闭音频设备（先停流后彻底关闭，缓解C扩展退出竞态）
+            if self.audio_codec:
+                try:
+                    await self.audio_codec.stop_streams()
+                    await asyncio.sleep(0.1)
+                except Exception:
+                    pass
             await self._safe_close_resource(self.audio_codec, "音频设备")
 
             # 6. 关闭MCP服务器

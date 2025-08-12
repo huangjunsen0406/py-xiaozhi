@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Callable, Optional
 
 from PyQt5.QtCore import QObject, Qt
-from PyQt5.QtGui import QFont, QMovie, QPixmap
+from PyQt5.QtGui import QFont, QKeySequence, QMovie, QPixmap
 from PyQt5.QtWidgets import (
     QApplication,
     QLabel,
@@ -156,12 +156,18 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         full_status_text = f"状态: {status}"
         self._safe_update_label(self.status_label, full_status_text)
 
-        if status != self.current_status:
+        # 既跟踪状态文本变化，也跟踪连接状态变化
+        new_connected = bool(connected)
+        status_changed = status != self.current_status
+        connected_changed = new_connected != self.is_connected
+
+        if status_changed:
             self.current_status = status
+        if connected_changed:
+            self.is_connected = new_connected
 
-            self.is_connected = bool(connected)
-
-            # 更新系统托盘
+        # 任一变化都更新系统托盘
+        if status_changed or connected_changed:
             self._update_system_tray(status)
 
     async def update_text(self, text: str):
@@ -252,6 +258,13 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
                         self._gif_movies = {}
                     self._gif_movies[asset_path] = movie
 
+                # 如切换到新的movie，停止旧的以避免CPU占用
+                if getattr(self, "emotion_movie", None) is not None and self.emotion_movie is not movie:
+                    try:
+                        self.emotion_movie.stop()
+                    except Exception:
+                        pass
+
                 self.emotion_movie = movie
                 label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
                 label.setAlignment(Qt.AlignCenter)
@@ -259,7 +272,14 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
                 movie.setSpeed(105)
                 movie.start()
             else:
-                # 静态图片
+                # 静态图片：如有旧的GIF在播放则停止
+                if getattr(self, "emotion_movie", None) is not None:
+                    try:
+                        self.emotion_movie.stop()
+                    except Exception:
+                        pass
+                    self.emotion_movie = None
+
                 pixmap = QPixmap(asset_path)
                 if pixmap.isNull():
                     label.setText("😊")
@@ -287,6 +307,23 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         关闭窗口处理.
         """
         self._running = False
+        # 停止并清理GIF资源，避免资源泄漏
+        try:
+            if getattr(self, "emotion_movie", None) is not None:
+                try:
+                    self.emotion_movie.stop()
+                except Exception:
+                    pass
+                self.emotion_movie = None
+            if hasattr(self, "_gif_movies") and isinstance(self._gif_movies, dict):
+                for _m in list(self._gif_movies.values()):
+                    try:
+                        _m.stop()
+                    except Exception:
+                        pass
+                self._gif_movies.clear()
+        except Exception:
+            pass
         if self.system_tray:
             self.system_tray.hide()
         if self.root:
@@ -303,6 +340,18 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             self.app = QApplication.instance()
             if self.app is None:
                 raise RuntimeError("QApplication未找到，请确保在qasync环境中运行")
+
+            # 关闭最后一个窗口被关闭时自动退出应用的行为，确保托盘常驻
+            try:
+                self.app.setQuitOnLastWindowClosed(False)
+            except Exception:
+                pass
+
+            # 安装应用级事件过滤器：支持点击Dock图标时恢复窗口
+            try:
+                self.app.installEventFilter(self)
+            except Exception:
+                pass
 
             # 设置默认字体
             default_font = QFont()
@@ -333,6 +382,25 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             self.logger.error(f"GUI启动失败: {e}", exc_info=True)
             raise
 
+    def eventFilter(self, obj, event):
+        """
+        应用级事件过滤：
+        - macOS 点击 Dock 图标会触发 ApplicationActivate 事件
+        - 当主窗口处于隐藏/最小化时，自动恢复显示
+        """
+        try:
+            # 延迟导入，避免顶层循环依赖
+            from PyQt5.QtCore import QEvent
+            from PyQt5.QtCore import Qt as _Qt
+
+            if event and event.type() == QEvent.ApplicationActivate:
+                if self.root and not self.root.isVisible():
+                    self._show_main_window()
+        except Exception as e:
+            if hasattr(self, "logger"):
+                self.logger.error(f"处理应用激活事件失败: {e}")
+        return False
+
     def _init_ui_controls(self):
         """
         初始化UI控件.
@@ -344,6 +412,7 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         self.abort_btn = self.root.findChild(QPushButton, "abort_btn")
         self.auto_btn = self.root.findChild(QPushButton, "auto_btn")
         self.mode_btn = self.root.findChild(QPushButton, "mode_btn")
+        self.settings_btn = self.root.findChild(QPushButton, "settings_btn")
         self.text_input = self.root.findChild(QLineEdit, "text_input")
         self.send_btn = self.root.findChild(QPushButton, "send_btn")
 
@@ -364,15 +433,29 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         if self.text_input and self.send_btn:
             self.send_btn.clicked.connect(self._on_send_button_click)
             self.text_input.returnPressed.connect(self._on_send_button_click)
+        if self.settings_btn:
+            self.settings_btn.clicked.connect(self._on_settings_button_click)
 
         # 设置窗口关闭事件
         self.root.closeEvent = self._closeEvent
+
+        # 快捷键：Ctrl+, 与 Cmd+, 打开设置
+        try:
+            from PyQt5.QtWidgets import QShortcut
+            QShortcut(QKeySequence("Ctrl+,"), self.root, activated=self._on_settings_button_click)
+            QShortcut(QKeySequence("Meta+,"), self.root, activated=self._on_settings_button_click)
+        except Exception:
+            pass
 
     def _setup_system_tray(self):
         """
         设置系统托盘.
         """
         try:
+            # 允许通过环境变量禁用系统托盘用于排障
+            if os.getenv("XIAOZHI_DISABLE_TRAY") == "1":
+                self.logger.warning("已通过环境变量禁用系统托盘 (XIAOZHI_DISABLE_TRAY=1)")
+                return
             from src.views.components.system_tray import SystemTray
 
             self.system_tray = SystemTray(self.root)
@@ -473,11 +556,27 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         """
         处理窗口关闭事件.
         """
-        if self.system_tray and self.system_tray.is_visible():
-            self.root.hide()
-            self.system_tray.show_message(
-                "小智AI助手", "程序仍在运行中，点击托盘图标可以重新打开窗口。"
-            )
+        # 只要系统托盘可用，就最小化到托盘
+        if self.system_tray and (
+            getattr(self.system_tray, "is_available", lambda: False)()
+            or getattr(self.system_tray, "is_visible", lambda: False)()
+        ):
+            self.logger.info("关闭窗口：最小化到托盘")
+            # 延迟隐藏，避免在closeEvent中直接操作窗口引发macOS图形栈不稳定
+            try:
+                from PyQt5.QtCore import QTimer
+                QTimer.singleShot(0, self.root.hide)
+            except Exception:
+                try:
+                    self.root.hide()
+                except Exception:
+                    pass
+            # 停止GIF动画，规避隐藏时的潜在崩溃
+            try:
+                if getattr(self, "emotion_movie", None) is not None:
+                    self.emotion_movie.stop()
+            except Exception:
+                pass
             event.ignore()
         else:
             self._quit_application()
@@ -513,7 +612,12 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         try:
             import asyncio
 
-            asyncio.create_task(self.send_text_callback(text))
+            task = asyncio.create_task(self.send_text_callback(text))
+
+            def _on_done(t):
+                if not t.cancelled() and t.exception():
+                    self.logger.error(f"发送文本任务异常: {t.exception()}", exc_info=True)
+            task.add_done_callback(_on_done)
         except Exception as e:
             self.logger.error(f"发送文本时出错: {e}")
 
