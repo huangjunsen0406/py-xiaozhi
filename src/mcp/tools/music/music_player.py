@@ -143,7 +143,7 @@ class MusicPlayer:
         self.config = {
             "SEARCH_URL": "http://search.kuwo.cn/r.s",
             "PLAY_URL": "http://api.xiaodaokg.com/kuwo.php",
-            "LYRIC_URL": "http://m.kuwo.cn/newh5/singles/songinfoandlrc",
+            "LYRIC_URL": "https://api.xiaodaokg.com/kw/kwlyric.php",
             "HEADERS": {
                 "User-Agent": (
                     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " "AppleWebKit/537.36"
@@ -845,7 +845,7 @@ class MusicPlayer:
 
             # 构建歌词API请求
             lyric_url = self.config.get("LYRIC_URL")
-            lyric_api_url = f"{lyric_url}?musicId={song_id}"
+            lyric_api_url = f"{lyric_url}?id={song_id}"
             logger.info(f"获取歌词URL: {lyric_api_url}")
 
             response = await asyncio.to_thread(
@@ -858,24 +858,44 @@ class MusicPlayer:
 
             # 解析歌词
             if (
-                data.get("status") == 200
+                data.get("code") == 200
                 and data.get("data")
-                and data["data"].get("lrclist")
+                and data["data"].get("content")
             ):
-                lrc_list = data["data"]["lrclist"]
-
-                for lrc in lrc_list:
-                    time_sec = float(lrc.get("time", "0"))
-                    text = lrc.get("lineLyric", "").strip()
-
-                    # 跳过空歌词和元信息歌词
-                    if (
-                        text
-                        and not text.startswith("作词")
-                        and not text.startswith("作曲")
-                        and not text.startswith("编曲")
-                    ):
-                        self.lyrics.append((time_sec, text))
+                lrc_content = data["data"]["content"]
+                
+                # 解析LRC格式歌词
+                lines = lrc_content.split('\n')
+                for line in lines:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    
+                    # 匹配时间标签格式 [mm:ss.xx]
+                    import re
+                    time_match = re.match(r'\[(\d{2}):(\d{2})\.(\d{2})\](.+)', line)
+                    if time_match:
+                        minutes = int(time_match.group(1))
+                        seconds = int(time_match.group(2))
+                        centiseconds = int(time_match.group(3))
+                        text = time_match.group(4).strip()
+                        
+                        # 转换为总秒数
+                        time_sec = minutes * 60 + seconds + centiseconds / 100.0
+                        
+                        # 跳过空歌词和元信息歌词
+                        if (
+                            text
+                            and not text.startswith("作词")
+                            and not text.startswith("作曲")
+                            and not text.startswith("编曲")
+                            and not text.startswith("ti:")
+                            and not text.startswith("ar:")
+                            and not text.startswith("al:")
+                            and not text.startswith("by:")
+                            and not text.startswith("offset:")
+                        ):
+                            self.lyrics.append((time_sec, text))
 
                 logger.info(f"成功获取歌词，共 {len(self.lyrics)} 行")
             else:

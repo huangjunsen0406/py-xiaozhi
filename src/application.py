@@ -187,7 +187,6 @@ class Application:
 
         except Exception as e:
             logger.error(f"启动应用程序失败: {e}", exc_info=True)
-            await self.shutdown()
             return 1
         finally:
             # 确保应用程序正确关闭
@@ -274,12 +273,7 @@ class Application:
             # 核心判断逻辑（优化版，基于C++版本）：
             # 1. LISTENING状态：总是发送（包括实时模式下TTS播放期间）
             # 2. SPEAKING状态：只有在REALTIME模式下才发送（向后兼容）
-            should_send = (self.device_state == DeviceState.LISTENING) or (
-                self.device_state == DeviceState.SPEAKING
-                and self.aec_enabled
-                and self.keep_listening
-                and self.listening_mode == ListeningMode.REALTIME
-            )
+            should_send = self._should_send_microphone_audio()
 
             if (
                 should_send
@@ -303,12 +297,7 @@ class Application:
         try:
             # 再次检查状态（可能在调度期间状态已改变）
             # 核心逻辑：LISTENING状态或SPEAKING+REALTIME模式下发送音频
-            should_send = (self.device_state == DeviceState.LISTENING) or (
-                self.device_state == DeviceState.SPEAKING
-                and self.aec_enabled
-                and self.keep_listening
-                and self.listening_mode == ListeningMode.REALTIME
-            )
+            should_send = self._should_send_microphone_audio()
 
             if (
                 should_send
@@ -320,6 +309,17 @@ class Application:
 
         except Exception as e:
             logger.error(f"调度音频发送失败: {e}")
+
+    def _should_send_microphone_audio(self) -> bool:
+        """
+        是否应发送麦克风编码后的音频数据到协议层。
+        """
+        return self.device_state == DeviceState.LISTENING or (
+            self.device_state == DeviceState.SPEAKING
+            and self.aec_enabled
+            and self.keep_listening
+            and self.listening_mode == ListeningMode.REALTIME
+        )
 
     def _set_protocol_type(self, protocol_type: str):
         """
@@ -435,30 +435,25 @@ class Application:
         """
         while self.running:
             try:
-                # 检查队列是否已初始化
-                if self.command_queue is None:
-                    await asyncio.sleep(0.1)
+                # 阻塞等待命令；在 shutdown 时通过取消任务立即唤醒
+                command = await self.command_queue.get()
+
+                # 关闭过程中若状态已变更，直接退出
+                if not self.running:
+                    break
+
+                # 检查命令是否有效
+                if command is None:
+                    logger.warning("收到空命令，跳过执行")
+                    continue
+                if not callable(command):
+                    logger.warning(f"收到非可调用命令: {type(command)}, 跳过执行")
                     continue
 
-                # 等待命令，超时后继续循环检查running状态
-                try:
-                    command = await asyncio.wait_for(
-                        self.command_queue.get(), timeout=0.1
-                    )
-                    # 检查命令是否有效
-                    if command is None:
-                        logger.warning("收到空命令，跳过执行")
-                        continue
-                    if not callable(command):
-                        logger.warning(f"收到非可调用命令: {type(command)}, 跳过执行")
-                        continue
-
-                    # 执行命令
-                    result = command()
-                    if asyncio.iscoroutine(result):
-                        await result
-                except asyncio.TimeoutError:
-                    continue
+                # 执行命令
+                result = command()
+                if asyncio.iscoroutine(result):
+                    await result
 
             except asyncio.CancelledError:
                 break

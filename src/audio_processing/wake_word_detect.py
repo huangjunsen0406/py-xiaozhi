@@ -51,22 +51,40 @@ class WakeWordDetector:
         self._validate_config()
 
     def _load_config(self, config):
-        """加载配置参数"""
+        """
+        加载配置参数.
+        """
         # 模型路径配置
-        self.model_dir = Path(config.get_config("WAKE_WORD_OPTIONS.MODEL_PATH", "models"))
-        
-        # KWS参数配置 - 优化速度
-        self.num_threads = config.get_config("WAKE_WORD_OPTIONS.NUM_THREADS", 4)  # 增加线程数
-        self.provider = config.get_config("WAKE_WORD_OPTIONS.PROVIDER", "cpu")
-        self.max_active_paths = config.get_config("WAKE_WORD_OPTIONS.MAX_ACTIVE_PATHS", 2)  # 减少搜索路径
-        self.keywords_score = config.get_config("WAKE_WORD_OPTIONS.KEYWORDS_SCORE", 1.8)  # 降低分数提升速度
-        self.keywords_threshold = config.get_config("WAKE_WORD_OPTIONS.KEYWORDS_THRESHOLD", 0.2)  # 降低阈值提高灵敏度
-        self.num_trailing_blanks = config.get_config("WAKE_WORD_OPTIONS.NUM_TRAILING_BLANKS", 1)
+        self.model_dir = Path(
+            config.get_config("WAKE_WORD_OPTIONS.MODEL_PATH", "models")
+        )
 
-        logger.info(f"KWS配置加载完成 - 阈值: {self.keywords_threshold}, 分数: {self.keywords_score}")
+        # KWS参数配置 - 优化速度
+        self.num_threads = config.get_config(
+            "WAKE_WORD_OPTIONS.NUM_THREADS", 4
+        )  # 增加线程数
+        self.provider = config.get_config("WAKE_WORD_OPTIONS.PROVIDER", "cpu")
+        self.max_active_paths = config.get_config(
+            "WAKE_WORD_OPTIONS.MAX_ACTIVE_PATHS", 2
+        )  # 减少搜索路径
+        self.keywords_score = config.get_config(
+            "WAKE_WORD_OPTIONS.KEYWORDS_SCORE", 1.8
+        )  # 降低分数提升速度
+        self.keywords_threshold = config.get_config(
+            "WAKE_WORD_OPTIONS.KEYWORDS_THRESHOLD", 0.2
+        )  # 降低阈值提高灵敏度
+        self.num_trailing_blanks = config.get_config(
+            "WAKE_WORD_OPTIONS.NUM_TRAILING_BLANKS", 1
+        )
+
+        logger.info(
+            f"KWS配置加载完成 - 阈值: {self.keywords_threshold}, 分数: {self.keywords_score}"
+        )
 
     def _init_kws_model(self):
-        """初始化Sherpa-ONNX KeywordSpotter模型"""
+        """
+        初始化Sherpa-ONNX KeywordSpotter模型.
+        """
         try:
             # 检查模型文件
             encoder_path = self.model_dir / "encoder.onnx"
@@ -75,7 +93,13 @@ class WakeWordDetector:
             tokens_path = self.model_dir / "tokens.txt"
             keywords_path = self.model_dir / "keywords.txt"
 
-            required_files = [encoder_path, decoder_path, joiner_path, tokens_path, keywords_path]
+            required_files = [
+                encoder_path,
+                decoder_path,
+                joiner_path,
+                tokens_path,
+                keywords_path,
+            ]
             for file_path in required_files:
                 if not file_path.exists():
                     raise FileNotFoundError(f"模型文件不存在: {file_path}")
@@ -106,11 +130,15 @@ class WakeWordDetector:
             self.enabled = False
 
     def on_detected(self, callback: Callable):
-        """设置检测到唤醒词的回调函数"""
+        """
+        设置检测到唤醒词的回调函数.
+        """
         self.on_detected_callback = callback
 
     async def start(self, audio_codec) -> bool:
-        """启动唤醒词检测器"""
+        """
+        启动唤醒词检测器.
+        """
         if not self.enabled:
             logger.warning("唤醒词功能未启用")
             return False
@@ -126,7 +154,7 @@ class WakeWordDetector:
 
             # 创建检测流
             self.stream = self.keyword_spotter.create_stream()
-            
+
             # 启动检测任务
             self.detection_task = asyncio.create_task(self._detection_loop())
 
@@ -138,7 +166,9 @@ class WakeWordDetector:
             return False
 
     async def _detection_loop(self):
-        """检测循环"""
+        """
+        检测循环.
+        """
         error_count = 0
         MAX_ERRORS = 5
 
@@ -164,7 +194,7 @@ class WakeWordDetector:
             except Exception as e:
                 error_count += 1
                 logger.error(f"KWS检测循环错误({error_count}/{MAX_ERRORS}): {e}")
-                
+
                 # 调用错误回调
                 if self.on_error:
                     try:
@@ -200,20 +230,24 @@ class WakeWordDetector:
             for data in audio_batches:
                 # 转换音频格式
                 if isinstance(data, bytes):
-                    samples = np.frombuffer(data, dtype=np.int16).astype(np.float32) / 32768.0
+                    samples = (
+                        np.frombuffer(data, dtype=np.int16).astype(np.float32) / 32768.0
+                    )
                 else:
                     samples = np.array(data, dtype=np.float32)
 
                 # 提供音频数据给KeywordSpotter
-                self.stream.accept_waveform(sample_rate=self.sample_rate, waveform=samples)
+                self.stream.accept_waveform(
+                    sample_rate=self.sample_rate, waveform=samples
+                )
 
             # 处理检测结果
             while self.keyword_spotter.is_ready(self.stream):
                 self.keyword_spotter.decode_stream(self.stream)
                 result = self.keyword_spotter.get_result(self.stream)
-                
-                if result and result.strip():
-                    await self._handle_detection_result(result.strip())
+
+                if result:
+                    await self._handle_detection_result(result)
                     # 重置流状态
                     self.keyword_spotter.reset_stream(self.stream)
                     break  # 检测到后立即处理，不继续批量处理
@@ -222,15 +256,15 @@ class WakeWordDetector:
             logger.debug(f"KWS音频处理错误: {e}")
 
     async def _handle_detection_result(self, result):
-        """处理检测结果"""
+        """
+        处理检测结果.
+        """
         # 防重复触发检查
         current_time = time.time()
         if current_time - self.last_detection_time < self.detection_cooldown:
             return
 
         self.last_detection_time = current_time
-        
-        logger.info(f"🎯 检测到唤醒词: '{result}'")
 
         # 触发回调
         if self.on_detected_callback:
@@ -243,7 +277,9 @@ class WakeWordDetector:
                 logger.error(f"唤醒词回调执行失败: {e}")
 
     async def stop(self):
-        """停止检测器"""
+        """
+        停止检测器.
+        """
         self.is_running_flag = False
 
         if self.detection_task:
@@ -256,21 +292,29 @@ class WakeWordDetector:
         logger.info("Sherpa-ONNX KeywordSpotter检测器已停止")
 
     async def pause(self):
-        """暂停检测"""
+        """
+        暂停检测.
+        """
         self.paused = True
         logger.debug("KWS检测已暂停")
 
     async def resume(self):
-        """恢复检测"""
+        """
+        恢复检测.
+        """
         self.paused = False
         logger.debug("KWS检测已恢复")
 
     def is_running(self) -> bool:
-        """检查是否正在运行"""
+        """
+        检查是否正在运行.
+        """
         return self.is_running_flag and not self.paused
 
     def _validate_config(self):
-        """验证配置参数"""
+        """
+        验证配置参数.
+        """
         if not self.enabled:
             return
 
@@ -283,10 +327,14 @@ class WakeWordDetector:
             logger.warning(f"关键词分数 {self.keywords_score} 超出范围，重置为2.0")
             self.keywords_score = 2.0
 
-        logger.info(f"KWS配置验证完成 - 阈值: {self.keywords_threshold}, 分数: {self.keywords_score}")
+        logger.info(
+            f"KWS配置验证完成 - 阈值: {self.keywords_threshold}, 分数: {self.keywords_score}"
+        )
 
     def get_performance_stats(self):
-        """获取性能统计信息"""
+        """
+        获取性能统计信息.
+        """
         return {
             "enabled": self.enabled,
             "engine": "sherpa-onnx-kws",
@@ -298,5 +346,6 @@ class WakeWordDetector:
         }
 
     def clear_cache(self):
-        """清空缓存"""
-        pass
+        """
+        清空缓存.
+        """
