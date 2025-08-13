@@ -863,26 +863,27 @@ class MusicPlayer:
                 and data["data"].get("content")
             ):
                 lrc_content = data["data"]["content"]
-                
+
                 # 解析LRC格式歌词
-                lines = lrc_content.split('\n')
+                lines = lrc_content.split("\n")
                 for line in lines:
                     line = line.strip()
                     if not line:
                         continue
-                    
+
                     # 匹配时间标签格式 [mm:ss.xx]
                     import re
-                    time_match = re.match(r'\[(\d{2}):(\d{2})\.(\d{2})\](.+)', line)
+
+                    time_match = re.match(r"\[(\d{2}):(\d{2})\.(\d{2})\](.+)", line)
                     if time_match:
                         minutes = int(time_match.group(1))
                         seconds = int(time_match.group(2))
                         centiseconds = int(time_match.group(3))
                         text = time_match.group(4).strip()
-                        
+
                         # 转换为总秒数
                         time_sec = minutes * 60 + seconds + centiseconds / 100.0
-                        
+
                         # 跳过空歌词和元信息歌词
                         if (
                             text

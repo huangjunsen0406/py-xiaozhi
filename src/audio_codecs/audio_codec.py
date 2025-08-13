@@ -64,7 +64,7 @@ class AudioCodec:
         初始化音频设备.
         """
         try:
-            # 显示并选择音频设备 - 照搬quick_realtime_test.py
+            # 显示并选择音频设备
             await self._select_audio_devices()
 
             input_device_info = sd.query_devices(
@@ -136,37 +136,10 @@ class AudioCodec:
         显示并选择音频设备.
         """
         try:
-            # 显示设备列表
+            # 使用系统默认设备
+            self.mic_device_id = sd.default.device[0]
             devices = sd.query_devices()
-            logger.info("📋 可用音频设备:")
-            for i, device in enumerate(devices):
-                if device["max_input_channels"] > 0:
-                    logger.info(
-                        f"  [{i}] {device['name']} - 输入{device['max_input_channels']}ch"
-                    )
-
-            # 自动检测麦克风设备
-            mac_mic_id = None
-
-            for i, device in enumerate(devices):
-                device_name = device["name"].lower()
-                if (
-                    "macbook" in device_name or "built-in" in device_name
-                ) and "microphone" in device_name:
-                    mac_mic_id = i
-                    break
-
-            # 设置麦克风设备
-            if mac_mic_id is not None:
-                self.mic_device_id = mac_mic_id
-                logger.info(
-                    f"🎤 检测到麦克风设备: [{mac_mic_id}] {devices[mac_mic_id]['name']}"
-                )
-            else:
-                self.mic_device_id = sd.default.device[0]
-                logger.info(
-                    f"🎤 使用默认麦克风设备: [{self.mic_device_id}] {devices[self.mic_device_id]['name']}"
-                )
+            logger.info(f"使用默认麦克风设备: [{self.mic_device_id}] {devices[self.mic_device_id]['name']}")
 
         except Exception as e:
             logger.warning(f"设备选择失败: {e}，使用默认设备")
@@ -561,8 +534,6 @@ class AudioCodec:
             cleared_count += len(self._resample_output_buffer)
             self._resample_output_buffer.clear()
 
-        await asyncio.sleep(0.01)
-
         if cleared_count > 0:
             logger.info(f"清空音频队列，丢弃 {cleared_count} 帧音频数据")
 
@@ -668,6 +639,8 @@ class AudioCodec:
             logger.info("音频资源已完全释放")
         except Exception as e:
             logger.error(f"关闭音频编解码器过程中发生错误: {e}")
+        finally:
+            self._is_closing = True
 
     def __del__(self):
         """
