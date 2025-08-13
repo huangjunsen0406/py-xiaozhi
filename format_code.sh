@@ -3,7 +3,7 @@
 echo "🧹 开始代码格式化..."
 
 # 定义要格式化的目标文件夹和文件
-TARGETS="src/ scripts/ hooks/ main.py"
+TARGETS="src/ scripts/ main.py"
 
 echo "📁 格式化目标: $TARGETS"
 echo ""

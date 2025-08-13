@@ -143,7 +143,9 @@ class Application:
 
         # 音频与发送并发限制（避免任务风暴）
         try:
-            audio_write_cc = int(self.config.get_config("APP.AUDIO_WRITE_CONCURRENCY", 4))
+            audio_write_cc = int(
+                self.config.get_config("APP.AUDIO_WRITE_CONCURRENCY", 4)
+            )
         except Exception:
             audio_write_cc = 4
         try:
@@ -158,15 +160,21 @@ class Application:
 
         # 音频静默检测（事件驱动取代固定sleep）
         try:
-            tail_silence_ms = int(self.config.get_config("APP.TTS_TAIL_SILENCE_MS", 150))
+            tail_silence_ms = int(
+                self.config.get_config("APP.TTS_TAIL_SILENCE_MS", 150)
+            )
         except Exception:
             tail_silence_ms = 150
         try:
-            tail_wait_timeout_ms = int(self.config.get_config("APP.TTS_TAIL_WAIT_TIMEOUT_MS", 800))
+            tail_wait_timeout_ms = int(
+                self.config.get_config("APP.TTS_TAIL_WAIT_TIMEOUT_MS", 800)
+            )
         except Exception:
             tail_wait_timeout_ms = 800
         self._incoming_audio_silence_sec: float = max(0.0, tail_silence_ms / 1000.0)
-        self._incoming_audio_tail_timeout_sec: float = max(0.1, tail_wait_timeout_ms / 1000.0)
+        self._incoming_audio_tail_timeout_sec: float = max(
+            0.1, tail_wait_timeout_ms / 1000.0
+        )
         self._incoming_audio_idle_event = None
         self._incoming_audio_idle_handle = None
 
@@ -482,14 +490,17 @@ class Application:
         task.add_done_callback(done_callback)
         return task
 
-    def _create_background_task(self, coro, name: str):  # type: (asyncio.coroutines, str) -> _t.Optional[asyncio.Task]
+    def _create_background_task(
+        self, coro, name: str
+    ):  # type: (asyncio.coroutines, str) -> _t.Optional[asyncio.Task]
         """
-        创建不纳入 _main_tasks 管理的短期后台任务，并统一记录异常日志。
-        任务将纳入 _bg_tasks，关停时统一取消。
+        创建不纳入 _main_tasks 管理的短期后台任务，并统一记录异常日志。 任务将纳入 _bg_tasks，关停时统一取消。
         """
 
         # 关停时避免再创建新的后台任务
-        if (not self.running) or (self._shutdown_event and self._shutdown_event.is_set()):
+        if (not self.running) or (
+            self._shutdown_event and self._shutdown_event.is_set()
+        ):
             logger.debug(f"跳过后台任务创建（应用正在关闭）: {name}")
             return None
 
@@ -561,8 +572,7 @@ class Application:
         self._enqueue_command(command)
 
     def schedule_command_nowait(self, command) -> None:
-        """
-        同步/跨线程安全的命令调度：将入队操作切回主事件循环线程。
+        """同步/跨线程安全的命令调度：将入队操作切回主事件循环线程。
 
         适用于无法 await 的场景（同步回调、其他线程等）。
         """
@@ -579,7 +589,9 @@ class Application:
         实际的入队实现：仅在事件循环线程中执行。
         """
         # 停机中或未初始化则拒绝
-        if (not self.running) or (self._shutdown_event and self._shutdown_event.is_set()):
+        if (not self.running) or (
+            self._shutdown_event and self._shutdown_event.is_set()
+        ):
             logger.warning("应用正在关闭，拒绝新命令")
             return
         if self.command_queue is None:
@@ -595,7 +607,9 @@ class Application:
                 self.command_queue.get_nowait()
                 self.command_queue.put_nowait(command)
                 self._command_dropped_count += 1
-                logger.info(f"清理旧命令后重新添加，累计丢弃: {self._command_dropped_count}")
+                logger.info(
+                    f"清理旧命令后重新添加，累计丢弃: {self._command_dropped_count}"
+                )
             except asyncio.QueueEmpty:
                 pass
 
@@ -842,18 +856,17 @@ class Application:
         接收音频数据回调.
         """
         # 在实时模式下，TTS播放时设备状态可能保持LISTENING，也需要播放音频
-        should_play_audio = (
-            self.device_state == DeviceState.SPEAKING
-            or (
-                self.device_state == DeviceState.LISTENING
-                and self.listening_mode == ListeningMode.REALTIME
-            )
+        should_play_audio = self.device_state == DeviceState.SPEAKING or (
+            self.device_state == DeviceState.LISTENING
+            and self.listening_mode == ListeningMode.REALTIME
         )
 
         if should_play_audio and self.audio_codec and self.running:
             # 若是 IDLE，恢复为 SPEAKING（通过命令队列，线程安全、可重入）
             if self.device_state == DeviceState.IDLE:
-                self.schedule_command_nowait(lambda: self._set_device_state_impl(DeviceState.SPEAKING))
+                self.schedule_command_nowait(
+                    lambda: self._set_device_state_impl(DeviceState.SPEAKING)
+                )
 
             try:
                 # 记录最近一次收到服务端音频的时间
@@ -872,6 +885,7 @@ class Application:
                     def _mark_idle():
                         if self._incoming_audio_idle_event:
                             self._incoming_audio_idle_event.set()
+
                     if self._main_loop and not self._main_loop.is_closed():
                         self._incoming_audio_idle_handle = self._main_loop.call_later(
                             self._incoming_audio_silence_sec,

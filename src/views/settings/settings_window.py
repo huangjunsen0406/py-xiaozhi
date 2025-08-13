@@ -15,7 +15,7 @@ from PyQt5.QtWidgets import (
 
 from src.utils.config_manager import ConfigManager
 from src.utils.logging_config import get_logger
-from src.utils.resource_finder import resource_finder, get_project_root
+from src.utils.resource_finder import get_project_root, resource_finder
 from src.views.settings.components.shortcuts_settings import ShortcutsSettingsWidget
 
 
@@ -636,50 +636,52 @@ class SettingsWindow(QDialog):
             if not keywords_file.exists():
                 self.logger.warning(f"关键词文件不存在: {keywords_file}")
                 return ""
-            
+
             keywords = []
-            with open(keywords_file, 'r', encoding='utf-8') as f:
+            with open(keywords_file, "r", encoding="utf-8") as f:
                 for line in f:
                     line = line.strip()
-                    if line and '@' in line and not line.startswith('#'):
+                    if line and "@" in line and not line.startswith("#"):
                         # 保持完整格式: 拼音 @中文
                         keywords.append(line)
-            
+
             return "\n".join(keywords)
-            
+
         except Exception as e:
             self.logger.error(f"读取关键词文件失败: {e}")
             return ""
-    
+
     def _save_keywords_to_file(self, keywords_text: str):
         """
         保存唤醒词到 keywords.txt 文件，支持完整格式.
         """
         try:
             keywords_file = get_project_root() / "models" / "keywords.txt"
-            
+
             # 处理输入的关键词文本
-            lines = [line.strip() for line in keywords_text.split('\n') if line.strip()]
-            
+            lines = [line.strip() for line in keywords_text.split("\n") if line.strip()]
+
             processed_lines = []
             has_invalid_lines = False
-            
+
             for line in lines:
-                if '@' in line:
+                if "@" in line:
                     # 完整格式：拼音 @中文
                     processed_lines.append(line)
                 else:
                     # 只有中文，没有拼音 - 标记为无效
                     processed_lines.append(f"# 无效：缺少拼音格式 - {line}")
                     has_invalid_lines = True
-                    self.logger.warning(f"关键词 '{line}' 缺少拼音，需要格式：拼音 @中文")
-            
+                    self.logger.warning(
+                        f"关键词 '{line}' 缺少拼音，需要格式：拼音 @中文"
+                    )
+
             # 写入文件
-            with open(keywords_file, 'w', encoding='utf-8') as f:
-                f.write('\n'.join(processed_lines) + '\n')
-            
+            with open(keywords_file, "w", encoding="utf-8") as f:
+                f.write("\n".join(processed_lines) + "\n")
+
             self.logger.info(f"成功保存关键词到 {keywords_file}")
-            
+
             # 如果有无效格式，提示用户
             if has_invalid_lines:
                 QMessageBox.warning(
@@ -688,24 +690,24 @@ class SettingsWindow(QDialog):
                     "检测到无效的关键词格式！\n\n"
                     "正确格式：拼音 @中文\n"
                     "示例：x iǎo ài t óng x ué @小爱同学\n\n"
-                    "无效的行已被注释，请手动修正后重新保存。"
+                    "无效的行已被注释，请手动修正后重新保存。",
                 )
-            
+
         except Exception as e:
             self.logger.error(f"保存关键词文件失败: {e}")
             QMessageBox.warning(self, "错误", f"保存关键词失败: {str(e)}")
-    
+
     def _get_default_keywords(self) -> str:
         """
         获取默认关键词列表，完整格式.
         """
         default_keywords = [
             "x iǎo ài t óng x ué @小爱同学",
-            "n ǐ h ǎo w èn w èn @你好问问", 
+            "n ǐ h ǎo w èn w èn @你好问问",
             "x iǎo y ì x iǎo y ì @小艺小艺",
             "x iǎo m ǐ x iǎo m ǐ @小米小米",
             "n ǐ h ǎo x iǎo zh ì @你好小智",
-            "j iā w éi s ī @贾维斯"
+            "j iā w éi s ī @贾维斯",
         ]
         return "\n".join(default_keywords)
 

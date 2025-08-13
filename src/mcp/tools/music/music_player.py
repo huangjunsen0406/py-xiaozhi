@@ -15,7 +15,7 @@ import requests
 
 from src.constants.constants import AudioConfig
 from src.utils.logging_config import get_logger
-from src.utils.resource_finder import get_project_root
+from src.utils.resource_finder import get_user_cache_dir
 
 # 尝试导入音乐元数据库
 try:
@@ -134,8 +134,9 @@ class MusicPlayer:
         self.lyrics = []  # 歌词列表，格式为 [(时间, 文本), ...]
         self.current_lyric_index = -1  # 当前歌词索引
 
-        # 缓存目录设置
-        self.cache_dir = Path(get_project_root()) / "cache" / "music"
+        # 缓存目录设置 - 使用用户缓存目录确保可写
+        user_cache_dir = get_user_cache_dir()
+        self.cache_dir = user_cache_dir / "music"
         self.temp_cache_dir = self.cache_dir / "temp"
         self._init_cache_dirs()
 

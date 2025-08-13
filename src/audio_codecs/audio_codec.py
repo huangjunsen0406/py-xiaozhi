@@ -139,7 +139,9 @@ class AudioCodec:
             # 使用系统默认设备
             self.mic_device_id = sd.default.device[0]
             devices = sd.query_devices()
-            logger.info(f"使用默认麦克风设备: [{self.mic_device_id}] {devices[self.mic_device_id]['name']}")
+            logger.info(
+                f"使用默认麦克风设备: [{self.mic_device_id}] {devices[self.mic_device_id]['name']}"
+            )
 
         except Exception as e:
             logger.warning(f"设备选择失败: {e}，使用默认设备")
