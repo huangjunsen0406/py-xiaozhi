@@ -1,46 +1,128 @@
 {
-    "name": "xiaozhi",
-    "version": "1.0.0",
-    "publisher": "Junsen",
-    "entry": "main.py",
-    "icon": "assets/xiaozhi_icon.ico",
-    "hooks": "hooks",
-    "onefile": false,
-    "additional_pyinstaller_args": "--add-data assets;assets --add-data libs;libs --add-data src;src --add-data models;models --hidden-import=PyQt5",
-    "inno_setup_path": "E:\\application\\Inno Setup 6\\ISCC.exe",
-    "platform_specific": {
-        "windows": {
-            "format": "exe",
-            "additional_pyinstaller_args": "--add-data assets;assets --add-data libs;libs --add-data src;src --add-data models;models --hidden-import=PyQt5 --noconsole",
-            "desktop_entry": true,
-            "installer_options": {
-                "languages": ["ChineseSimplified", "English"],
-                "license_file": "LICENSE",
-                "readme_file": "README.md",
-                "create_desktop_icon": true,
-                "allow_run_after_install": true
-            }
-        },
-        "linux": {
-            "format": "deb",
-            "desktop_entry": true,
-            "categories": "Utility;Development;",
-            "description": "小智Ai客户端",
-            "requires": "libc6,libgtk-3-0,libx11-6,libopenblas-dev",
-            "additional_pyinstaller_args": "--add-data assets:assets --add-data libs:libs --add-data src:src --add-data models:models --hidden-import=PyQt5"
-        },
-        "macos": {
-            "format": "app",
-            "additional_pyinstaller_args": "--add-data assets:assets --add-data libs:libs --add-data src:src --add-data models:models --hidden-import=PyQt5 --windowed",
-            "app_bundle_name": "XiaoZhi.app",
-            "bundle_identifier": "com.junsen.xiaozhi",
-            "sign_bundle": false,
-            "create_dmg": true,
-            "installer_options": {
-                "license_file": "LICENSE",
-                "readme_file": "README.md"
-            }
-        }
+  "name": "xiaozhi",
+  "display_name": "小智AI助手",
+  "version": "1.0.0",
+  "entry": "main.py",
+  "publisher": "小智AI Team",
+  "description": "基于AI的智能语音助手，支持语音识别、对话交互和多种智能功能",
+  
+  "platforms": {
+    "macos": {
+      "bundle_identifier": "com.xiaozhi.ai.assistant",
+      "minimum_system_version": "10.15.0",
+      "category": "public.app-category.productivity",
+      "copyright": "© 2024 小智AI Team. All rights reserved.",
+      "high_resolution_capable": true,
+      "supports_automatic_graphics_switching": true,
+      "osx_entitlements_file": "auto_generated_entitlements.plist",
+      "microphone_usage_description": "AI语音助手需要访问麦克风进行语音识别和语音交互",
+      "camera_usage_description": "AI语音助手需要访问摄像头进行视频通话和人脸识别",
+      "speech_recognition_usage_description": "AI语音助手需要使用语音识别功能来理解您的语音指令",
+      "local_network_usage_description": "AI语音助手需要网络访问来提供在线服务",
+      "audio_usage_description": "AI语音助手需要音频访问权限进行语音识别和播放",
+      "accessibility_usage_description": "AI语音助手需要辅助功能权限来监听全局快捷键和自动化操作",
+      "documents_folder_usage_description": "AI语音助手需要访问文档文件夹来保存和读取用户数据",
+      "downloads_folder_usage_description": "AI语音助手需要访问下载文件夹来管理下载的文件",
+      "apple_events_usage_description": "AI语音助手需要发送 Apple Events 来与其他 macOS 应用程序进行交互",
+      
+      "dmg": {
+        "volname": "小智AI助手安装器",
+        "window_size": [600, 450],
+        "icon_size": 100,
+        "format": "UDZO"
+      }
     },
-    "build_installer": true
+    
+    "windows": {
+      "inno_setup": {
+        "languages": ["chinesesimplified", "english"],
+        "create_desktop_icon": true,
+        "create_start_menu_icon": true,
+        "allow_run_after_install": true,
+        "license_file": "LICENSE",
+        "readme_file": "README.md",
+        "app_publisher": "小智AI Team"
+      }
+    },
+    
+    "linux": {
+      "deb": {
+        "package": "xiaozhi-ai",
+        "section": "sound",
+        "priority": "optional",
+        "description": "AI语音助手应用程序，支持语音识别、对话交互和多种智能功能",
+        "depends": [
+          "libc6 (>= 2.17)",
+          "libgtk-3-0 (>= 3.0)",
+          "libqt5core5a (>= 5.12)",
+          "libqt5widgets5 (>= 5.12)",
+          "libqt5multimedia5 (>= 5.12)",
+          "python3 (>= 3.8)"
+        ],
+        "maintainer": "小智AI Team <support@xiaozhi.ai>",
+        "desktop_entry": true,
+        "categories": ["AudioVideo", "Audio", "Recorder"]
+      },
+      
+      "appimage": {
+        "desktop_entry": true,
+        "categories": ["AudioVideo", "Audio", "Recorder"],
+        "description": "AI语音助手应用程序"
+      }
+    }
+  },
+  
+  "icon": "assets/icon.png",
+  
+  "pyinstaller": {
+    "onefile": false,
+    "windowed": true,
+    "clean": true,
+    "noconfirm": true,
+    "optimize": "2",
+    "strip": false,
+    "noupx": true,
+    
+    "hidden_import": [
+      "qasync",
+      "opuslib", 
+      "pyaec",
+      "sherpa_onnx",
+      "PyQt5.QtCore",
+      "PyQt5.QtGui",
+      "PyQt5.QtWidgets",
+      "PyQt5.QtMultimedia",
+      "mqtt",
+      "websockets",
+      "asyncio",
+      "sqlite3",
+      "json",
+      "yaml",
+      "numpy",
+      "scipy",
+      "librosa",
+      "soundfile",
+      "threading",
+      "multiprocessing",
+      "pendulum",
+      "tzdata",
+      "zoneinfo",
+      "importlib.resources"
+    ],
+    
+    "exclude_module": [
+      "tkinter",
+      "matplotlib.backends._backend_pdf",
+      "matplotlib.backends._backend_ps",
+      "PIL._imagingtk"
+    ],
+    
+    "add_data": [
+      "src:src",
+      "libs:libs", 
+      "assets:assets",
+      "models:models",
+      "scripts:scripts"
+    ]
+  }
 }

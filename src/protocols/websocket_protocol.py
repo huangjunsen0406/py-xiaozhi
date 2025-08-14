@@ -216,7 +216,7 @@ class WebsocketProtocol(Protocol):
 
                 # 检查连接状态
                 if self.websocket:
-                    if self.websocket.closed:
+                    if self.websocket.close_code is not None:
                         logger.warning("检测到WebSocket连接已关闭")
                         await self._handle_connection_loss("连接已关闭")
                         break
@@ -339,7 +339,7 @@ class WebsocketProtocol(Protocol):
         """
         return {
             "connected": self.connected,
-            "websocket_closed": self.websocket.closed if self.websocket else True,
+            "websocket_closed": self.websocket.close_code is not None if self.websocket else True,
             "is_closing": self._is_closing,
             "auto_reconnect_enabled": self._auto_reconnect_enabled,
             "reconnect_attempts": self._reconnect_attempts,
@@ -454,7 +454,7 @@ class WebsocketProtocol(Protocol):
 
         # 检查WebSocket的实际状态
         try:
-            return not self.websocket.closed
+            return self.websocket.close_code is None
         except Exception:
             return False
 
@@ -528,7 +528,7 @@ class WebsocketProtocol(Protocol):
                 pass
 
         # 关闭WebSocket连接
-        if self.websocket and not self.websocket.closed:
+        if self.websocket and self.websocket.close_code is None:
             try:
                 await self.websocket.close()
             except Exception as e:

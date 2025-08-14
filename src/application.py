@@ -95,8 +95,7 @@ class Application:
         self.voice_detected = False
         self.keep_listening = False
         self.aborted = False
-        self.aborted_event = asyncio.Event()
-        self.aborted_event.clear()
+        self.aborted_event = None  # 将在_initialize_async_objects中初始化
 
         # 监听模式和AEC启用状态
         self.listening_mode = ListeningMode.AUTO_STOP
@@ -137,9 +136,9 @@ class Application:
             "mcp": self._handle_mcp_message,
         }
 
-        # 并发控制锁
-        self._state_lock = asyncio.Lock()
-        self._abort_lock = asyncio.Lock()
+        # 并发控制锁 - 将在_initialize_async_objects中初始化
+        self._state_lock = None
+        self._abort_lock = None
 
         # 音频与发送并发限制（避免任务风暴）
         try:
@@ -152,8 +151,11 @@ class Application:
             send_audio_cc = int(self.config.get_config("APP.SEND_AUDIO_CONCURRENCY", 4))
         except Exception:
             send_audio_cc = 4
-        self._audio_write_semaphore = asyncio.Semaphore(audio_write_cc)
-        self._send_audio_semaphore = asyncio.Semaphore(send_audio_cc)
+        # 保存配置值，在_initialize_async_objects中创建Semaphore
+        self._audio_write_cc = audio_write_cc
+        self._send_audio_cc = send_audio_cc
+        self._audio_write_semaphore = None
+        self._send_audio_semaphore = None
 
         # 最近一次接收到服务端音频的时间（用于应对TTS起止近邻竞态）
         self._last_incoming_audio_at: float = 0.0
@@ -203,6 +205,19 @@ class Application:
             maxsize = 256
         self.command_queue = asyncio.Queue(maxsize=maxsize)
         self._shutdown_event = asyncio.Event()
+        
+        # 初始化异步锁
+        self._state_lock = asyncio.Lock()
+        self._abort_lock = asyncio.Lock()
+        
+        # 初始化中止事件
+        self.aborted_event = asyncio.Event()
+        self.aborted_event.clear()
+        
+        # 初始化信号量
+        self._audio_write_semaphore = asyncio.Semaphore(self._audio_write_cc)
+        self._send_audio_semaphore = asyncio.Semaphore(self._send_audio_cc)
+        
         # 初始化音频静默事件（默认置为已静默，避免无谓等待）
         self._incoming_audio_idle_event = asyncio.Event()
         self._incoming_audio_idle_event.set()
