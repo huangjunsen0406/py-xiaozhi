@@ -5,7 +5,6 @@
   "entry": "main.py",
   "publisher": "小智AI Team",
   "description": "基于AI的智能语音助手，支持语音识别、对话交互和多种智能功能",
-  
   "platforms": {
     "macos": {
       "bundle_identifier": "com.xiaozhi.ai.assistant",
@@ -24,27 +23,45 @@
       "documents_folder_usage_description": "AI语音助手需要访问文档文件夹来保存和读取用户数据",
       "downloads_folder_usage_description": "AI语音助手需要访问下载文件夹来管理下载的文件",
       "apple_events_usage_description": "AI语音助手需要发送 Apple Events 来与其他 macOS 应用程序进行交互",
-      
       "dmg": {
         "volname": "小智AI助手安装器",
-        "window_size": [600, 450],
+        "window_size": [
+          600,
+          450
+        ],
         "icon_size": 100,
         "format": "UDZO"
+      },
+      "zip": {
+        "readme_content": "小智AI助手 v1.0.0\n\n这是一个基于AI的智能语音助手应用程序，支持语音识别、智能对话和多种实用功能。\n\n安装说明:\n1. 解压ZIP文件到任意位置\n2. 双击运行 xiaozhi.app\n3. 根据系统提示允许麦克风访问权限\n\n系统要求:\n- macOS 10.15 或更高版本\n- 至少 200MB 可用磁盘空间\n- 麦克风访问权限（用于语音识别）\n- 网络连接（用于AI服务）\n\n功能特性:\n🎙️ 智能语音识别与交互\n🤖 AI驱动的智能对话\n📱 简洁直观的用户界面\n🔒 本地数据安全保护\n⚡ 快速响应与高效处理\n🎯 多场景智能助手功能\n\n技术支持: support@xiaozhi.ai\n© 2024 小智AI Team. All rights reserved.",
+        "license_file": "LICENSE",
+        "extra_files": [
+          {
+            "source": "README.md",
+            "target": "README.txt"
+          },
+          {
+            "source": "assets/icon.png",
+            "target": "icon.png"
+          }
+        ]
       }
     },
-    
     "windows": {
       "inno_setup": {
-        "languages": ["chinesesimplified", "english"],
+        "languages": [
+          "chinesesimplified",
+          "english"
+        ],
         "create_desktop_icon": true,
         "create_start_menu_icon": true,
         "allow_run_after_install": true,
         "license_file": "LICENSE",
         "readme_file": "README.md",
-        "app_publisher": "小智AI Team"
+        "app_publisher": "小智AI Team",
+        "app_id": "503E4A6A-DA22-5752-8253-F6CF03E9BFBF"
       }
     },
-    
     "linux": {
       "deb": {
         "package": "xiaozhi-ai",
@@ -61,19 +78,24 @@
         ],
         "maintainer": "小智AI Team <support@xiaozhi.ai>",
         "desktop_entry": true,
-        "categories": ["AudioVideo", "Audio", "Recorder"]
+        "categories": [
+          "AudioVideo",
+          "Audio",
+          "Recorder"
+        ]
       },
-      
       "appimage": {
         "desktop_entry": true,
-        "categories": ["AudioVideo", "Audio", "Recorder"],
+        "categories": [
+          "AudioVideo",
+          "Audio",
+          "Recorder"
+        ],
         "description": "AI语音助手应用程序"
       }
     }
   },
-  
   "icon": "assets/icon.png",
-  
   "pyinstaller": {
     "onefile": false,
     "windowed": true,
@@ -82,10 +104,9 @@
     "optimize": "2",
     "strip": false,
     "noupx": true,
-    
     "hidden_import": [
       "qasync",
-      "opuslib", 
+      "opuslib",
       "pyaec",
       "sherpa_onnx",
       "PyQt5.QtCore",
@@ -109,17 +130,15 @@
       "zoneinfo",
       "importlib.resources"
     ],
-    
     "exclude_module": [
       "tkinter",
       "matplotlib.backends._backend_pdf",
       "matplotlib.backends._backend_ps",
       "PIL._imagingtk"
     ],
-    
     "add_data": [
       "src:src",
-      "libs:libs", 
+      "libs:libs",
       "assets:assets",
       "models:models",
       "scripts:scripts"
