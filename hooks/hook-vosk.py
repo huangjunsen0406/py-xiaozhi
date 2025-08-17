@@ -53,6 +53,7 @@ except Exception as e:
 # 手动查找并添加 libvosk.dyld 文件
 try:
     import vosk
+
     vosk_dir = Path(vosk.__file__).parent
     libvosk_path = vosk_dir / "libvosk.dyld"
 

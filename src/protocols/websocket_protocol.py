@@ -79,7 +79,7 @@ class WebsocketProtocol(Protocol):
                     ssl=current_ssl_context,
                     additional_headers=self.HEADERS,
                     ping_interval=20,  # 使用websockets自己的心跳，20秒间隔
-                    ping_timeout=20,   # ping超时20秒
+                    ping_timeout=20,  # ping超时20秒
                     close_timeout=10,  # 关闭超时10秒
                     max_size=10 * 1024 * 1024,  # 最大消息10MB
                     compression=None,  # 禁用压缩以提高稳定性
@@ -91,7 +91,7 @@ class WebsocketProtocol(Protocol):
                     ssl=current_ssl_context,
                     extra_headers=self.HEADERS,
                     ping_interval=20,  # 使用websockets自己的心跳
-                    ping_timeout=20,   # ping超时20秒
+                    ping_timeout=20,  # ping超时20秒
                     close_timeout=10,  # 关闭超时10秒
                     max_size=10 * 1024 * 1024,  # 最大消息10MB
                     compression=None,  # 禁用压缩

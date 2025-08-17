@@ -20,7 +20,7 @@ def get_railway_tools_manager() -> RailwayToolsManager:
 
 
 __all__ = [
-    "get_railway_manager",       # 兼容性接口
-    "get_railway_tools_manager", # 新版本智能工具接口
-    "RailwayToolsManager"
+    "get_railway_manager",  # 兼容性接口
+    "get_railway_tools_manager",  # 新版本智能工具接口
+    "RailwayToolsManager",
 ]

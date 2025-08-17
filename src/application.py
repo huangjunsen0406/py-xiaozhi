@@ -325,24 +325,25 @@ class Application:
             self.audio_codec = None
 
     def _on_encoded_audio(self, encoded_data: bytes):
-        """
-        处理编码后的音频数据回调.
-        
+        """处理编码后的音频数据回调.
+
         注意：这个回调在音频驱动线程中被调用，需要线程安全地调度到主事件循环。
         """
         try:
             # 只在监听状态且音频通道打开时发送数据
-            if (self.device_state == DeviceState.LISTENING 
-                    and self.protocol 
-                    and self.protocol.is_audio_channel_opened()
-                    and not getattr(self, '_transitioning', False)):
-                
+            if (
+                self.device_state == DeviceState.LISTENING
+                and self.protocol
+                and self.protocol.is_audio_channel_opened()
+                and not getattr(self, "_transitioning", False)
+            ):
+
                 # 线程安全地调度到主事件循环
                 if self._main_loop and not self._main_loop.is_closed():
                     self._main_loop.call_soon_threadsafe(
                         self._schedule_audio_send, encoded_data
                     )
-                
+
         except Exception as e:
             logger.error(f"处理编码音频数据回调失败: {e}")
 
@@ -352,13 +353,15 @@ class Application:
         """
         try:
             # 再次检查状态（可能在调度期间状态已改变）
-            if (self.device_state == DeviceState.LISTENING 
-                    and self.protocol 
-                    and self.protocol.is_audio_channel_opened()):
-                
+            if (
+                self.device_state == DeviceState.LISTENING
+                and self.protocol
+                and self.protocol.is_audio_channel_opened()
+            ):
+
                 # 创建异步任务发送音频数据
                 asyncio.create_task(self.protocol.send_audio(encoded_data))
-                
+
         except Exception as e:
             logger.error(f"调度音频发送失败: {e}")
 
@@ -453,7 +456,7 @@ class Application:
         def done_callback(t):
             # 任务完成后从集合中移除，防止内存泄漏
             self._main_tasks.discard(t)
-            
+
             if not t.cancelled() and t.exception():
                 logger.error(f"任务 {name} 异常结束: {t.exception()}", exc_info=True)
 
@@ -470,7 +473,7 @@ class Application:
                 if self.command_queue is None:
                     await asyncio.sleep(0.1)
                     continue
-                    
+
                 # 等待命令，超时后继续循环检查running状态
                 try:
                     command = await asyncio.wait_for(
@@ -520,7 +523,7 @@ class Application:
         if self.command_queue is None:
             logger.warning("命令队列未初始化，丢弃命令")
             return
-            
+
         try:
             # 使用 put_nowait 避免阻塞，如果队列满则记录警告
             self.command_queue.put_nowait(command)

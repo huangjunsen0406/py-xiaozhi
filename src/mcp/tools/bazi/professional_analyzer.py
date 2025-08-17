@@ -6,10 +6,10 @@ from typing import Any, Dict, List
 
 from .professional_data import (
     GAN_WUXING,
+    WUXING,
     WUXING_RELATIONS,
     ZHI_CANG_GAN,
     ZHI_WUXING,
-    WUXING,
     analyze_zhi_combinations,
     get_changsheng_state,
     get_nayin,

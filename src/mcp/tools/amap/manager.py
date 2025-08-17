@@ -56,19 +56,13 @@ class AmapToolsManager:
             )
 
             # 注册天气查询工具
-            self._register_weather_tool(
-                add_tool, PropertyList, Property, PropertyType
-            )
+            self._register_weather_tool(add_tool, PropertyList, Property, PropertyType)
 
             # 注册步行导航工具
-            self._register_walking_tool(
-                add_tool, PropertyList, Property, PropertyType
-            )
+            self._register_walking_tool(add_tool, PropertyList, Property, PropertyType)
 
             # 注册驾车导航工具
-            self._register_driving_tool(
-                add_tool, PropertyList, Property, PropertyType
-            )
+            self._register_driving_tool(add_tool, PropertyList, Property, PropertyType)
 
             # 注册关键词搜索工具
             self._register_text_search_tool(
@@ -86,9 +80,7 @@ class AmapToolsManager:
             )
 
             # 注册距离测量工具
-            self._register_distance_tool(
-                add_tool, PropertyList, Property, PropertyType
-            )
+            self._register_distance_tool(add_tool, PropertyList, Property, PropertyType)
 
             self._initialized = True
             logger.info("[AmapManager] 高德地图工具注册完成")
@@ -153,7 +145,9 @@ class AmapToolsManager:
         )
         logger.debug("[AmapManager] 注册地理编码工具成功")
 
-    def _register_ip_location_tool(self, add_tool, PropertyList, Property, PropertyType):
+    def _register_ip_location_tool(
+        self, add_tool, PropertyList, Property, PropertyType
+    ):
         """
         注册IP定位工具.
         """
@@ -262,7 +256,9 @@ class AmapToolsManager:
         )
         logger.debug("[AmapManager] 注册驾车导航工具成功")
 
-    def _register_text_search_tool(self, add_tool, PropertyList, Property, PropertyType):
+    def _register_text_search_tool(
+        self, add_tool, PropertyList, Property, PropertyType
+    ):
         """
         注册关键词搜索工具.
         """

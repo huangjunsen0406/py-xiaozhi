@@ -6,8 +6,10 @@
     "source.fixAll": "explicit"
   },
   "python.formatting.blackArgs": [
-    "--line-length", "88",
-    "--target-version", "py39"
+    "--line-length",
+    "88",
+    "--target-version",
+    "py39"
   ],
   "python.formatting.blackPath": "/Users/junsen/miniconda3/envs/py-test/bin/black",
   "python.linting.flake8Enabled": true,
@@ -21,7 +23,7 @@
     "--line-length=88"
   ],
   "[python]": {
-    "editor.defaultFormatter": "ms-python.black-formatter",
+    "editor.defaultFormatter": "charliermarsh.ruff",
     "editor.formatOnSave": true,
     "editor.codeActionsOnSave": {
       "source.organizeImports": "explicit"

@@ -396,7 +396,7 @@ def _analyze_complement(male_bazi, female_bazi) -> Dict[str, Any]:
     分析八字互补性.
     """
     # 分析五行互补
-    from .professional_data import GAN_WUXING, ZHI_WUXING, WUXING
+    from .professional_data import GAN_WUXING, WUXING, ZHI_WUXING
 
     male_elements = []
     female_elements = []
@@ -498,7 +498,9 @@ def _get_compatibility_level(score: float) -> str:
 
 
 def _get_compatibility_suggestions(score: float) -> List[str]:
-    """获取合婚建议"""
+    """
+    获取合婚建议.
+    """
     if score >= 80:
         return ["天作之合，婚姻美满", "互相扶持，白头偕老", "继续保持良好沟通"]
     elif score >= 70:
