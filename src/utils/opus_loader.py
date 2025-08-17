@@ -6,7 +6,7 @@ import shutil
 import sys
 from enum import Enum
 from pathlib import Path
-from typing import List, Tuple
+from typing import List, Tuple, Union, cast
 
 # 获取日志记录器
 from src.utils.logging_config import get_logger
@@ -65,7 +65,7 @@ def get_arch(system: PLATFORM) -> str:
     return architecture, arch_name
 
 
-def get_lib_path(system: PLATFORM, arch_name: ARCH):
+def get_lib_path(system: PLATFORM, arch_name: str):
     if system == PLATFORM.WINDOWS:
         lib_name = LIB_PATH.WINDOWS.value
     elif system == PLATFORM.MACOS:
@@ -75,7 +75,7 @@ def get_lib_path(system: PLATFORM, arch_name: ARCH):
     return lib_name
 
 
-def get_lib_name(system: PLATFORM, local: bool = True) -> str | List:
+def get_lib_name(system: PLATFORM, local: bool = True) -> Union[str, List[str]]:
     """获取库名称.
 
     Args:
@@ -109,13 +109,13 @@ def get_system_info() -> Tuple[str, str]:
     return system, arch_name
 
 
-def get_search_paths(system: PLATFORM, arch_name: ARCH) -> List[Tuple[Path, str]]:
+def get_search_paths(system: PLATFORM, arch_name: str) -> List[Tuple[Path, str]]:
     """
     获取库文件搜索路径列表（使用统一的资源查找器）
     """
     from .resource_finder import find_libs_dir, get_project_root
 
-    lib_name = get_lib_name(system)
+    lib_name = cast(str, get_lib_name(system))
 
     search_paths: List[Tuple[Path, str]] = []
 
@@ -168,7 +168,7 @@ def find_system_opus() -> str:
 
     try:
         # 获取系统上opus库的名称
-        lib_names = get_lib_name(system, False)
+        lib_names = cast(List[str], get_lib_name(system, False))
 
         # 尝试加载每个可能的名称
         for lib_name in lib_names:
@@ -222,7 +222,7 @@ def copy_opus_to_project(system_lib_path):
         target_dir.mkdir(parents=True, exist_ok=True)
 
         # 确定目标文件名
-        lib_name = get_lib_name(system)
+        lib_name = cast(str, get_lib_name(system))
         target_file = target_dir / lib_name
 
         # 复制文件
