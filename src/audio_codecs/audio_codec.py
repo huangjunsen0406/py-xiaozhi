@@ -12,6 +12,7 @@ import soxr
 from src.constants.constants import AudioConfig
 from src.utils.config_manager import ConfigManager
 from src.utils.logging_config import get_logger
+from src.audio_codecs.aec_processor import AECProcessor
 
 logger = get_logger(__name__)
 
@@ -59,6 +60,10 @@ class AudioCodec:
         # 实时编码回调（直接发送，不走队列）
         self._encoded_audio_callback = None
 
+        # AEC处理器
+        self.aec_processor = AECProcessor()
+        self._aec_enabled = False
+
     async def initialize(self):
         """
         初始化音频设备.
@@ -96,6 +101,15 @@ class AudioCodec:
             self.opus_decoder = opuslib.Decoder(
                 AudioConfig.OUTPUT_SAMPLE_RATE, AudioConfig.CHANNELS
             )
+
+            # 初始化AEC处理器
+            try:
+                await self.aec_processor.initialize()
+                self._aec_enabled = True
+                logger.info("AEC处理器启用")
+            except Exception as e:
+                logger.warning(f"AEC处理器初始化失败，将使用原始音频: {e}")
+                self._aec_enabled = False
 
             logger.info("音频初始化完成")
         except Exception as e:
@@ -213,6 +227,13 @@ class AudioCodec:
                 audio_data = self._process_input_resampling(audio_data)
                 if audio_data is None:
                     return
+
+            # 应用AEC处理
+            if self._aec_enabled and len(audio_data) == AudioConfig.INPUT_FRAME_SIZE:
+                try:
+                    audio_data = self.aec_processor.process_audio(audio_data)
+                except Exception as e:
+                    logger.warning(f"AEC处理失败，使用原始音频: {e}")
 
             # 实时编码并发送（不走队列，减少延迟）
             if (
@@ -467,6 +488,49 @@ class AudioCodec:
         else:
             logger.info("禁用编码回调")
 
+    def is_aec_enabled(self) -> bool:
+        """
+        检查AEC是否启用.
+        """
+        return self._aec_enabled
+
+    def get_aec_status(self) -> dict:
+        """
+        获取AEC状态信息.
+        """
+        if not self._aec_enabled or not self.aec_processor:
+            return {"enabled": False, "reason": "AEC未启用或初始化失败"}
+        
+        try:
+            return {
+                "enabled": True,
+                **self.aec_processor.get_status()
+            }
+        except Exception as e:
+            return {"enabled": False, "reason": f"获取状态失败: {e}"}
+
+    def toggle_aec(self, enabled: bool) -> bool:
+        """
+        切换AEC启用状态.
+        
+        Args:
+            enabled: 是否启用AEC
+            
+        Returns:
+            实际的AEC状态
+        """
+        if not self.aec_processor:
+            logger.warning("AEC处理器未初始化，无法切换状态")
+            return False
+        
+        self._aec_enabled = enabled and self.aec_processor._is_initialized
+        
+        if enabled and not self._aec_enabled:
+            logger.warning("无法启用AEC，处理器未正确初始化")
+        
+        logger.info(f"AEC状态: {'启用' if self._aec_enabled else '禁用'}")
+        return self._aec_enabled
+
     async def write_audio(self, opus_data: bytes):
         """
         解码音频并播放 网络接收的Opus数据 -> 解码24kHz -> 播放队列.
@@ -632,6 +696,15 @@ class AudioCodec:
 
             self._resample_input_buffer.clear()
             self._resample_output_buffer.clear()
+
+            # 关闭AEC处理器
+            if self.aec_processor:
+                try:
+                    await self.aec_processor.close()
+                except Exception as e:
+                    logger.warning(f"关闭AEC处理器失败: {e}")
+                finally:
+                    self.aec_processor = None
 
             self.opus_encoder = None
             self.opus_decoder = None
