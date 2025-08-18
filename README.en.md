@@ -71,8 +71,10 @@ py-xiaozhi is a Python-based Xiaozhi voice client, designed to learn coding and 
 
 - **Multi-level Audio Processing**: Supports Opus codec and real-time resampling
 - **Voice Activity Detection**: VAD detector for intelligent interruption with real-time voice activity monitoring
-- **Wake Word Detection**: Vosk-based offline speech recognition with multiple wake words and pinyin matching
+- **Wake Word Detection**: Sherpa-ONNX-based offline speech recognition with multiple wake words and pinyin matching
 - **Audio Stream Management**: Independent input/output streams with stream rebuild and error recovery
+- **Audio Echo Cancellation**: Integrated WebRTC audio processing module providing high-quality echo cancellation
+- **System Audio Recording**: Supports system audio recording with audio loopback processing
 
 ### 🖥️ User Interface
 
@@ -121,7 +123,7 @@ py-xiaozhi is a Python-based Xiaozhi voice client, designed to learn coding and 
 
 ### Optional Feature Requirements
 
-- **Voice Wake-up**: Requires downloading Vosk speech recognition models
+- **Voice Wake-up**: Requires downloading Sherpa-ONNX speech recognition models
 - **Camera Features**: Requires camera device and OpenCV support
 
 ## Read This First
@@ -142,10 +144,10 @@ py-xiaozhi is a Python-based Xiaozhi voice client, designed to learn coding and 
 
 ### Key Technical Components
 
-- **Audio Processing**: Opus codec, real-time resampling
-- **Speech Recognition**: Vosk offline models, voice activity detection, wake word recognition
-- **Protocol Communication**: WebSocket/MQTT dual protocol support, encrypted transmission
-- **Configuration System**: Hierarchical configuration, dot notation access, dynamic updates
+- **Audio Processing**: Opus codec, WebRTC echo cancellation, real-time resampling, system audio recording
+- **Speech Recognition**: Sherpa-ONNX offline models, voice activity detection, wake word recognition
+- **Protocol Communication**: WebSocket/MQTT dual protocol support, encrypted transmission, auto-reconnection
+- **Configuration System**: Hierarchical configuration, dot notation access, dynamic updates, JSON/YAML support
 
 ### Performance Optimization
 
@@ -167,21 +169,40 @@ py-xiaozhi is a Python-based Xiaozhi voice client, designed to learn coding and 
 
 ```
 py-xiaozhi/
+├── main.py                     # Application main entry (CLI argument handling)
 ├── src/
-│   ├── application.py          # Application main entry
+│   ├── application.py          # Application core logic
 │   ├── audio_codecs/           # Audio codecs
+│   │   ├── aec_processor.py    # Audio echo cancellation processor
+│   │   ├── audio_codec.py      # Audio codec base class
+│   │   └── system_audio_recorder.py  # System audio recorder
 │   ├── audio_processing/       # Audio processing modules
+│   │   ├── vad_detector.py     # Voice activity detection
+│   │   └── wake_word_detect.py # Wake word detection
 │   ├── core/                   # Core components
-│   ├── display/                # Display interfaces
+│   │   ├── ota.py             # Over-the-air update module
+│   │   └── system_initializer.py # System initializer
+│   ├── display/                # Display interface abstraction layer
 │   ├── iot/                    # IoT device management
+│   │   ├── thing.py           # Device base class
+│   │   ├── thing_manager.py   # Device manager
+│   │   └── things/            # Concrete device implementations
 │   ├── mcp/                    # MCP tool system
+│   │   ├── mcp_server.py      # MCP server
+│   │   └── tools/             # Various tool modules
 │   ├── protocols/              # Communication protocols
 │   ├── utils/                  # Utility functions
-│   └── views/                  # View components
-├── config/                     # Configuration files
-├── models/                     # Speech models
-├── assets/                     # Resource files
-└── libs/                       # Third-party libraries
+│   └── views/                  # UI view components
+├── libs/                       # Third-party native libraries
+│   ├── libopus/               # Opus audio codec library
+│   ├── webrtc_apm/            # WebRTC audio processing module
+│   └── SystemAudioRecorder/   # System audio recording tool
+├── config/                     # Configuration file directory
+├── models/                     # Speech model files
+├── assets/                     # Static resource files
+├── scripts/                    # Auxiliary scripts
+├── requirements.txt            # Python dependency package list
+└── build.json                  # Build configuration file
 ```
 
 ### Development Environment Setup
@@ -197,8 +218,15 @@ pip install -r requirements.txt
 # Code formatting
 ./format_code.sh
 
-# Run program
+# Run program - GUI mode (default)
 python main.py
+
+# Run program - CLI mode
+python main.py --mode cli
+
+# Specify communication protocol
+python main.py --protocol websocket  # WebSocket (default)
+python main.py --protocol mqtt       # MQTT protocol
 ```
 
 ### Core Development Patterns

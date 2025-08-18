@@ -77,7 +77,9 @@ const modules = [
     icon: DocumentIcon,
     features: [
       '基于Opus的实时音频编解码',
+      'WebRTC音频回声消除(AEC)处理器',
       'SoXR高质量音频重采样',
+      '系统音频录制与环回处理',
       '异步音频流处理',
       '低延迟音频缓冲管理'
     ]
@@ -87,7 +89,7 @@ const modules = [
     icon: SpeakerXMarkIcon,
     features: [
       'AEC声学回声消除处理器',
-      '基于Vosk的语音活动检测(VAD)',
+      '基于Sherpa-ONNX的语音活动检测(VAD)',
       '多语言唤醒词检测',
       '实时音频处理和回调机制'
     ]

@@ -66,8 +66,10 @@ py-xiaozhi 是一个使用 Python 实现的小智语音客户端，旨在通过�
 ### 🎵 高级音频处理
 - **多级音频处理**：支持Opus编解码、实时重采样
 - **语音活动检测**：VAD检测器实现智能打断，支持语音活动实时监控
-- **唤醒词检测**：基于Vosk的离线语音识别，支持多唤醒词和拼音匹配
+- **唤醒词检测**：基于Sherpa-ONNX的离线语音识别，支持多唤醒词和拼音匹配
 - **音频流管理**：独立输入输出流，支持流重建和错误恢复
+- **音频回声消除**：集成WebRTC音频处理模块，提供高质量的回声消除功能
+- **系统音频录制**：支持系统音频录制，实现音频环回处理
 
 ### 🖥️ 用户界面
 - **图形化界面**：基于PyQt5的现代GUI，支持小智表情与文本显示，增强视觉体验
@@ -109,7 +111,7 @@ py-xiaozhi 是一个使用 Python 实现的小智语音客户端，旨在通过�
 - **音频**：支持16kHz采样率的音频设备
 
 ### 可选功能要求
-- **语音唤醒**：需要下载Vosk语音识别模型
+- **语音唤醒**：需要下载Sherpa-ONNX语音识别模型
 - **摄像头功能**：需要摄像头设备和OpenCV支持
 
 ## 请先看这里
@@ -129,10 +131,10 @@ py-xiaozhi 是一个使用 Python 实现的小智语音客户端，旨在通过�
 - **插件化**: MCP工具系统和IoT设备支持插件化扩展
 
 ### 关键技术组件
-- **音频处理**: Opus编解码、实时重采样
-- **语音识别**: Vosk离线模型、语音活动检测、唤醒词识别
-- **协议通信**: WebSocket/MQTT双协议支持、加密传输
-- **配置系统**: 分层配置、点记法访问、动态更新
+- **音频处理**: Opus编解码、WebRTC回声消除、实时重采样、系统音频录制
+- **语音识别**: Sherpa-ONNX离线模型、语音活动检测、唤醒词识别
+- **协议通信**: WebSocket/MQTT双协议支持、加密传输、自动重连
+- **配置系统**: 分层配置、点记法访问、动态更新、JSON/YAML支持
 
 ### 性能优化
 - **异步优先**: 全系统异步架构，避免阻塞操作
@@ -151,21 +153,40 @@ py-xiaozhi 是一个使用 Python 实现的小智语音客户端，旨在通过�
 ### 项目结构
 ```
 py-xiaozhi/
+├── main.py                     # 应用程序主入口（CLI参数处理）
 ├── src/
-│   ├── application.py          # 应用程序主入口
+│   ├── application.py          # 应用程序核心逻辑
 │   ├── audio_codecs/           # 音频编解码器
+│   │   ├── aec_processor.py    # 音频回声消除处理器
+│   │   ├── audio_codec.py      # 音频编解码基础类
+│   │   └── system_audio_recorder.py  # 系统音频录制器
 │   ├── audio_processing/       # 音频处理模块
+│   │   ├── vad_detector.py     # 语音活动检测
+│   │   └── wake_word_detect.py # 唤醒词检测
 │   ├── core/                   # 核心组件
-│   ├── display/                # 显示界面
+│   │   ├── ota.py             # 在线更新模块
+│   │   └── system_initializer.py # 系统初始化器
+│   ├── display/                # 显示界面抽象层
 │   ├── iot/                    # IoT设备管理
+│   │   ├── thing.py           # 设备基类
+│   │   ├── thing_manager.py   # 设备管理器
+│   │   └── things/            # 具体设备实现
 │   ├── mcp/                    # MCP工具系统
+│   │   ├── mcp_server.py      # MCP服务器
+│   │   └── tools/             # 各种工具模块
 │   ├── protocols/              # 通信协议
 │   ├── utils/                  # 工具函数
-│   └── views/                  # 视图组件
-├── config/                     # 配置文件
-├── models/                     # 语音模型
-├── assets/                     # 资源文件
-└── libs/                       # 第三方库
+│   └── views/                  # UI视图组件
+├── libs/                       # 第三方原生库
+│   ├── libopus/               # Opus音频编解码库
+│   ├── webrtc_apm/            # WebRTC音频处理模块
+│   └── SystemAudioRecorder/   # 系统音频录制工具
+├── config/                     # 配置文件目录
+├── models/                     # 语音模型文件
+├── assets/                     # 静态资源文件
+├── scripts/                    # 辅助脚本
+├── requirements.txt            # Python依赖包列表
+└── build.json                  # 构建配置文件
 ```
 
 ### 开发环境设置
@@ -178,10 +199,17 @@ cd py-xiaozhi
 pip install -r requirements.txt
 
 # 代码格式化
-./format_code/sh
+./format_code.sh
 
-# 运行程序
+# 运行程序 - GUI模式（默认）
 python main.py
+
+# 运行程序 - CLI模式
+python main.py --mode cli
+
+# 指定通信协议
+python main.py --protocol websocket  # WebSocket（默认）
+python main.py --protocol mqtt       # MQTT协议
 ```
 
 ### 核心开发模式

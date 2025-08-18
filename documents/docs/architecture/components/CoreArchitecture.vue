@@ -68,7 +68,6 @@ const createChartOption = (darkMode) => ({
         { name: '智能家居', value: 'Smart Home', category: 2, symbolSize: 30 }
       ],
       links: [
-        { source: '应用核心', target: '资源管理器' },
         { source: '应用核心', target: 'MCP服务器' },
         { source: '应用核心', target: '通信协议层' },
         { source: '应用核心', target: '音频处理系统' },

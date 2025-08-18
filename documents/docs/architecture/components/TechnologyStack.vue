@@ -50,13 +50,13 @@ const techStack = [
     icon: ArrowsUpDownIcon
   },
   {
-    name: 'Vosk',
+    name: 'Sherpa-ONNX',
     description: '语音识别引擎',
     icon: DocumentIcon
   },
   {
-    name: 'pyaec',
-    description: 'AEC声学回声消除',
+    name: 'WebRTC AEC',
+    description: 'WebRTC音频处理模块',
     icon: MusicIcon
   },
   {
