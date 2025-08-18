@@ -9,11 +9,23 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from src.utils.logging_config import get_logger
+from src.utils.resource_finder import get_user_data_dir
 
 logger = get_logger(__name__)
 
-# 数据库文件路径
-DATABASE_FILE = "cache/calendar.db"
+
+def _get_database_file_path() -> str:
+    """
+    获取数据库文件路径，确保在可写目录中.
+    """
+    data_dir = get_user_data_dir()
+    database_file = str(data_dir / "calendar.db")
+    logger.debug(f"使用数据库文件路径: {database_file}")
+    return database_file
+
+
+# 数据库文件路径 - 使用函数获取确保可写
+DATABASE_FILE = _get_database_file_path()
 
 
 class CalendarDatabase:

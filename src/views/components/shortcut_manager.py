@@ -557,7 +557,7 @@ class ShortcutManager:
         )
 
         if self._listener_error_count >= self._max_error_count:
-            logger.error(f"键盘监听器错误次数超限，尝试重启")
+            logger.error("键盘监听器错误次数超限，尝试重启")
             if self._main_loop:
                 asyncio.run_coroutine_threadsafe(
                     self._restart_listener(), self._main_loop

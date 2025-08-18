@@ -1,5 +1,10 @@
 # py-xiaozhi
 
+<p align="center" class="trendshift">
+  <a href="https://trendshift.io/repositories/14130" target="_blank">
+    <img src="https://trendshift.io/api/badge/repositories/14130" alt="Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/>
+  </a>
+</p>
 <p align="center">
   <a href="https://github.com/huangjunsen0406/py-xiaozhi/releases/latest">
     <img src="https://img.shields.io/github/v/release/huangjunsen0406/py-xiaozhi?style=flat-square&logo=github&color=blue" alt="Release"/>
@@ -36,12 +41,14 @@ py-xiaozhi is a Python-based Xiaozhi voice client, designed to learn coding and 
 ## Features
 
 ### 🎯 Core AI Capabilities
+
 - **AI Voice Interaction**: Supports voice input and recognition, enabling intelligent human-computer interaction with natural conversation flow
 - **Visual Multimodal**: Supports image recognition and processing, providing multimodal interaction capabilities and image content understanding
 - **Intelligent Wake-up**: Supports multiple wake word activation for hands-free interaction (configurable)
 - **Continuous Dialogue Mode**: Implements seamless conversation experience, enhancing user interaction fluidity
 
 ### 🔧 MCP Tools Ecosystem
+
 - **System Control Tools**: System status monitoring, application management, volume control, device management
 - **Calendar Management Tools**: Full-featured calendar system with create, query, update, delete events, intelligent categorization and reminders
 - **Timer Tools**: Countdown timer functionality with delayed MCP tool execution and parallel task management
@@ -54,18 +61,21 @@ py-xiaozhi is a Python-based Xiaozhi voice client, designed to learn coding and 
 - **Camera Tools**: Image capture and AI analysis with photo recognition and intelligent Q&A
 
 ### 🏠 IoT Device Integration
+
 - **Device Management Architecture**: Unified device management based on Thing pattern with asynchronous property and method calls
 - **Smart Home Control**: Supports lighting, volume, temperature sensors, and other device control
 - **State Synchronization**: Real-time status monitoring with incremental updates and concurrent state retrieval
 - **Extensible Design**: Modular device drivers, easy to add new device types
 
 ### 🎵 Advanced Audio Processing
+
 - **Multi-level Audio Processing**: Supports Opus codec and real-time resampling
 - **Voice Activity Detection**: VAD detector for intelligent interruption with real-time voice activity monitoring
 - **Wake Word Detection**: Vosk-based offline speech recognition with multiple wake words and pinyin matching
 - **Audio Stream Management**: Independent input/output streams with stream rebuild and error recovery
 
 ### 🖥️ User Interface
+
 - **Graphical Interface**: Modern PyQt5-based GUI with Xiaozhi expressions and text display for enhanced visual experience
 - **Command Line Mode**: CLI support suitable for embedded devices or GUI-less environments
 - **System Tray**: Background operation support with integrated system tray functionality
@@ -73,17 +83,20 @@ py-xiaozhi is a Python-based Xiaozhi voice client, designed to learn coding and 
 - **Settings Interface**: Complete settings management interface with configuration customization
 
 ### 🔒 Security & Stability
+
 - **Encrypted Audio Transmission**: WSS protocol support ensuring audio data security and preventing information leakage
 - **Device Activation System**: Dual v1/v2 protocol activation with automatic verification code and device fingerprint handling
 - **Error Recovery**: Complete error handling and recovery mechanisms with reconnection support
 
 ### 🌐 Cross-platform Support
+
 - **System Compatibility**: Compatible with Windows 10+, macOS 10.15+, and Linux systems
 - **Protocol Support**: WebSocket and MQTT dual protocol communication support
 - **Multi-environment Deployment**: GUI and CLI dual modes adapting to different deployment environments
 - **Platform Optimization**: Audio and system control optimization for different platforms
 
 ### 🔧 Developer Friendly
+
 - **Modular Architecture**: Clean code structure with clear responsibility separation for secondary development
 - **Async First**: Event-driven architecture based on asyncio for high-performance concurrent processing
 - **Configuration Management**: Hierarchical configuration system with dot notation access and dynamic updates
@@ -93,18 +106,21 @@ py-xiaozhi is a Python-based Xiaozhi voice client, designed to learn coding and 
 ## System Requirements
 
 ### Basic Requirements
+
 - **Python Version**: 3.9 - 3.12
 - **Operating System**: Windows 10+, macOS 10.15+, Linux
 - **Audio Devices**: Microphone and speaker devices
 - **Network Connection**: Stable internet connection (for AI services and online features)
 
 ### Recommended Configuration
+
 - **Memory**: At least 4GB RAM (8GB+ recommended)
 - **Processor**: Modern CPU with AVX instruction set support
 - **Storage**: At least 2GB available disk space (for model files and cache)
 - **Audio**: Audio devices supporting 16kHz sampling rate
 
 ### Optional Feature Requirements
+
 - **Voice Wake-up**: Requires downloading Vosk speech recognition models
 - **Camera Features**: Requires camera device and OpenCV support
 
@@ -118,24 +134,28 @@ py-xiaozhi is a Python-based Xiaozhi voice client, designed to learn coding and 
 ## Technical Architecture
 
 ### Core Architecture Design
+
 - **Event-Driven Architecture**: Based on asyncio asynchronous event loop, supporting high-concurrency processing
 - **Layered Design**: Clear separation of application layer, protocol layer, device layer, and UI layer
 - **Singleton Pattern**: Core components use singleton pattern to ensure unified resource management
 - **Plugin System**: MCP tool system and IoT devices support plugin-based extension
 
 ### Key Technical Components
+
 - **Audio Processing**: Opus codec, real-time resampling
 - **Speech Recognition**: Vosk offline models, voice activity detection, wake word recognition
 - **Protocol Communication**: WebSocket/MQTT dual protocol support, encrypted transmission
 - **Configuration System**: Hierarchical configuration, dot notation access, dynamic updates
 
 ### Performance Optimization
+
 - **Async First**: Full system asynchronous architecture, avoiding blocking operations
 - **Memory Management**: Smart caching, garbage collection
 - **Audio Optimization**: 5ms low-latency processing, queue management, streaming transmission
 - **Concurrency Control**: Task pool management, semaphore control, thread safety
 
 ### Security Mechanisms
+
 - **Encrypted Communication**: WSS/TLS encryption, certificate verification
 - **Device Authentication**: Dual protocol activation, device fingerprint recognition
 - **Access Control**: Tool permission management, API access control
@@ -144,6 +164,7 @@ py-xiaozhi is a Python-based Xiaozhi voice client, designed to learn coding and 
 ## Development Guide
 
 ### Project Structure
+
 ```
 py-xiaozhi/
 ├── src/
@@ -164,6 +185,7 @@ py-xiaozhi/
 ```
 
 ### Development Environment Setup
+
 ```bash
 # Clone project
 git clone https://github.com/huangjunsen0406/py-xiaozhi.git
@@ -180,18 +202,21 @@ python main.py
 ```
 
 ### Core Development Patterns
+
 - **Async First**: Use `async/await` syntax, avoid blocking operations
 - **Error Handling**: Complete exception handling and logging
 - **Configuration Management**: Use `ConfigManager` for unified configuration access
 - **Test-Driven**: Write unit tests to ensure code quality
 
 ### Extension Development
+
 - **Add MCP Tools**: Create new tool modules in `src/mcp/tools/` directory
 - **Add IoT Devices**: Inherit from `Thing` base class to implement new devices
 - **Add Protocols**: Implement `Protocol` abstract base class
 - **Add Interfaces**: Extend `BaseDisplay` to implement new UI components
 
 ### State Transition Diagram
+
 ```
                         +----------------+
                         |                |

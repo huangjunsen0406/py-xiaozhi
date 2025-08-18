@@ -97,6 +97,9 @@ def detect_cameras():
         print(
             f"  - 分辨率: {current_camera_config.get('frame_width', '未设置')}x{current_camera_config.get('frame_height', '未设置')}"
         )
+        print(
+            f"  - 分辨率: {current_camera_config.get('frame_width', '未设置')}x{current_camera_config.get('frame_height', '未设置')}"
+        )
         print(f"  - 帧率: {current_camera_config.get('fps', '未设置')}")
         print(f"  - VL模型: {current_camera_config.get('models', '未设置')}")
         print("")
@@ -146,9 +149,7 @@ def detect_cameras():
                 # 标记当前配置使用的摄像头
                 current_index = current_camera_config.get("camera_index")
                 if current_index == i:
-                    print(f"  - 📹 当前配置使用的摄像头")
-
-                print("")
+                    print("当前配置使用的摄像头")
 
                 # 添加到设备列表
                 camera_devices.append(
@@ -339,9 +340,9 @@ if __name__ == "__main__":
     try:
         cameras = detect_cameras()
         if cameras:
-            print(f"\n检测到 {len(cameras)} 个摄像头设备！")
+            print("\n检测到 {len(cameras)} 个摄像头设备！")
         else:
             print("\n未检测到可用的摄像头设备！")
-    except Exception as e:
-        logger.error(f"检测过程中出错: {e}")
-        print(f"检测过程中出错: {e}")
+    except Exception:
+        logger.error("检测过程中出错: {e}")
+        print("检测过程中出错: {e}")

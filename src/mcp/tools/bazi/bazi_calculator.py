@@ -963,7 +963,7 @@ class BaziCalculator:
                     month_gan = bazi.getMonthGan()
                     month_zhi = bazi.getMonthZhi()
                     month_pillars.add(f"{month_gan}{month_zhi}")
-                except:
+                except Exception:
                     continue
 
             # 如果月中任何一天的月柱匹配，就认为匹配

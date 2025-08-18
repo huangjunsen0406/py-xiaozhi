@@ -11,7 +11,6 @@ pynput==1.8.1
 pyperclip==1.9.0
 pypinyin==0.53.0
 requests==2.32.3
-vosk==0.3.44
 webrtcvad-wheels==2.0.14
 websockets==11.0.3
 colorlog==6.9.0
@@ -30,3 +29,5 @@ opencv-python-headless==4.11.0.86
 pendulum==3.1.0
 lunar_python==1.4.4
 tzdata
+pyaec==1.0.1
+sherpa-onnx==1.12.8

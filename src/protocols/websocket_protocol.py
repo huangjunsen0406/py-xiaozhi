@@ -23,6 +23,8 @@ class WebsocketProtocol(Protocol):
         self.websocket = None
         self.connected = False
         self.hello_received = None  # 初始化时先设为 None
+        # 消息处理任务引用，便于在关闭时取消
+        self._message_task = None
 
         # 连接健康状态监测
         self._last_ping_time = None
@@ -97,8 +99,8 @@ class WebsocketProtocol(Protocol):
                     compression=None,  # 禁用压缩
                 )
 
-            # 启动消息处理循环
-            asyncio.create_task(self._message_handler())
+            # 启动消息处理循环（保存任务引用，关闭时可取消）
+            self._message_task = asyncio.create_task(self._message_handler())
 
             # 注释掉自定义心跳，使用websockets内置的心跳机制
             # self._start_heartbeat()
@@ -214,7 +216,7 @@ class WebsocketProtocol(Protocol):
 
                 # 检查连接状态
                 if self.websocket:
-                    if self.websocket.closed:
+                    if self.websocket.close_code is not None:
                         logger.warning("检测到WebSocket连接已关闭")
                         await self._handle_connection_loss("连接已关闭")
                         break
@@ -337,7 +339,7 @@ class WebsocketProtocol(Protocol):
         """
         return {
             "connected": self.connected,
-            "websocket_closed": self.websocket.closed if self.websocket else True,
+            "websocket_closed": self.websocket.close_code is not None if self.websocket else True,
             "is_closing": self._is_closing,
             "auto_reconnect_enabled": self._auto_reconnect_enabled,
             "reconnect_attempts": self._reconnect_attempts,
@@ -378,6 +380,9 @@ class WebsocketProtocol(Protocol):
                     logger.error(f"处理消息时出错: {e}", exc_info=True)
                     continue
 
+        except asyncio.CancelledError:
+            logger.debug("消息处理任务被取消")
+            return
         except websockets.ConnectionClosed as e:
             if not self._is_closing:
                 logger.info(f"WebSocket连接已关闭: {e}")
@@ -449,7 +454,7 @@ class WebsocketProtocol(Protocol):
 
         # 检查WebSocket的实际状态
         try:
-            return not self.websocket.closed
+            return self.websocket.close_code is None
         except Exception:
             return False
 
@@ -474,7 +479,6 @@ class WebsocketProtocol(Protocol):
             if not transport or transport != "websocket":
                 logger.error(f"不支持的传输方式: {transport}")
                 return
-            print("服务链接返回初始化配置", data)
 
             # 设置 hello 接收事件
             self.hello_received.set()
@@ -496,6 +500,17 @@ class WebsocketProtocol(Protocol):
         """
         self.connected = False
 
+        # 取消消息处理任务，防止事件循环退出后仍有挂起等待
+        if self._message_task and not self._message_task.done():
+            self._message_task.cancel()
+            try:
+                await self._message_task
+            except asyncio.CancelledError:
+                pass
+            except Exception as e:
+                logger.debug(f"等待消息任务取消时异常: {e}")
+        self._message_task = None
+
         # 取消心跳任务
         if self._heartbeat_task and not self._heartbeat_task.done():
             self._heartbeat_task.cancel()
@@ -513,7 +528,7 @@ class WebsocketProtocol(Protocol):
                 pass
 
         # 关闭WebSocket连接
-        if self.websocket and not self.websocket.closed:
+        if self.websocket and self.websocket.close_code is None:
             try:
                 await self.websocket.close()
             except Exception as e:

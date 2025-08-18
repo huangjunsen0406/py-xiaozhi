@@ -215,6 +215,22 @@ QLabel {
        </property>
       </widget>
      </item>
+      <item>
+       <widget class="QPushButton" name="settings_btn">
+        <property name="minimumSize">
+         <size>
+          <width>0</width>
+          <height>36</height>
+         </size>
+        </property>
+        <property name="text">
+         <string>参数配置</string>
+        </property>
+        <property name="toolTip">
+         <string>打开设置（Ctrl+,）</string>
+        </property>
+       </widget>
+      </item>
     </layout>
    </item>
   </layout>

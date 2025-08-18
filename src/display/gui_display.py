@@ -1,10 +1,10 @@
 import os
-import platform
+from abc import ABCMeta
 from pathlib import Path
 from typing import Callable, Optional
 
 from PyQt5.QtCore import QObject, Qt
-from PyQt5.QtGui import QFont, QMovie
+from PyQt5.QtGui import QFont, QKeySequence, QMovie, QPixmap
 from PyQt5.QtWidgets import (
     QApplication,
     QLabel,
@@ -13,19 +13,6 @@ from PyQt5.QtWidgets import (
     QSizePolicy,
     QWidget,
 )
-
-# 根据不同操作系统处理 pynput 导入
-try:
-    if platform.system() == "Windows":
-        from pynput import keyboard as pynput_keyboard
-    elif os.environ.get("DISPLAY"):
-        from pynput import keyboard as pynput_keyboard
-    else:
-        pynput_keyboard = None
-except ImportError:
-    pynput_keyboard = None
-
-from abc import ABCMeta
 
 from src.display.base_display import BaseDisplay
 from src.utils.resource_finder import find_assets_dir
@@ -162,20 +149,25 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             self.auto_btn.hide()
             self.manual_btn.show()
 
-    async def update_status(self, status: str):
+    async def update_status(self, status: str, connected: bool):
         """
         更新状态文本并处理相关逻辑.
         """
         full_status_text = f"状态: {status}"
         self._safe_update_label(self.status_label, full_status_text)
 
-        if status != self.current_status:
+        # 既跟踪状态文本变化，也跟踪连接状态变化
+        new_connected = bool(connected)
+        status_changed = status != self.current_status
+        connected_changed = new_connected != self.is_connected
+
+        if status_changed:
             self.current_status = status
+        if connected_changed:
+            self.is_connected = new_connected
 
-            # 根据状态更新连接状态
-            self._update_connection_status(status)
-
-            # 更新系统托盘
+        # 任一变化都更新系统托盘
+        if status_changed or connected_changed:
             self._update_system_tray(status)
 
     async def update_text(self, text: str):
@@ -192,17 +184,17 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             return
 
         self._last_emotion_name = emotion_name
-        gif_path = self._get_emotion_gif_path(emotion_name)
+        asset_path = self._get_emotion_asset_path(emotion_name)
 
         if self.emotion_label:
             try:
-                self._set_emotion_gif(self.emotion_label, gif_path)
+                self._set_emotion_asset(self.emotion_label, asset_path)
             except Exception as e:
                 self.logger.error(f"设置表情GIF时发生错误: {str(e)}")
 
-    def _get_emotion_gif_path(self, emotion_name: str) -> str:
+    def _get_emotion_asset_path(self, emotion_name: str) -> str:
         """
-        获取表情GIF文件路径.
+        获取表情资源文件路径，自动匹配常见后缀.
         """
         if emotion_name in self._emotion_cache:
             return self._emotion_cache[emotion_name]
@@ -212,57 +204,92 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             path = "😊"
         else:
             emotion_dir = assets_dir / "emojis"
-            gif_file = emotion_dir / f"{emotion_name}.gif"
+            # 支持的后缀优先级：gif > png > jpg > jpeg > webp
+            candidates = [
+                emotion_dir / f"{emotion_name}.gif",
+                emotion_dir / f"{emotion_name}.png",
+                emotion_dir / f"{emotion_name}.jpg",
+                emotion_dir / f"{emotion_name}.jpeg",
+                emotion_dir / f"{emotion_name}.webp",
+            ]
+            # 依次匹配
+            found = next((p for p in candidates if p.exists()), None)
 
-            if gif_file.exists():
-                path = str(gif_file)
-            elif (emotion_dir / "neutral.gif").exists():
-                path = str(emotion_dir / "neutral.gif")
-            else:
-                path = "😊"
+            # 兜底到 neutral 同样规则
+            if not found:
+                neutral_candidates = [
+                    emotion_dir / "neutral.gif",
+                    emotion_dir / "neutral.png",
+                    emotion_dir / "neutral.jpg",
+                    emotion_dir / "neutral.jpeg",
+                    emotion_dir / "neutral.webp",
+                ]
+                found = next((p for p in neutral_candidates if p.exists()), None)
+
+            path = str(found) if found else "😊"
 
         self._emotion_cache[emotion_name] = path
         return path
 
-    def _set_emotion_gif(self, label, gif_path):
+    def _set_emotion_asset(self, label, asset_path: str):
         """
-        设置表情GIF动画.
+        设置表情资源（GIF动图或静态图片）。
         """
         if not label:
             return
 
         # 如果是emoji字符串，直接设置文本
-        if not gif_path.endswith(".gif"):
-            label.setText(gif_path)
+        if not isinstance(asset_path, str) or "." not in asset_path:
+            label.setText(asset_path or "😊")
             return
 
         try:
-            # 检查缓存中是否有该GIF
-            if hasattr(self, "_gif_movies") and gif_path in self._gif_movies:
-                movie = self._gif_movies[gif_path]
+            if asset_path.lower().endswith(".gif"):
+                # GIF 动图
+                if hasattr(self, "_gif_movies") and asset_path in self._gif_movies:
+                    movie = self._gif_movies[asset_path]
+                else:
+                    movie = QMovie(asset_path)
+                    if not movie.isValid():
+                        label.setText("😊")
+                        return
+                    movie.setCacheMode(QMovie.CacheAll)
+                    if not hasattr(self, "_gif_movies"):
+                        self._gif_movies = {}
+                    self._gif_movies[asset_path] = movie
+
+                # 如切换到新的movie，停止旧的以避免CPU占用
+                if (
+                    getattr(self, "emotion_movie", None) is not None
+                    and self.emotion_movie is not movie
+                ):
+                    try:
+                        self.emotion_movie.stop()
+                    except Exception:
+                        pass
+
+                self.emotion_movie = movie
+                label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+                label.setAlignment(Qt.AlignCenter)
+                label.setMovie(movie)
+                movie.setSpeed(105)
+                movie.start()
             else:
-                movie = QMovie(gif_path)
-                if not movie.isValid():
+                # 静态图片：如有旧的GIF在播放则停止
+                if getattr(self, "emotion_movie", None) is not None:
+                    try:
+                        self.emotion_movie.stop()
+                    except Exception:
+                        pass
+                    self.emotion_movie = None
+
+                pixmap = QPixmap(asset_path)
+                if pixmap.isNull():
                     label.setText("😊")
                     return
-
-                movie.setCacheMode(QMovie.CacheAll)
-
-                if not hasattr(self, "_gif_movies"):
-                    self._gif_movies = {}
-                self._gif_movies[gif_path] = movie
-
-            # 保存动画对象
-            self.emotion_movie = movie
-
-            # 设置标签属性
-            label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-            label.setAlignment(Qt.AlignCenter)
-            label.setMovie(movie)
-
-            # 设置动画速度并开始播放
-            movie.setSpeed(105)
-            movie.start()
+                label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+                label.setAlignment(Qt.AlignCenter)
+                label.setPixmap(pixmap)
 
         except Exception as e:
             self.logger.error(f"设置GIF动画失败: {e}")
@@ -283,6 +310,23 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         关闭窗口处理.
         """
         self._running = False
+        # 停止并清理GIF资源，避免资源泄漏
+        try:
+            if getattr(self, "emotion_movie", None) is not None:
+                try:
+                    self.emotion_movie.stop()
+                except Exception:
+                    pass
+                self.emotion_movie = None
+            if hasattr(self, "_gif_movies") and isinstance(self._gif_movies, dict):
+                for _m in list(self._gif_movies.values()):
+                    try:
+                        _m.stop()
+                    except Exception:
+                        pass
+                self._gif_movies.clear()
+        except Exception:
+            pass
         if self.system_tray:
             self.system_tray.hide()
         if self.root:
@@ -299,6 +343,18 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             self.app = QApplication.instance()
             if self.app is None:
                 raise RuntimeError("QApplication未找到，请确保在qasync环境中运行")
+
+            # 关闭最后一个窗口被关闭时自动退出应用的行为，确保托盘常驻
+            try:
+                self.app.setQuitOnLastWindowClosed(False)
+            except Exception:
+                pass
+
+            # 安装应用级事件过滤器：支持点击Dock图标时恢复窗口
+            try:
+                self.app.installEventFilter(self)
+            except Exception:
+                pass
 
             # 设置默认字体
             default_font = QFont()
@@ -329,6 +385,24 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             self.logger.error(f"GUI启动失败: {e}", exc_info=True)
             raise
 
+    def eventFilter(self, obj, event):
+        """应用级事件过滤：
+
+        - macOS 点击 Dock 图标会触发 ApplicationActivate 事件
+        - 当主窗口处于隐藏/最小化时，自动恢复显示
+        """
+        try:
+            # 延迟导入，避免顶层循环依赖
+            from PyQt5.QtCore import QEvent
+
+            if event and event.type() == QEvent.ApplicationActivate:
+                if self.root and not self.root.isVisible():
+                    self._show_main_window()
+        except Exception as e:
+            if hasattr(self, "logger"):
+                self.logger.error(f"处理应用激活事件失败: {e}")
+        return False
+
     def _init_ui_controls(self):
         """
         初始化UI控件.
@@ -340,6 +414,7 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         self.abort_btn = self.root.findChild(QPushButton, "abort_btn")
         self.auto_btn = self.root.findChild(QPushButton, "auto_btn")
         self.mode_btn = self.root.findChild(QPushButton, "mode_btn")
+        self.settings_btn = self.root.findChild(QPushButton, "settings_btn")
         self.text_input = self.root.findChild(QLineEdit, "text_input")
         self.send_btn = self.root.findChild(QPushButton, "send_btn")
 
@@ -360,15 +435,40 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         if self.text_input and self.send_btn:
             self.send_btn.clicked.connect(self._on_send_button_click)
             self.text_input.returnPressed.connect(self._on_send_button_click)
+        if self.settings_btn:
+            self.settings_btn.clicked.connect(self._on_settings_button_click)
 
         # 设置窗口关闭事件
         self.root.closeEvent = self._closeEvent
+
+        # 快捷键：Ctrl+, 与 Cmd+, 打开设置
+        try:
+            from PyQt5.QtWidgets import QShortcut
+
+            QShortcut(
+                QKeySequence("Ctrl+,"),
+                self.root,
+                activated=self._on_settings_button_click,
+            )
+            QShortcut(
+                QKeySequence("Meta+,"),
+                self.root,
+                activated=self._on_settings_button_click,
+            )
+        except Exception:
+            pass
 
     def _setup_system_tray(self):
         """
         设置系统托盘.
         """
         try:
+            # 允许通过环境变量禁用系统托盘用于排障
+            if os.getenv("XIAOZHI_DISABLE_TRAY") == "1":
+                self.logger.warning(
+                    "已通过环境变量禁用系统托盘 (XIAOZHI_DISABLE_TRAY=1)"
+                )
+                return
             from src.views.components.system_tray import SystemTray
 
             self.system_tray = SystemTray(self.root)
@@ -469,11 +569,28 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         """
         处理窗口关闭事件.
         """
-        if self.system_tray and self.system_tray.is_visible():
-            self.root.hide()
-            self.system_tray.show_message(
-                "小智AI助手", "程序仍在运行中，点击托盘图标可以重新打开窗口。"
-            )
+        # 只要系统托盘可用，就最小化到托盘
+        if self.system_tray and (
+            getattr(self.system_tray, "is_available", lambda: False)()
+            or getattr(self.system_tray, "is_visible", lambda: False)()
+        ):
+            self.logger.info("关闭窗口：最小化到托盘")
+            # 延迟隐藏，避免在closeEvent中直接操作窗口引发macOS图形栈不稳定
+            try:
+                from PyQt5.QtCore import QTimer
+
+                QTimer.singleShot(0, self.root.hide)
+            except Exception:
+                try:
+                    self.root.hide()
+                except Exception:
+                    pass
+            # 停止GIF动画，规避隐藏时的潜在崩溃
+            try:
+                if getattr(self, "emotion_movie", None) is not None:
+                    self.emotion_movie.stop()
+            except Exception:
+                pass
             event.ignore()
         else:
             self._quit_application()
@@ -509,7 +626,15 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         try:
             import asyncio
 
-            asyncio.create_task(self.send_text_callback(text))
+            task = asyncio.create_task(self.send_text_callback(text))
+
+            def _on_done(t):
+                if not t.cancelled() and t.exception():
+                    self.logger.error(
+                        f"发送文本任务异常: {t.exception()}", exc_info=True
+                    )
+
+            task.add_done_callback(_on_done)
         except Exception as e:
             self.logger.error(f"发送文本时出错: {e}")
 
@@ -525,25 +650,6 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
 
         except Exception as e:
             self.logger.error(f"打开设置窗口失败: {e}", exc_info=True)
-
-    def _update_connection_status(self, status: str):
-        """
-        根据状态更新连接状态.
-        """
-        if status in ["连接中...", "聆听中...", "说话中..."]:
-            self.is_connected = True
-        elif status == "待命":
-            # 对于待命状态，需要检查音频通道是否真的开启
-            from src.application import Application
-
-            app = Application.get_instance()
-            if app and app.protocol:
-                self.is_connected = app.protocol.is_audio_channel_opened()
-            else:
-                self.is_connected = False
-        else:
-            # 其他状态（如错误状态）设为未连接
-            self.is_connected = False
 
     async def toggle_mode(self):
         """

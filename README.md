@@ -1,5 +1,8 @@
-# py-xiaozhi
-
+<p align="center" class="trendshift">
+  <a href="https://trendshift.io/repositories/14130" target="_blank">
+    <img src="https://trendshift.io/api/badge/repositories/14130" alt="Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/>
+  </a>
+</p>
 <p align="center">
   <a href="https://github.com/huangjunsen0406/py-xiaozhi/releases/latest">
     <img src="https://img.shields.io/github/v/release/huangjunsen0406/py-xiaozhi?style=flat-square&logo=github&color=blue" alt="Release"/>

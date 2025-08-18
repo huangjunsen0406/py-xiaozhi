@@ -91,7 +91,7 @@ class BaziEngine:
                 minute=dt.minute,
                 second=dt.second,
             )
-        except Exception as e:
+        except Exception:
             # 如果pendulum解析失败，尝试其他格式
             formats = [
                 "%Y-%m-%dT%H:%M:%S+08:00",

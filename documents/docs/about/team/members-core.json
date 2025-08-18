@@ -17,6 +17,10 @@
       {
         "label": "xiaozhi-esp32-server",
         "url": "https://github.com/xinnan-tech/xiaozhi-esp32-server"
+      },
+      {
+        "label": "xiaozhi-mcphub",
+        "url": "https://github.com/huangjunsen0406/xiaozhi-mcphub"
       }
     ],
     "socials": {
@@ -95,16 +99,6 @@
     "languages": ["中文"],
     "socials": {
       "github": "wupengya"
-    }
-  },
-  {
-    "name": "pengzhenglong001",
-    "company": "南方电网人工智能有限公司 算法工程师",
-    "projects": [],
-    "location": "中国",
-    "languages": ["中文"],
-    "socials": {
-      "github": "pengzhenglong001"
     }
   }
 ]

@@ -51,15 +51,20 @@ class SystemTray(QObject):
             # 创建托盘菜单
             self._create_tray_menu()
 
-            # 创建系统托盘图标
-            self.tray_icon = QSystemTrayIcon(self.parent_widget)
+            # 创建系统托盘图标（不绑定 QWidget 作为父对象，避免窗口生命周期影响托盘图标，防止 macOS 下隐藏/关闭时崩溃）
+            self.tray_icon = QSystemTrayIcon()
             self.tray_icon.setContextMenu(self.tray_menu)
 
             # 连接托盘图标的事件
             self.tray_icon.activated.connect(self._on_tray_activated)
 
-            # 设置初始图标
-            self.update_status("待命", connected=True)
+            # 设置初始图标（避免在某些平台第一次绘制引发崩溃，延迟到事件循环空闲时执行）
+            try:
+                from PyQt5.QtCore import QTimer
+
+                QTimer.singleShot(0, lambda: self.update_status("待命", connected=True))
+            except Exception:
+                self.update_status("待命", connected=True)
 
             # 显示系统托盘图标
             self.tray_icon.show()

@@ -40,6 +40,7 @@ export default defineConfig({
           { text: '八字 (Bazi)', link: '/mcp/bazi' },
           { text: '日历 (Calendar)', link: '/mcp/calendar' },
           { text: '相机 (Camera)', link: '/mcp/camera' },
+          { text: 'Home Assistant (HA)', link: '/mcp/ha' },
           { text: '音乐 (Music)', link: '/mcp/music' },
           { text: '火车票 (Railway)', link: '/mcp/railway' },
           { text: '菜谱 (Recipe)', link: '/mcp/recipe' },

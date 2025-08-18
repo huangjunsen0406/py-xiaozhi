@@ -28,22 +28,6 @@ features:
     details: 兼容Windows 10+、macOS 10.15+和Linux系统，支持GUI和CLI双模式运行，自适应不同平台的音频设备和系统接口。
 ---
 
-<div class="developers-section">
-  <p>感谢以下开发者对 py-xiaozhi 作出的贡献</p>
-  
-  <div class="contributors-wrapper">
-    <a href="https://github.com/huangjunsen0406/py-xiaozhi/graphs/contributors" class="contributors-link">
-      <img src="https://contrib.rocks/image?repo=huangjunsen0406/py-xiaozhi&max=1000" alt="contributors" class="contributors-image"/>
-    </a>
-  </div>
-  
-  <div class="developers-actions">
-    <a href="/py-xiaozhi/contributors" class="dev-button">查看特别贡献者</a>
-    <a href="/py-xiaozhi/contributing" class="dev-button outline">如何参与贡献</a>
-  </div>
-
-</div>
-
 <style>
 .developers-section {
   text-align: center;

@@ -134,7 +134,7 @@ def detect_audio_devices():
     if recommended_mic:
         print(f"正在测试麦克风 (设备 {recommended_mic[0]})...")
         try:
-            test_recording = sd.rec(
+            sd.rec(
                 int(1 * 16000),
                 samplerate=16000,
                 channels=1,

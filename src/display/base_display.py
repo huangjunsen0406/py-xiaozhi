@@ -33,7 +33,7 @@ class BaseDisplay(ABC):
         """
 
     @abstractmethod
-    async def update_status(self, status: str):
+    async def update_status(self, status: str, connected: bool):
         """
         更新状态文本.
         """

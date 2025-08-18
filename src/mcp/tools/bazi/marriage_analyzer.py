@@ -515,7 +515,7 @@ class MarriageAnalyzer:
         if day_gan:
             huagai_zhi = HUAGAI_XING.get(day_gan, "")
             if huagai_zhi and huagai_zhi in zhi_list:
-                obstacles.append(f"命带华盖星，性格孤独，不易接近")
+                obstacles.append("命带华盖星，性格孤独，不易接近")
 
         # 5. 配偶宫特殊情况分析
         if day_zhi:

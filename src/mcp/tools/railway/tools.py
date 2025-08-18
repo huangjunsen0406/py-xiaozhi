@@ -369,27 +369,3 @@ def _format_transfer_tickets(transfers: list) -> str:
         result_lines.append("")  # 空行分隔
 
     return "\n".join(result_lines)
-
-
-def _format_ticket_status(num: str) -> str:
-    """
-    格式化票量信息.
-    """
-    if num.isdigit():
-        count = int(num)
-        if count == 0:
-            return "无票"
-        else:
-            return f"剩余{count}张票"
-
-    # 处理特殊状态
-    status_map = {
-        "有": "有票",
-        "充足": "有票",
-        "无": "无票",
-        "--": "无票",
-        "": "无票",
-        "候补": "无票需候补",
-    }
-
-    return status_map.get(num, f"{num}票")
