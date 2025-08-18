@@ -212,16 +212,17 @@ class BaziCalculator:
             fortune_gz = self._calculate_fortune_ganzhi(
                 month_gan, month_zhi, i + 1, gender, year_yin_yang
             )
-            
+
             # 分离大运天干和地支
             fortune_gan = fortune_gz[0]
             fortune_zhi = fortune_gz[1]
-            
+
             # 计算地支藏干的十神关系
             from .professional_data import ZHI_CANG_GAN
+
             zhi_ten_gods = []
             zhi_canggan = []
-            
+
             if fortune_zhi in ZHI_CANG_GAN:
                 canggan_data = ZHI_CANG_GAN[fortune_zhi]
                 for hidden_gan, strength in canggan_data.items():
@@ -235,7 +236,9 @@ class BaziCalculator:
                     "开始年份": year_start,
                     "结束": year_end,
                     "天干十神": self._get_ten_star(day_master, fortune_gan),
-                    "地支十神": zhi_ten_gods if zhi_ten_gods else [f"地支{fortune_zhi}"],
+                    "地支十神": (
+                        zhi_ten_gods if zhi_ten_gods else [f"地支{fortune_zhi}"]
+                    ),
                     "地支藏干": zhi_canggan if zhi_canggan else [fortune_zhi],
                     "开始年龄": age_start,
                     "结束年龄": age_end,
@@ -251,7 +254,9 @@ class BaziCalculator:
     def _calculate_fortune_ganzhi(
         self, month_gan: str, month_zhi: str, step: int, gender: int, year_yin_yang: int
     ) -> str:
-        """计算大运干支"""
+        """
+        计算大运干支.
+        """
         from .professional_data import GAN, ZHI
 
         # 确定大运方向：阳男阴女顺行，阴男阳女逆行
@@ -356,7 +361,9 @@ class BaziCalculator:
         from datetime import datetime
 
         # 支持中文农历格式：农历2024年三月初八 [时间]
-        chinese_match = re.match(r"农历(\d{4})年(\S+)月(\S+)(?:\s+(.+))?", lunar_datetime)
+        chinese_match = re.match(
+            r"农历(\d{4})年(\S+)月(\S+)(?:\s+(.+))?", lunar_datetime
+        )
         if chinese_match:
             year = int(chinese_match.group(1))
             month_str = chinese_match.group(2)
@@ -366,7 +373,7 @@ class BaziCalculator:
             # 转换中文月份和日期
             month = self._chinese_month_to_number(month_str)
             day = self._chinese_day_to_number(day_str)
-            
+
             # 解析时间部分
             hour, minute, second = self._parse_time_part(time_str)
 
@@ -594,17 +601,36 @@ class BaziCalculator:
                         if self._match_month_pillar(year, month, month_gan, month_zhi):
                             # 遍历日期，使用更精确的日期范围
                             import calendar
+
                             max_day = calendar.monthrange(year, month)[1]
-                            
+
                             for day in range(1, max_day + 1):
                                 try:
                                     if self._match_day_pillar(
                                         year, month, day, day_gan, day_zhi
                                     ):
                                         # 遍历时辰，使用每个时辰的中心点
-                                        for hour in [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22]:  # 12个时辰的中心点
+                                        for hour in [
+                                            0,
+                                            2,
+                                            4,
+                                            6,
+                                            8,
+                                            10,
+                                            12,
+                                            14,
+                                            16,
+                                            18,
+                                            20,
+                                            22,
+                                        ]:  # 12个时辰的中心点
                                             if self._match_hour_pillar(
-                                                hour, hour_gan, hour_zhi, year, month, day
+                                                hour,
+                                                hour_gan,
+                                                hour_zhi,
+                                                year,
+                                                month,
+                                                day,
                                             ):
                                                 solar_time = f"{year}-{month:02d}-{day:02d} {hour:02d}:00:00"
                                                 result_times.append(solar_time)
@@ -712,34 +738,48 @@ class BaziCalculator:
             return max(1, min(final_age, 8))
 
     def _parse_time_part(self, time_str: str) -> tuple:
-        """解析时间部分，返回(hour, minute, second)"""
+        """
+        解析时间部分，返回(hour, minute, second)
+        """
         if not time_str:
             return (0, 0, 0)
-        
+
         time_str = time_str.strip()
-        
+
         # 支持时辰格式：子时、丑时、寅时等
         shichen_map = {
-            "子时": 0, "子": 0,
-            "丑时": 1, "丑": 1,
-            "寅时": 3, "寅": 3,
-            "卯时": 5, "卯": 5,
-            "辰时": 7, "辰": 7,
-            "巳时": 9, "巳": 9,
-            "午时": 11, "午": 11,
-            "未时": 13, "未": 13,
-            "申时": 15, "申": 15,
-            "酉时": 17, "酉": 17,
-            "戌时": 19, "戌": 19,
-            "亥时": 21, "亥": 21,
+            "子时": 0,
+            "子": 0,
+            "丑时": 1,
+            "丑": 1,
+            "寅时": 3,
+            "寅": 3,
+            "卯时": 5,
+            "卯": 5,
+            "辰时": 7,
+            "辰": 7,
+            "巳时": 9,
+            "巳": 9,
+            "午时": 11,
+            "午": 11,
+            "未时": 13,
+            "未": 13,
+            "申时": 15,
+            "申": 15,
+            "酉时": 17,
+            "酉": 17,
+            "戌时": 19,
+            "戌": 19,
+            "亥时": 21,
+            "亥": 21,
         }
-        
+
         if time_str in shichen_map:
             return (shichen_map[time_str], 0, 0)
-        
+
         # 支持数字时间格式：10时、10:30等
         import re
-        
+
         # 匹配 "10时30分20秒" 格式
         chinese_time_match = re.match(r"(\d+)时(?:(\d+)分)?(?:(\d+)秒)?", time_str)
         if chinese_time_match:
@@ -747,7 +787,7 @@ class BaziCalculator:
             minute = int(chinese_time_match.group(2) or 0)
             second = int(chinese_time_match.group(3) or 0)
             return (hour, minute, second)
-        
+
         # 匹配 "10:30:20" 或 "10:30" 格式
         colon_time_match = re.match(r"(\d+):(\d+)(?::(\d+))?", time_str)
         if colon_time_match:
@@ -755,17 +795,19 @@ class BaziCalculator:
             minute = int(colon_time_match.group(2))
             second = int(colon_time_match.group(3) or 0)
             return (hour, minute, second)
-        
+
         # 纯数字时间（小时）
         if time_str.isdigit():
             hour = int(time_str)
             return (hour, 0, 0)
-        
+
         # 默认返回0时
         return (0, 0, 0)
 
     def _chinese_month_to_number(self, month_str: str) -> int:
-        """转换中文月份为数字"""
+        """
+        转换中文月份为数字.
+        """
         month_map = {
             "正": 1,
             "一": 1,
@@ -784,7 +826,9 @@ class BaziCalculator:
         return month_map.get(month_str, 1)
 
     def _chinese_day_to_number(self, day_str: str) -> int:
-        """转换中文日期为数字"""
+        """
+        转换中文日期为数字.
+        """
         # 数字映射表
         chinese_numbers = {
             "一": 1,
@@ -839,7 +883,9 @@ class BaziCalculator:
                 return 1
 
     def _calculate_days_diff(self, solar1, solar2) -> int:
-        """计算两个Solar对象之间的天数差"""
+        """
+        计算两个Solar对象之间的天数差.
+        """
         try:
             from datetime import datetime
 
@@ -860,25 +906,33 @@ class BaziCalculator:
             solar_start = Solar.fromYmdHms(year, 1, 1, 0, 0, 0)
             lunar_start = solar_start.getLunar()
             bazi_start = lunar_start.getEightChar()
-            
+
             # 检查年中（立春后）
             solar_mid = Solar.fromYmdHms(year, 6, 1, 0, 0, 0)
             lunar_mid = solar_mid.getLunar()
             bazi_mid = lunar_mid.getEightChar()
-            
+
             # 检查年末
             solar_end = Solar.fromYmdHms(year, 12, 31, 23, 59, 59)
             lunar_end = solar_end.getLunar()
             bazi_end = lunar_end.getEightChar()
 
             # 如果年中任何一个时间点的年柱匹配，就认为匹配
-            year_gans = [bazi_start.getYearGan(), bazi_mid.getYearGan(), bazi_end.getYearGan()]
-            year_zhis = [bazi_start.getYearZhi(), bazi_mid.getYearZhi(), bazi_end.getYearZhi()]
-            
+            year_gans = [
+                bazi_start.getYearGan(),
+                bazi_mid.getYearGan(),
+                bazi_end.getYearGan(),
+            ]
+            year_zhis = [
+                bazi_start.getYearZhi(),
+                bazi_mid.getYearZhi(),
+                bazi_end.getYearZhi(),
+            ]
+
             for i in range(len(year_gans)):
                 if year_gans[i] == gan and year_zhis[i] == zhi:
                     return True
-                    
+
             return False
         except Exception:
             return False
@@ -891,16 +945,17 @@ class BaziCalculator:
             # 月柱以节气为界，检查月中几个时间点
             # 月初、月中、月末的月柱可能不同，需要都检查
             test_days = [1, 8, 15, 22, 28]  # 检查多个日期
-            
+
             month_pillars = set()
             for day in test_days:
                 try:
                     # 确保日期有效
                     import calendar
+
                     max_day = calendar.monthrange(year, month)[1]
                     if day > max_day:
                         day = max_day
-                        
+
                     solar = Solar.fromYmdHms(year, month, day, 12, 0, 0)
                     lunar = solar.getLunar()
                     bazi = lunar.getEightChar()
@@ -910,18 +965,20 @@ class BaziCalculator:
                     month_pillars.add(f"{month_gan}{month_zhi}")
                 except:
                     continue
-            
+
             # 如果月中任何一天的月柱匹配，就认为匹配
             target_pillar = f"{gan}{zhi}"
             return target_pillar in month_pillars
-            
+
         except Exception:
             return False
 
     def _match_day_pillar(
         self, year: int, month: int, day: int, gan: str, zhi: str
     ) -> bool:
-        """匹配日柱"""
+        """
+        匹配日柱.
+        """
         try:
             from lunar_python import Solar
 
@@ -936,7 +993,15 @@ class BaziCalculator:
         except Exception:
             return False
 
-    def _match_hour_pillar(self, hour: int, gan: str, zhi: str, year: int = None, month: int = None, day: int = None) -> bool:
+    def _match_hour_pillar(
+        self,
+        hour: int,
+        gan: str,
+        zhi: str,
+        year: int = None,
+        month: int = None,
+        day: int = None,
+    ) -> bool:
         """匹配时柱 - 修复版本，使用实际日期"""
         try:
             from lunar_python import Solar
@@ -945,7 +1010,7 @@ class BaziCalculator:
             use_year = year if year else 2024
             use_month = month if month else 1
             use_day = day if day else 1
-            
+
             solar = Solar.fromYmdHms(use_year, use_month, use_day, hour, 0, 0)
             lunar = solar.getLunar()
             bazi = lunar.getEightChar()
@@ -963,7 +1028,7 @@ class BaziCalculator:
         """
         try:
             from lunar_python import Solar
-            
+
             solar = Solar.fromYmdHms(
                 solar_time.year,
                 solar_time.month,
@@ -973,7 +1038,7 @@ class BaziCalculator:
                 solar_time.second,
             )
             lunar = solar.getLunar()
-            
+
             # 使用lunar-python直接获取农历生肖（以春节为界）
             return lunar.getYearShengXiao()
         except Exception as e:

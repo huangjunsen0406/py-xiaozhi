@@ -21,7 +21,6 @@ from .professional_data import (
     GAN,
     GAN_WUXING,
     GAN_YINYANG,
-    GANZHI_60,
     SHENG_XIAO,
     ZHI,
     ZHI_CANG_GAN,
@@ -31,15 +30,15 @@ from .professional_data import (
 
 
 class BaziEngine:
-    """八字计算引擎"""
+    """
+    八字计算引擎.
+    """
 
     # 动态构建天干映射 - 基于 professional_data.py 的数据
     HEAVEN_STEMS = {}
     for gan in GAN:
         HEAVEN_STEMS[gan] = HeavenStem(
-            name=gan,
-            element=GAN_WUXING[gan],
-            yin_yang=GAN_YINYANG[gan]
+            name=gan, element=GAN_WUXING[gan], yin_yang=GAN_YINYANG[gan]
         )
 
     # 动态构建地支映射 - 基于 professional_data.py 的数据
@@ -48,7 +47,7 @@ class BaziEngine:
         # 获取地支的藏干
         cang_gan = ZHI_CANG_GAN.get(zhi, {})
         cang_gan_list = list(cang_gan.keys())
-        
+
         # 构建 EarthBranch 对象
         EARTH_BRANCHES[zhi] = EarthBranch(
             name=zhi,
@@ -284,7 +283,9 @@ class BaziEngine:
         )
 
     def _get_nayin(self, gan: str, zhi: str) -> str:
-        """获取纳音"""
+        """
+        获取纳音.
+        """
         from .professional_data import get_nayin
 
         return get_nayin(gan, zhi)
@@ -418,7 +419,9 @@ class BaziEngine:
             raise ValueError(f"获取黄历信息失败: {e}")
 
     def _calculate_xun_by_position(self, jiazi_number: int) -> str:
-        """根据六十甲子序号计算旬"""
+        """
+        根据六十甲子序号计算旬.
+        """
         # 从 professional_data.py 使用 GANZHI_60
         # 每旬的旬首
         xun_starts = ["甲子", "甲戌", "甲申", "甲午", "甲辰", "甲寅"]
@@ -430,7 +433,9 @@ class BaziEngine:
             return "甲子"
 
     def _calculate_kong_wang_by_position(self, jiazi_number: int) -> List[str]:
-        """根据六十甲子序号计算空亡"""
+        """
+        根据六十甲子序号计算空亡.
+        """
         # 六旬的空亡地支
         kong_wang_table = [
             ["戌", "亥"],  # 甲子旬
@@ -448,7 +453,9 @@ class BaziEngine:
             return ["戌", "亥"]
 
     def get_detailed_lunar_info(self, solar_time: SolarTime) -> Dict[str, Any]:
-        """获取详细的农历信息"""
+        """
+        获取详细的农历信息.
+        """
         try:
             solar = Solar.fromYmdHms(
                 solar_time.year,

@@ -58,20 +58,19 @@ class MqttProtocol(Protocol):
         self.server_hello_event = asyncio.Event()
 
     def _parse_endpoint(self, endpoint: str) -> tuple[str, int]:
-        """
-        解析endpoint字符串，提取主机和端口.
-        
+        """解析endpoint字符串，提取主机和端口.
+
         Args:
             endpoint: endpoint字符串，格式可以是:
                      - "hostname" (使用默认端口8883)
                      - "hostname:port" (使用指定端口)
-        
+
         Returns:
             tuple: (host, port) 主机名和端口号
         """
         if not endpoint:
             raise ValueError("endpoint不能为空")
-        
+
         # 检查是否包含端口
         if ":" in endpoint:
             host, port_str = endpoint.rsplit(":", 1)
@@ -85,7 +84,7 @@ class MqttProtocol(Protocol):
             # 没有指定端口，使用默认端口8883
             host = endpoint
             port = 8883
-        
+
         return host, port
 
     async def connect(self):
@@ -129,7 +128,7 @@ class MqttProtocol(Protocol):
             if self._on_network_error:
                 await self._on_network_error("MQTT配置不完整")
             return False
-        
+
         # subscribe_topic 可以为 "null" 字符串，需要特殊处理
         if self.subscribe_topic == "null":
             self.subscribe_topic = None
@@ -147,8 +146,10 @@ class MqttProtocol(Protocol):
         try:
             host, port = self._parse_endpoint(self.endpoint)
             use_tls = port == 8883  # 只有使用8883端口时才使用TLS
-            
-            logger.info(f"解析endpoint: {self.endpoint} -> 主机: {host}, 端口: {port}, 使用TLS: {use_tls}")
+
+            logger.info(
+                f"解析endpoint: {self.endpoint} -> 主机: {host}, 端口: {port}, 使用TLS: {use_tls}"
+            )
         except ValueError as e:
             logger.error(f"解析endpoint失败: {e}")
             if self._on_network_error:

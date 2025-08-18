@@ -27,11 +27,11 @@ class WakeWordDetector:
         self.is_running_flag = False
         self.paused = False
         self.detection_task = None
-        
+
         # 防重复触发机制
         self.last_detection_time = 0
         self.detection_cooldown = 3.0  # 3秒冷却时间
-        
+
         # 回调函数
         self.on_detected_callback: Optional[Callable] = None
         self.on_error: Optional[Callable] = None
@@ -70,7 +70,7 @@ class WakeWordDetector:
 
         # 初始化模型
         self._init_model(config)
-        
+
         # 验证配置
         self._validate_config()
 
@@ -462,8 +462,6 @@ class WakeWordDetector:
             except Exception as e:
                 logger.error(f"唤醒词回调执行失败: {e}")
 
-
-
     async def stop(self):
         """
         停止检测器.
@@ -558,4 +556,3 @@ class WakeWordDetector:
         self._get_text_pinyin_variants.cache_clear()
         self._recent_texts.clear()
         logger.info("缓存已清空")
-
