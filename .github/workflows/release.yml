@@ -8,21 +8,8 @@ permissions:
   contents: write
 
 jobs:
-  wait-for-docker:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Wait for Docker build to complete
-        uses: lewagon/wait-on-check-action@v1.3.4
-        with:
-          ref: ${{ github.ref }}
-          check-name: 'build (base)'
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-          wait-interval: 30
-          allowed-conclusions: success,failure,cancelled
-
   create-release:
     runs-on: ubuntu-latest
-    needs: wait-for-docker
     steps:
       - name: Checkout
         uses: actions/checkout@v4
