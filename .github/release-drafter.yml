@@ -1,0 +1,68 @@
+name-template: 'v$RESOLVED_VERSION'
+tag-template: 'v$RESOLVED_VERSION'
+version-template: $MAJOR.$MINOR.$PATCH
+change-template: '* $TITLE (#$NUMBER) @$AUTHOR'
+template: |
+  # What's Changed
+
+  $CHANGES
+
+  **Full Changelog**: https://github.com/$OWNER/$REPOSITORY/compare/$PREVIOUS_TAG...v$RESOLVED_VERSION
+
+  ## Contributors
+  
+  $CONTRIBUTORS
+
+categories:
+  - title: 'Features'
+    labels:
+      - 'feature'
+      - 'feat'
+      - '新功能'
+  - title: 'Bug Fixes'
+    labels:
+      - 'bug'
+      - 'fix'
+      - '修复'
+      - 'bugfix'
+  - title: 'Performance'
+    labels:
+      - 'perf'
+      - '性能'
+      - '优化'
+  - title: 'Documentation'
+    labels:
+      - 'docs'
+      - 'documentation'
+      - '文档'
+  - title: 'Maintenance'
+    labels:
+      - 'chore'
+      - 'maintenance'
+      - '维护'
+      - 'deps'
+      - 'dependencies'
+
+version-resolver:
+  major:
+    labels:
+      - 'major'
+      - 'breaking'
+  minor:
+    labels:
+      - 'minor'
+      - 'feature'
+      - 'feat'
+  patch:
+    labels:
+      - 'patch'
+      - 'bug'
+      - 'fix'
+      - 'docs'
+      - 'chore'
+
+exclude-labels:
+  - 'skip-changelog'
+  - 'no-changelog'
+  - 'reverted'
+  - 'invalid'
