@@ -39,7 +39,8 @@ class AECProcessor:
         
         # 缓冲区
         self._reference_buffer = deque()
-        self._aec_frame_size = AudioConfig.INPUT_FRAME_SIZE  # 16kHz, 10ms = 160 samples
+        self._webrtc_frame_size = 160  # WebRTC标准：16kHz, 10ms = 160 samples
+        self._system_frame_size = AudioConfig.INPUT_FRAME_SIZE  # 系统配置的帧大小
         
         # 状态标志
         self._is_initialized = False
@@ -104,7 +105,7 @@ class AECProcessor:
             self.render_config = self.apm.create_stream_config(sample_rate, channels)
             
             # 设置流延迟
-            self.apm.set_stream_delay_ms(50)  # 50ms延迟
+            self.apm.set_stream_delay_ms(40)  # 50ms延迟
             
             logger.info("WebRTC APM初始化完成")
             
@@ -127,9 +128,9 @@ class AECProcessor:
             self.reference_device_id = reference_device['id']
             self.reference_sample_rate = int(reference_device['default_samplerate'])
             
-            # 创建参考信号输入流
-            frame_duration_sec = AudioConfig.FRAME_DURATION / 1000  # 10ms
-            reference_frame_size = int(self.reference_sample_rate * frame_duration_sec)
+            # 创建参考信号输入流（固定使用10ms帧，匹配WebRTC标准）
+            webrtc_frame_duration = 0.01  # 10ms，WebRTC标准帧长度
+            reference_frame_size = int(self.reference_sample_rate * webrtc_frame_duration)
             
             self.reference_stream = sd.InputStream(
                 device=self.reference_device_id,
@@ -182,6 +183,9 @@ class AECProcessor:
     
     def _reference_callback(self, indata, frames, time_info, status):
         """参考信号回调"""
+        # frames, time_info用于sounddevice回调，此处不使用但需要保留签名
+        _ = frames, time_info
+        
         if status and "overflow" not in str(status).lower():
             logger.warning(f"参考信号流状态: {status}")
         
@@ -206,7 +210,7 @@ class AECProcessor:
             self._reference_buffer.extend(audio_data)
             
             # 保持缓冲区大小合理
-            max_buffer_size = self._aec_frame_size * 10  # 保持约100ms的数据
+            max_buffer_size = self._webrtc_frame_size * 20  # 保持约200ms的数据
             while len(self._reference_buffer) > max_buffer_size:
                 self._reference_buffer.popleft()
                 
@@ -220,6 +224,7 @@ class AECProcessor:
     def process_audio(self, capture_audio: np.ndarray) -> np.ndarray:
         """
         处理音频帧，应用AEC
+        支持10ms/20ms/40ms/60ms等不同帧长度，通过分割处理实现
         
         Args:
             capture_audio: 麦克风采集的音频数据 (16kHz, int16)
@@ -239,55 +244,83 @@ class AECProcessor:
             return capture_audio
         
         try:
-            # 确保输入是正确的格式
-            if len(capture_audio) != self._aec_frame_size:
-                logger.warning(f"音频帧大小不匹配: {len(capture_audio)}, 期望: {self._aec_frame_size}")
+            # 检查输入帧大小是否为WebRTC帧大小的整数倍
+            if len(capture_audio) % self._webrtc_frame_size != 0:
+                logger.warning(f"音频帧大小不是WebRTC帧的整数倍: {len(capture_audio)}, WebRTC帧: {self._webrtc_frame_size}")
                 return capture_audio
             
-            # 获取参考信号
-            reference_audio = self._get_reference_frame()
+            # 计算需要分割的块数
+            num_chunks = len(capture_audio) // self._webrtc_frame_size
             
-            # 创建ctypes缓冲区
-            capture_buffer = (ctypes.c_short * self._aec_frame_size)(*capture_audio)
-            reference_buffer = (ctypes.c_short * self._aec_frame_size)(*reference_audio)
-            
-            processed_capture = (ctypes.c_short * self._aec_frame_size)()
-            processed_reference = (ctypes.c_short * self._aec_frame_size)()
-            
-            # 首先处理参考信号（render stream）
-            render_result = self.apm.process_reverse_stream(
-                reference_buffer, self.render_config, self.render_config, processed_reference
-            )
-            
-            if render_result != 0:
-                logger.warning(f"参考信号处理失败，错误码: {render_result}")
-            
-            # 然后处理采集信号（capture stream）
-            capture_result = self.apm.process_stream(
-                capture_buffer, self.capture_config, self.capture_config, processed_capture
-            )
-            
-            if capture_result != 0:
-                logger.warning(f"采集信号处理失败，错误码: {capture_result}")
-                return capture_audio
-            
-            # 转换回numpy数组
-            result = np.array(processed_capture, dtype=np.int16)
-            return result
+            if num_chunks == 1:
+                # 10ms帧，直接处理
+                return self._process_single_aec_frame(capture_audio)
+            else:
+                # 20ms/40ms/60ms帧，分割处理
+                return self._process_chunked_aec_frames(capture_audio, num_chunks)
             
         except Exception as e:
             logger.error(f"AEC处理失败: {e}")
             return capture_audio
     
-    def _get_reference_frame(self) -> np.ndarray:
-        """获取一帧参考信号"""
+    def _process_single_aec_frame(self, capture_audio: np.ndarray) -> np.ndarray:
+        """处理单个10ms WebRTC帧"""
+        # 获取参考信号
+        reference_audio = self._get_reference_frame(self._webrtc_frame_size)
+        
+        # 创建ctypes缓冲区
+        capture_buffer = (ctypes.c_short * self._webrtc_frame_size)(*capture_audio)
+        reference_buffer = (ctypes.c_short * self._webrtc_frame_size)(*reference_audio)
+        
+        processed_capture = (ctypes.c_short * self._webrtc_frame_size)()
+        processed_reference = (ctypes.c_short * self._webrtc_frame_size)()
+        
+        # 首先处理参考信号（render stream）
+        render_result = self.apm.process_reverse_stream(
+            reference_buffer, self.render_config, self.render_config, processed_reference
+        )
+        
+        if render_result != 0:
+            logger.warning(f"参考信号处理失败，错误码: {render_result}")
+        
+        # 然后处理采集信号（capture stream）
+        capture_result = self.apm.process_stream(
+            capture_buffer, self.capture_config, self.capture_config, processed_capture
+        )
+        
+        if capture_result != 0:
+            logger.warning(f"采集信号处理失败，错误码: {capture_result}")
+            return capture_audio
+        
+        # 转换回numpy数组
+        return np.array(processed_capture, dtype=np.int16)
+    
+    def _process_chunked_aec_frames(self, capture_audio: np.ndarray, num_chunks: int) -> np.ndarray:
+        """分割处理大帧（20ms/40ms/60ms等）"""
+        processed_chunks = []
+        
+        for i in range(num_chunks):
+            # 提取当前10ms块
+            start_idx = i * self._webrtc_frame_size
+            end_idx = (i + 1) * self._webrtc_frame_size
+            chunk = capture_audio[start_idx:end_idx]
+            
+            # 处理这个10ms块
+            processed_chunk = self._process_single_aec_frame(chunk)
+            processed_chunks.append(processed_chunk)
+        
+        # 将所有处理后的块重新组合
+        return np.concatenate(processed_chunks)
+    
+    def _get_reference_frame(self, frame_size: int) -> np.ndarray:
+        """获取指定大小的参考信号帧"""
         # 如果没有参考信号或缓冲区不足，返回静音
-        if len(self._reference_buffer) < self._aec_frame_size:
-            return np.zeros(self._aec_frame_size, dtype=np.int16)
+        if len(self._reference_buffer) < frame_size:
+            return np.zeros(frame_size, dtype=np.int16)
         
         # 从缓冲区提取一帧
         frame_data = []
-        for _ in range(self._aec_frame_size):
+        for _ in range(frame_size):
             frame_data.append(self._reference_buffer.popleft())
         
         return np.array(frame_data, dtype=np.int16)
@@ -301,7 +334,7 @@ class AECProcessor:
         # macOS 需要检查参考信号流
         return (self.reference_stream is not None and 
                 self.reference_stream.active and 
-                len(self._reference_buffer) >= self._aec_frame_size)
+                len(self._reference_buffer) >= self._webrtc_frame_size)
     
     def get_status(self) -> Dict[str, Any]:
         """获取AEC处理器状态"""
