@@ -17,6 +17,7 @@ export default defineConfig({
           { text: '配置说明', link: '/guide/配置说明' },
           { text: '语音交互模式说明', link: '/guide/语音交互模式说明' },
           { text: '快捷键说明', link: '/guide/快捷键说明.md'},
+          { text: '回声消除', link: '/guide/回声消除' },
           { text: '语音唤醒', link: '/guide/语音唤醒' },
           { text: '设备激活流程', link: '/guide/设备激活流程' },
           { text: '打包教程', link: '/guide/打包教程' },

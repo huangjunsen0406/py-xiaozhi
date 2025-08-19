@@ -374,15 +374,48 @@ class Application:
                 and self.protocol
                 and self.protocol.is_audio_channel_opened()
             ):
-                # 并发限制，避免任务风暴
-                async def _send():
-                    async with self._send_audio_semaphore:
-                        await self.protocol.send_audio(encoded_data)
-
-                self._create_background_task(_send(), "发送音频数据")
+                # 使用call_soon_threadsafe避免qasync任务重入
+                if self._main_loop and not self._main_loop.is_closed():
+                    self._main_loop.call_soon_threadsafe(
+                        self._schedule_audio_send_task, encoded_data
+                    )
 
         except Exception as e:
             logger.error(f"调度音频发送失败: {e}")
+
+    def _schedule_audio_send_task(self, encoded_data: bytes):
+        """
+        在主事件循环中创建音频发送任务.
+        """
+        try:
+            if not self.running or not self.protocol:
+                return
+            
+            # 并发限制，避免任务风暴
+            async def _send():
+                async with self._send_audio_semaphore:
+                    await self.protocol.send_audio(encoded_data)
+
+            self._create_background_task(_send(), "发送音频数据")
+        except Exception as e:
+            logger.error(f"创建音频发送任务失败: {e}", exc_info=True)
+
+    def _schedule_audio_write_task(self, data: bytes):
+        """
+        在主事件循环中创建音频写入任务.
+        """
+        try:
+            if not self.running or not self.audio_codec:
+                return
+            
+            # 音频数据处理需要实时性，限制并发，避免任务风暴
+            async def _write():
+                async with self._audio_write_semaphore:
+                    await self.audio_codec.write_audio(data)
+
+            self._create_background_task(_write(), "写入音频数据")
+        except Exception as e:
+            logger.error(f"创建音频写入任务失败: {e}", exc_info=True)
 
     def _should_send_microphone_audio(self) -> bool:
         """
@@ -422,19 +455,40 @@ class Application:
 
     def _create_async_callback(self, coro_func, *args):
         """
-        创建异步回调函数的辅助方法.
+        创建异步回调函数的辅助方法 - 使用call_soon_threadsafe避免qasync任务重入.
         """
 
         def _callback():
-            task = asyncio.create_task(coro_func(*args))
+            try:
+                if self._main_loop and not self._main_loop.is_closed():
+                    self._main_loop.call_soon_threadsafe(
+                        self._schedule_gui_callback, coro_func, args
+                    )
+            except Exception as e:
+                logger.error(f"调度GUI回调失败: {e}", exc_info=True)
 
+        return _callback
+
+    def _schedule_gui_callback(self, coro_func, args):
+        """
+        在主事件循环中调度GUI回调.
+        """
+        try:
+            if not self.running:
+                return
+            
+            async def _execute():
+                await coro_func(*args)
+            
+            task = asyncio.create_task(_execute())
+            
             def _on_done(t):
                 if not t.cancelled() and t.exception():
                     logger.error(f"GUI回调任务异常: {t.exception()}", exc_info=True)
 
             task.add_done_callback(_on_done)
-
-        return _callback
+        except Exception as e:
+            logger.error(f"执行GUI回调失败: {e}", exc_info=True)
 
     def _setup_gui_callbacks(self):
         """
@@ -766,10 +820,32 @@ class Application:
 
     def _update_display_async(self, update_func, *args):
         """
-        异步更新显示的辅助方法.
+        异步更新显示的辅助方法 - 使用call_soon_threadsafe避免qasync任务重入.
         """
-        if self.display:
-            self._create_background_task(update_func(*args), "显示更新")
+        if self.display and self._main_loop:
+            try:
+                # 使用call_soon_threadsafe避免qasync任务重入问题
+                self._main_loop.call_soon_threadsafe(
+                    self._schedule_display_update, update_func, args
+                )
+            except Exception as e:
+                logger.error(f"调度显示更新失败: {e}", exc_info=True)
+
+    def _schedule_display_update(self, update_func, args):
+        """
+        在主事件循环中调度显示更新.
+        """
+        try:
+            if not self.running or not self.display:
+                return
+            
+            # 创建后台任务更新显示，避免阻塞
+            async def _update():
+                await update_func(*args)
+            
+            self._create_background_task(_update(), "显示更新")
+        except Exception as e:
+            logger.error(f"调度显示更新失败: {e}", exc_info=True)
 
     async def _set_device_state_impl(self, state):
         """
@@ -915,12 +991,11 @@ class Application:
                         lambda: self._set_device_state_impl(DeviceState.SPEAKING)
                     )
 
-                # 音频数据处理需要实时性，限制并发，避免任务风暴
-                async def _write():
-                    async with self._audio_write_semaphore:
-                        await self.audio_codec.write_audio(data)
-
-                self._create_background_task(_write(), "写入音频数据")
+                # 使用call_soon_threadsafe避免qasync任务重入
+                if self._main_loop and not self._main_loop.is_closed():
+                    self._main_loop.call_soon_threadsafe(
+                        self._schedule_audio_write_task, data
+                    )
             except RuntimeError as e:
                 logger.error(f"无法创建音频写入任务: {e}")
             except Exception as e:
@@ -1355,29 +1430,44 @@ class Application:
         初始化MCP服务器.
         """
         logger.info("初始化MCP服务器")
-        # 设置发送回调（异步快速返回，实际发送放入后台，避免阻塞）
+        # 设置异步发送回调 - MCP服务器期望async回调
         self.mcp_server.set_send_callback(self._send_mcp_message_async)
         # 添加通用工具
         self.mcp_server.add_common_tools()
 
     async def _send_mcp_message_async(self, msg):
         """
-        MCP消息发送回调（异步）：快速把发送任务放入后台并立即返回，避免阻塞。
+        MCP消息发送回调（异步接口）- 使用call_soon_threadsafe避免qasync任务重入.
         """
         try:
-            if not self.protocol:
-                logger.warning("协议未初始化，丢弃MCP消息")
-                # 作为异步回调，快速让出控制权
-                await asyncio.sleep(0)
+            if not self.protocol or not self._main_loop:
+                logger.warning("协议未初始化或事件循环不可用，丢弃MCP消息")
                 return
-            result = self.protocol.send_mcp_message(msg)
-            if asyncio.iscoroutine(result):
-                # 放到后台执行，避免阻塞调用方
-                self._create_background_task(result, "发送MCP消息")
+            
+            # 使用call_soon_threadsafe安全地调度到主事件循环
+            self._main_loop.call_soon_threadsafe(
+                self._schedule_mcp_send, msg
+            )
+            # 确保异步回调快速返回
+            await asyncio.sleep(0)
         except Exception as e:
-            logger.error(f"发送MCP消息失败: {e}", exc_info=True)
-        # 作为异步回调，快速让出控制权
-        await asyncio.sleep(0)
+            logger.error(f"调度MCP消息发送失败: {e}", exc_info=True)
+
+    def _schedule_mcp_send(self, msg):
+        """
+        在主事件循环中调度MCP消息发送.
+        """
+        try:
+            if not self.running or not self.protocol:
+                return
+            
+            # 创建后台任务发送MCP消息，避免阻塞
+            async def _send():
+                await self.protocol.send_mcp_message(msg)
+            
+            self._create_background_task(_send(), "发送MCP消息")
+        except Exception as e:
+            logger.error(f"调度MCP消息发送失败: {e}", exc_info=True)
 
     async def _handle_mcp_message(self, data):
         """

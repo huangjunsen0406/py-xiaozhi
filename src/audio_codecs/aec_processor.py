@@ -1,16 +1,14 @@
-import asyncio
+import ctypes
 import platform
-import time
 from collections import deque
-from typing import Optional, Dict, Any
+from typing import Any, Dict, Optional
 
 import numpy as np
 import sounddevice as sd
-import ctypes
 
+from libs.webrtc_apm import WebRTCAudioProcessing, create_default_config
 from src.constants.constants import AudioConfig
 from src.utils.logging_config import get_logger
-from libs.webrtc_apm import WebRTCAudioProcessing, create_default_config
 
 logger = get_logger(__name__)
 
@@ -22,13 +20,19 @@ class AECProcessor:
     """
     
     def __init__(self):
-        # WebRTC APM 实例
+        # 平台信息
+        self._platform = platform.system().lower()
+        self._is_macos = self._platform == 'darwin'
+        self._is_linux = self._platform == 'linux'
+        self._is_windows = self._platform == 'windows'
+        
+        # WebRTC APM 实例（仅 macOS 使用）
         self.apm = None
         self.apm_config = None
         self.capture_config = None
         self.render_config = None
         
-        # 参考信号流（用于获取扬声器输出）
+        # 参考信号流（仅 macOS 使用）
         self.reference_stream = None
         self.reference_device_id = None
         self.reference_sample_rate = None
@@ -41,21 +45,22 @@ class AECProcessor:
         self._is_initialized = False
         self._is_closing = False
         
-        # 平台信息
-        self._platform = platform.system().lower()
-        self._is_macos = self._platform == 'darwin'
-        
     async def initialize(self):
         """初始化AEC处理器"""
         try:
-            # 初始化WebRTC APM
-            await self._initialize_apm()
-            
-            # 如果是macOS，尝试初始化参考信号捕获
-            if self._is_macos:
+            if self._is_windows or self._is_linux:
+                # Windows 和 Linux 平台使用系统级AEC，无需额外处理
+                logger.info(f"{self._platform.capitalize()} 平台使用系统级回声消除，AEC处理器已启用")
+                self._is_initialized = True
+                return
+            elif self._is_macos:
+                # macOS 平台使用 WebRTC + BlackHole
+                await self._initialize_apm()
                 await self._initialize_reference_capture()
             else:
-                logger.info(f"当前平台 {self._platform} 暂不支持参考信号捕获，AEC功能受限")
+                logger.warning(f"当前平台 {self._platform} 暂不支持AEC功能")
+                self._is_initialized = True
+                return
             
             self._is_initialized = True
             logger.info("AEC处理器初始化完成")
@@ -222,7 +227,15 @@ class AECProcessor:
         Returns:
             处理后的音频数据
         """
-        if not self._is_initialized or self.apm is None:
+        if not self._is_initialized:
+            return capture_audio
+        
+        # Windows 和 Linux 平台直接返回原始音频（系统级处理）
+        if self._is_windows or self._is_linux:
+            return capture_audio
+        
+        # macOS 平台使用 WebRTC AEC 处理
+        if not self._is_macos or self.apm is None:
             return capture_audio
         
         try:
@@ -281,20 +294,48 @@ class AECProcessor:
     
     def is_reference_available(self) -> bool:
         """检查参考信号是否可用"""
+        if self._is_windows or self._is_linux:
+            # Windows 和 Linux 使用系统级AEC，总是可用
+            return self._is_initialized
+        
+        # macOS 需要检查参考信号流
         return (self.reference_stream is not None and 
                 self.reference_stream.active and 
                 len(self._reference_buffer) >= self._aec_frame_size)
     
     def get_status(self) -> Dict[str, Any]:
         """获取AEC处理器状态"""
-        return {
+        status = {
             'initialized': self._is_initialized,
             'platform': self._platform,
             'reference_available': self.is_reference_available(),
-            'reference_device_id': self.reference_device_id,
-            'reference_buffer_size': len(self._reference_buffer),
-            'webrtc_apm_active': self.apm is not None
         }
+        
+        if self._is_windows:
+            status.update({
+                'aec_type': 'system_level',
+                'description': 'Windows 系统底层回声消除'
+            })
+        elif self._is_linux:
+            status.update({
+                'aec_type': 'system_level',
+                'description': 'Linux 系统级回声消除（PulseAudio）'
+            })
+        elif self._is_macos:
+            status.update({
+                'aec_type': 'webrtc_blackhole',
+                'description': 'WebRTC + BlackHole 参考信号',
+                'reference_device_id': self.reference_device_id,
+                'reference_buffer_size': len(self._reference_buffer),
+                'webrtc_apm_active': self.apm is not None
+            })
+        else:
+            status.update({
+                'aec_type': 'unsupported',
+                'description': f'平台 {self._platform} 暂不支持AEC'
+            })
+        
+        return status
     
     async def close(self):
         """关闭AEC处理器"""
@@ -305,29 +346,31 @@ class AECProcessor:
         logger.info("开始关闭AEC处理器...")
         
         try:
-            # 停止参考信号流
-            if self.reference_stream:
-                try:
-                    self.reference_stream.stop()
-                    self.reference_stream.close()
-                except Exception as e:
-                    logger.warning(f"关闭参考信号流失败: {e}")
-                finally:
-                    self.reference_stream = None
-            
-            # 清理WebRTC APM
-            if self.apm:
-                try:
-                    if self.capture_config:
-                        self.apm.destroy_stream_config(self.capture_config)
-                    if self.render_config:
-                        self.apm.destroy_stream_config(self.render_config)
-                except Exception as e:
-                    logger.warning(f"清理APM配置失败: {e}")
-                finally:
-                    self.capture_config = None
-                    self.render_config = None
-                    self.apm = None
+            # 仅在 macOS 平台清理 WebRTC 相关资源
+            if self._is_macos:
+                # 停止参考信号流
+                if self.reference_stream:
+                    try:
+                        self.reference_stream.stop()
+                        self.reference_stream.close()
+                    except Exception as e:
+                        logger.warning(f"关闭参考信号流失败: {e}")
+                    finally:
+                        self.reference_stream = None
+                
+                # 清理WebRTC APM
+                if self.apm:
+                    try:
+                        if self.capture_config:
+                            self.apm.destroy_stream_config(self.capture_config)
+                        if self.render_config:
+                            self.apm.destroy_stream_config(self.render_config)
+                    except Exception as e:
+                        logger.warning(f"清理APM配置失败: {e}")
+                    finally:
+                        self.capture_config = None
+                        self.render_config = None
+                        self.apm = None
             
             # 清理缓冲区
             self._reference_buffer.clear()

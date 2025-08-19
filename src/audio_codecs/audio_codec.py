@@ -228,8 +228,10 @@ class AudioCodec:
                 if audio_data is None:
                     return
 
-            # 应用AEC处理
-            if self._aec_enabled and len(audio_data) == AudioConfig.INPUT_FRAME_SIZE:
+            # 应用AEC处理（仅 macOS 需要）
+            if (self._aec_enabled and 
+                len(audio_data) == AudioConfig.INPUT_FRAME_SIZE and 
+                self.aec_processor._is_macos):
                 try:
                     audio_data = self.aec_processor.process_audio(audio_data)
                 except Exception as e:
