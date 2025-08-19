@@ -9,10 +9,6 @@ template: |
 
   **Full Changelog**: https://github.com/$OWNER/$REPOSITORY/compare/$PREVIOUS_TAG...v$RESOLVED_VERSION
 
-  ## Contributors
-  
-  $CONTRIBUTORS
-
 categories:
   - title: 'Features'
     labels:
