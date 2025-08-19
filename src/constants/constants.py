@@ -100,7 +100,7 @@ class AudioConfig:
     CHANNELS = 1
 
     # 动态获取帧长度
-    FRAME_DURATION = 10
+    FRAME_DURATION = get_frame_duration()
 
     # 根据不同采样率计算帧大小
     INPUT_FRAME_SIZE = int(INPUT_SAMPLE_RATE * (FRAME_DURATION / 1000))
