@@ -1,0 +1,1 @@
+import{_ as i,c as a,o as n,ae as l}from"./chunks/framework.BGWP4WZ_.js";const E=JSON.parse('{"title":"MCP 开发指南","description":"","frontmatter":{},"headers":[],"relativePath":"mcp/index.md","filePath":"mcp/index.md"}'),t={name:"mcp/index.md"};function h(p,s,e,k,r,o){return n(),a("div",null,s[0]||(s[0]=[l("",83)]))}const g=i(t,[["render",h]]);export{E as __pageData,g as default};
