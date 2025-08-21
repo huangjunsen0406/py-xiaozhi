@@ -6,9 +6,10 @@
 from pathlib import Path
 from typing import Optional
 
-from PyQt5 import uic
-from PyQt5.QtCore import QSize, pyqtSignal
-from PyQt5.QtWidgets import QApplication
+from PyQt5.QtCore import QSize, pyqtSignal, QUrl, Qt
+from PyQt5.QtQuickWidgets import QQuickWidget
+from PyQt5.QtWidgets import QApplication, QVBoxLayout, QWidget
+from PyQt5.QtGui import QPainterPath, QRegion
 
 from src.core.system_initializer import SystemInitializer
 from src.utils.device_activator import DeviceActivator
@@ -16,6 +17,7 @@ from src.utils.logging_config import get_logger
 
 from ..base.async_mixins import AsyncMixin, AsyncSignalEmitter
 from ..base.base_window import BaseWindow
+from .activation_model import ActivationModel
 
 logger = get_logger(__name__)
 
@@ -34,6 +36,10 @@ class ActivationWindow(BaseWindow, AsyncMixin):
         system_initializer: Optional[SystemInitializer] = None,
         parent: Optional = None,
     ):
+        # QML相关 - 必须在super().__init__之前创建
+        self.qml_widget = None
+        self.activation_model = ActivationModel()
+
         super().__init__(parent)
 
         # 组件实例
@@ -51,6 +57,9 @@ class ActivationWindow(BaseWindow, AsyncMixin):
         self.signal_emitter = AsyncSignalEmitter()
         self._setup_signal_connections()
 
+        # 窗口拖拽相关
+        self.drag_position = None
+
         # 延迟启动初始化（等事件循环运行后）
         self.start_update_timer(100)  # 100ms后开始初始化
 
@@ -58,18 +67,41 @@ class ActivationWindow(BaseWindow, AsyncMixin):
         """
         设置UI.
         """
-        ui_file = Path(__file__).parent / "activation_window.ui"
-        uic.loadUi(str(ui_file), self)
+        # 设置无边框窗口
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
+        self.setAttribute(Qt.WA_TranslucentBackground)
 
-        # 设置窗口属性和自适应尺寸
-        self.setWindowTitle("设备激活 - py-xiaozhi")
+        # 创建中央widget
+        central_widget = QWidget()
+        central_widget.setStyleSheet("background: transparent;")
+        self.setCentralWidget(central_widget)
+
+        # 创建布局
+        layout = QVBoxLayout(central_widget)
+        layout.setContentsMargins(0, 0, 0, 0)
+
+        # 创建QML widget
+        self.qml_widget = QQuickWidget()
+        self.qml_widget.setResizeMode(QQuickWidget.SizeRootObjectToView)
+        self.qml_widget.setAttribute(Qt.WA_AlwaysStackOnTop)
+        self.qml_widget.setClearColor(Qt.transparent)
+
+        # 注册数据模型到QML上下文
+        qml_context = self.qml_widget.rootContext()
+        qml_context.setContextProperty("activationModel", self.activation_model)
+
+        # 加载QML文件
+        qml_file = Path(__file__).parent / "activation_window.qml"
+        self.qml_widget.setSource(QUrl.fromLocalFile(str(qml_file)))
+
+        # 添加到布局
+        layout.addWidget(self.qml_widget)
+
+        # 设置自适应尺寸
         self._setup_adaptive_size()
 
-        # 隐藏日志区域
-        if hasattr(self, "log_text"):
-            self.log_text.hide()
-
-        self.logger.info("激活窗口UI加载完成")
+        # 延迟设置连接，确保QML完全加载
+        self._setup_qml_connections()
 
     def _setup_adaptive_size(self):
         """
@@ -142,12 +174,26 @@ class ActivationWindow(BaseWindow, AsyncMixin):
         """
         设置信号连接.
         """
-        # 按钮连接
-        self.close_btn.clicked.connect(self.close)
-        self.retry_btn.clicked.connect(self._on_retry_clicked)
-        self.copy_code_btn.clicked.connect(self._on_copy_code_clicked)
+        # 连接数据模型信号
+        self.activation_model.copyCodeClicked.connect(self._on_copy_code_clicked)
+        self.activation_model.retryClicked.connect(self._on_retry_clicked)
+        self.activation_model.closeClicked.connect(self.close)
 
-        self.logger.debug("信号连接设置完成")
+        self.logger.debug("基础信号连接设置完成")
+
+    def _setup_qml_connections(self):
+        """
+        设置QML信号连接.
+        """
+        # 连接QML信号到Python槽
+        if self.qml_widget and self.qml_widget.rootObject():
+            root_object = self.qml_widget.rootObject()
+            root_object.copyCodeClicked.connect(self._on_copy_code_clicked)
+            root_object.retryClicked.connect(self._on_retry_clicked)
+            root_object.closeClicked.connect(self.close)
+            self.logger.debug("QML信号连接设置完成")
+        else:
+            self.logger.warning("QML根对象未找到，无法设置信号连接")
 
     def _setup_signal_connections(self):
         """
@@ -157,25 +203,23 @@ class ActivationWindow(BaseWindow, AsyncMixin):
         self.signal_emitter.error_occurred.connect(self._on_error_occurred)
         self.signal_emitter.data_ready.connect(self._on_data_ready)
 
-    def _setup_styles(self):
-        """
-        设置样式.
-        """
-        # 基础样式已在UI文件中定义
-
     def _on_timer_update(self):
         """定时器更新回调 - 启动初始化"""
         if not self.initialization_started:
             self.initialization_started = True
             self.stop_update_timer()  # 停止定时器
 
-            # 现在事件循环应该正在运行，可以创建异步任务
-            try:
-                self.create_task(self._start_initialization(), "initialization")
-            except RuntimeError as e:
-                self.logger.error(f"创建初始化任务失败: {e}")
-                # 如果还是失败，再试一次
-                self.start_update_timer(500)
+            # 只有在有系统初始化器时才启动初始化
+            if self.system_initializer is not None:
+                # 现在事件循环应该正在运行，可以创建异步任务
+                try:
+                    self.create_task(self._start_initialization(), "initialization")
+                except RuntimeError as e:
+                    self.logger.error(f"创建初始化任务失败: {e}")
+                    # 如果还是失败，再试一次
+                    self.start_update_timer(500)
+            else:
+                self.logger.info("无系统初始化器，跳过自动初始化")
 
     async def _start_initialization(self):
         """
@@ -230,11 +274,11 @@ class ActivationWindow(BaseWindow, AsyncMixin):
 
         # 更新序列号
         serial_number = device_fp.get_serial_number()
-        self.serial_value.setText(serial_number if serial_number else "--")
+        self.activation_model.serialNumber = serial_number if serial_number else "--"
 
         # 更新MAC地址
         mac_address = device_fp.get_mac_address_from_efuse()
-        self.mac_value.setText(mac_address if mac_address else "--")
+        self.activation_model.macAddress = mac_address if mac_address else "--"
 
         # 获取激活状态
         activation_status = self.system_initializer.get_activation_status()
@@ -246,21 +290,17 @@ class ActivationWindow(BaseWindow, AsyncMixin):
         self.is_activated = local_activated
 
         if not status_consistent:
-            if local_activated and not server_activated:
-                status_text = "状态不一致(需重新激活)"
-                status_style = "color: #ff9900;"  # 橙色警告
-            else:
-                status_text = "状态不一致(已修复)"
-                status_style = "color: #28a745;"  # 绿色
+            self.activation_model.set_status_inconsistent(
+                local_activated, server_activated
+            )
         else:
-            status_text = "已激活" if local_activated else "未激活"
-            status_style = "color: #28a745;" if local_activated else "color: #dc3545;"
-
-        self.status_value.setText(status_text)
-        self.status_value.setStyleSheet(status_style)
+            if local_activated:
+                self.activation_model.set_status_activated()
+            else:
+                self.activation_model.set_status_not_activated()
 
         # 初始化激活码显示
-        self.activation_code_value.setText("--")
+        self.activation_model.reset_activation_code()
 
     async def _start_activation_process(self):
         """
@@ -312,7 +352,7 @@ class ActivationWindow(BaseWindow, AsyncMixin):
         code = activation_data.get("code", "------")
 
         # 更新设备信息中的激活码
-        self.activation_code_value.setText(code)
+        self.activation_model.update_activation_code(code)
 
         # 信息已在UI界面显示，仅记录简要日志
         self.logger.info(f"获取激活验证码: {code}")
@@ -322,11 +362,7 @@ class ActivationWindow(BaseWindow, AsyncMixin):
         激活成功处理.
         """
         # 更新状态显示
-        self.status_value.setText("已激活")
-        self.status_value.setStyleSheet("color: #28a745;")
-
-        # 清除激活码显示
-        self.activation_code_value.setText("--")
+        self.activation_model.set_status_activated()
 
         # 发射完成信号
         self.activation_completed.emit(True)
@@ -347,9 +383,15 @@ class ActivationWindow(BaseWindow, AsyncMixin):
 
     def _on_data_ready(self, data):
         """
-        数据就绪处理.
+        数据就绪处理 - 更新设备信息.
         """
         self.logger.debug(f"收到数据: {data}")
+        if isinstance(data, dict):
+            serial = data.get("serial_number")
+            mac = data.get("mac_address")
+            if serial or mac:
+                self.logger.info(f"通过信号更新设备信息: SN={serial}, MAC={mac}")
+                self.activation_model.update_device_info(serial_number=serial, mac_address=mac)
 
     def _on_retry_clicked(self):
         """
@@ -362,7 +404,7 @@ class ActivationWindow(BaseWindow, AsyncMixin):
             return
 
         # 重置状态
-        self.activation_code_value.setText("--")
+        self.activation_model.reset_activation_code()
 
         # 重新开始初始化
         self.create_task(self._start_initialization(), "retry_initialization")
@@ -374,6 +416,13 @@ class ActivationWindow(BaseWindow, AsyncMixin):
         if self.activation_data:
             code = self.activation_data.get("code", "")
             if code:
+                clipboard = QApplication.clipboard()
+                clipboard.setText(code)
+                self.update_status(f"验证码已复制到剪贴板: {code}")
+        else:
+            # 从模型获取激活码
+            code = self.activation_model.activationCode
+            if code and code != "--":
                 clipboard = QApplication.clipboard()
                 clipboard.setText(code)
                 self.update_status(f"验证码已复制到剪贴板: {code}")
@@ -421,6 +470,56 @@ class ActivationWindow(BaseWindow, AsyncMixin):
 
         # 然后调用父类关闭
         await super().shutdown_async()
+
+    def mousePressEvent(self, event):
+        """
+        鼠标按下事件 - 用于窗口拖拽.
+        """
+        if event.button() == Qt.LeftButton:
+            self.drag_position = event.globalPos() - self.frameGeometry().topLeft()
+            event.accept()
+
+    def mouseMoveEvent(self, event):
+        """
+        鼠标移动事件 - 实现窗口拖拽.
+        """
+        if event.buttons() == Qt.LeftButton and self.drag_position:
+            self.move(event.globalPos() - self.drag_position)
+            event.accept()
+
+    def mouseReleaseEvent(self, event):
+        """
+        鼠标释放事件.
+        """
+        self.drag_position = None
+
+    def _apply_native_rounded_corners(self):
+        """
+        应用原生圆角窗口形状.
+        """
+        try:
+            # 获取窗口尺寸
+            width = self.width()
+            height = self.height()
+
+            # 创建圆角路径
+            radius = 16  # 圆角半径
+            path = QPainterPath()
+            path.addRoundedRect(0, 0, width, height, radius, radius)
+
+            # 创建区域并应用到窗口
+            region = QRegion(path.toFillPolygon().toPolygon())
+            self.setMask(region)
+
+            self.logger.info(
+                f"已应用原生圆角窗口形状: {width}x{height}, 圆角半径: {radius}px"
+            )
+
+        except Exception as e:
+            self.logger.error(f"应用原生圆角形状失败: {e}")
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
 
     def closeEvent(self, event):
         """
