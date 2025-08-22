@@ -1,4 +1,5 @@
 from pathlib import Path
+import os
 
 from PyQt5.QtWidgets import (
     QCheckBox,
@@ -429,8 +430,10 @@ class SettingsWindow(QDialog):
 
             model_path = self._get_text_value("model_path_edit")
             if model_path:
+                # 转换为相对路径（如果适用）
+                relative_path = self._convert_to_relative_path(model_path)
                 self.config_manager.update_config(
-                    "WAKE_WORD_OPTIONS.MODEL_PATH", model_path
+                    "WAKE_WORD_OPTIONS.MODEL_PATH", relative_path
                 )
 
             # 保存唤醒词到 keywords.txt 文件
@@ -570,12 +573,57 @@ class SettingsWindow(QDialog):
             )
 
             if selected_path:
-                self._set_text_value("model_path_edit", selected_path)
-                self.logger.info(f"已选择模型路径: {selected_path}")
+                # 转换为相对路径（如果适用）
+                relative_path = self._convert_to_relative_path(selected_path)
+                self._set_text_value("model_path_edit", relative_path)
+                self.logger.info(f"已选择模型路径: {selected_path}，存储为: {relative_path}")
 
         except Exception as e:
             self.logger.error(f"浏览模型路径失败: {e}", exc_info=True)
             QMessageBox.warning(self, "错误", f"浏览模型路径时发生错误: {str(e)}")
+
+    def _convert_to_relative_path(self, model_path: str) -> str:
+        """
+        将绝对路径转换为相对于项目根目录的相对路径（如果在同一盘符）.
+
+        Args:
+            model_path (str): 模型路径
+
+        Returns:
+            str: 相对路径或原始路径
+        """
+        try:
+            # 获取项目根目录
+            project_root = get_project_root()
+
+            # 检查是否在同一盘符（仅在Windows上适用）
+            if os.name == 'nt':  # Windows系统
+                model_path_drive = os.path.splitdrive(model_path)[0]
+                project_root_drive = os.path.splitdrive(str(project_root))[0]
+
+                # 如果在同一盘符，计算相对路径
+                if model_path_drive.lower() == project_root_drive.lower():
+                    relative_path = os.path.relpath(model_path, project_root)
+                    return relative_path
+                else:
+                    # 不在同一盘符，使用绝对路径
+                    return model_path
+            else:
+                # 非Windows系统，直接计算相对路径
+                try:
+                    relative_path = os.path.relpath(model_path, project_root)
+                    # 只有当相对路径不包含".."+os.sep时才使用相对路径
+                    if not relative_path.startswith(".." + os.sep) and not relative_path.startswith("/"):
+                        return relative_path
+                    else:
+                        # 相对路径包含向上查找，使用绝对路径
+                        return model_path
+                except ValueError:
+                    # 无法计算相对路径（不同卷），使用绝对路径
+                    return model_path
+        except Exception as e:
+            self.logger.warning(f"计算相对路径时出错，使用原始路径: {e}")
+            return model_path
 
     def _restart_application(self):
         """
@@ -640,7 +688,7 @@ class SettingsWindow(QDialog):
             else:
                 # 使用配置的模型路径
                 keywords_file = Path(model_path) / "keywords.txt"
-            
+
             if not keywords_file.exists():
                 self.logger.warning(f"关键词文件不存在: {keywords_file}")
                 return ""
