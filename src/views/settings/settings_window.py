@@ -632,7 +632,15 @@ class SettingsWindow(QDialog):
         从 keywords.txt 文件加载唤醒词，按完整格式显示.
         """
         try:
-            keywords_file = get_project_root() / "models" / "keywords.txt"
+            # 获取配置的模型路径
+            model_path = self.config_manager.get_config("WAKE_WORD_OPTIONS.MODEL_PATH", "")
+            if not model_path:
+                # 如果没有配置模型路径，使用默认的models目录
+                keywords_file = get_project_root() / "models" / "keywords.txt"
+            else:
+                # 使用配置的模型路径
+                keywords_file = Path(model_path) / "keywords.txt"
+            
             if not keywords_file.exists():
                 self.logger.warning(f"关键词文件不存在: {keywords_file}")
                 return ""
@@ -656,7 +664,14 @@ class SettingsWindow(QDialog):
         保存唤醒词到 keywords.txt 文件，支持完整格式.
         """
         try:
-            keywords_file = get_project_root() / "models" / "keywords.txt"
+            # 获取配置的模型路径
+            model_path = self.config_manager.get_config("WAKE_WORD_OPTIONS.MODEL_PATH", "")
+            if not model_path:
+                # 如果没有配置模型路径，使用默认的models目录
+                keywords_file = get_project_root() / "models" / "keywords.txt"
+            else:
+                # 使用配置的模型路径
+                keywords_file = Path(model_path) / "keywords.txt"
 
             # 处理输入的关键词文本
             lines = [line.strip() for line in keywords_text.split("\n") if line.strip()]
