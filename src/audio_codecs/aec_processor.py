@@ -6,7 +6,6 @@ from typing import Any, Dict, Optional
 import numpy as np
 import sounddevice as sd
 
-from libs.webrtc_apm import WebRTCAudioProcessing, create_default_config
 from src.constants.constants import AudioConfig
 from src.utils.logging_config import get_logger
 
@@ -74,6 +73,9 @@ class AECProcessor:
     async def _initialize_apm(self):
         """初始化WebRTC音频处理模块"""
         try:
+            # 延迟导入，仅在需要时加载本地库（避免 Linux/Windows 触发 .so/.dll 依赖）
+            from libs.webrtc_apm import WebRTCAudioProcessing, create_default_config
+
             self.apm = WebRTCAudioProcessing()
             
             # 创建配置
