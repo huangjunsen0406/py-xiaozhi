@@ -1,4 +1,3 @@
-import ctypes
 import platform
 from collections import deque
 from typing import Any, Dict, Optional
@@ -6,7 +5,6 @@ from typing import Any, Dict, Optional
 import numpy as np
 import sounddevice as sd
 
-from libs.webrtc_apm import WebRTCAudioProcessing, create_default_config
 from src.constants.constants import AudioConfig
 from src.utils.logging_config import get_logger
 
@@ -72,8 +70,15 @@ class AECProcessor:
             raise
     
     async def _initialize_apm(self):
-        """初始化WebRTC音频处理模块"""
+        """初始化WebRTC音频处理模块（仅macOS）"""
+        if not self._is_macos:
+            logger.warning("非macOS平台调用了_initialize_apm，这不应该发生")
+            return
+            
         try:
+            # 延迟导入，仅在macOS需要时加载本地库
+            from libs.webrtc_apm import WebRTCAudioProcessing, create_default_config
+
             self.apm = WebRTCAudioProcessing()
             
             # 创建配置
@@ -264,36 +269,47 @@ class AECProcessor:
             return capture_audio
     
     def _process_single_aec_frame(self, capture_audio: np.ndarray) -> np.ndarray:
-        """处理单个10ms WebRTC帧"""
-        # 获取参考信号
-        reference_audio = self._get_reference_frame(self._webrtc_frame_size)
-        
-        # 创建ctypes缓冲区
-        capture_buffer = (ctypes.c_short * self._webrtc_frame_size)(*capture_audio)
-        reference_buffer = (ctypes.c_short * self._webrtc_frame_size)(*reference_audio)
-        
-        processed_capture = (ctypes.c_short * self._webrtc_frame_size)()
-        processed_reference = (ctypes.c_short * self._webrtc_frame_size)()
-        
-        # 首先处理参考信号（render stream）
-        render_result = self.apm.process_reverse_stream(
-            reference_buffer, self.render_config, self.render_config, processed_reference
-        )
-        
-        if render_result != 0:
-            logger.warning(f"参考信号处理失败，错误码: {render_result}")
-        
-        # 然后处理采集信号（capture stream）
-        capture_result = self.apm.process_stream(
-            capture_buffer, self.capture_config, self.capture_config, processed_capture
-        )
-        
-        if capture_result != 0:
-            logger.warning(f"采集信号处理失败，错误码: {capture_result}")
+        """处理单个10ms WebRTC帧（仅macOS）"""
+        if not self._is_macos:
             return capture_audio
-        
-        # 转换回numpy数组
-        return np.array(processed_capture, dtype=np.int16)
+            
+        try:
+            # 仅在macOS导入ctypes
+            import ctypes
+            
+            # 获取参考信号
+            reference_audio = self._get_reference_frame(self._webrtc_frame_size)
+            
+            # 创建ctypes缓冲区
+            capture_buffer = (ctypes.c_short * self._webrtc_frame_size)(*capture_audio)
+            reference_buffer = (ctypes.c_short * self._webrtc_frame_size)(*reference_audio)
+            
+            processed_capture = (ctypes.c_short * self._webrtc_frame_size)()
+            processed_reference = (ctypes.c_short * self._webrtc_frame_size)()
+            
+            # 首先处理参考信号（render stream）
+            render_result = self.apm.process_reverse_stream(
+                reference_buffer, self.render_config, self.render_config, processed_reference
+            )
+            
+            if render_result != 0:
+                logger.warning(f"参考信号处理失败，错误码: {render_result}")
+            
+            # 然后处理采集信号（capture stream）
+            capture_result = self.apm.process_stream(
+                capture_buffer, self.capture_config, self.capture_config, processed_capture
+            )
+            
+            if capture_result != 0:
+                logger.warning(f"采集信号处理失败，错误码: {capture_result}")
+                return capture_audio
+            
+            # 转换回numpy数组
+            return np.array(processed_capture, dtype=np.int16)
+            
+        except Exception as e:
+            logger.error(f"AEC帧处理失败: {e}")
+            return capture_audio
     
     def _process_chunked_aec_frames(self, capture_audio: np.ndarray, num_chunks: int) -> np.ndarray:
         """分割处理大帧（20ms/40ms/60ms等）"""

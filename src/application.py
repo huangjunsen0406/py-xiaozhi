@@ -9,7 +9,6 @@ import typing as _t  # noqa: F401
 from typing import Set
 
 from src.constants.constants import AbortReason, DeviceState, ListeningMode
-from src.display import gui_display
 from src.mcp.mcp_server import McpServer
 from src.protocols.mqtt_protocol import MqttProtocol
 from src.protocols.websocket_protocol import WebsocketProtocol
@@ -17,6 +16,8 @@ from src.utils.common_utils import handle_verification_code
 from src.utils.config_manager import ConfigManager
 from src.utils.logging_config import get_logger
 from src.utils.opus_loader import setup_opus
+
+logger = get_logger(__name__)
 
 # 检查是否为 macOS 系统
 if platform.system() == "Darwin":
@@ -46,11 +47,9 @@ if platform.system() == "Darwin":
     setup_signal_handler(signal.SIGINT, handle_sigint, "SIGINT")
 
 else:
-    print("非 macOS 系统，跳过信号处理器设置")
+    logger.debug("非 macOS 系统，跳过信号处理器设置")
 
 setup_opus()
-
-logger = get_logger(__name__)
 
 try:
     import opuslib  # noqa: F401
@@ -205,19 +204,19 @@ class Application:
             maxsize = 256
         self.command_queue = asyncio.Queue(maxsize=maxsize)
         self._shutdown_event = asyncio.Event()
-        
+
         # 初始化异步锁
         self._state_lock = asyncio.Lock()
         self._abort_lock = asyncio.Lock()
-        
+
         # 初始化中止事件
         self.aborted_event = asyncio.Event()
         self.aborted_event.clear()
-        
+
         # 初始化信号量
         self._audio_write_semaphore = asyncio.Semaphore(self._audio_write_cc)
         self._send_audio_semaphore = asyncio.Semaphore(self._send_audio_cc)
-        
+
         # 初始化音频静默事件（默认置为已静默，避免无谓等待）
         self._incoming_audio_idle_event = asyncio.Event()
         self._incoming_audio_idle_event.set()
@@ -445,7 +444,8 @@ class Application:
         logger.debug("设置显示界面类型: %s", mode)
 
         if mode == "gui":
-            self.display = gui_display.GuiDisplay()
+            from src.display.gui_display import GuiDisplay
+            self.display = GuiDisplay()
             self._setup_gui_callbacks()
         else:
             from src.display.cli_display import CliDisplay
