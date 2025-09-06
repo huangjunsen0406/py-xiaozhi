@@ -110,7 +110,8 @@ class ResourceFinder:
             if cwd != project_root:
                 base_paths.append(cwd)
                 logger.debug(f"开发环境 - 当前工作目录: {cwd}")
-
+            # 允许环境变量覆盖（最高优先级）
+            self._add_env_paths(base_paths)
             return base_paths
 
         # === 打包环境 ===
@@ -177,6 +178,14 @@ class ResourceFinder:
         exe_parent = exe_dir.parent
         if exe_parent not in base_paths:
             base_paths.append(exe_parent)
+
+        # 当前工作目录兜底（某些情况下从非标准位置启动）
+        try:
+            cwd = Path.cwd()
+            if cwd not in base_paths:
+                base_paths.append(cwd)
+        except Exception:
+            pass
 
         # 去重但保持顺序
         unique_paths = []
@@ -404,7 +413,31 @@ class ResourceFinder:
         Returns:
             项目根目录路径
         """
-        return self._base_paths[0]
+        # 开发环境：直接返回源码项目根目录
+        if not getattr(sys, "frozen", False):
+            return Path(__file__).parent.parent.parent
+
+        # 打包环境：优先 macOS .app 的 Resources，其次单文件解包目录，最后可执行文件目录
+        exe_path = Path(sys.executable).resolve()
+        exe_dir = exe_path.parent
+
+        if sys.platform == "darwin":
+            for p in [exe_path] + list(exe_path.parents):
+                if p.name.endswith(".app"):
+                    resources_dir = p / "Contents" / "Resources"
+                    if resources_dir.exists():
+                        return resources_dir
+                    break
+
+        if hasattr(sys, "_MEIPASS"):
+            try:
+                meipass_dir = Path(sys._MEIPASS)
+                if meipass_dir.exists():
+                    return meipass_dir
+            except Exception:
+                pass
+
+        return exe_dir
 
     def get_app_path(self) -> Path:
         """获取应用程序的基础路径（兼容ConfigManager的方法）

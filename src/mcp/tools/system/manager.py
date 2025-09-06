@@ -97,9 +97,18 @@ class SystemToolsManager:
         add_tool(
             (
                 "self.audio_speaker.set_volume",
-                "Set the volume of the audio speaker. If the current volume is "
-                "unknown, you must call `self.get_device_status` tool first and "
-                "then call this tool.",
+                "Set system speaker volume to an absolute value (0–100). Always "
+                "provide integer 'volume'.\n"
+                "Use this tool when:\n"
+                "1. User asks to set volume to a specific percent/number (e.g., '音量设为50%')\n"
+                "2. User asks to increase/decrease volume relatively ('调大/调小一点'): first call "
+                "`self.get_device_status` to read current audio_speaker.volume, compute a target within 0–100, "
+                "then call this tool\n"
+                "3. Ensuring volume stays within 0–100 (do not guess current value)\n\n"
+                "Parameters:\n"
+                "- volume: INTEGER in [0, 100] (absolute target)\n\n"
+                "Notes: If the current volume is unknown, do NOT assume it — call `self.get_device_status` first. "
+                "To mute, set volume=0. This tool does not toggle mute state.",
                 volume_props,
                 set_volume,
             )
