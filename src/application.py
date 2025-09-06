@@ -39,9 +39,18 @@ if platform.system() == "Darwin":
         # 使用app的主循环，更稳定且跨线程安全
         loop = app._main_loop
         if loop and not loop.is_closed():
-            loop.call_soon_threadsafe(
-                lambda: asyncio.create_task(app.shutdown())
-            )
+            # 直接创建task在指定的循环中
+            def create_shutdown_task():
+                try:
+                    if loop.is_running():
+                        asyncio.run_coroutine_threadsafe(app.shutdown(), loop)
+                    else:
+                        loop.create_task(app.shutdown())
+                except Exception as e:
+                    print(f"创建shutdown任务失败: {e}")
+                    sys.exit(0)
+            
+            loop.call_soon_threadsafe(create_shutdown_task)
         else:
             # 主循环未就绪或已关闭，直接退出
             sys.exit(0)

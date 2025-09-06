@@ -278,43 +278,70 @@ class McpServer:
         music_manager = get_music_tools_manager()
         music_manager.init_tools(self.add_tool, PropertyList, Property, PropertyType)
 
-        # 添加12306铁路查询工具
-        from src.mcp.tools.railway import get_railway_tools_manager
-
-        railway_manager = get_railway_tools_manager()
-        railway_manager.init_tools(self.add_tool, PropertyList, Property, PropertyType)
-
-        # 添加搜索工具
-        from src.mcp.tools.search import get_search_manager
-
-        search_manager = get_search_manager()
-        search_manager.init_tools(self.add_tool, PropertyList, Property, PropertyType)
-
-        # 添加菜谱工具
-        from src.mcp.tools.recipe import get_recipe_manager
-
-        recipe_manager = get_recipe_manager()
-        recipe_manager.init_tools(self.add_tool, PropertyList, Property, PropertyType)
-
         # 添加摄像头工具
         from src.mcp.tools.camera import take_photo
 
         # 注册take_photo工具
         properties = PropertyList([Property("question", PropertyType.STRING)])
+        VISION_DESC = (
+            "【图像/识图/OCR/问答】当用户提到：拍照、识图、读取/提取文字、OCR、翻译图片文字、"
+            "看一下这张图/截图、这是什么、数一数、识别二维码/条码、对比两张图、分析场景/报错截图、"
+            "表格/票据信息抽取、图片问答 时调用本工具。"
+            "功能：①拍照或接收已有图片/截图/URL；②物体/场景/标签识别；③OCR(多语)与翻译；④计数/位置；"
+            "⑤二维码/条码读取；⑥关键信息抽取(表格/票据)；⑦两图对比；⑧就图回答问题。"
+            "输入建议：{ mode:'capture'|'upload'|'url', image?, url?, question?, target_lang? }；"
+            "若用户未提供图片且允许，可触发拍照(mode='capture')。"
+            "避免：纯文本知识问答、与图片无关的请求。"
+            "English: Vision/OCR/QA tool. Use when the user provides or asks about a photo/screenshot/image: "
+            "describe, classify, OCR, translate, count objects, read QR/barcodes, extract tables/receipts, "
+            "compare two images, image QA. Inputs as above. Do NOT use for pure text queries."
+            "Examples: '这张图是什么', 'OCR这张发票并翻译成英文', '数一下图里有几只猫', '读一下这个二维码', "
+            "'对比这两张UI截图的差异', '把截图里的表格提取成CSV'。"
+        )
+
         self.add_tool(
             McpTool(
-                "take_photo",
-                "拍照并分析图像内容。可以进行物体识别、文字识别、场景分析、问题解答等。适用于：看看这是什么、拍照识别、读取文字、分析场景、解答问题等需求。Take photo and analyze image content including object recognition, text recognition, scene analysis, and question answering.",
+                "take_photo",            # 保留原名兼容
+                VISION_DESC,
                 properties,
                 take_photo,
             )
         )
 
-        # 添加高德地图工具
-        from src.mcp.tools.amap import get_amap_manager
+        # 添加桌面截图工具
+        from src.mcp.tools.screenshot import take_screenshot
 
-        amap_manager = get_amap_manager()
-        amap_manager.init_tools(self.add_tool, PropertyList, Property, PropertyType)
+        # 注册take_screenshot工具
+        screenshot_properties = PropertyList([
+            Property("question", PropertyType.STRING),
+            Property("display", PropertyType.STRING, default_value=None)
+        ])
+        SCREENSHOT_DESC = (
+            "【桌面截图/屏幕分析】当用户提到：截屏、截图、看看桌面、分析屏幕、桌面上有什么、"
+            "屏幕截图、查看当前界面、分析当前页面、读取屏幕内容、屏幕OCR 时调用本工具。"
+            "功能：①截取整个桌面画面；②屏幕内容识别与分析；③屏幕OCR文字提取；④界面元素分析；"
+            "⑤应用程序识别；⑥错误信息截图分析；⑦桌面状态检查；⑧多屏幕截图。"
+            "参数说明：{ question: '你想了解的关于桌面/屏幕的问题', display: '显示器选择(可选)' }；"
+            "display可选值：'main'/'主屏'/'笔记本'(主显示器), 'secondary'/'副屏'/'外屏'(副显示器), 或留空(所有显示器)；"
+            "适用场景：桌面截图、屏幕分析、界面问题诊断、应用状态查看、错误截图分析等。"
+            "注意：该工具会截取桌面，请确保用户同意截图操作。"
+            "English: Desktop screenshot/screen analysis tool. Use when user mentions: screenshot, screen capture, "
+            "desktop analysis, screen content, current interface, screen OCR, etc. "
+            "Functions: ①Full desktop capture; ②Screen content recognition; ③Screen OCR; ④Interface analysis; "
+            "⑤Application identification; ⑥Error screenshot analysis; ⑦Desktop status check. "
+            "Parameters: { question: 'Question about desktop/screen', display: 'Display selection (optional)' }; "
+            "Display options: 'main'(primary), 'secondary'(external), or empty(all displays). "
+            "Examples: '截个图看看主屏', '查看副屏有什么', '分析当前屏幕内容', '读取屏幕上的文字'。"
+        )
+
+        self.add_tool(
+            McpTool(
+                "take_screenshot",
+                SCREENSHOT_DESC,
+                screenshot_properties,
+                take_screenshot,
+            )
+        )
 
         # 添加八字命理工具
         from src.mcp.tools.bazi import get_bazi_manager
