@@ -1,0 +1,218 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>SystemOptionsWidget</class>
+ <widget class="QWidget" name="SystemOptionsWidget">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>580</width>
+    <height>600</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>系统选项</string>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayout">
+   <item>
+    <widget class="QScrollArea" name="scrollArea">
+     <property name="widgetResizable">
+      <bool>true</bool>
+     </property>
+     <widget class="QWidget" name="scrollAreaWidgetContents">
+      <property name="geometry">
+       <rect>
+        <x>0</x>
+        <y>0</y>
+        <width>578</width>
+        <height>580</height>
+       </rect>
+      </property>
+      <layout class="QFormLayout" name="formLayout">
+       <property name="labelAlignment">
+        <set>Qt::AlignRight|Qt::AlignVCenter</set>
+       </property>
+       <property name="fieldGrowthPolicy">
+        <enum>QFormLayout::ExpandingFieldsGrow</enum>
+       </property>
+       <item row="0" column="0">
+        <widget class="QLabel" name="label_client_id">
+         <property name="text">
+          <string>客户端ID:</string>
+         </property>
+        </widget>
+       </item>
+       <item row="0" column="1">
+        <widget class="QLineEdit" name="client_id_edit"/>
+       </item>
+       <item row="1" column="0">
+        <widget class="QLabel" name="label_device_id">
+         <property name="text">
+          <string>设备ID:</string>
+         </property>
+        </widget>
+       </item>
+       <item row="1" column="1">
+        <widget class="QLineEdit" name="device_id_edit"/>
+       </item>
+       <item row="2" column="0">
+        <widget class="QLabel" name="label_ota_url">
+         <property name="text">
+          <string>OTA版本URL:</string>
+         </property>
+        </widget>
+       </item>
+       <item row="2" column="1">
+        <widget class="QLineEdit" name="ota_url_edit"/>
+       </item>
+       <item row="3" column="0">
+        <widget class="QLabel" name="label_websocket_url">
+         <property name="text">
+          <string>WebSocket URL:</string>
+         </property>
+        </widget>
+       </item>
+       <item row="3" column="1">
+        <widget class="QLineEdit" name="websocket_url_edit"/>
+       </item>
+       <item row="4" column="0">
+        <widget class="QLabel" name="label_websocket_token">
+         <property name="text">
+          <string>WebSocket Token:</string>
+         </property>
+        </widget>
+       </item>
+       <item row="4" column="1">
+        <widget class="QLineEdit" name="websocket_token_edit">
+         <property name="echoMode">
+          <enum>QLineEdit::Password</enum>
+         </property>
+        </widget>
+       </item>
+       <item row="5" column="0">
+        <widget class="QLabel" name="label_authorization_url">
+         <property name="text">
+          <string>授权URL:</string>
+         </property>
+        </widget>
+       </item>
+       <item row="5" column="1">
+        <widget class="QLineEdit" name="authorization_url_edit"/>
+       </item>
+       <item row="6" column="0">
+        <widget class="QLabel" name="label_activation_version">
+         <property name="text">
+          <string>激活版本:</string>
+         </property>
+        </widget>
+       </item>
+       <item row="6" column="1">
+        <widget class="QComboBox" name="activation_version_combo">
+         <item>
+          <property name="text">
+           <string>v1</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>v2</string>
+          </property>
+         </item>
+        </widget>
+       </item>
+       <item row="7" column="0">
+        <widget class="QLabel" name="label_aec_enabled">
+         <property name="text">
+          <string>启用AEC回声消除:</string>
+         </property>
+        </widget>
+       </item>
+       <item row="7" column="1">
+        <widget class="QCheckBox" name="aec_enabled_check">
+         <property name="text">
+          <string>启用</string>
+         </property>
+        </widget>
+       </item>
+       <item row="8" column="0" colspan="2">
+        <widget class="QGroupBox" name="mqtt_group">
+         <property name="title">
+          <string>MQTT配置</string>
+         </property>
+         <layout class="QFormLayout" name="mqtt_form">
+          <item row="0" column="0">
+           <widget class="QLabel" name="label_mqtt_endpoint">
+            <property name="text">
+             <string>端点:</string>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="1">
+           <widget class="QLineEdit" name="mqtt_endpoint_edit"/>
+          </item>
+          <item row="1" column="0">
+           <widget class="QLabel" name="label_mqtt_client_id">
+            <property name="text">
+             <string>客户端ID:</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="1">
+           <widget class="QLineEdit" name="mqtt_client_id_edit"/>
+          </item>
+          <item row="2" column="0">
+           <widget class="QLabel" name="label_mqtt_username">
+            <property name="text">
+             <string>用户名:</string>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="1">
+           <widget class="QLineEdit" name="mqtt_username_edit"/>
+          </item>
+          <item row="3" column="0">
+           <widget class="QLabel" name="label_mqtt_password">
+            <property name="text">
+             <string>密码:</string>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="1">
+           <widget class="QLineEdit" name="mqtt_password_edit">
+            <property name="echoMode">
+             <enum>QLineEdit::Password</enum>
+            </property>
+           </widget>
+          </item>
+          <item row="4" column="0">
+           <widget class="QLabel" name="label_mqtt_publish_topic">
+            <property name="text">
+             <string>发布主题:</string>
+            </property>
+           </widget>
+          </item>
+          <item row="4" column="1">
+           <widget class="QLineEdit" name="mqtt_publish_topic_edit"/>
+          </item>
+          <item row="5" column="0">
+           <widget class="QLabel" name="label_mqtt_subscribe_topic">
+            <property name="text">
+             <string>订阅主题:</string>
+            </property>
+           </widget>
+          </item>
+          <item row="5" column="1">
+           <widget class="QLineEdit" name="mqtt_subscribe_topic_edit"/>
+          </item>
+         </layout>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>WakeWordWidget</class>
+ <widget class="QWidget" name="WakeWordWidget">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>580</width>
+    <height>500</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>唤醒词</string>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayout">
+   <item>
+    <widget class="QScrollArea" name="scrollArea">
+     <property name="widgetResizable">
+      <bool>true</bool>
+     </property>
+     <widget class="QWidget" name="scrollAreaWidgetContents">
+      <property name="geometry">
+       <rect>
+        <x>0</x>
+        <y>0</y>
+        <width>578</width>
+        <height>480</height>
+       </rect>
+      </property>
+      <layout class="QVBoxLayout" name="contentLayout">
+       <item>
+        <widget class="QCheckBox" name="use_wake_word_check">
+         <property name="text">
+          <string>启用唤醒词检测</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QGroupBox" name="model_group">
+         <property name="title">
+          <string>模型配置</string>
+         </property>
+         <layout class="QFormLayout" name="modelLayout">
+          <item row="0" column="0">
+           <widget class="QLabel" name="label_model_path">
+            <property name="text">
+             <string>模型路径:</string>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="1">
+           <layout class="QHBoxLayout" name="model_path_layout">
+            <item>
+             <widget class="QLineEdit" name="model_path_edit"/>
+            </item>
+            <item>
+             <widget class="QPushButton" name="model_path_btn">
+              <property name="text">
+               <string>浏览...</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QGroupBox" name="keywords_group">
+         <property name="title">
+          <string>唤醒词配置</string>
+         </property>
+         <layout class="QVBoxLayout" name="keywords_layout">
+          <item>
+           <widget class="QLabel" name="keywords_help">
+            <property name="text">
+             <string>格式：拼音 @中文
+例如：x iǎo ài t óng x ué @小爱同学</string>
+            </property>
+            <property name="styleSheet">
+             <string>color: #666666; font-size: 11px;</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QTextEdit" name="wake_words_edit">
+            <property name="minimumSize">
+             <size>
+              <width>0</width>
+              <height>200</height>
+             </size>
+            </property>
+            <property name="placeholderText">
+             <string>请输入唤醒词，每行一个，格式：拼音 @中文</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <spacer name="verticalSpacer">
+         <property name="orientation">
+          <enum>Qt::Vertical</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>20</width>
+           <height>40</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+      </layout>
+     </widget>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
