@@ -34,7 +34,7 @@ class Camera(Thing):
         # 摄像头控制器
         VL.ImageAnalyzer.get_instance().init(
             self.config.get_config("CAMERA.VLapi_key"),
-            self.config.get_config("CAMERA.Loacl_VL_url"),
+            self.config.get_config("CAMERA.Local_VL_url"),
             self.config.get_config("CAMERA.models"),
         )
         self.VL = VL.ImageAnalyzer.get_instance()

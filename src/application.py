@@ -33,14 +33,18 @@ if platform.system() == "Darwin":
 
     def handle_sigint(signum, frame):
         app = Application.get_instance()
-        if app:
-            # 使用事件循环运行shutdown
-            try:
-                loop = asyncio.get_running_loop()
-                loop.create_task(app.shutdown())
-            except RuntimeError:
-                # 没有运行中的事件循环，直接退出
-                sys.exit(0)
+        if not app:
+            sys.exit(0)
+        
+        # 使用app的主循环，更稳定且跨线程安全
+        loop = app._main_loop
+        if loop and not loop.is_closed():
+            loop.call_soon_threadsafe(
+                lambda: asyncio.create_task(app.shutdown())
+            )
+        else:
+            # 主循环未就绪或已关闭，直接退出
+            sys.exit(0)
 
     # 设置信号处理器
     setup_signal_handler(signal.SIGTRAP, signal.SIG_IGN, "SIGTRAP")
@@ -623,16 +627,13 @@ class Application:
         启动GUI显示.
         """
         # 在qasync环境中，GUI可以直接在主线程启动
-        try:
-            await self.display.start()
-        except Exception as e:
-            logger.error(f"GUI显示错误: {e}", exc_info=True)
+        await self.display.start()
 
     async def _start_cli_display(self):
         """
         启动CLI显示.
         """
-        self._create_task(self.display.start(), "CLI显示")
+        await self.display.start()
 
     async def schedule_command(self, command):
         """
