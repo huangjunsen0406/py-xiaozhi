@@ -14,6 +14,7 @@ from src.views.settings.components.shortcuts_settings import ShortcutsSettingsWi
 from src.views.settings.components.system_options import SystemOptionsWidget
 from src.views.settings.components.wake_word import WakeWordWidget
 from src.views.settings.components.camera import CameraWidget
+from src.views.settings.components.audio import AudioWidget
 
 
 class SettingsWindow(QDialog):
@@ -30,6 +31,7 @@ class SettingsWindow(QDialog):
         self.system_options_tab = None
         self.wake_word_tab = None
         self.camera_tab = None
+        self.audio_tab = None
         self.shortcuts_tab = None
         
         # UI控件
@@ -87,6 +89,11 @@ class SettingsWindow(QDialog):
             self.camera_tab = CameraWidget()
             tab_widget.addTab(self.camera_tab, "摄像头")
             self.camera_tab.settings_changed.connect(self._on_settings_changed)
+
+            # 创建并添加音频设备组件
+            self.audio_tab = AudioWidget()
+            tab_widget.addTab(self.audio_tab, "音频设备")
+            self.audio_tab.settings_changed.connect(self._on_settings_changed)
 
             # 创建并添加快捷键设置组件
             self.shortcuts_tab = ShortcutsSettingsWidget()
@@ -186,6 +193,11 @@ class SettingsWindow(QDialog):
                 camera_config = self.camera_tab.get_config_data()
                 all_config_data.update(camera_config)
             
+            # 音频设备配置
+            if self.audio_tab:
+                audio_config = self.audio_tab.get_config_data()
+                all_config_data.update(audio_config)
+            
             # 快捷键配置
             if self.shortcuts_tab:
                 # 快捷键组件有自己的保存方法
@@ -231,6 +243,9 @@ class SettingsWindow(QDialog):
             
             if self.camera_tab:
                 self.camera_tab.reset_to_defaults()
+            
+            if self.audio_tab:
+                self.audio_tab.reset_to_defaults()
             
             if self.shortcuts_tab:
                 self.shortcuts_tab.reset_to_defaults()
