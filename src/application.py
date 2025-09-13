@@ -9,7 +9,6 @@ import typing as _t  # noqa: F401
 from typing import Set
 
 from src.constants.constants import AbortReason, DeviceState, ListeningMode
-from src.display import gui_display
 from src.mcp.mcp_server import McpServer
 from src.protocols.mqtt_protocol import MqttProtocol
 from src.protocols.websocket_protocol import WebsocketProtocol
@@ -17,6 +16,8 @@ from src.utils.common_utils import handle_verification_code
 from src.utils.config_manager import ConfigManager
 from src.utils.logging_config import get_logger
 from src.utils.opus_loader import setup_opus
+
+logger = get_logger(__name__)
 
 # 检查是否为 macOS 系统
 if platform.system() == "Darwin":
@@ -32,25 +33,36 @@ if platform.system() == "Darwin":
 
     def handle_sigint(signum, frame):
         app = Application.get_instance()
-        if app:
-            # 使用事件循环运行shutdown
-            try:
-                loop = asyncio.get_running_loop()
-                loop.create_task(app.shutdown())
-            except RuntimeError:
-                # 没有运行中的事件循环，直接退出
-                sys.exit(0)
+        if not app:
+            sys.exit(0)
+        
+        # 使用app的主循环，更稳定且跨线程安全
+        loop = app._main_loop
+        if loop and not loop.is_closed():
+            # 直接创建task在指定的循环中
+            def create_shutdown_task():
+                try:
+                    if loop.is_running():
+                        asyncio.run_coroutine_threadsafe(app.shutdown(), loop)
+                    else:
+                        loop.create_task(app.shutdown())
+                except Exception as e:
+                    print(f"创建shutdown任务失败: {e}")
+                    sys.exit(0)
+            
+            loop.call_soon_threadsafe(create_shutdown_task)
+        else:
+            # 主循环未就绪或已关闭，直接退出
+            sys.exit(0)
 
     # 设置信号处理器
     setup_signal_handler(signal.SIGTRAP, signal.SIG_IGN, "SIGTRAP")
     setup_signal_handler(signal.SIGINT, handle_sigint, "SIGINT")
 
 else:
-    print("非 macOS 系统，跳过信号处理器设置")
+    logger.debug("非 macOS 系统，跳过信号处理器设置")
 
 setup_opus()
-
-logger = get_logger(__name__)
 
 try:
     import opuslib  # noqa: F401
@@ -205,19 +217,19 @@ class Application:
             maxsize = 256
         self.command_queue = asyncio.Queue(maxsize=maxsize)
         self._shutdown_event = asyncio.Event()
-        
+
         # 初始化异步锁
         self._state_lock = asyncio.Lock()
         self._abort_lock = asyncio.Lock()
-        
+
         # 初始化中止事件
         self.aborted_event = asyncio.Event()
         self.aborted_event.clear()
-        
+
         # 初始化信号量
         self._audio_write_semaphore = asyncio.Semaphore(self._audio_write_cc)
         self._send_audio_semaphore = asyncio.Semaphore(self._send_audio_cc)
-        
+
         # 初始化音频静默事件（默认置为已静默，避免无谓等待）
         self._incoming_audio_idle_event = asyncio.Event()
         self._incoming_audio_idle_event.set()
@@ -445,7 +457,8 @@ class Application:
         logger.debug("设置显示界面类型: %s", mode)
 
         if mode == "gui":
-            self.display = gui_display.GuiDisplay()
+            from src.display.gui_display import GuiDisplay
+            self.display = GuiDisplay()
             self._setup_gui_callbacks()
         else:
             from src.display.cli_display import CliDisplay
@@ -623,16 +636,13 @@ class Application:
         启动GUI显示.
         """
         # 在qasync环境中，GUI可以直接在主线程启动
-        try:
-            await self.display.start()
-        except Exception as e:
-            logger.error(f"GUI显示错误: {e}", exc_info=True)
+        await self.display.start()
 
     async def _start_cli_display(self):
         """
         启动CLI显示.
         """
-        self._create_task(self.display.start(), "CLI显示")
+        await self.display.start()
 
     async def schedule_command(self, command):
         """

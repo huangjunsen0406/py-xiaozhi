@@ -1,0 +1,204 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>AudioWidget</class>
+ <widget class="QWidget" name="AudioWidget">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>580</width>
+    <height>500</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>音频设备</string>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayout">
+   <item>
+    <widget class="QScrollArea" name="scrollArea">
+     <property name="widgetResizable">
+      <bool>true</bool>
+     </property>
+     <widget class="QWidget" name="scrollAreaWidgetContents">
+      <property name="geometry">
+       <rect>
+        <x>0</x>
+        <y>0</y>
+        <width>578</width>
+        <height>480</height>
+       </rect>
+      </property>
+      <layout class="QVBoxLayout" name="contentLayout">
+       <item>
+        <widget class="QGroupBox" name="input_device_group">
+         <property name="title">
+          <string>音频输入设备 (麦克风)</string>
+         </property>
+         <layout class="QFormLayout" name="input_layout">
+          <item row="0" column="0">
+           <widget class="QLabel" name="label_input_device">
+            <property name="text">
+             <string>输入设备:</string>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="1">
+           <layout class="QHBoxLayout" name="input_device_layout">
+            <item>
+             <widget class="QComboBox" name="input_device_combo">
+              <property name="placeholderText">
+               <string>请选择麦克风设备...</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="test_input_btn">
+              <property name="text">
+               <string>测试录音</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+          <item row="1" column="0">
+           <widget class="QLabel" name="label_input_info">
+            <property name="text">
+             <string>设备信息:</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="1">
+           <widget class="QLabel" name="input_info_label">
+            <property name="text">
+             <string>未选择设备</string>
+            </property>
+            <property name="styleSheet">
+             <string>color: #666;</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QGroupBox" name="output_device_group">
+         <property name="title">
+          <string>音频输出设备 (扬声器)</string>
+         </property>
+         <layout class="QFormLayout" name="output_layout">
+          <item row="0" column="0">
+           <widget class="QLabel" name="label_output_device">
+            <property name="text">
+             <string>输出设备:</string>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="1">
+           <layout class="QHBoxLayout" name="output_device_layout">
+            <item>
+             <widget class="QComboBox" name="output_device_combo">
+              <property name="placeholderText">
+               <string>请选择扬声器设备...</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="test_output_btn">
+              <property name="text">
+               <string>测试播放</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+          <item row="1" column="0">
+           <widget class="QLabel" name="label_output_info">
+            <property name="text">
+             <string>设备信息:</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="1">
+           <widget class="QLabel" name="output_info_label">
+            <property name="text">
+             <string>未选择设备</string>
+            </property>
+            <property name="styleSheet">
+             <string>color: #666;</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <layout class="QHBoxLayout" name="scan_layout">
+         <item>
+          <widget class="QPushButton" name="scan_devices_btn">
+           <property name="text">
+            <string>扫描设备</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <spacer name="scan_spacer">
+           <property name="orientation">
+            <enum>Qt::Horizontal</enum>
+           </property>
+           <property name="sizeHint" stdset="0">
+            <size>
+             <width>40</width>
+             <height>20</height>
+            </size>
+           </property>
+          </spacer>
+         </item>
+        </layout>
+       </item>
+       <item>
+        <widget class="QGroupBox" name="status_group">
+         <property name="title">
+          <string>设备信息</string>
+         </property>
+         <layout class="QVBoxLayout" name="status_layout">
+          <item>
+           <widget class="QTextEdit" name="status_text">
+            <property name="maximumSize">
+             <size>
+              <width>16777215</width>
+              <height>120</height>
+             </size>
+            </property>
+            <property name="readOnly">
+             <bool>true</bool>
+            </property>
+            <property name="placeholderText">
+             <string>设备信息和测试状态将显示在这里...</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <spacer name="verticalSpacer">
+         <property name="orientation">
+          <enum>Qt::Vertical</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>20</width>
+           <height>40</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+      </layout>
+     </widget>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

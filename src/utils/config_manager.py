@@ -65,6 +65,14 @@ class ConfigManager:
             "FILTER_LENGTH_RATIO": 0.4,
             "ENABLE_PREPROCESS": True,
         },
+        "AUDIO_DEVICES": {
+            "input_device_id": None,
+            "input_device_name": None,
+            "output_device_id": None,
+            "output_device_name": None,
+            "input_sample_rate": None,
+            "output_sample_rate": None
+        }
     }
 
     def __new__(cls):

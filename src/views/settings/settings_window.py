@@ -1,22 +1,20 @@
 from pathlib import Path
+import os
 
 from PyQt5.QtWidgets import (
-    QCheckBox,
-    QComboBox,
     QDialog,
-    QFileDialog,
-    QLineEdit,
     QMessageBox,
     QPushButton,
-    QSpinBox,
     QTabWidget,
-    QTextEdit,
 )
 
 from src.utils.config_manager import ConfigManager
 from src.utils.logging_config import get_logger
-from src.utils.resource_finder import get_project_root, resource_finder
 from src.views.settings.components.shortcuts_settings import ShortcutsSettingsWidget
+from src.views.settings.components.system_options import SystemOptionsWidget
+from src.views.settings.components.wake_word import WakeWordWidget
+from src.views.settings.components.camera import CameraWidget
+from src.views.settings.components.audio import AudioWidget
 
 
 class SettingsWindow(QDialog):
@@ -29,16 +27,19 @@ class SettingsWindow(QDialog):
         self.logger = get_logger(__name__)
         self.config_manager = ConfigManager.get_instance()
 
+        # 组件引用
+        self.system_options_tab = None
+        self.wake_word_tab = None
+        self.camera_tab = None
+        self.audio_tab = None
+        self.shortcuts_tab = None
+        
         # UI控件
         self.ui_controls = {}
-
-        # 快捷键设置组件
-        self.shortcuts_tab = None
 
         # 初始化UI
         self._setup_ui()
         self._connect_events()
-        self._load_config_values()
 
     def _setup_ui(self):
         """
@@ -50,19 +51,19 @@ class SettingsWindow(QDialog):
             ui_path = Path(__file__).parent / "settings_window.ui"
             uic.loadUi(str(ui_path), self)
 
-            # 获取所有UI控件的引用
+            # 获取UI控件的引用
             self._get_ui_controls()
 
-            # 添加快捷键设置选项卡
-            self._add_shortcuts_tab()
+            # 添加各个组件选项卡
+            self._add_component_tabs()
 
         except Exception as e:
             self.logger.error(f"设置UI失败: {e}", exc_info=True)
             raise
 
-    def _add_shortcuts_tab(self):
+    def _add_component_tabs(self):
         """
-        添加快捷键设置选项卡.
+        添加各个组件选项卡.
         """
         try:
             # 获取TabWidget
@@ -71,19 +72,38 @@ class SettingsWindow(QDialog):
                 self.logger.error("未找到TabWidget控件")
                 return
 
-            # 创建快捷键设置组件
+            # 清空现有选项卡（如果有的话）
+            tab_widget.clear()
+
+            # 创建并添加系统选项组件
+            self.system_options_tab = SystemOptionsWidget()
+            tab_widget.addTab(self.system_options_tab, "系统选项")
+            self.system_options_tab.settings_changed.connect(self._on_settings_changed)
+
+            # 创建并添加唤醒词组件
+            self.wake_word_tab = WakeWordWidget()
+            tab_widget.addTab(self.wake_word_tab, "唤醒词")
+            self.wake_word_tab.settings_changed.connect(self._on_settings_changed)
+
+            # 创建并添加摄像头组件
+            self.camera_tab = CameraWidget()
+            tab_widget.addTab(self.camera_tab, "摄像头")
+            self.camera_tab.settings_changed.connect(self._on_settings_changed)
+
+            # 创建并添加音频设备组件
+            self.audio_tab = AudioWidget()
+            tab_widget.addTab(self.audio_tab, "音频设备")
+            self.audio_tab.settings_changed.connect(self._on_settings_changed)
+
+            # 创建并添加快捷键设置组件
             self.shortcuts_tab = ShortcutsSettingsWidget()
-
-            # 添加到选项卡
             tab_widget.addTab(self.shortcuts_tab, "快捷键")
-
-            # 连接信号
             self.shortcuts_tab.settings_changed.connect(self._on_settings_changed)
 
-            self.logger.debug("成功添加快捷键设置选项卡")
+            self.logger.debug("成功添加所有组件选项卡")
 
         except Exception as e:
-            self.logger.error(f"添加快捷键设置选项卡失败: {e}", exc_info=True)
+            self.logger.error(f"添加组件选项卡失败: {e}", exc_info=True)
 
     def _on_settings_changed(self):
         """
@@ -95,72 +115,12 @@ class SettingsWindow(QDialog):
         """
         获取UI控件引用.
         """
-        # 系统选项控件
-        self.ui_controls.update(
-            {
-                "client_id_edit": self.findChild(QLineEdit, "client_id_edit"),
-                "device_id_edit": self.findChild(QLineEdit, "device_id_edit"),
-                "ota_url_edit": self.findChild(QLineEdit, "ota_url_edit"),
-                "websocket_url_edit": self.findChild(QLineEdit, "websocket_url_edit"),
-                "websocket_token_edit": self.findChild(
-                    QLineEdit, "websocket_token_edit"
-                ),
-                "authorization_url_edit": self.findChild(
-                    QLineEdit, "authorization_url_edit"
-                ),
-                "activation_version_combo": self.findChild(
-                    QComboBox, "activation_version_combo"
-                ),
-            }
-        )
-
-        # MQTT配置控件
-        self.ui_controls.update(
-            {
-                "mqtt_endpoint_edit": self.findChild(QLineEdit, "mqtt_endpoint_edit"),
-                "mqtt_client_id_edit": self.findChild(QLineEdit, "mqtt_client_id_edit"),
-                "mqtt_username_edit": self.findChild(QLineEdit, "mqtt_username_edit"),
-                "mqtt_password_edit": self.findChild(QLineEdit, "mqtt_password_edit"),
-                "mqtt_publish_topic_edit": self.findChild(
-                    QLineEdit, "mqtt_publish_topic_edit"
-                ),
-                "mqtt_subscribe_topic_edit": self.findChild(
-                    QLineEdit, "mqtt_subscribe_topic_edit"
-                ),
-            }
-        )
-
-        # 唤醒词配置控件
-        self.ui_controls.update(
-            {
-                "use_wake_word_check": self.findChild(QCheckBox, "use_wake_word_check"),
-                "model_path_edit": self.findChild(QLineEdit, "model_path_edit"),
-                "model_path_btn": self.findChild(QPushButton, "model_path_btn"),
-                "wake_words_edit": self.findChild(QTextEdit, "wake_words_edit"),
-            }
-        )
-
-        # 摄像头配置控件
-        self.ui_controls.update(
-            {
-                "camera_index_spin": self.findChild(QSpinBox, "camera_index_spin"),
-                "frame_width_spin": self.findChild(QSpinBox, "frame_width_spin"),
-                "frame_height_spin": self.findChild(QSpinBox, "frame_height_spin"),
-                "fps_spin": self.findChild(QSpinBox, "fps_spin"),
-                "local_vl_url_edit": self.findChild(QLineEdit, "local_vl_url_edit"),
-                "vl_api_key_edit": self.findChild(QLineEdit, "vl_api_key_edit"),
-                "models_edit": self.findChild(QLineEdit, "models_edit"),
-            }
-        )
-
-        # 按钮控件
-        self.ui_controls.update(
-            {
-                "save_btn": self.findChild(QPushButton, "save_btn"),
-                "cancel_btn": self.findChild(QPushButton, "cancel_btn"),
-                "reset_btn": self.findChild(QPushButton, "reset_btn"),
-            }
-        )
+        # 只需要获取主要的按钮控件
+        self.ui_controls.update({
+            "save_btn": self.findChild(QPushButton, "save_btn"),
+            "cancel_btn": self.findChild(QPushButton, "cancel_btn"),
+            "reset_btn": self.findChild(QPushButton, "reset_btn"),
+        })
 
     def _connect_events(self):
         """
@@ -175,146 +135,9 @@ class SettingsWindow(QDialog):
         if self.ui_controls["reset_btn"]:
             self.ui_controls["reset_btn"].clicked.connect(self._on_reset_clicked)
 
-        if self.ui_controls["model_path_btn"]:
-            self.ui_controls["model_path_btn"].clicked.connect(
-                self._on_model_path_browse
-            )
+    # 配置加载现在由各个组件自行处理，不需要在主窗口中处理
 
-    def _load_config_values(self):
-        """
-        从配置文件加载值到UI控件.
-        """
-        try:
-            # 系统选项
-            client_id = self.config_manager.get_config("SYSTEM_OPTIONS.CLIENT_ID", "")
-            self._set_text_value("client_id_edit", client_id)
-
-            device_id = self.config_manager.get_config("SYSTEM_OPTIONS.DEVICE_ID", "")
-            self._set_text_value("device_id_edit", device_id)
-
-            ota_url = self.config_manager.get_config(
-                "SYSTEM_OPTIONS.NETWORK.OTA_VERSION_URL", ""
-            )
-            self._set_text_value("ota_url_edit", ota_url)
-
-            websocket_url = self.config_manager.get_config(
-                "SYSTEM_OPTIONS.NETWORK.WEBSOCKET_URL", ""
-            )
-            self._set_text_value("websocket_url_edit", websocket_url)
-
-            websocket_token = self.config_manager.get_config(
-                "SYSTEM_OPTIONS.NETWORK.WEBSOCKET_ACCESS_TOKEN", ""
-            )
-            self._set_text_value("websocket_token_edit", websocket_token)
-
-            auth_url = self.config_manager.get_config(
-                "SYSTEM_OPTIONS.NETWORK.AUTHORIZATION_URL", ""
-            )
-            self._set_text_value("authorization_url_edit", auth_url)
-
-            # 激活版本
-            activation_version = self.config_manager.get_config(
-                "SYSTEM_OPTIONS.NETWORK.ACTIVATION_VERSION", "v1"
-            )
-            if self.ui_controls["activation_version_combo"]:
-                combo = self.ui_controls["activation_version_combo"]
-                combo.setCurrentText(activation_version)
-
-            # MQTT配置
-            mqtt_info = self.config_manager.get_config(
-                "SYSTEM_OPTIONS.NETWORK.MQTT_INFO", {}
-            )
-            if mqtt_info:
-                self._set_text_value(
-                    "mqtt_endpoint_edit", mqtt_info.get("endpoint", "")
-                )
-                self._set_text_value(
-                    "mqtt_client_id_edit", mqtt_info.get("client_id", "")
-                )
-                self._set_text_value(
-                    "mqtt_username_edit", mqtt_info.get("username", "")
-                )
-                self._set_text_value(
-                    "mqtt_password_edit", mqtt_info.get("password", "")
-                )
-                self._set_text_value(
-                    "mqtt_publish_topic_edit", mqtt_info.get("publish_topic", "")
-                )
-                self._set_text_value(
-                    "mqtt_subscribe_topic_edit", mqtt_info.get("subscribe_topic", "")
-                )
-
-            # 唤醒词配置
-            use_wake_word = self.config_manager.get_config(
-                "WAKE_WORD_OPTIONS.USE_WAKE_WORD", False
-            )
-            if self.ui_controls["use_wake_word_check"]:
-                self.ui_controls["use_wake_word_check"].setChecked(use_wake_word)
-
-            self._set_text_value(
-                "model_path_edit",
-                self.config_manager.get_config("WAKE_WORD_OPTIONS.MODEL_PATH", ""),
-            )
-
-            # 从 keywords.txt 文件读取唤醒词
-            wake_words_text = self._load_keywords_from_file()
-            if self.ui_controls["wake_words_edit"]:
-                self.ui_controls["wake_words_edit"].setPlainText(wake_words_text)
-
-            # 摄像头配置
-            camera_config = self.config_manager.get_config("CAMERA", {})
-            self._set_spin_value(
-                "camera_index_spin", camera_config.get("camera_index", 0)
-            )
-            self._set_spin_value(
-                "frame_width_spin", camera_config.get("frame_width", 640)
-            )
-            self._set_spin_value(
-                "frame_height_spin", camera_config.get("frame_height", 480)
-            )
-            self._set_spin_value("fps_spin", camera_config.get("fps", 30))
-            self._set_text_value(
-                "local_vl_url_edit", camera_config.get("Local_VL_url", "")
-            )
-            self._set_text_value("vl_api_key_edit", camera_config.get("VLapi_key", ""))
-            self._set_text_value("models_edit", camera_config.get("models", ""))
-
-        except Exception as e:
-            self.logger.error(f"加载配置值失败: {e}", exc_info=True)
-
-    def _set_text_value(self, control_name: str, value: str):
-        """
-        设置文本控件的值.
-        """
-        control = self.ui_controls.get(control_name)
-        if control and hasattr(control, "setText"):
-            control.setText(str(value) if value is not None else "")
-
-    def _set_spin_value(self, control_name: str, value: int):
-        """
-        设置数字控件的值.
-        """
-        control = self.ui_controls.get(control_name)
-        if control and hasattr(control, "setValue"):
-            control.setValue(int(value) if value is not None else 0)
-
-    def _get_text_value(self, control_name: str) -> str:
-        """
-        获取文本控件的值.
-        """
-        control = self.ui_controls.get(control_name)
-        if control and hasattr(control, "text"):
-            return control.text().strip()
-        return ""
-
-    def _get_spin_value(self, control_name: str) -> int:
-        """
-        获取数字控件的值.
-        """
-        control = self.ui_controls.get(control_name)
-        if control and hasattr(control, "value"):
-            return control.value()
-        return 0
+    # 移除了不再需要的控件操作方法，现在由各个组件处理
 
     def _on_save_clicked(self):
         """
@@ -350,123 +173,43 @@ class SettingsWindow(QDialog):
         保存所有配置.
         """
         try:
-            # 系统选项 - 网络配置
-            ota_url = self._get_text_value("ota_url_edit")
-            if ota_url:
-                self.config_manager.update_config(
-                    "SYSTEM_OPTIONS.NETWORK.OTA_VERSION_URL", ota_url
-                )
-
-            websocket_url = self._get_text_value("websocket_url_edit")
-            if websocket_url:
-                self.config_manager.update_config(
-                    "SYSTEM_OPTIONS.NETWORK.WEBSOCKET_URL", websocket_url
-                )
-
-            websocket_token = self._get_text_value("websocket_token_edit")
-            if websocket_token:
-                self.config_manager.update_config(
-                    "SYSTEM_OPTIONS.NETWORK.WEBSOCKET_ACCESS_TOKEN", websocket_token
-                )
-
-            authorization_url = self._get_text_value("authorization_url_edit")
-            if authorization_url:
-                self.config_manager.update_config(
-                    "SYSTEM_OPTIONS.NETWORK.AUTHORIZATION_URL", authorization_url
-                )
-
-            # 激活版本
-            if self.ui_controls["activation_version_combo"]:
-                activation_version = self.ui_controls[
-                    "activation_version_combo"
-                ].currentText()
-                self.config_manager.update_config(
-                    "SYSTEM_OPTIONS.NETWORK.ACTIVATION_VERSION", activation_version
-                )
-
-            # MQTT配置
-            mqtt_config = {}
-            mqtt_endpoint = self._get_text_value("mqtt_endpoint_edit")
-            if mqtt_endpoint:
-                mqtt_config["endpoint"] = mqtt_endpoint
-
-            mqtt_client_id = self._get_text_value("mqtt_client_id_edit")
-            if mqtt_client_id:
-                mqtt_config["client_id"] = mqtt_client_id
-
-            mqtt_username = self._get_text_value("mqtt_username_edit")
-            if mqtt_username:
-                mqtt_config["username"] = mqtt_username
-
-            mqtt_password = self._get_text_value("mqtt_password_edit")
-            if mqtt_password:
-                mqtt_config["password"] = mqtt_password
-
-            mqtt_publish_topic = self._get_text_value("mqtt_publish_topic_edit")
-            if mqtt_publish_topic:
-                mqtt_config["publish_topic"] = mqtt_publish_topic
-
-            mqtt_subscribe_topic = self._get_text_value("mqtt_subscribe_topic_edit")
-            if mqtt_subscribe_topic:
-                mqtt_config["subscribe_topic"] = mqtt_subscribe_topic
-
-            if mqtt_config:
-                # 获取现有的MQTT配置并更新
-                existing_mqtt = self.config_manager.get_config(
-                    "SYSTEM_OPTIONS.NETWORK.MQTT_INFO", {}
-                )
-                existing_mqtt.update(mqtt_config)
-                self.config_manager.update_config(
-                    "SYSTEM_OPTIONS.NETWORK.MQTT_INFO", existing_mqtt
-                )
-
+            # 从各个组件收集配置数据
+            all_config_data = {}
+            
+            # 系统选项配置
+            if self.system_options_tab:
+                system_config = self.system_options_tab.get_config_data()
+                all_config_data.update(system_config)
+            
             # 唤醒词配置
-            if self.ui_controls["use_wake_word_check"]:
-                use_wake_word = self.ui_controls["use_wake_word_check"].isChecked()
-                self.config_manager.update_config(
-                    "WAKE_WORD_OPTIONS.USE_WAKE_WORD", use_wake_word
-                )
-
-            model_path = self._get_text_value("model_path_edit")
-            if model_path:
-                self.config_manager.update_config(
-                    "WAKE_WORD_OPTIONS.MODEL_PATH", model_path
-                )
-
-            # 保存唤醒词到 keywords.txt 文件
-            if self.ui_controls["wake_words_edit"]:
-                wake_words_text = (
-                    self.ui_controls["wake_words_edit"].toPlainText().strip()
-                )
-                self._save_keywords_to_file(wake_words_text)
-
+            if self.wake_word_tab:
+                wake_word_config = self.wake_word_tab.get_config_data()
+                all_config_data.update(wake_word_config)
+                # 保存唤醒词文件
+                self.wake_word_tab.save_keywords()
+            
             # 摄像头配置
-            camera_config = {}
-            camera_config["camera_index"] = self._get_spin_value("camera_index_spin")
-            camera_config["frame_width"] = self._get_spin_value("frame_width_spin")
-            camera_config["frame_height"] = self._get_spin_value("frame_height_spin")
-            camera_config["fps"] = self._get_spin_value("fps_spin")
-
-            local_vl_url = self._get_text_value("local_vl_url_edit")
-            if local_vl_url:
-                camera_config["Local_VL_url"] = local_vl_url
-
-            vl_api_key = self._get_text_value("vl_api_key_edit")
-            if vl_api_key:
-                camera_config["VLapi_key"] = vl_api_key
-
-            models = self._get_text_value("models_edit")
-            if models:
-                camera_config["models"] = models
-
-            # 获取现有的摄像头配置并更新
-            existing_camera = self.config_manager.get_config("CAMERA", {})
-            existing_camera.update(camera_config)
-            self.config_manager.update_config("CAMERA", existing_camera)
-
+            if self.camera_tab:
+                camera_config = self.camera_tab.get_config_data()
+                all_config_data.update(camera_config)
+            
+            # 音频设备配置
+            if self.audio_tab:
+                audio_config = self.audio_tab.get_config_data()
+                all_config_data.update(audio_config)
+            
+            # 快捷键配置
+            if self.shortcuts_tab:
+                # 快捷键组件有自己的保存方法
+                self.shortcuts_tab.apply_settings()
+            
+            # 批量更新配置
+            for config_path, value in all_config_data.items():
+                self.config_manager.update_config(config_path, value)
+            
             self.logger.info("配置保存成功")
             return True
-
+        
         except Exception as e:
             self.logger.error(f"保存配置时出错: {e}", exc_info=True)
             return False
@@ -491,91 +234,27 @@ class SettingsWindow(QDialog):
         重置为默认值.
         """
         try:
-            # 获取默认配置
-            default_config = ConfigManager.DEFAULT_CONFIG
-
-            # 系统选项
-            self._set_text_value(
-                "ota_url_edit",
-                default_config["SYSTEM_OPTIONS"]["NETWORK"]["OTA_VERSION_URL"],
-            )
-            self._set_text_value("websocket_url_edit", "")
-            self._set_text_value("websocket_token_edit", "")
-            self._set_text_value(
-                "authorization_url_edit",
-                default_config["SYSTEM_OPTIONS"]["NETWORK"]["AUTHORIZATION_URL"],
-            )
-
-            if self.ui_controls["activation_version_combo"]:
-                self.ui_controls["activation_version_combo"].setCurrentText(
-                    default_config["SYSTEM_OPTIONS"]["NETWORK"]["ACTIVATION_VERSION"]
-                )
-
-            # 清空MQTT配置
-            self._set_text_value("mqtt_endpoint_edit", "")
-            self._set_text_value("mqtt_client_id_edit", "")
-            self._set_text_value("mqtt_username_edit", "")
-            self._set_text_value("mqtt_password_edit", "")
-            self._set_text_value("mqtt_publish_topic_edit", "")
-            self._set_text_value("mqtt_subscribe_topic_edit", "")
-
-            # 唤醒词配置
-            wake_word_config = default_config["WAKE_WORD_OPTIONS"]
-            if self.ui_controls["use_wake_word_check"]:
-                self.ui_controls["use_wake_word_check"].setChecked(
-                    wake_word_config["USE_WAKE_WORD"]
-                )
-
-            self._set_text_value("model_path_edit", wake_word_config["MODEL_PATH"])
-
-            if self.ui_controls["wake_words_edit"]:
-                # 使用默认的关键词重置
-                default_keywords = self._get_default_keywords()
-                self.ui_controls["wake_words_edit"].setPlainText(default_keywords)
-
-            # 摄像头配置
-            camera_config = default_config["CAMERA"]
-            self._set_spin_value("camera_index_spin", camera_config["camera_index"])
-            self._set_spin_value("frame_width_spin", camera_config["frame_width"])
-            self._set_spin_value("frame_height_spin", camera_config["frame_height"])
-            self._set_spin_value("fps_spin", camera_config["fps"])
-            self._set_text_value("local_vl_url_edit", camera_config["Local_VL_url"])
-            self._set_text_value("vl_api_key_edit", camera_config["VLapi_key"])
-            self._set_text_value("models_edit", camera_config["models"])
-
-            self.logger.info("配置已重置为默认值")
-
+            # 让各个组件重置为默认值
+            if self.system_options_tab:
+                self.system_options_tab.reset_to_defaults()
+            
+            if self.wake_word_tab:
+                self.wake_word_tab.reset_to_defaults()
+            
+            if self.camera_tab:
+                self.camera_tab.reset_to_defaults()
+            
+            if self.audio_tab:
+                self.audio_tab.reset_to_defaults()
+            
+            if self.shortcuts_tab:
+                self.shortcuts_tab.reset_to_defaults()
+            
+            self.logger.info("所有组件配置已重置为默认值")
+        
         except Exception as e:
             self.logger.error(f"重置配置失败: {e}", exc_info=True)
             QMessageBox.critical(self, "错误", f"重置配置时发生错误: {str(e)}")
-
-    def _on_model_path_browse(self):
-        """
-        浏览模型路径.
-        """
-        try:
-            current_path = self._get_text_value("model_path_edit")
-            if not current_path:
-                # 使用resource_finder查找默认models目录
-                models_dir = resource_finder.find_models_dir()
-                if models_dir:
-                    current_path = str(models_dir)
-                else:
-                    # 如果找不到，使用项目根目录下的models
-                    project_root = resource_finder.get_project_root()
-                    current_path = str(project_root / "models")
-
-            selected_path = QFileDialog.getExistingDirectory(
-                self, "选择模型目录", current_path
-            )
-
-            if selected_path:
-                self._set_text_value("model_path_edit", selected_path)
-                self.logger.info(f"已选择模型路径: {selected_path}")
-
-        except Exception as e:
-            self.logger.error(f"浏览模型路径失败: {e}", exc_info=True)
-            QMessageBox.warning(self, "错误", f"浏览模型路径时发生错误: {str(e)}")
 
     def _restart_application(self):
         """
@@ -601,8 +280,8 @@ class SettingsWindow(QDialog):
         直接重启程序.
         """
         try:
-            import os
             import sys
+            from PyQt5.QtWidgets import QApplication
 
             # 获取当前执行的程序路径和参数
             python = sys.executable
@@ -612,8 +291,6 @@ class SettingsWindow(QDialog):
             self.logger.info(f"重启命令: {python} {script} {' '.join(args)}")
 
             # 关闭当前应用
-            from PyQt5.QtWidgets import QApplication
-
             QApplication.quit()
 
             # 启动新实例
@@ -626,90 +303,6 @@ class SettingsWindow(QDialog):
 
         except Exception as e:
             self.logger.error(f"直接重启失败: {e}", exc_info=True)
-
-    def _load_keywords_from_file(self) -> str:
-        """
-        从 keywords.txt 文件加载唤醒词，按完整格式显示.
-        """
-        try:
-            keywords_file = get_project_root() / "models" / "keywords.txt"
-            if not keywords_file.exists():
-                self.logger.warning(f"关键词文件不存在: {keywords_file}")
-                return ""
-
-            keywords = []
-            with open(keywords_file, "r", encoding="utf-8") as f:
-                for line in f:
-                    line = line.strip()
-                    if line and "@" in line and not line.startswith("#"):
-                        # 保持完整格式: 拼音 @中文
-                        keywords.append(line)
-
-            return "\n".join(keywords)
-
-        except Exception as e:
-            self.logger.error(f"读取关键词文件失败: {e}")
-            return ""
-
-    def _save_keywords_to_file(self, keywords_text: str):
-        """
-        保存唤醒词到 keywords.txt 文件，支持完整格式.
-        """
-        try:
-            keywords_file = get_project_root() / "models" / "keywords.txt"
-
-            # 处理输入的关键词文本
-            lines = [line.strip() for line in keywords_text.split("\n") if line.strip()]
-
-            processed_lines = []
-            has_invalid_lines = False
-
-            for line in lines:
-                if "@" in line:
-                    # 完整格式：拼音 @中文
-                    processed_lines.append(line)
-                else:
-                    # 只有中文，没有拼音 - 标记为无效
-                    processed_lines.append(f"# 无效：缺少拼音格式 - {line}")
-                    has_invalid_lines = True
-                    self.logger.warning(
-                        f"关键词 '{line}' 缺少拼音，需要格式：拼音 @中文"
-                    )
-
-            # 写入文件
-            with open(keywords_file, "w", encoding="utf-8") as f:
-                f.write("\n".join(processed_lines) + "\n")
-
-            self.logger.info(f"成功保存关键词到 {keywords_file}")
-
-            # 如果有无效格式，提示用户
-            if has_invalid_lines:
-                QMessageBox.warning(
-                    self,
-                    "格式错误",
-                    "检测到无效的关键词格式！\n\n"
-                    "正确格式：拼音 @中文\n"
-                    "示例：x iǎo ài t óng x ué @小爱同学\n\n"
-                    "无效的行已被注释，请手动修正后重新保存。",
-                )
-
-        except Exception as e:
-            self.logger.error(f"保存关键词文件失败: {e}")
-            QMessageBox.warning(self, "错误", f"保存关键词失败: {str(e)}")
-
-    def _get_default_keywords(self) -> str:
-        """
-        获取默认关键词列表，完整格式.
-        """
-        default_keywords = [
-            "x iǎo ài t óng x ué @小爱同学",
-            "n ǐ h ǎo w èn w èn @你好问问",
-            "x iǎo y ì x iǎo y ì @小艺小艺",
-            "x iǎo m ǐ x iǎo m ǐ @小米小米",
-            "n ǐ h ǎo x iǎo zh ì @你好小智",
-            "j iā w éi s ī @贾维斯",
-        ]
-        return "\n".join(default_keywords)
 
     def closeEvent(self, event):
         """
