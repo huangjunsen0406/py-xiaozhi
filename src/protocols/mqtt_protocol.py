@@ -313,7 +313,7 @@ class MqttProtocol(Protocol):
                 "transport": "udp",
                 "audio_params": {
                     "format": "opus",
-                    "sample_rate": AudioConfig.INPUT_SAMPLE_RATE,
+                    "sample_rate": AudioConfig.OUTPUT_SAMPLE_RATE,
                     "channels": AudioConfig.CHANNELS,
                     "frame_duration": AudioConfig.FRAME_DURATION,
                 },
