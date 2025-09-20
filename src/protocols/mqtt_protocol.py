@@ -112,7 +112,6 @@ class MqttProtocol(Protocol):
             self.password = mqtt_config.get("password")
             self.publish_topic = mqtt_config.get("publish_topic")
             self.subscribe_topic = mqtt_config.get("subscribe_topic")
-
             logger.info(f"已从OTA服务器获取MQTT配置: {self.endpoint}")
         except Exception as e:
             logger.warning(f"从OTA服务器获取MQTT配置失败: {e}")
@@ -157,7 +156,7 @@ class MqttProtocol(Protocol):
             return False
 
         # 创建新的MQTT客户端
-        self.mqtt_client = mqtt.Client(client_id=self.client_id)
+        self.mqtt_client = mqtt.Client(client_id=self.client_id,callback_api_version=mqtt.CallbackAPIVersion.VERSION2)
         self.mqtt_client.username_pw_set(self.username, self.password)
 
         # 根据端口决定是否配置TLS加密连接
@@ -203,7 +202,7 @@ class MqttProtocol(Protocol):
             except Exception as e:
                 logger.error(f"处理MQTT消息时出错: {e}")
 
-        def on_disconnect_callback(client, userdata, rc):
+        def on_disconnect_callback(client, userdata, flags, rc, properties=None):
             """MQTT断开连接回调.
 
             Args:
@@ -265,13 +264,13 @@ class MqttProtocol(Protocol):
             except Exception as e:
                 logger.error(f"处理MQTT断开连接失败: {e}")
 
-        def on_publish_callback(client, userdata, mid):
+        def on_publish_callback(client, userdata, mid, reason_code=None, properties=None):
             """
             MQTT消息发布回调.
             """
             self._last_activity_time = time.time()  # 更新活动时间
 
-        def on_subscribe_callback(client, userdata, mid, granted_qos):
+        def on_subscribe_callback(client, userdata, mid, granted_qos, properties=None):
             """
             MQTT订阅回调.
             """
