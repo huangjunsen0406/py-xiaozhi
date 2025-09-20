@@ -88,7 +88,7 @@ class AudioCodec:
             if "WASAPI" in name:
                 key = "default_input_device" if kind == "input" else "default_output_device"
                 cand = ha.get(key, -1)
-                if isinstance(cand, int) and cand >= 0:
+                if isinstance(cand, int) and 0 <= cand < len(devices):
                     d = devices[cand]
                     if (kind == "input" and d["max_input_channels"] > 0) or (
                         kind == "output" and d["max_output_channels"] > 0
