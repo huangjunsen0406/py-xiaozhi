@@ -55,6 +55,21 @@ class SystemTray(QObject):
             self.tray_icon = QSystemTrayIcon()
             self.tray_icon.setContextMenu(self.tray_menu)
 
+            # 在显示前设置一个占位图标，避免 QSystemTrayIcon::setVisible: No Icon set 警告
+            try:
+                # 使用一个纯色圆点作为初始占位
+                pixmap = QPixmap(16, 16)
+                pixmap.fill(QColor(0, 0, 0, 0))
+                painter = QPainter(pixmap)
+                painter.setRenderHint(QPainter.Antialiasing)
+                painter.setBrush(QBrush(QColor(0, 180, 0)))
+                painter.setPen(QColor(0, 0, 0, 0))
+                painter.drawEllipse(2, 2, 12, 12)
+                painter.end()
+                self.tray_icon.setIcon(QIcon(pixmap))
+            except Exception:
+                pass
+
             # 连接托盘图标的事件
             self.tray_icon.activated.connect(self._on_tray_activated)
 
