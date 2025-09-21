@@ -1,35 +1,39 @@
-comtypes==1.4.6
+# Windows-only
+comtypes==1.4.6; sys_platform == "win32"
+pycaw==20240210; sys_platform == "win32"
+
+# 二进制/系统库敏感
 cryptography==44.0.1
 numpy==1.26.4
+sounddevice>=0.4.4
+pygame==2.6.1
+PyQt5==5.15.11
+opencv-python-headless==4.11.0.86
+soxr==0.5.0.post1
+psutil==7.0.0
+pillow==11.3.0
+webrtcvad-wheels==2.0.14
+sherpa-onnx==1.12.8
+pendulum==3.1.0
+
+# 纯 Python 为主
 openai==1.86.0
 opuslib==3.0.1
 paho-mqtt==2.1.0
-psutil==7.0.0
-sounddevice>=0.4.4
-pycaw==20240210
 pynput==1.8.1
 pyperclip==1.9.0
 pypinyin==0.53.0
-requests==2.32.3
 aiohttp==3.12.13
-webrtcvad-wheels==2.0.14
 websockets==11.0.3
 colorlog==6.9.0
-pygame==2.6.1
 qasync==0.27.1
 py-machineid==0.8.0
-soxr==0.5.0.post1
 mutagen==1.47.0
 beautifulsoup4==4.12.3
 brotli==1.1.0
 python-dateutil==2.9.0.post0
-PyQt5==5.15.11
-opencv-python-headless==4.11.0.86
-pendulum==3.1.0
 lunar_python==1.4.4
-sherpa-onnx==1.12.8
 pyinstaller==6.15.0
 rich==14.1.0
-requests==2.32.3
 packaging==25.0
-pillow==11.3.0
+requests==2.32.3
