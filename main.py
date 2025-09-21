@@ -89,7 +89,6 @@ if __name__ == "__main__":
         if args.mode == "gui":
             # 在GUI模式下，由main统一创建 QApplication 与 qasync 事件循环
             try:
-                # 在导入Qt之前，根据平台设置软件渲染兜底，规避QQuickWidget在部分Linux驱动上的崩溃
                 if platform.system() == "Linux":
                     os.environ.setdefault("QT_OPENGL", "software")
                     os.environ.setdefault("QT_QUICK_BACKEND", "software")
