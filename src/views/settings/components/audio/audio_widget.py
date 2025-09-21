@@ -4,7 +4,7 @@ from pathlib import Path
 
 import numpy as np
 import sounddevice as sd
-from PyQt5.QtCore import Q_ARG, QMetaObject, Qt, pyqtSignal
+from PyQt5.QtCore import pyqtSignal
 from PyQt5.QtWidgets import (
     QComboBox,
     QLabel,
@@ -25,6 +25,9 @@ class AudioWidget(QWidget):
 
     # 信号定义
     settings_changed = pyqtSignal()
+    status_message = pyqtSignal(str)
+    reset_input_ui = pyqtSignal()
+    reset_output_ui = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -47,6 +50,14 @@ class AudioWidget(QWidget):
         self._connect_events()
         self._scan_devices()
         self._load_config_values()
+
+        # 连接线程安全UI更新信号
+        try:
+            self.status_message.connect(self._on_status_message)
+            self.reset_input_ui.connect(self._reset_input_test_ui)
+            self.reset_output_ui.connect(self._reset_output_test_ui)
+        except Exception:
+            pass
 
     def _setup_ui(self):
         """
@@ -236,7 +247,7 @@ class AudioWidget(QWidget):
 
     def _select_default_devices(self):
         """
-        自动选择默认设备（与audio_codec.py的逻辑保持一致）.
+        自动选择默认设备（与audio_codec.py的逻辑保持一致）。
         """
         try:
             # 优先选择配置中的设备，如果没有则选择系统默认设备
@@ -310,7 +321,7 @@ class AudioWidget(QWidget):
             # 获取设备信息和采样率
             input_device = next((d for d in self.input_devices if d['id'] == device_id), None)
             if not input_device:
-                self._append_status("错误: 无法获取设备信息")
+                self._append_status_threadsafe("错误: 无法获取设备信息")
                 return
 
             sample_rate = int(input_device['sample_rate'])
@@ -411,7 +422,7 @@ class AudioWidget(QWidget):
             # 获取设备信息和采样率
             output_device = next((d for d in self.output_devices if d['id'] == device_id), None)
             if not output_device:
-                self._append_status("错误: 无法获取设备信息")
+                self._append_status_threadsafe("错误: 无法获取设备信息")
                 return
 
             sample_rate = int(output_device['sample_rate'])
@@ -463,22 +474,7 @@ class AudioWidget(QWidget):
 
     def _reset_input_ui_threadsafe(self):
         try:
-            self.testing_input = False
-            btn = self.ui_controls.get("test_input_btn")
-            if not btn:
-                return
-            QMetaObject.invokeMethod(
-                btn,
-                "setEnabled",
-                Qt.QueuedConnection,
-                Q_ARG(bool, True),
-            )
-            QMetaObject.invokeMethod(
-                btn,
-                "setText",
-                Qt.QueuedConnection,
-                Q_ARG(str, "测试录音"),
-            )
+            self.reset_input_ui.emit()
         except Exception as e:
             self.logger.error(f"线程安全重置输入测试UI失败: {e}")
 
@@ -492,22 +488,7 @@ class AudioWidget(QWidget):
 
     def _reset_output_ui_threadsafe(self):
         try:
-            self.testing_output = False
-            btn = self.ui_controls.get("test_output_btn")
-            if not btn:
-                return
-            QMetaObject.invokeMethod(
-                btn,
-                "setEnabled",
-                Qt.QueuedConnection,
-                Q_ARG(bool, True),
-            )
-            QMetaObject.invokeMethod(
-                btn,
-                "setText",
-                Qt.QueuedConnection,
-                Q_ARG(str, "测试播放"),
-            )
+            self.reset_output_ui.emit()
         except Exception as e:
             self.logger.error(f"线程安全重置输出测试UI失败: {e}")
 
@@ -529,21 +510,28 @@ class AudioWidget(QWidget):
 
     def _append_status_threadsafe(self, message):
         """
-        后台线程安全地将状态文本追加到 QTextEdit（切回主线程）。
+        后台线程安全地将状态文本追加到 QTextEdit（通过信号切回主线程）。
         """
         try:
-            if not self.ui_controls["status_text"]:
+            if not self.ui_controls.get("status_text"):
                 return
             current_time = time.strftime("%H:%M:%S")
             formatted_message = f"[{current_time}] {message}"
-            QMetaObject.invokeMethod(
-                self.ui_controls["status_text"],
-                "append",
-                Qt.QueuedConnection,
-                Q_ARG(str, formatted_message),
-            )
+            self.status_message.emit(formatted_message)
         except Exception as e:
             self.logger.error(f"线程安全追加状态失败: {e}", exc_info=True)
+
+    def _on_status_message(self, formatted_message: str):
+        try:
+            if not self.ui_controls.get("status_text"):
+                return
+            self.ui_controls["status_text"].append(formatted_message)
+            # 滚动到底部
+            self.ui_controls["status_text"].verticalScrollBar().setValue(
+                self.ui_controls["status_text"].verticalScrollBar().maximum()
+            )
+        except Exception as e:
+            self.logger.error(f"状态文本追加失败: {e}")
 
     def _load_config_values(self):
         """
