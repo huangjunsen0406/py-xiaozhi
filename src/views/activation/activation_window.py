@@ -96,6 +96,21 @@ class ActivationWindow(BaseWindow, AsyncMixin):
         # 保存以便回退使用
         self._layout = layout
 
+        # 在 Linux 默认直接使用 Widgets 界面，彻底绕开 QQuickWidget/QML（可通过环境变量强制使用QML）
+        try:
+            import os
+
+            force_qml = os.getenv("XIAOZHI_FORCE_QML", "0") == "1"
+        except Exception:
+            force_qml = False
+
+        if platform.system() == "Linux" and not force_qml:
+            panel = self._create_widgets_activation_panel()
+            layout.addWidget(panel)
+            # 自适应尺寸与居中
+            self._setup_adaptive_size()
+            return
+
         # 创建QML widget
         self.qml_widget = QQuickWidget()
         self.qml_widget.setResizeMode(QQuickWidget.SizeRootObjectToView)
@@ -139,6 +154,50 @@ class ActivationWindow(BaseWindow, AsyncMixin):
         except Exception:
             pass
 
+    def _create_widgets_activation_panel(self) -> QWidget:
+        """
+        构建基于QtWidgets的激活界面（Linux稳定回退）。
+        """
+        fallback = QWidget()
+        vbox = QVBoxLayout(fallback)
+        vbox.setContentsMargins(16, 16, 16, 16)
+        vbox.setSpacing(12)
+
+        title = QLabel("设备激活")
+        title.setStyleSheet("font-size:18px;font-weight:600;")
+        vbox.addWidget(title)
+
+        info_sn = QLabel(f"设备序列号: {self.activation_model.serialNumber}")
+        info_mac = QLabel(f"MAC地址: {self.activation_model.macAddress}")
+        vbox.addWidget(info_sn)
+        vbox.addWidget(info_mac)
+
+        code_label = QLabel("激活验证码:")
+        code_value = QLabel(self.activation_model.activationCode or "--")
+        code_value.setStyleSheet("font-family:monospace;font-size:16px;color:#d33;")
+        vbox.addWidget(code_label)
+        vbox.addWidget(code_value)
+
+        # 按钮行
+        btn_row = QWidget()
+        hbox = QHBoxLayout(btn_row)
+        hbox.setContentsMargins(0, 0, 0, 0)
+        hbox.setSpacing(8)
+        btn_copy = QPushButton("复制")
+        btn_retry = QPushButton("跳转激活")
+        btn_close = QPushButton("关闭")
+        hbox.addWidget(btn_copy)
+        hbox.addWidget(btn_retry)
+        hbox.addWidget(btn_close)
+        vbox.addWidget(btn_row)
+
+        # 事件连接
+        btn_copy.clicked.connect(self._on_copy_code_clicked)
+        btn_retry.clicked.connect(self._on_retry_clicked)
+        btn_close.clicked.connect(self.close)
+
+        return fallback
+
     def _on_qml_status_changed(self, status):
         try:
             if status == QQuickWidget.Error:
@@ -176,44 +235,7 @@ class ActivationWindow(BaseWindow, AsyncMixin):
                 pass
 
             # 构建回退界面
-            fallback = QWidget()
-            vbox = QVBoxLayout(fallback)
-            vbox.setContentsMargins(16, 16, 16, 16)
-            vbox.setSpacing(12)
-
-            title = QLabel("设备激活")
-            title.setStyleSheet("font-size:18px;font-weight:600;")
-            vbox.addWidget(title)
-
-            info_sn = QLabel(f"设备序列号: {self.activation_model.serialNumber}")
-            info_mac = QLabel(f"MAC地址: {self.activation_model.macAddress}")
-            vbox.addWidget(info_sn)
-            vbox.addWidget(info_mac)
-
-            code_label = QLabel("激活验证码:")
-            code_value = QLabel(self.activation_model.activationCode or "--")
-            code_value.setStyleSheet("font-family:monospace;font-size:16px;color:#d33;")
-            vbox.addWidget(code_label)
-            vbox.addWidget(code_value)
-
-            # 按钮行
-            btn_row = QWidget()
-            hbox = QHBoxLayout(btn_row)
-            hbox.setContentsMargins(0, 0, 0, 0)
-            hbox.setSpacing(8)
-            btn_copy = QPushButton("复制")
-            btn_retry = QPushButton("跳转激活")
-            btn_close = QPushButton("关闭")
-            hbox.addWidget(btn_copy)
-            hbox.addWidget(btn_retry)
-            hbox.addWidget(btn_close)
-            vbox.addWidget(btn_row)
-
-            # 事件连接
-            btn_copy.clicked.connect(self._on_copy_code_clicked)
-            btn_retry.clicked.connect(self._on_retry_clicked)
-            btn_close.clicked.connect(self.close)
-
+            fallback = self._create_widgets_activation_panel()
             self._layout.addWidget(fallback)
             self.logger.info("已切换到Widgets回退界面")
         except Exception as e:
