@@ -1,7 +1,7 @@
-import QtQuick 2.15
-import QtQuick.Controls 2.15
-import QtQuick.Layouts 1.15
-import QtGraphicalEffects 1.15
+import QtQuick 2.12
+import QtQuick.Controls 2.12
+import QtQuick.Layouts 1.12
+import QtGraphicalEffects 1.0
 
 Rectangle {
     id: root
@@ -316,7 +316,6 @@ Rectangle {
 
                         font.family: "PingFang SC, Microsoft YaHei UI"
                         font.pixelSize: 13
-                        palette.buttonText: "white"
 
                         onClicked: root.copyCodeClicked()
                     }
@@ -373,7 +372,6 @@ Rectangle {
                     font.family: "PingFang SC, Microsoft YaHei UI"
                     font.pixelSize: 14
                     font.weight: Font.Medium
-                    palette.buttonText: "white"
 
                     onClicked: root.retryClicked()
                 }
