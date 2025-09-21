@@ -27,14 +27,14 @@ Rectangle {
 
         // Linux上禁用阴影效果以规避驱动/合成器问题
         layer.enabled: Qt.platform.os !== "linux"
-        layer.effect: Qt.platform.os !== "linux" ? DropShadow {
+        layer.effect: DropShadow {
             horizontalOffset: 0
             verticalOffset: 2
             radius: 10
             samples: 16
             color: "#15000000"
             transparentBorder: true
-        } : undefined
+        }
 
         ColumnLayout {
             anchors.fill: parent

@@ -3,7 +3,6 @@
 设备激活窗口 显示激活流程、设备信息和激活进度.
 """
 
-import os
 import platform
 from pathlib import Path
 from typing import Optional
