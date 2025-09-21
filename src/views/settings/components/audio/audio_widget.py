@@ -25,6 +25,9 @@ class AudioWidget(QWidget):
 
     # 信号定义
     settings_changed = pyqtSignal()
+    status_message = pyqtSignal(str)
+    reset_input_ui = pyqtSignal()
+    reset_output_ui = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -47,6 +50,14 @@ class AudioWidget(QWidget):
         self._connect_events()
         self._scan_devices()
         self._load_config_values()
+
+        # 连接线程安全UI更新信号
+        try:
+            self.status_message.connect(self._on_status_message)
+            self.reset_input_ui.connect(self._reset_input_test_ui)
+            self.reset_output_ui.connect(self._reset_output_test_ui)
+        except Exception:
+            pass
 
     def _setup_ui(self):
         """
@@ -236,7 +247,7 @@ class AudioWidget(QWidget):
 
     def _select_default_devices(self):
         """
-        自动选择默认设备（与audio_codec.py的逻辑保持一致）.
+        自动选择默认设备（与audio_codec.py的逻辑保持一致）。
         """
         try:
             # 优先选择配置中的设备，如果没有则选择系统默认设备
@@ -310,21 +321,21 @@ class AudioWidget(QWidget):
             # 获取设备信息和采样率
             input_device = next((d for d in self.input_devices if d['id'] == device_id), None)
             if not input_device:
-                self._append_status("错误: 无法获取设备信息")
+                self._append_status_threadsafe("错误: 无法获取设备信息")
                 return
 
             sample_rate = int(input_device['sample_rate'])
             duration = 3  # 录音时长3秒
 
-            self._append_status(f"开始录音测试 (设备: {device_id}, 采样率: {sample_rate}Hz)")
-            self._append_status("请对着麦克风说话，比如数数字: 1、2、3...")
+            self._append_status_threadsafe(f"开始录音测试 (设备: {device_id}, 采样率: {sample_rate}Hz)")
+            self._append_status_threadsafe("请对着麦克风说话，比如数数字: 1、2、3...")
 
             # 倒计时提示
             for i in range(3, 0, -1):
-                self._append_status(f"{i}秒后开始录音...")
+                self._append_status_threadsafe(f"{i}秒后开始录音...")
                 time.sleep(1)
 
-            self._append_status("正在录音，请说话... (3秒)")
+            self._append_status_threadsafe("正在录音，请说话... (3秒)")
 
             # 录音
             recording = sd.rec(
@@ -336,7 +347,7 @@ class AudioWidget(QWidget):
             )
             sd.wait()
 
-            self._append_status("录音完成，正在分析...")
+            self._append_status_threadsafe("录音完成，正在分析...")
 
             # 分析录音质量
             max_amplitude = np.max(np.abs(recording))
@@ -354,27 +365,27 @@ class AudioWidget(QWidget):
 
             # 测试结果分析
             if max_amplitude < 0.001:
-                self._append_status("[失败] 未检测到音频信号")
-                self._append_status("请检查: 1) 麦克风连接 2) 系统音量 3) 麦克风权限")
+                self._append_status_threadsafe("[失败] 未检测到音频信号")
+                self._append_status_threadsafe("请检查: 1) 麦克风连接 2) 系统音量 3) 麦克风权限")
             elif max_amplitude > 0.8:
-                self._append_status("[警告] 音频信号过载")
-                self._append_status("建议降低麦克风增益或音量设置")
+                self._append_status_threadsafe("[警告] 音频信号过载")
+                self._append_status_threadsafe("建议降低麦克风增益或音量设置")
             elif activity_ratio < 0.1:
-                self._append_status("[警告] 检测到音频但语音活动较少")
-                self._append_status("请确保对着麦克风说话，或检查麦克风灵敏度")
+                self._append_status_threadsafe("[警告] 检测到音频但语音活动较少")
+                self._append_status_threadsafe("请确保对着麦克风说话，或检查麦克风灵敏度")
             else:
-                self._append_status("[成功] 录音测试通过")
-                self._append_status(f"音质数据: 最大音量={max_amplitude:.1%}, 平均音量={rms:.1%}, 活跃度={activity_ratio:.1%}")
-                self._append_status("麦克风工作正常")
+                self._append_status_threadsafe("[成功] 录音测试通过")
+                self._append_status_threadsafe(f"音质数据: 最大音量={max_amplitude:.1%}, 平均音量={rms:.1%}, 活跃度={activity_ratio:.1%}")
+                self._append_status_threadsafe("麦克风工作正常")
 
         except Exception as e:
             self.logger.error(f"录音测试失败: {e}", exc_info=True)
-            self._append_status(f"[错误] 录音测试失败: {str(e)}")
+            self._append_status_threadsafe(f"[错误] 录音测试失败: {str(e)}")
             if "Permission denied" in str(e) or "access" in str(e).lower():
-                self._append_status("可能是权限问题，请检查系统麦克风权限设置")
+                self._append_status_threadsafe("可能是权限问题，请检查系统麦克风权限设置")
         finally:
-            # 重置UI状态
-            self._reset_input_test_ui()
+            # 重置UI状态（切回主线程）
+            self._reset_input_ui_threadsafe()
 
     def _test_output_device(self):
         """
@@ -411,22 +422,22 @@ class AudioWidget(QWidget):
             # 获取设备信息和采样率
             output_device = next((d for d in self.output_devices if d['id'] == device_id), None)
             if not output_device:
-                self._append_status("错误: 无法获取设备信息")
+                self._append_status_threadsafe("错误: 无法获取设备信息")
                 return
 
             sample_rate = int(output_device['sample_rate'])
             duration = 2.0  # 播放时长
             frequency = 440  # 440Hz A音
 
-            self._append_status(f"开始播放测试 (设备: {device_id}, 采样率: {sample_rate}Hz)")
-            self._append_status("请准备好耳机/扬声器，即将播放测试音...")
+            self._append_status_threadsafe(f"开始播放测试 (设备: {device_id}, 采样率: {sample_rate}Hz)")
+            self._append_status_threadsafe("请准备好耳机/扬声器，即将播放测试音...")
 
             # 倒计时提示
             for i in range(3, 0, -1):
-                self._append_status(f"{i}秒后开始播放...")
+                self._append_status_threadsafe(f"{i}秒后开始播放...")
                 time.sleep(1)
 
-            self._append_status(f"正在播放 {frequency}Hz 测试音 ({duration}秒)...")
+            self._append_status_threadsafe(f"正在播放 {frequency}Hz 测试音 ({duration}秒)...")
 
             # 生成测试音频 (正弦波)
             t = np.linspace(0, duration, int(sample_rate * duration))
@@ -442,16 +453,16 @@ class AudioWidget(QWidget):
             sd.play(audio, samplerate=sample_rate, device=device_id)
             sd.wait()
 
-            self._append_status("播放完成")
-            self._append_status("测试说明: 如果听到清晰的测试音，说明扬声器/耳机工作正常")
-            self._append_status("如果没听到声音，请检查音量设置或选择其他输出设备")
+            self._append_status_threadsafe("播放完成")
+            self._append_status_threadsafe("测试说明: 如果听到清晰的测试音，说明扬声器/耳机工作正常")
+            self._append_status_threadsafe("如果没听到声音，请检查音量设置或选择其他输出设备")
 
         except Exception as e:
             self.logger.error(f"播放测试失败: {e}", exc_info=True)
-            self._append_status(f"[错误] 播放测试失败: {str(e)}")
+            self._append_status_threadsafe(f"[错误] 播放测试失败: {str(e)}")
         finally:
-            # 重置UI状态
-            self._reset_output_test_ui()
+            # 重置UI状态（切回主线程）
+            self._reset_output_ui_threadsafe()
 
     def _reset_input_test_ui(self):
         """
@@ -461,6 +472,12 @@ class AudioWidget(QWidget):
         self.ui_controls["test_input_btn"].setEnabled(True)
         self.ui_controls["test_input_btn"].setText("测试录音")
 
+    def _reset_input_ui_threadsafe(self):
+        try:
+            self.reset_input_ui.emit()
+        except Exception as e:
+            self.logger.error(f"线程安全重置输入测试UI失败: {e}")
+
     def _reset_output_test_ui(self):
         """
         重置输出测试UI状态.
@@ -468,6 +485,12 @@ class AudioWidget(QWidget):
         self.testing_output = False
         self.ui_controls["test_output_btn"].setEnabled(True)
         self.ui_controls["test_output_btn"].setText("测试播放")
+
+    def _reset_output_ui_threadsafe(self):
+        try:
+            self.reset_output_ui.emit()
+        except Exception as e:
+            self.logger.error(f"线程安全重置输出测试UI失败: {e}")
 
     def _append_status(self, message):
         """
@@ -484,6 +507,31 @@ class AudioWidget(QWidget):
                 )
         except Exception as e:
             self.logger.error(f"添加状态信息失败: {e}", exc_info=True)
+
+    def _append_status_threadsafe(self, message):
+        """
+        后台线程安全地将状态文本追加到 QTextEdit（通过信号切回主线程）。
+        """
+        try:
+            if not self.ui_controls.get("status_text"):
+                return
+            current_time = time.strftime("%H:%M:%S")
+            formatted_message = f"[{current_time}] {message}"
+            self.status_message.emit(formatted_message)
+        except Exception as e:
+            self.logger.error(f"线程安全追加状态失败: {e}", exc_info=True)
+
+    def _on_status_message(self, formatted_message: str):
+        try:
+            if not self.ui_controls.get("status_text"):
+                return
+            self.ui_controls["status_text"].append(formatted_message)
+            # 滚动到底部
+            self.ui_controls["status_text"].verticalScrollBar().setValue(
+                self.ui_controls["status_text"].verticalScrollBar().maximum()
+            )
+        except Exception as e:
+            self.logger.error(f"状态文本追加失败: {e}")
 
     def _load_config_values(self):
         """

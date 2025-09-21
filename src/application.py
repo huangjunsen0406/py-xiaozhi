@@ -1,6 +1,5 @@
 import asyncio
 import json
-import platform
 import signal
 import sys
 import threading
@@ -19,48 +18,48 @@ from src.utils.opus_loader import setup_opus
 
 logger = get_logger(__name__)
 
-# 检查是否为 macOS 系统
-if platform.system() == "Darwin":
 
-    def setup_signal_handler(sig, handler, description):
-        """
-        统一的信号处理器设置函数.
-        """
-        try:
-            signal.signal(sig, handler)
-        except (AttributeError, ValueError) as e:
-            print(f"注意: 无法设置{description}处理器: {e}")
+def setup_signal_handler(sig, handler, description):
+    """
+    统一的信号处理器设置函数（跨平台尽力而为）.
+    """
+    try:
+        signal.signal(sig, handler)
+    except (AttributeError, ValueError) as e:
+        print(f"注意: 无法设置{description}处理器: {e}")
 
-    def handle_sigint(signum, frame):
-        app = Application.get_instance()
-        if not app:
-            sys.exit(0)
-        
-        # 使用app的主循环，更稳定且跨线程安全
-        loop = app._main_loop
-        if loop and not loop.is_closed():
-            # 直接创建task在指定的循环中
-            def create_shutdown_task():
-                try:
-                    if loop.is_running():
-                        asyncio.run_coroutine_threadsafe(app.shutdown(), loop)
-                    else:
-                        loop.create_task(app.shutdown())
-                except Exception as e:
-                    print(f"创建shutdown任务失败: {e}")
-                    sys.exit(0)
-            
-            loop.call_soon_threadsafe(create_shutdown_task)
-        else:
-            # 主循环未就绪或已关闭，直接退出
-            sys.exit(0)
 
-    # 设置信号处理器
+def handle_sigint(signum, frame):
+    app = Application.get_instance()
+    if not app:
+        sys.exit(0)
+
+    # 使用app的主循环，更稳定且跨线程安全
+    loop = app._main_loop
+    if loop and not loop.is_closed():
+        # 直接创建task在指定的循环中
+        def create_shutdown_task():
+            try:
+                if loop.is_running():
+                    asyncio.run_coroutine_threadsafe(app.shutdown(), loop)
+                else:
+                    loop.create_task(app.shutdown())
+            except Exception as e:
+                print(f"创建shutdown任务失败: {e}")
+                sys.exit(0)
+
+        loop.call_soon_threadsafe(create_shutdown_task)
+    else:
+        # 主循环未就绪或已关闭，直接退出
+        sys.exit(0)
+
+
+# 设置信号处理器：所有平台尽量设置 SIGINT；支持则设置 SIGTERM；若存在 SIGTRAP 则忽略它
+setup_signal_handler(signal.SIGINT, handle_sigint, "SIGINT")
+if hasattr(signal, "SIGTERM"):
+    setup_signal_handler(signal.SIGTERM, handle_sigint, "SIGTERM")
+if hasattr(signal, "SIGTRAP"):
     setup_signal_handler(signal.SIGTRAP, signal.SIG_IGN, "SIGTRAP")
-    setup_signal_handler(signal.SIGINT, handle_sigint, "SIGINT")
-
-else:
-    logger.debug("非 macOS 系统，跳过信号处理器设置")
 
 setup_opus()
 
