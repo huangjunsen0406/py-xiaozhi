@@ -1,13 +1,15 @@
-import QtQuick 2.15
-import QtQuick.Controls 2.15
-import QtQuick.Layouts 1.15
-import QtGraphicalEffects 1.15
+import QtQuick 2.12
+import QtQuick.Controls 2.12
+import QtQuick.Layouts 1.12
+import QtGraphicalEffects 1.0
 
 Rectangle {
     id: root
     width: 520
     height: 420
-    color: "transparent"
+    // 在Linux上避免完全透明背景，降低QQuickWidget与透明叠加的崩溃概率
+    // 使用接近透明的白色，其他平台保持透明
+    color: Qt.platform.os === "linux" ? "#01ffffff" : "transparent"
 
     // 信号定义
     signal copyCodeClicked()
@@ -23,8 +25,8 @@ Rectangle {
         border.width: 0
         antialiasing: true
 
-        // 添加窗口阴影效果
-        layer.enabled: true
+        // Linux上禁用阴影效果以规避驱动/合成器问题
+        layer.enabled: Qt.platform.os !== "linux"
         layer.effect: DropShadow {
             horizontalOffset: 0
             verticalOffset: 2
@@ -312,9 +314,16 @@ Rectangle {
                             }
                         }
 
-                        font.family: "PingFang SC, Microsoft YaHei UI"
-                        font.pixelSize: 13
-                        palette.buttonText: "white"
+                    font.family: "PingFang SC, Microsoft YaHei UI"
+                    font.pixelSize: 13
+
+                    contentItem: Text {
+                        text: copyCodeBtn.text
+                        color: "white"
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                        elide: Text.ElideRight
+                    }
 
                         onClicked: root.copyCodeClicked()
                     }
@@ -371,7 +380,14 @@ Rectangle {
                     font.family: "PingFang SC, Microsoft YaHei UI"
                     font.pixelSize: 14
                     font.weight: Font.Medium
-                    palette.buttonText: "white"
+
+                    contentItem: Text {
+                        text: retryBtn.text
+                        color: "white"
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                        elide: Text.ElideRight
+                    }
 
                     onClicked: root.retryClicked()
                 }

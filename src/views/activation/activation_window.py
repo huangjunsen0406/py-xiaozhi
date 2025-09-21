@@ -3,13 +3,21 @@
 设备激活窗口 显示激活流程、设备信息和激活进度.
 """
 
+import platform
 from pathlib import Path
 from typing import Optional
 
-from PyQt5.QtCore import QSize, pyqtSignal, QUrl, Qt
-from PyQt5.QtQuickWidgets import QQuickWidget
-from PyQt5.QtWidgets import QApplication, QVBoxLayout, QWidget
+from PyQt5.QtCore import QSize, Qt, QUrl, pyqtSignal
 from PyQt5.QtGui import QPainterPath, QRegion
+from PyQt5.QtQuickWidgets import QQuickWidget
+from PyQt5.QtWidgets import (
+    QApplication,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
+)
 
 from src.core.system_initializer import SystemInitializer
 from src.utils.device_activator import DeviceActivator
@@ -67,9 +75,15 @@ class ActivationWindow(BaseWindow, AsyncMixin):
         """
         设置UI.
         """
-        # 设置无边框窗口
-        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
-        self.setAttribute(Qt.WA_TranslucentBackground)
+        # 设置窗口外观（在Linux上避免无边框+透明，规避QQuickWidget渲染崩溃）
+        if platform.system() == "Linux":
+            # 使用标准窗口，避免透明与无边框以提升稳定性
+            self.setWindowFlags(Qt.Window | Qt.WindowStaysOnTopHint)
+            # 不设置 WA_TranslucentBackground
+        else:
+            # 其他平台保持原设计
+            self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
+            self.setAttribute(Qt.WA_TranslucentBackground)
 
         # 创建中央widget
         central_widget = QWidget()
@@ -79,12 +93,40 @@ class ActivationWindow(BaseWindow, AsyncMixin):
         # 创建布局
         layout = QVBoxLayout(central_widget)
         layout.setContentsMargins(0, 0, 0, 0)
+        # 保存以便回退使用
+        self._layout = layout
+
+        # 在 Linux 默认直接使用 Widgets 界面，彻底绕开 QQuickWidget/QML（可通过环境变量强制使用QML）
+        try:
+            import os
+
+            force_qml = os.getenv("XIAOZHI_FORCE_QML", "0") == "1"
+        except Exception:
+            force_qml = False
+
+        if platform.system() == "Linux" and not force_qml:
+            panel = self._create_widgets_activation_panel()
+            layout.addWidget(panel)
+            # 自适应尺寸与居中
+            self._setup_adaptive_size()
+            # 立即同步一次设备信息，随后由初始化流程继续更新
+            try:
+                self._update_device_info()
+            except Exception:
+                pass
+            return
 
         # 创建QML widget
         self.qml_widget = QQuickWidget()
         self.qml_widget.setResizeMode(QQuickWidget.SizeRootObjectToView)
         self.qml_widget.setAttribute(Qt.WA_AlwaysStackOnTop)
-        self.qml_widget.setClearColor(Qt.transparent)
+        # 在Linux上避免透明清屏色以规避驱动问题
+        if platform.system() == "Linux":
+            from PyQt5.QtGui import QColor
+
+            self.qml_widget.setClearColor(QColor("#00000000"))
+        else:
+            self.qml_widget.setClearColor(Qt.transparent)
 
         # 注册数据模型到QML上下文
         qml_context = self.qml_widget.rootContext()
@@ -94,6 +136,12 @@ class ActivationWindow(BaseWindow, AsyncMixin):
         qml_file = Path(__file__).parent / "activation_window.qml"
         self.qml_widget.setSource(QUrl.fromLocalFile(str(qml_file)))
 
+        # 监听QML加载状态，出现错误时记录详细错误并回退到Widgets界面
+        try:
+            self.qml_widget.statusChanged.connect(self._on_qml_status_changed)
+        except Exception:
+            pass
+
         # 添加到布局
         layout.addWidget(self.qml_widget)
 
@@ -102,6 +150,116 @@ class ActivationWindow(BaseWindow, AsyncMixin):
 
         # 延迟设置连接，确保QML完全加载
         self._setup_qml_connections()
+
+        # 若初始状态即错误，则立即回退
+        try:
+            if self.qml_widget.status() == QQuickWidget.Error:
+                self._log_qml_errors()
+                self._switch_to_widgets_fallback()
+        except Exception:
+            pass
+
+    def _create_widgets_activation_panel(self) -> QWidget:
+        """
+        构建基于QtWidgets的激活界面（Linux稳定回退）。
+        """
+        fallback = QWidget()
+        vbox = QVBoxLayout(fallback)
+        vbox.setContentsMargins(16, 16, 16, 16)
+        vbox.setSpacing(12)
+
+        title = QLabel("设备激活")
+        title.setStyleSheet("font-size:18px;font-weight:600;")
+        vbox.addWidget(title)
+
+        # 设备信息标签（保存引用以便后续更新）
+        self._lbl_sn = QLabel(f"设备序列号: {self.activation_model.serialNumber}")
+        self._lbl_mac = QLabel(f"MAC地址: {self.activation_model.macAddress}")
+        vbox.addWidget(self._lbl_sn)
+        vbox.addWidget(self._lbl_mac)
+
+        code_label = QLabel("激活验证码:")
+        self._lbl_code = QLabel(self.activation_model.activationCode or "--")
+        self._lbl_code.setStyleSheet("font-family:monospace;font-size:16px;color:#d33;")
+        vbox.addWidget(code_label)
+        vbox.addWidget(self._lbl_code)
+
+        # 按钮行
+        btn_row = QWidget()
+        hbox = QHBoxLayout(btn_row)
+        hbox.setContentsMargins(0, 0, 0, 0)
+        hbox.setSpacing(8)
+        btn_copy = QPushButton("复制")
+        btn_retry = QPushButton("跳转激活")
+        btn_close = QPushButton("关闭")
+        hbox.addWidget(btn_copy)
+        hbox.addWidget(btn_retry)
+        hbox.addWidget(btn_close)
+        vbox.addWidget(btn_row)
+
+        # 事件连接
+        btn_copy.clicked.connect(self._on_copy_code_clicked)
+        btn_retry.clicked.connect(self._on_retry_clicked)
+        btn_close.clicked.connect(self.close)
+
+        # 绑定模型变化以实时更新标签
+        try:
+            self.activation_model.serialNumberChanged.connect(
+                lambda: self._lbl_sn.setText(f"设备序列号: {self.activation_model.serialNumber}")
+            )
+            self.activation_model.macAddressChanged.connect(
+                lambda: self._lbl_mac.setText(f"MAC地址: {self.activation_model.macAddress}")
+            )
+            self.activation_model.activationCodeChanged.connect(
+                lambda: self._lbl_code.setText(self.activation_model.activationCode or "--")
+            )
+        except Exception:
+            pass
+
+        return fallback
+
+    def _on_qml_status_changed(self, status):
+        try:
+            if status == QQuickWidget.Error:
+                self.logger.error("QML加载失败，切换到Widgets回退界面")
+                self._log_qml_errors()
+                self._switch_to_widgets_fallback()
+        except Exception as e:
+            self.logger.error(f"处理QML状态变更失败: {e}")
+
+    def _log_qml_errors(self):
+        try:
+            for err in self.qml_widget.errors() or []:
+                try:
+                    self.logger.error(
+                        f"QML错误: {err.toString() if hasattr(err, 'toString') else err}"
+                    )
+                except Exception:
+                    self.logger.error(f"QML错误: {err}")
+        except Exception:
+            pass
+
+    def _switch_to_widgets_fallback(self):
+        try:
+            if not hasattr(self, "_layout") or self._layout is None:
+                return
+            # 移除并销毁QQuickWidget
+            try:
+                self._layout.removeWidget(self.qml_widget)
+            except Exception:
+                pass
+            try:
+                self.qml_widget.setParent(None)
+                self.qml_widget.deleteLater()
+            except Exception:
+                pass
+
+            # 构建回退界面
+            fallback = self._create_widgets_activation_panel()
+            self._layout.addWidget(fallback)
+            self.logger.info("已切换到Widgets回退界面")
+        except Exception as e:
+            self.logger.error(f"切换回退界面失败: {e}")
 
     def _setup_adaptive_size(self):
         """
@@ -264,10 +422,22 @@ class ActivationWindow(BaseWindow, AsyncMixin):
         """
         更新设备信息显示.
         """
-        if (
-            not self.system_initializer
-            or not self.system_initializer.device_fingerprint
-        ):
+        if not self.system_initializer:
+            # 在未完成初始化前，通过模型中的占位信息渲染基础UI
+            try:
+                if hasattr(self, "_lbl_sn"):
+                    self._lbl_sn.setText(
+                        f"设备序列号: {self.activation_model.serialNumber}"
+                    )
+                if hasattr(self, "_lbl_mac"):
+                    self._lbl_mac.setText(
+                        f"MAC地址: {self.activation_model.macAddress}"
+                    )
+            except Exception:
+                pass
+            return
+
+        if not self.system_initializer.device_fingerprint:
             return
 
         device_fp = self.system_initializer.device_fingerprint
@@ -301,6 +471,17 @@ class ActivationWindow(BaseWindow, AsyncMixin):
 
         # 初始化激活码显示
         self.activation_model.reset_activation_code()
+
+        # 同步刷新 Widgets 回退标签
+        try:
+            if hasattr(self, "_lbl_sn"):
+                self._lbl_sn.setText(f"设备序列号: {self.activation_model.serialNumber}")
+            if hasattr(self, "_lbl_mac"):
+                self._lbl_mac.setText(f"MAC地址: {self.activation_model.macAddress}")
+            if hasattr(self, "_lbl_code"):
+                self._lbl_code.setText(self.activation_model.activationCode or "--")
+        except Exception:
+            pass
 
     async def _start_activation_process(self):
         """
