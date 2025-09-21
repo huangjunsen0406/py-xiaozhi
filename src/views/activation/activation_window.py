@@ -109,6 +109,11 @@ class ActivationWindow(BaseWindow, AsyncMixin):
             layout.addWidget(panel)
             # 自适应尺寸与居中
             self._setup_adaptive_size()
+            # 立即同步一次设备信息，随后由初始化流程继续更新
+            try:
+                self._update_device_info()
+            except Exception:
+                pass
             return
 
         # 创建QML widget
@@ -167,16 +172,17 @@ class ActivationWindow(BaseWindow, AsyncMixin):
         title.setStyleSheet("font-size:18px;font-weight:600;")
         vbox.addWidget(title)
 
-        info_sn = QLabel(f"设备序列号: {self.activation_model.serialNumber}")
-        info_mac = QLabel(f"MAC地址: {self.activation_model.macAddress}")
-        vbox.addWidget(info_sn)
-        vbox.addWidget(info_mac)
+        # 设备信息标签（保存引用以便后续更新）
+        self._lbl_sn = QLabel(f"设备序列号: {self.activation_model.serialNumber}")
+        self._lbl_mac = QLabel(f"MAC地址: {self.activation_model.macAddress}")
+        vbox.addWidget(self._lbl_sn)
+        vbox.addWidget(self._lbl_mac)
 
         code_label = QLabel("激活验证码:")
-        code_value = QLabel(self.activation_model.activationCode or "--")
-        code_value.setStyleSheet("font-family:monospace;font-size:16px;color:#d33;")
+        self._lbl_code = QLabel(self.activation_model.activationCode or "--")
+        self._lbl_code.setStyleSheet("font-family:monospace;font-size:16px;color:#d33;")
         vbox.addWidget(code_label)
-        vbox.addWidget(code_value)
+        vbox.addWidget(self._lbl_code)
 
         # 按钮行
         btn_row = QWidget()
@@ -195,6 +201,20 @@ class ActivationWindow(BaseWindow, AsyncMixin):
         btn_copy.clicked.connect(self._on_copy_code_clicked)
         btn_retry.clicked.connect(self._on_retry_clicked)
         btn_close.clicked.connect(self.close)
+
+        # 绑定模型变化以实时更新标签
+        try:
+            self.activation_model.serialNumberChanged.connect(
+                lambda: self._lbl_sn.setText(f"设备序列号: {self.activation_model.serialNumber}")
+            )
+            self.activation_model.macAddressChanged.connect(
+                lambda: self._lbl_mac.setText(f"MAC地址: {self.activation_model.macAddress}")
+            )
+            self.activation_model.activationCodeChanged.connect(
+                lambda: self._lbl_code.setText(self.activation_model.activationCode or "--")
+            )
+        except Exception:
+            pass
 
         return fallback
 
@@ -402,10 +422,22 @@ class ActivationWindow(BaseWindow, AsyncMixin):
         """
         更新设备信息显示.
         """
-        if (
-            not self.system_initializer
-            or not self.system_initializer.device_fingerprint
-        ):
+        if not self.system_initializer:
+            # 在未完成初始化前，通过模型中的占位信息渲染基础UI
+            try:
+                if hasattr(self, "_lbl_sn"):
+                    self._lbl_sn.setText(
+                        f"设备序列号: {self.activation_model.serialNumber}"
+                    )
+                if hasattr(self, "_lbl_mac"):
+                    self._lbl_mac.setText(
+                        f"MAC地址: {self.activation_model.macAddress}"
+                    )
+            except Exception:
+                pass
+            return
+
+        if not self.system_initializer.device_fingerprint:
             return
 
         device_fp = self.system_initializer.device_fingerprint
@@ -439,6 +471,17 @@ class ActivationWindow(BaseWindow, AsyncMixin):
 
         # 初始化激活码显示
         self.activation_model.reset_activation_code()
+
+        # 同步刷新 Widgets 回退标签
+        try:
+            if hasattr(self, "_lbl_sn"):
+                self._lbl_sn.setText(f"设备序列号: {self.activation_model.serialNumber}")
+            if hasattr(self, "_lbl_mac"):
+                self._lbl_mac.setText(f"MAC地址: {self.activation_model.macAddress}")
+            if hasattr(self, "_lbl_code"):
+                self._lbl_code.setText(self.activation_model.activationCode or "--")
+        except Exception:
+            pass
 
     async def _start_activation_process(self):
         """
