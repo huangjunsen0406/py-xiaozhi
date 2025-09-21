@@ -314,8 +314,16 @@ Rectangle {
                             }
                         }
 
-                        font.family: "PingFang SC, Microsoft YaHei UI"
-                        font.pixelSize: 13
+                    font.family: "PingFang SC, Microsoft YaHei UI"
+                    font.pixelSize: 13
+
+                    contentItem: Text {
+                        text: copyCodeBtn.text
+                        color: "white"
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                        elide: Text.ElideRight
+                    }
 
                         onClicked: root.copyCodeClicked()
                     }
@@ -372,6 +380,14 @@ Rectangle {
                     font.family: "PingFang SC, Microsoft YaHei UI"
                     font.pixelSize: 14
                     font.weight: Font.Medium
+
+                    contentItem: Text {
+                        text: retryBtn.text
+                        color: "white"
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                        elide: Text.ElideRight
+                    }
 
                     onClicked: root.retryClicked()
                 }
