@@ -1,5 +1,7 @@
 import argparse
 import asyncio
+import os
+import platform
 import sys
 
 from src.application import Application
@@ -87,11 +89,23 @@ if __name__ == "__main__":
         if args.mode == "gui":
             # 在GUI模式下，由main统一创建 QApplication 与 qasync 事件循环
             try:
+                # 在导入Qt之前，根据平台设置软件渲染兜底，规避QQuickWidget在部分Linux驱动上的崩溃
+                if platform.system() == "Linux":
+                    os.environ.setdefault("QT_OPENGL", "software")
+                    os.environ.setdefault("QT_QUICK_BACKEND", "software")
+                    os.environ.setdefault("QSG_RENDER_LOOP", "basic")
+
                 import qasync
+                from PyQt5.QtCore import Qt
                 from PyQt5.QtWidgets import QApplication
             except ImportError as e:
                 logger.error(f"GUI模式需要qasync和PyQt5库: {e}")
                 sys.exit(1)
+
+            try:
+                QApplication.setAttribute(Qt.AA_UseSoftwareOpenGL, True)
+            except Exception:
+                pass
 
             qt_app = QApplication.instance() or QApplication(sys.argv)
 

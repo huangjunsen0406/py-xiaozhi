@@ -7,7 +7,9 @@ Rectangle {
     id: root
     width: 520
     height: 420
-    color: "transparent"
+    // 在Linux上避免完全透明背景，降低QQuickWidget与透明叠加的崩溃概率
+    // 使用接近透明的白色，其他平台保持透明
+    color: Qt.platform.os === "linux" ? "#01ffffff" : "transparent"
 
     // 信号定义
     signal copyCodeClicked()
@@ -23,16 +25,16 @@ Rectangle {
         border.width: 0
         antialiasing: true
 
-        // 添加窗口阴影效果
-        layer.enabled: true
-        layer.effect: DropShadow {
+        // Linux上禁用阴影效果以规避驱动/合成器问题
+        layer.enabled: Qt.platform.os !== "linux"
+        layer.effect: Qt.platform.os !== "linux" ? DropShadow {
             horizontalOffset: 0
             verticalOffset: 2
             radius: 10
             samples: 16
             color: "#15000000"
             transparentBorder: true
-        }
+        } : undefined
 
         ColumnLayout {
             anchors.fill: parent

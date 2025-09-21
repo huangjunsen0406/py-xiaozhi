@@ -3,13 +3,15 @@
 设备激活窗口 显示激活流程、设备信息和激活进度.
 """
 
+import os
+import platform
 from pathlib import Path
 from typing import Optional
 
-from PyQt5.QtCore import QSize, pyqtSignal, QUrl, Qt
+from PyQt5.QtCore import QSize, Qt, QUrl, pyqtSignal
+from PyQt5.QtGui import QPainterPath, QRegion
 from PyQt5.QtQuickWidgets import QQuickWidget
 from PyQt5.QtWidgets import QApplication, QVBoxLayout, QWidget
-from PyQt5.QtGui import QPainterPath, QRegion
 
 from src.core.system_initializer import SystemInitializer
 from src.utils.device_activator import DeviceActivator
@@ -67,9 +69,15 @@ class ActivationWindow(BaseWindow, AsyncMixin):
         """
         设置UI.
         """
-        # 设置无边框窗口
-        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
-        self.setAttribute(Qt.WA_TranslucentBackground)
+        # 设置窗口外观（在Linux上避免无边框+透明，规避QQuickWidget渲染崩溃）
+        if platform.system() == "Linux":
+            # 使用标准窗口，避免透明与无边框以提升稳定性
+            self.setWindowFlags(Qt.Window | Qt.WindowStaysOnTopHint)
+            # 不设置 WA_TranslucentBackground
+        else:
+            # 其他平台保持原设计
+            self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
+            self.setAttribute(Qt.WA_TranslucentBackground)
 
         # 创建中央widget
         central_widget = QWidget()
@@ -84,7 +92,13 @@ class ActivationWindow(BaseWindow, AsyncMixin):
         self.qml_widget = QQuickWidget()
         self.qml_widget.setResizeMode(QQuickWidget.SizeRootObjectToView)
         self.qml_widget.setAttribute(Qt.WA_AlwaysStackOnTop)
-        self.qml_widget.setClearColor(Qt.transparent)
+        # 在Linux上避免透明清屏色以规避驱动问题
+        if platform.system() == "Linux":
+            from PyQt5.QtGui import QColor
+
+            self.qml_widget.setClearColor(QColor("#00000000"))
+        else:
+            self.qml_widget.setClearColor(Qt.transparent)
 
         # 注册数据模型到QML上下文
         qml_context = self.qml_widget.rootContext()
