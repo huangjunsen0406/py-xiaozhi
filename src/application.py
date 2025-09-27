@@ -1220,17 +1220,10 @@ class Application:
         连接服务器并开始监听.
         """
         try:
-            if not await self.protocol.connect():
-                logger.error("连接服务器失败")
-                await self._set_device_state(DeviceState.IDLE)
-                return
-
             if not await self.protocol.open_audio_channel():
                 logger.error("打开音频通道失败")
                 await self._set_device_state(DeviceState.IDLE)
                 return
-
-            await self.protocol.send_wake_word_detected("唤醒")
             self.keep_listening = True
             # 根据AEC启用状态决定监听模式
             listening_mode = (
