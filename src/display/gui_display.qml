@@ -20,9 +20,9 @@ Rectangle {
     // 标题栏相关信号
     signal titleMinimize()
     signal titleClose()
-    signal titleDragMove(int dx, int dy)
-    signal titleDragStart(int sx, int sy)
-    signal titleDragMoveTo(int sx, int sy)
+    signal titleDragStart(real mouseX, real mouseY)
+    signal titleDragMoveTo(real mouseX, real mouseY)
+    signal titleDragEnd()
 
     // 主布局
     ColumnLayout {
@@ -38,11 +38,31 @@ Rectangle {
             color: "#f7f8fa"
             border.width: 0
 
+            // 整条标题栏拖动（使用屏幕坐标，避免累计误差导致抖动）
+            // 放在最底层，让按钮的 MouseArea 可以优先响应
+            MouseArea {
+                anchors.fill: parent
+                acceptedButtons: Qt.LeftButton
+                onPressed: {
+                    root.titleDragStart(mouse.x, mouse.y)
+                }
+                onPositionChanged: {
+                    if (pressed) {
+                        root.titleDragMoveTo(mouse.x, mouse.y)
+                    }
+                }
+                onReleased: {
+                    root.titleDragEnd()
+                }
+                z: 0  // 最底层
+            }
+
             RowLayout {
                 anchors.fill: parent
                 anchors.leftMargin: 10
                 anchors.rightMargin: 8
                 spacing: 8
+                z: 1  // 按钮层在拖动层上方
 
                 // 左侧拖动区域
                 Item { id: dragArea; Layout.fillWidth: true; Layout.fillHeight: true }
@@ -52,6 +72,7 @@ Rectangle {
                     id: btnMin
                     width: 24; height: 24; radius: 6
                     color: btnMinMouse.pressed ? "#e5e6eb" : (btnMinMouse.containsMouse ? "#f2f3f5" : "transparent")
+                    z: 2  // 确保按钮在最上层
                     Text { anchors.centerIn: parent; text: "–"; font.pixelSize: 14; color: "#4e5969" }
                     MouseArea {
                         id: btnMinMouse
@@ -66,6 +87,7 @@ Rectangle {
                     id: btnClose
                     width: 24; height: 24; radius: 6
                     color: btnCloseMouse.pressed ? "#f53f3f" : (btnCloseMouse.containsMouse ? "#ff7875" : "transparent")
+                    z: 2  // 确保按钮在最上层
                     Text { anchors.centerIn: parent; text: "×"; font.pixelSize: 14; color: btnCloseMouse.containsMouse ? "white" : "#86909c" }
                     MouseArea {
                         id: btnCloseMouse
@@ -74,14 +96,6 @@ Rectangle {
                         onClicked: root.titleClose()
                     }
                 }
-            }
-
-            // 整条标题栏拖动（使用屏幕坐标，避免累计误差导致抖动）
-            MouseArea {
-                anchors.fill: parent
-                acceptedButtons: Qt.LeftButton
-                onPressed: { root.titleDragStart(mouse.screenX, mouse.screenY) }
-                onPositionChanged: { root.titleDragMoveTo(mouse.screenX, mouse.screenY) }
             }
         }
 

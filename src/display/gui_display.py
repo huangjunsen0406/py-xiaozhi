@@ -11,8 +11,8 @@ from abc import ABCMeta
 from pathlib import Path
 from typing import Callable, Optional
 
-from PyQt5.QtCore import QObject, Qt, QTimer, QUrl
-from PyQt5.QtGui import QFont, QKeySequence
+from PyQt5.QtCore import QObject, Qt, QTimer, QUrl, QPoint
+from PyQt5.QtGui import QFont, QKeySequence, QCursor
 from PyQt5.QtQuickWidgets import QQuickWidget
 from PyQt5.QtWidgets import QApplication, QShortcut, QWidget
 
@@ -57,6 +57,10 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
 
         # 系统托盘组件
         self.system_tray = None
+
+        # 窗口拖动相关
+        self._dragging = False
+        self._drag_position = None
 
     async def set_callbacks(
         self,
@@ -393,48 +397,50 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             root_object.settingsButtonClicked.connect(self._on_settings_button_click)
             # 标题栏交互（最小化/关闭/拖拽移动）
             try:
-                root_object.titleMinimize.connect(
-                    lambda: QTimer.singleShot(0, self._minimize_window)
-                )
-            except Exception:
-                pass
+                root_object.titleMinimize.connect(self._minimize_window)
+                self.logger.debug("标题栏最小化信号已连接")
+            except Exception as e:
+                self.logger.warning(f"连接最小化信号失败: {e}")
             try:
-                root_object.titleClose.connect(
-                    lambda: QTimer.singleShot(0, self._quit_application)
-                )
-            except Exception:
-                pass
-            # 改用屏幕坐标：开始位置 + 当前屏幕位置，避免累计误差抖动
+                root_object.titleClose.connect(self._quit_application)
+                self.logger.debug("标题栏关闭信号已连接")
+            except Exception as e:
+                self.logger.warning(f"连接关闭信号失败: {e}")
+
+            # 窗口拖动：在 Python 端处理，QML 只负责传递事件
             try:
-                self._drag_start_screen_pos = None
+                def _on_drag_start(mouse_x, mouse_y):
+                    """标题栏拖动开始"""
+                    self._dragging = True
+                    # 直接记录窗口当前位置和鼠标全局位置的偏移
+                    global_pos = QCursor.pos()
+                    self._drag_position = global_pos - self.root.pos()
+                    self.logger.debug(f"拖动开始: 全局鼠标位置={global_pos}, 窗口位置={self.root.pos()}, 偏移={self._drag_position}")
 
-                def _drag_start(sx, sy):
-                    try:
-                        self._drag_start_screen_pos = (int(sx), int(sy))
-                        self._drag_start_window_pos = (self.root.x(), self.root.y())
-                    except Exception:
-                        pass
+                def _on_drag_move(mouse_x, mouse_y):
+                    """标题栏拖动移动"""
+                    if self._dragging and self._drag_position:
+                        new_pos = QCursor.pos() - self._drag_position
+                        self.root.move(new_pos)
 
-                def _drag_to(sx, sy):
-                    try:
-                        if (
-                            not hasattr(self, "_drag_start_screen_pos")
-                            or self._drag_start_screen_pos is None
-                        ):
-                            return
-                        dx = int(sx) - self._drag_start_screen_pos[0]
-                        dy = int(sy) - self._drag_start_screen_pos[1]
-                        self.root.move(
-                            self._drag_start_window_pos[0] + dx,
-                            self._drag_start_window_pos[1] + dy,
-                        )
-                    except Exception:
-                        pass
+                def _on_drag_end():
+                    """标题栏拖动结束"""
+                    self._dragging = False
+                    self._drag_position = None
 
-                root_object.titleDragStart.connect(_drag_start)
-                root_object.titleDragMoveTo.connect(_drag_to)
-            except Exception:
-                pass
+                root_object.titleDragStart.connect(_on_drag_start)
+                root_object.titleDragMoveTo.connect(_on_drag_move)
+                # 连接 released 信号（需要在 QML 中添加）
+                try:
+                    root_object.titleDragEnd.connect(_on_drag_end)
+                except AttributeError:
+                    # 如果 QML 没有 titleDragEnd 信号，使用简化逻辑
+                    pass
+
+                self.logger.debug("标题栏拖动信号已连接")
+            except Exception as e:
+                self.logger.warning(f"连接拖动信号失败: {e}")
+
             self.logger.debug("QML 信号连接设置完成")
         else:
             self.logger.warning("QML 根对象未找到，无法设置信号连接")
