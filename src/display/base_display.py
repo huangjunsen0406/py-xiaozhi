@@ -61,15 +61,3 @@ class BaseDisplay(ABC):
         """
         关闭显示.
         """
-
-    async def toggle_mode(self):
-        """
-        切换模式（在基类中定义接口）
-        """
-        self.logger.debug("基类中的toggle_mode被调用")
-
-    async def toggle_window_visibility(self):
-        """
-        切换窗口可见性（在基类中定义接口）
-        """
-        self.logger.debug("基类中的toggle_window_visibility被调用")

@@ -3,18 +3,17 @@
 GUI 显示模块 - 使用 QML 实现.
 """
 
+import asyncio
 import os
-
-# platform 仅在原生标题栏模式时使用；当前自定义标题栏不依赖
 import signal
 from abc import ABCMeta
 from pathlib import Path
 from typing import Callable, Optional
 
-from PyQt5.QtCore import QObject, Qt, QTimer, QUrl, QPoint
-from PyQt5.QtGui import QFont, QKeySequence, QCursor
+from PyQt5.QtCore import QObject, Qt, QTimer, QUrl
+from PyQt5.QtGui import QCursor, QFont
 from PyQt5.QtQuickWidgets import QQuickWidget
-from PyQt5.QtWidgets import QApplication, QShortcut, QWidget
+from PyQt5.QtWidgets import QApplication, QVBoxLayout, QWidget
 
 from src.display.base_display import BaseDisplay
 from src.display.gui_display_model import GuiDisplayModel
@@ -27,12 +26,23 @@ class CombinedMeta(type(QObject), ABCMeta):
 
 
 class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
+    """GUI 显示类 - 基于 QML 的现代化界面"""
+
+    # 常量定义
+    EMOTION_EXTENSIONS = (".gif", ".png", ".jpg", ".jpeg", ".webp")
+    DEFAULT_WINDOW_SIZE = (880, 560)
+    DEFAULT_FONT_SIZE = 12
+    QUIT_TIMEOUT_MS = 3000
+
     def __init__(self):
         super().__init__()
         QObject.__init__(self)
+
+        # Qt 组件
         self.app = None
         self.root = None
         self.qml_widget = None
+        self.system_tray = None
 
         # 数据模型
         self.display_model = GuiDisplayModel()
@@ -47,20 +57,23 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         self.current_status = ""
         self.is_connected = True
 
-        # 回调函数
-        self.button_press_callback = None
-        self.button_release_callback = None
-        self.mode_callback = None
-        self.auto_callback = None
-        self.abort_callback = None
-        self.send_text_callback = None
-
-        # 系统托盘组件
-        self.system_tray = None
-
-        # 窗口拖动相关
+        # 窗口拖动状态
         self._dragging = False
         self._drag_position = None
+
+        # 回调函数映射
+        self._callbacks = {
+            "button_press": None,
+            "button_release": None,
+            "mode": None,
+            "auto": None,
+            "abort": None,
+            "send_text": None,
+        }
+
+    # =========================================================================
+    # 公共 API - 回调与更新
+    # =========================================================================
 
     async def set_callbacks(
         self,
@@ -71,104 +84,273 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         abort_callback: Optional[Callable] = None,
         send_text_callback: Optional[Callable] = None,
     ):
-        """
-        设置回调函数.
-        """
-        self.button_press_callback = press_callback
-        self.button_release_callback = release_callback
-        self.mode_callback = mode_callback
-        self.auto_callback = auto_callback
-        self.abort_callback = abort_callback
-        self.send_text_callback = send_text_callback
-
-    def _on_manual_button_press(self):
-        """
-        手动模式按钮按下事件处理.
-        """
-        if self.button_press_callback:
-            self.button_press_callback()
-
-    def _on_manual_button_release(self):
-        """
-        手动模式按钮释放事件处理.
-        """
-        if self.button_release_callback:
-            self.button_release_callback()
-
-    def _on_auto_button_click(self):
-        """
-        自动模式按钮点击事件处理.
-        """
-        if self.auto_callback:
-            self.auto_callback()
-
-    def _on_abort_button_click(self):
-        """
-        处理中止按钮点击事件.
-        """
-        if self.abort_callback:
-            self.abort_callback()
-
-    def _on_mode_button_click(self):
-        """
-        对话模式切换按钮点击事件.
-        """
-        if self.mode_callback:
-            if not self.mode_callback():
-                return
-
-        self.auto_mode = not self.auto_mode
-
-        if self.auto_mode:
-            self.display_model.update_mode_text("自动对话")
-            self.display_model.set_auto_mode(True)
-        else:
-            self.display_model.update_mode_text("手动对话")
-            self.display_model.set_auto_mode(False)
+        """设置回调函数"""
+        self._callbacks.update(
+            {
+                "button_press": press_callback,
+                "button_release": release_callback,
+                "mode": mode_callback,
+                "auto": auto_callback,
+                "abort": abort_callback,
+                "send_text": send_text_callback,
+            }
+        )
 
     async def update_status(self, status: str, connected: bool):
-        """
-        更新状态文本并处理相关逻辑.
-        """
+        """更新状态文本并处理相关逻辑"""
         self.display_model.update_status(status, connected)
 
-        # 既跟踪状态文本变化，也跟踪连接状态变化
-        new_connected = bool(connected)
+        # 跟踪状态变化
         status_changed = status != self.current_status
-        connected_changed = new_connected != self.is_connected
+        connected_changed = bool(connected) != self.is_connected
 
         if status_changed:
             self.current_status = status
         if connected_changed:
-            self.is_connected = new_connected
+            self.is_connected = bool(connected)
 
-        # 任一变化都更新系统托盘
-        if status_changed or connected_changed:
-            self._update_system_tray(status)
+        # 更新系统托盘
+        if (status_changed or connected_changed) and self.system_tray:
+            self.system_tray.update_status(status, self.is_connected)
 
     async def update_text(self, text: str):
-        """
-        更新TTS文本.
-        """
+        """更新 TTS 文本"""
         self.display_model.update_text(text)
 
     async def update_emotion(self, emotion_name: str):
-        """
-        更新表情显示.
-        """
+        """更新表情显示"""
         if emotion_name == self._last_emotion_name:
             return
 
         self._last_emotion_name = emotion_name
         asset_path = self._get_emotion_asset_path(emotion_name)
-
-        # 更新模型中的表情路径
         self.display_model.update_emotion(asset_path)
 
+    async def update_button_status(self, text: str):
+        """更新按钮状态"""
+        if self.auto_mode:
+            self.display_model.update_button_text(text)
+
+    async def toggle_mode(self):
+        """切换对话模式"""
+        if self._callbacks["mode"]:
+            self._on_mode_button_click()
+            self.logger.debug("通过快捷键切换了对话模式")
+
+    async def toggle_window_visibility(self):
+        """切换窗口可见性"""
+        if not self.root:
+            return
+
+        if self.root.isVisible():
+            self.logger.debug("通过快捷键隐藏窗口")
+            self.root.hide()
+        else:
+            self.logger.debug("通过快捷键显示窗口")
+            self._show_main_window()
+
+    async def close(self):
+        """关闭窗口处理"""
+        self._running = False
+        if self.system_tray:
+            self.system_tray.hide()
+        if self.root:
+            self.root.close()
+
+    # =========================================================================
+    # 启动流程
+    # =========================================================================
+
+    async def start(self):
+        """启动 GUI"""
+        try:
+            self._configure_environment()
+            self._create_main_window()
+            self._load_qml()
+            self._setup_interactions()
+            await self._finalize_startup()
+        except Exception as e:
+            self.logger.error(f"GUI启动失败: {e}", exc_info=True)
+            raise
+
+    def _configure_environment(self):
+        """配置环境"""
+        os.environ.setdefault("QT_LOGGING_RULES", "qt.qpa.fonts.debug=false")
+
+        self.app = QApplication.instance()
+        if self.app is None:
+            raise RuntimeError("QApplication 未找到，请确保在 qasync 环境中运行")
+
+        self.app.setQuitOnLastWindowClosed(False)
+        self.app.setFont(QFont("PingFang SC", self.DEFAULT_FONT_SIZE))
+
+        self._setup_signal_handlers()
+        self._setup_activation_handler()
+
+    def _create_main_window(self):
+        """创建主窗口"""
+        self.root = QWidget()
+        self.root.setWindowTitle("")
+        self.root.setWindowFlags(Qt.FramelessWindowHint | Qt.Window)
+        self.root.resize(*self.DEFAULT_WINDOW_SIZE)
+        self.root.closeEvent = self._closeEvent
+
+    def _load_qml(self):
+        """加载 QML 界面"""
+        self.qml_widget = QQuickWidget()
+        self.qml_widget.setResizeMode(QQuickWidget.SizeRootObjectToView)
+        self.qml_widget.setClearColor(Qt.white)
+
+        # 注册数据模型到 QML 上下文
+        qml_context = self.qml_widget.rootContext()
+        qml_context.setContextProperty("displayModel", self.display_model)
+
+        # 加载 QML 文件
+        qml_file = Path(__file__).parent / "gui_display.qml"
+        self.qml_widget.setSource(QUrl.fromLocalFile(str(qml_file)))
+
+        # 设置为主窗口的中央 widget
+        layout = QVBoxLayout(self.root)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(self.qml_widget)
+
+    def _setup_interactions(self):
+        """设置交互（信号、托盘）"""
+        self._connect_qml_signals()
+
+    async def _finalize_startup(self):
+        """完成启动流程"""
+        await self.update_emotion("neutral")
+        self.root.show()
+        self._setup_system_tray()
+
+    # =========================================================================
+    # 信号连接
+    # =========================================================================
+
+    def _connect_qml_signals(self):
+        """连接 QML 信号到 Python 槽"""
+        root_object = self.qml_widget.rootObject()
+        if not root_object:
+            self.logger.warning("QML 根对象未找到，无法设置信号连接")
+            return
+
+        # 按钮事件信号映射
+        button_signals = {
+            "manualButtonPressed": self._on_manual_button_press,
+            "manualButtonReleased": self._on_manual_button_release,
+            "autoButtonClicked": self._on_auto_button_click,
+            "abortButtonClicked": self._on_abort_button_click,
+            "modeButtonClicked": self._on_mode_button_click,
+            "sendButtonClicked": self._on_send_button_click,
+            "settingsButtonClicked": self._on_settings_button_click,
+        }
+
+        # 标题栏控制信号映射
+        titlebar_signals = {
+            "titleMinimize": self._minimize_window,
+            "titleClose": self._quit_application,
+            "titleDragStart": self._on_title_drag_start,
+            "titleDragMoveTo": self._on_title_drag_move,
+            "titleDragEnd": self._on_title_drag_end,
+        }
+
+        # 批量连接信号
+        for signal_name, handler in {**button_signals, **titlebar_signals}.items():
+            try:
+                getattr(root_object, signal_name).connect(handler)
+            except AttributeError:
+                self.logger.debug(f"信号 {signal_name} 不存在（可能是可选功能）")
+
+        self.logger.debug("QML 信号连接设置完成")
+
+    # =========================================================================
+    # 按钮事件处理
+    # =========================================================================
+
+    def _on_manual_button_press(self):
+        """手动模式按钮按下"""
+        self._dispatch_callback("button_press")
+
+    def _on_manual_button_release(self):
+        """手动模式按钮释放"""
+        self._dispatch_callback("button_release")
+
+    def _on_auto_button_click(self):
+        """自动模式按钮点击"""
+        self._dispatch_callback("auto")
+
+    def _on_abort_button_click(self):
+        """中止按钮点击"""
+        self._dispatch_callback("abort")
+
+    def _on_mode_button_click(self):
+        """对话模式切换按钮点击"""
+        if self._callbacks["mode"] and not self._callbacks["mode"]():
+            return
+
+        self.auto_mode = not self.auto_mode
+        mode_text = "自动对话" if self.auto_mode else "手动对话"
+        self.display_model.update_mode_text(mode_text)
+        self.display_model.set_auto_mode(self.auto_mode)
+
+    def _on_send_button_click(self, text: str):
+        """处理发送文本按钮点击"""
+        text = text.strip()
+        if not text or not self._callbacks["send_text"]:
+            return
+
+        try:
+            task = asyncio.create_task(self._callbacks["send_text"](text))
+            task.add_done_callback(
+                lambda t: t.cancelled()
+                or not t.exception()
+                or self.logger.error(f"发送文本任务异常: {t.exception()}", exc_info=True)
+            )
+        except Exception as e:
+            self.logger.error(f"发送文本时出错: {e}")
+
+    def _on_settings_button_click(self):
+        """处理设置按钮点击"""
+        try:
+            from src.views.settings import SettingsWindow
+
+            settings_window = SettingsWindow(self.root)
+            settings_window.exec_()
+        except Exception as e:
+            self.logger.error(f"打开设置窗口失败: {e}", exc_info=True)
+
+    def _dispatch_callback(self, callback_name: str, *args):
+        """通用回调调度器"""
+        callback = self._callbacks.get(callback_name)
+        if callback:
+            callback(*args)
+
+    # =========================================================================
+    # 窗口拖动
+    # =========================================================================
+
+    def _on_title_drag_start(self, _x, _y):
+        """标题栏拖动开始"""
+        self._dragging = True
+        self._drag_position = QCursor.pos() - self.root.pos()
+
+    def _on_title_drag_move(self, _x, _y):
+        """标题栏拖动移动"""
+        if self._dragging and self._drag_position:
+            self.root.move(QCursor.pos() - self._drag_position)
+
+    def _on_title_drag_end(self):
+        """标题栏拖动结束"""
+        self._dragging = False
+        self._drag_position = None
+
+    # =========================================================================
+    # 表情管理
+    # =========================================================================
+
     def _get_emotion_asset_path(self, emotion_name: str) -> str:
-        """
-        获取表情资源文件路径，自动匹配常见后缀.
-        """
+        """获取表情资源文件路径，自动匹配常见后缀"""
         if emotion_name in self._emotion_cache:
             return self._emotion_cache[emotion_name]
 
@@ -177,361 +359,105 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             path = "😊"
         else:
             emotion_dir = assets_dir / "emojis"
-            # 支持的后缀优先级：gif > png > jpg > jpeg > webp
-            candidates = [
-                emotion_dir / f"{emotion_name}.gif",
-                emotion_dir / f"{emotion_name}.png",
-                emotion_dir / f"{emotion_name}.jpg",
-                emotion_dir / f"{emotion_name}.jpeg",
-                emotion_dir / f"{emotion_name}.webp",
-            ]
-            # 依次匹配
-            found = next((p for p in candidates if p.exists()), None)
-
-            # 兜底到 neutral 同样规则
-            if not found:
-                neutral_candidates = [
-                    emotion_dir / "neutral.gif",
-                    emotion_dir / "neutral.png",
-                    emotion_dir / "neutral.jpg",
-                    emotion_dir / "neutral.jpeg",
-                    emotion_dir / "neutral.webp",
-                ]
-                found = next((p for p in neutral_candidates if p.exists()), None)
-
-            path = str(found) if found else "😊"
+            # 尝试查找表情文件，失败则回退到 neutral
+            path = (
+                str(self._find_emotion_file(emotion_dir, emotion_name))
+                or str(self._find_emotion_file(emotion_dir, "neutral"))
+                or "😊"
+            )
 
         self._emotion_cache[emotion_name] = path
         return path
 
-    async def close(self):
-        """
-        关闭窗口处理.
-        """
-        self._running = False
+    def _find_emotion_file(self, emotion_dir: Path, name: str) -> Optional[Path]:
+        """在指定目录查找表情文件"""
+        for ext in self.EMOTION_EXTENSIONS:
+            file_path = emotion_dir / f"{name}{ext}"
+            if file_path.exists():
+                return file_path
+        return None
 
-        if self.system_tray:
-            self.system_tray.hide()
-        if self.root:
-            self.root.close()
-
-    async def start(self):
-        """
-        启动GUI.
-        """
-        try:
-            # 设置Qt环境变量
-            os.environ.setdefault("QT_LOGGING_RULES", "qt.qpa.fonts.debug=false")
-
-            self.app = QApplication.instance()
-            if self.app is None:
-                raise RuntimeError("QApplication未找到，请确保在qasync环境中运行")
-
-            # 关闭最后一个窗口被关闭时自动退出应用的行为，确保托盘常驻
-            try:
-                self.app.setQuitOnLastWindowClosed(False)
-            except Exception:
-                pass
-
-            # 设置优雅的 Ctrl+C 处理
-            self._setup_signal_handlers()
-
-            # macOS: 使用 applicationStateChanged 替代 eventFilter（更安全）
-            self._setup_activation_handler()
-
-            # 设置默认字体
-            default_font = QFont()
-            default_font.setPointSize(12)
-            self.app.setFont(default_font)
-
-            # 创建主窗口（无边框窗体）
-            self.root = QWidget()
-            # 隐藏标题文本，但保留原生窗口按钮
-            self.root.setWindowTitle("")
-            try:
-                # 无边框：使用自定义标题栏按钮
-                from PyQt5.QtCore import Qt as _Qt
-
-                self.root.setWindowFlags(_Qt.FramelessWindowHint | _Qt.Window)
-            except Exception:
-                pass
-            self.root.resize(880, 560)
-
-            # 创建 QML Widget
-            self.qml_widget = QQuickWidget()
-            self.qml_widget.setResizeMode(QQuickWidget.SizeRootObjectToView)
-            self.qml_widget.setClearColor(Qt.white)
-
-            # 注册数据模型到 QML 上下文
-            qml_context = self.qml_widget.rootContext()
-            qml_context.setContextProperty("displayModel", self.display_model)
-
-            # 加载 QML 文件
-            qml_file = Path(__file__).parent / "gui_display.qml"
-            self.qml_widget.setSource(QUrl.fromLocalFile(str(qml_file)))
-
-            # 设置为主窗口的中央widget
-            from PyQt5.QtWidgets import QVBoxLayout
-
-            layout = QVBoxLayout(self.root)
-            layout.setContentsMargins(0, 0, 0, 0)
-            layout.addWidget(self.qml_widget)
-
-            # 连接 QML 信号到 Python 槽
-            self._connect_qml_signals()
-
-            # 设置窗口关闭事件
-            self.root.closeEvent = self._closeEvent
-
-            # 设置快捷键
-            self._setup_shortcuts()
-
-            # 设置默认表情
-            await self._set_default_emotion()
-
-            # 先显示窗口（确保 UI 已在主线程初始化完成）
-            self.root.show()
-
-            # 最后初始化系统托盘（避免早期事件触发）
-            self._setup_system_tray()
-
-            # 自定义标题栏模式下，不再应用 macOS 原生外观
-
-        except Exception as e:
-            self.logger.error(f"GUI启动失败: {e}", exc_info=True)
-            raise
+    # =========================================================================
+    # 系统设置
+    # =========================================================================
 
     def _setup_signal_handlers(self):
-        """
-        设置信号处理器，优雅处理 Ctrl+C.
-        """
+        """设置信号处理器（Ctrl+C）"""
         try:
-
-            def _on_sigint(*_):
-                """
-                处理 SIGINT (Ctrl+C) 信号.
-                """
-                self.logger.info("收到 SIGINT (^C)，准备退出...")
-                # 用 Qt 的计时器把退出投递回主线程，避免跨线程直接操作 Qt
-                QTimer.singleShot(0, self._quit_application)
-
-            signal.signal(signal.SIGINT, _on_sigint)
+            signal.signal(
+                signal.SIGINT,
+                lambda *_: QTimer.singleShot(0, self._quit_application),
+            )
         except Exception as e:
             self.logger.warning(f"设置信号处理器失败: {e}")
 
-    def _apply_macos_titlebar_native(self):
-        """
-        MacOS：隐藏标题文本、透明标题栏、启用全尺寸内容视图，保留原生按钮； 同时允许在背景区域拖拽移动窗口。
-        """
-        try:
-            from AppKit import (
-                NSWindowStyleMaskFullSizeContentView,
-                NSWindowTitleHidden,
-            )
-            from objc import ObjCInstance
-
-            view = ObjCInstance(int(self.root.winId()))  # NSView*
-            window = view.window()
-            if window is None:
-                return
-            # 隐藏标题文本、透明标题栏
-            window.setTitleVisibility_(NSWindowTitleHidden)
-            window.setTitlebarAppearsTransparent_(True)
-            # 内容延伸到标题栏区域
-            mask = window.styleMask()
-            window.setStyleMask_(mask | NSWindowStyleMaskFullSizeContentView)
-            # 允许背景拖动
-            window.setMovableByWindowBackground_(True)
-        except Exception as e:
-            try:
-                self.logger.warning(f"macOS 原生标题栏样式设置失败: {e}")
-            except Exception:
-                pass
-
     def _setup_activation_handler(self):
-        """设置应用激活处理器（macOS Dock 图标点击恢复窗口）.
-
-        使用 applicationStateChanged 信号替代 eventFilter，避免跨线程问题.
-        """
+        """设置应用激活处理器（macOS Dock 图标点击恢复窗口）"""
         try:
             import platform
 
-            if platform.system() != "Darwin":  # 仅 macOS 需要
+            if platform.system() != "Darwin":
                 return
 
-            # 连接应用状态变化信号
             self.app.applicationStateChanged.connect(self._on_application_state_changed)
             self.logger.debug("已设置应用激活处理器（macOS Dock 支持）")
         except Exception as e:
             self.logger.warning(f"设置应用激活处理器失败: {e}")
 
     def _on_application_state_changed(self, state):
-        """
-        应用状态变化处理（Qt::ApplicationActive = 4）.
-        当用户点击 Dock 图标时，如果窗口隐藏则恢复显示.
-        """
-        try:
-            from PyQt5.QtCore import Qt
-
-            # Qt::ApplicationActive = 4，表示应用被激活
-            if state == Qt.ApplicationActive:
-                if self.root and not self.root.isVisible():
-                    # 使用 QTimer 确保在主线程执行
-                    QTimer.singleShot(0, self._show_main_window)
-        except Exception as e:
-            if hasattr(self, "logger"):
-                self.logger.error(f"处理应用状态变化失败: {e}")
-
-    def _connect_qml_signals(self):
-        """
-        连接 QML 信号到 Python 槽.
-        """
-        if self.qml_widget and self.qml_widget.rootObject():
-            root_object = self.qml_widget.rootObject()
-            root_object.manualButtonPressed.connect(self._on_manual_button_press)
-            root_object.manualButtonReleased.connect(self._on_manual_button_release)
-            root_object.autoButtonClicked.connect(self._on_auto_button_click)
-            root_object.abortButtonClicked.connect(self._on_abort_button_click)
-            root_object.modeButtonClicked.connect(self._on_mode_button_click)
-            root_object.sendButtonClicked.connect(self._on_send_button_click)
-            root_object.settingsButtonClicked.connect(self._on_settings_button_click)
-            # 标题栏交互（最小化/关闭/拖拽移动）
-            try:
-                root_object.titleMinimize.connect(self._minimize_window)
-                self.logger.debug("标题栏最小化信号已连接")
-            except Exception as e:
-                self.logger.warning(f"连接最小化信号失败: {e}")
-            try:
-                root_object.titleClose.connect(self._quit_application)
-                self.logger.debug("标题栏关闭信号已连接")
-            except Exception as e:
-                self.logger.warning(f"连接关闭信号失败: {e}")
-
-            # 窗口拖动：在 Python 端处理，QML 只负责传递事件
-            try:
-                def _on_drag_start(mouse_x, mouse_y):
-                    """标题栏拖动开始"""
-                    self._dragging = True
-                    # 直接记录窗口当前位置和鼠标全局位置的偏移
-                    global_pos = QCursor.pos()
-                    self._drag_position = global_pos - self.root.pos()
-                    self.logger.debug(f"拖动开始: 全局鼠标位置={global_pos}, 窗口位置={self.root.pos()}, 偏移={self._drag_position}")
-
-                def _on_drag_move(mouse_x, mouse_y):
-                    """标题栏拖动移动"""
-                    if self._dragging and self._drag_position:
-                        new_pos = QCursor.pos() - self._drag_position
-                        self.root.move(new_pos)
-
-                def _on_drag_end():
-                    """标题栏拖动结束"""
-                    self._dragging = False
-                    self._drag_position = None
-
-                root_object.titleDragStart.connect(_on_drag_start)
-                root_object.titleDragMoveTo.connect(_on_drag_move)
-                # 连接 released 信号（需要在 QML 中添加）
-                try:
-                    root_object.titleDragEnd.connect(_on_drag_end)
-                except AttributeError:
-                    # 如果 QML 没有 titleDragEnd 信号，使用简化逻辑
-                    pass
-
-                self.logger.debug("标题栏拖动信号已连接")
-            except Exception as e:
-                self.logger.warning(f"连接拖动信号失败: {e}")
-
-            self.logger.debug("QML 信号连接设置完成")
-        else:
-            self.logger.warning("QML 根对象未找到，无法设置信号连接")
-
-    def _setup_shortcuts(self):
-        """
-        设置快捷键.
-        """
-        try:
-            # Ctrl+, 与 Cmd+, 打开设置
-            QShortcut(
-                QKeySequence("Ctrl+,"),
-                self.root,
-                activated=self._on_settings_button_click,
-            )
-            QShortcut(
-                QKeySequence("Meta+,"),
-                self.root,
-                activated=self._on_settings_button_click,
-            )
-        except Exception as e:
-            self.logger.warning(f"设置快捷键失败: {e}")
+        """应用状态变化处理（macOS Dock 点击时恢复窗口）"""
+        if state == Qt.ApplicationActive and self.root and not self.root.isVisible():
+            QTimer.singleShot(0, self._show_main_window)
 
     def _setup_system_tray(self):
-        """设置系统托盘.
+        """设置系统托盘"""
+        if os.getenv("XIAOZHI_DISABLE_TRAY") == "1":
+            self.logger.warning("已通过环境变量禁用系统托盘 (XIAOZHI_DISABLE_TRAY=1)")
+            return
 
-        注意：所有托盘信号回调都通过 QTimer 投递到主线程，避免跨线程 UI 操作.
-        """
         try:
-            # 允许通过环境变量禁用系统托盘用于排障
-            if os.getenv("XIAOZHI_DISABLE_TRAY") == "1":
-                self.logger.warning(
-                    "已通过环境变量禁用系统托盘 (XIAOZHI_DISABLE_TRAY=1)"
-                )
-                return
             from src.views.components.system_tray import SystemTray
 
             self.system_tray = SystemTray(self.root)
 
-            # 使用 lambda + QTimer 确保所有回调在主线程执行
-            self.system_tray.show_window_requested.connect(
-                lambda: QTimer.singleShot(0, self._show_main_window)
-            )
-            self.system_tray.settings_requested.connect(
-                lambda: QTimer.singleShot(0, self._on_settings_button_click)
-            )
-            self.system_tray.quit_requested.connect(
-                lambda: QTimer.singleShot(0, self._quit_application)
-            )
+            # 连接托盘信号（使用 QTimer 确保主线程执行）
+            tray_signals = {
+                "show_window_requested": self._show_main_window,
+                "settings_requested": self._on_settings_button_click,
+                "quit_requested": self._quit_application,
+            }
+
+            for signal_name, handler in tray_signals.items():
+                getattr(self.system_tray, signal_name).connect(
+                    lambda h=handler: QTimer.singleShot(0, h)
+                )
 
         except Exception as e:
             self.logger.error(f"初始化系统托盘组件失败: {e}", exc_info=True)
 
-    async def _set_default_emotion(self):
-        """
-        设置默认表情.
-        """
-        try:
-            await self.update_emotion("neutral")
-        except Exception as e:
-            self.logger.error(f"设置默认表情失败: {e}", exc_info=True)
-
-    def _update_system_tray(self, status):
-        """
-        更新系统托盘状态.
-        """
-        if self.system_tray:
-            self.system_tray.update_status(status, self.is_connected)
+    # =========================================================================
+    # 窗口控制
+    # =========================================================================
 
     def _show_main_window(self):
-        """
-        显示主窗口.
-        """
-        if self.root:
-            if self.root.isMinimized():
-                self.root.showNormal()
-            if not self.root.isVisible():
-                self.root.show()
-            self.root.activateWindow()
-            self.root.raise_()
+        """显示主窗口"""
+        if not self.root:
+            return
+
+        if self.root.isMinimized():
+            self.root.showNormal()
+        if not self.root.isVisible():
+            self.root.show()
+        self.root.activateWindow()
+        self.root.raise_()
 
     def _minimize_window(self):
-        try:
+        """最小化窗口"""
+        if self.root:
             self.root.showMinimized()
-        except Exception:
-            pass
 
     def _quit_application(self):
-        """
-        退出应用程序.
-        """
+        """退出应用程序"""
         self.logger.info("开始退出应用程序...")
         self._running = False
 
@@ -542,131 +468,48 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             from src.application import Application
 
             app = Application.get_instance()
-            if app:
-                # 异步启动关闭流程，但设置超时
-                import asyncio
-
-                loop = asyncio.get_event_loop()
-                if loop.is_running():
-                    # 创建关闭任务，但不等待
-                    shutdown_task = asyncio.create_task(app.shutdown())
-
-                    # 设置超时后强制退出
-                    def force_quit():
-                        if not shutdown_task.done():
-                            self.logger.warning("关闭超时，强制退出")
-                            shutdown_task.cancel()
-                        QApplication.quit()
-
-                    # 3秒后强制退出
-                    QTimer.singleShot(3000, force_quit)
-
-                    # 当shutdown完成时正常退出
-                    def on_shutdown_complete(task):
-                        if not task.cancelled():
-                            if task.exception():
-                                self.logger.error(
-                                    f"应用程序关闭异常: {task.exception()}"
-                                )
-                            else:
-                                self.logger.info("应用程序正常关闭")
-                        QApplication.quit()
-
-                    shutdown_task.add_done_callback(on_shutdown_complete)
-                else:
-                    # 如果事件循环未运行，直接退出
-                    QApplication.quit()
-            else:
+            if not app:
                 QApplication.quit()
+                return
+
+            loop = asyncio.get_event_loop()
+            if not loop.is_running():
+                QApplication.quit()
+                return
+
+            # 创建关闭任务并设置超时
+            shutdown_task = asyncio.create_task(app.shutdown())
+
+            def on_shutdown_complete(task):
+                if not task.cancelled() and task.exception():
+                    self.logger.error(f"应用程序关闭异常: {task.exception()}")
+                else:
+                    self.logger.info("应用程序正常关闭")
+                QApplication.quit()
+
+            def force_quit():
+                if not shutdown_task.done():
+                    self.logger.warning("关闭超时，强制退出")
+                    shutdown_task.cancel()
+                QApplication.quit()
+
+            shutdown_task.add_done_callback(on_shutdown_complete)
+            QTimer.singleShot(self.QUIT_TIMEOUT_MS, force_quit)
 
         except Exception as e:
             self.logger.error(f"关闭应用程序失败: {e}")
-            # 异常情况下直接退出
             QApplication.quit()
 
     def _closeEvent(self, event):
-        """
-        处理窗口关闭事件.
-        """
-        # 只要系统托盘可用，就最小化到托盘
+        """处理窗口关闭事件"""
+        # 如果系统托盘可用，最小化到托盘
         if self.system_tray and (
             getattr(self.system_tray, "is_available", lambda: False)()
             or getattr(self.system_tray, "is_visible", lambda: False)()
         ):
             self.logger.info("关闭窗口：最小化到托盘")
-            # 使用 QTimer 确保在主线程执行隐藏操作
             QTimer.singleShot(0, self.root.hide)
             event.ignore()
         else:
-            # 使用 QTimer 确保退出在主线程执行
             QTimer.singleShot(0, self._quit_application)
             event.accept()
-
-    async def update_button_status(self, text: str):
-        """
-        更新按钮状态.
-        """
-        if self.auto_mode:
-            self.display_model.update_button_text(text)
-
-    def _on_send_button_click(self, text: str):
-        """
-        处理发送文本按钮点击事件.
-        """
-        if not self.send_text_callback:
-            return
-
-        text = text.strip()
-        if not text:
-            return
-
-        try:
-            import asyncio
-
-            task = asyncio.create_task(self.send_text_callback(text))
-
-            def _on_done(t):
-                if not t.cancelled() and t.exception():
-                    self.logger.error(
-                        f"发送文本任务异常: {t.exception()}", exc_info=True
-                    )
-
-            task.add_done_callback(_on_done)
-        except Exception as e:
-            self.logger.error(f"发送文本时出错: {e}")
-
-    def _on_settings_button_click(self):
-        """
-        处理设置按钮点击事件.
-        """
-        try:
-            from src.views.settings import SettingsWindow
-
-            settings_window = SettingsWindow(self.root)
-            settings_window.exec_()
-
-        except Exception as e:
-            self.logger.error(f"打开设置窗口失败: {e}", exc_info=True)
-
-    async def toggle_mode(self):
-        """
-        切换模式.
-        """
-        # 调用现有的模式切换功能
-        if hasattr(self, "mode_callback") and self.mode_callback:
-            self._on_mode_button_click()
-            self.logger.debug("通过快捷键切换了对话模式")
-
-    async def toggle_window_visibility(self):
-        """
-        切换窗口可见性.
-        """
-        if self.root:
-            if self.root.isVisible():
-                self.logger.debug("通过快捷键隐藏窗口")
-                self.root.hide()
-            else:
-                self.logger.debug("通过快捷键显示窗口")
-                self.root.show()
-                self.root.activateWindow()
-                self.root.raise_()
