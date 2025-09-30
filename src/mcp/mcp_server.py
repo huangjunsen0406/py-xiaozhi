@@ -301,7 +301,7 @@ class McpServer:
 
         self.add_tool(
             McpTool(
-                "take_photo",            # 保留原名兼容
+                "take_photo",  # 保留原名兼容
                 VISION_DESC,
                 properties,
                 take_photo,
@@ -312,10 +312,12 @@ class McpServer:
         from src.mcp.tools.screenshot import take_screenshot
 
         # 注册take_screenshot工具
-        screenshot_properties = PropertyList([
-            Property("question", PropertyType.STRING),
-            Property("display", PropertyType.STRING, default_value=None)
-        ])
+        screenshot_properties = PropertyList(
+            [
+                Property("question", PropertyType.STRING),
+                Property("display", PropertyType.STRING, default_value=None),
+            ]
+        )
         SCREENSHOT_DESC = (
             "【桌面截图/屏幕分析】当用户提到：截屏、截图、看看桌面、分析屏幕、桌面上有什么、"
             "屏幕截图、查看当前界面、分析当前页面、读取屏幕内容、屏幕OCR 时调用本工具。"

@@ -167,29 +167,30 @@ class MusicPlayer:
 
     def _init_pygame_mixer(self):
         """
-        根据服务器类型优化pygame mixer初始化
+        根据服务器类型优化pygame mixer初始化.
         """
         try:
-            
+
             # 预初始化mixer以设置缓冲区
             pygame.mixer.pre_init(
                 frequency=AudioConfig.OUTPUT_SAMPLE_RATE,
                 size=-16,  # 16位有符号
                 channels=AudioConfig.CHANNELS,
-                buffer=1024
+                buffer=1024,
             )
-            
+
             # 正式初始化
             pygame.mixer.init()
-            
-            logger.info(f"pygame mixer初始化完成 - 采样率: {AudioConfig.OUTPUT_SAMPLE_RATE}Hz")
-            
+
+            logger.info(
+                f"pygame mixer初始化完成 - 采样率: {AudioConfig.OUTPUT_SAMPLE_RATE}Hz"
+            )
+
         except Exception as e:
             logger.warning(f"优化pygame初始化失败，使用默认配置: {e}")
             # 回退到默认配置
             pygame.mixer.init(
-                frequency=AudioConfig.OUTPUT_SAMPLE_RATE, 
-                channels=AudioConfig.CHANNELS
+                frequency=AudioConfig.OUTPUT_SAMPLE_RATE, channels=AudioConfig.CHANNELS
             )
 
     def _initialize_app_reference(self):

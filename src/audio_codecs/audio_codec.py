@@ -86,7 +86,11 @@ class AudioCodec:
         for idx, ha in enumerate(hostapis):
             name = ha.get("name", "")
             if "WASAPI" in name:
-                key = "default_input_device" if kind == "input" else "default_output_device"
+                key = (
+                    "default_input_device"
+                    if kind == "input"
+                    else "default_output_device"
+                )
                 cand = ha.get(key, -1)
                 if isinstance(cand, int) and 0 <= cand < len(devices):
                     d = devices[cand]
@@ -120,7 +124,18 @@ class AudioCodec:
             if default_name and d["name"] == default_name:
                 score += 10
             # 小加分：常见可用端点关键词
-            if any(k in d["name"] for k in ["Speaker", "扬声器", "Realtek", "USB", "AMD", "HDMI", "Monitor"]):
+            if any(
+                k in d["name"]
+                for k in [
+                    "Speaker",
+                    "扬声器",
+                    "Realtek",
+                    "USB",
+                    "AMD",
+                    "HDMI",
+                    "Monitor",
+                ]
+            ):
                 score += 1
             scored.append((score, i))
 
@@ -156,10 +171,14 @@ class AudioCodec:
                 output_device_info = sd.query_devices(kind="output")
 
             self.device_input_sample_rate = int(input_device_info["default_samplerate"])
-            self.device_output_sample_rate = int(output_device_info["default_samplerate"])
+            self.device_output_sample_rate = int(
+                output_device_info["default_samplerate"]
+            )
 
             frame_duration_sec = AudioConfig.FRAME_DURATION / 1000
-            self._device_input_frame_size = int(self.device_input_sample_rate * frame_duration_sec)
+            self._device_input_frame_size = int(
+                self.device_input_sample_rate * frame_duration_sec
+            )
 
             logger.info(
                 f"输入采样率: {self.device_input_sample_rate}Hz, 输出: {self.device_output_sample_rate}Hz"
@@ -228,8 +247,8 @@ class AudioCodec:
             )
 
     async def _select_audio_devices(self):
-        """
-        显示并选择音频设备.
+        """显示并选择音频设备.
+
         优先使用配置文件中的设备，如果没有则自动选择并保存到配置（只在首次写入，之后不覆盖）。
         """
         try:
@@ -247,16 +266,24 @@ class AudioCodec:
             # --- 验证配置中的输入设备 ---
             if input_device_id is not None:
                 try:
-                    if isinstance(input_device_id, int) and 0 <= input_device_id < len(devices):
+                    if isinstance(input_device_id, int) and 0 <= input_device_id < len(
+                        devices
+                    ):
                         d = devices[input_device_id]
                         if d["max_input_channels"] > 0:
                             self.mic_device_id = input_device_id
-                            logger.info(f"使用配置的麦克风设备: [{input_device_id}] {d['name']}")
+                            logger.info(
+                                f"使用配置的麦克风设备: [{input_device_id}] {d['name']}"
+                            )
                         else:
-                            logger.warning(f"配置的设备[{input_device_id}]不支持输入，将自动选择")
+                            logger.warning(
+                                f"配置的设备[{input_device_id}]不支持输入，将自动选择"
+                            )
                             self.mic_device_id = None
                     else:
-                        logger.warning(f"配置的输入设备ID[{input_device_id}]无效，将自动选择")
+                        logger.warning(
+                            f"配置的输入设备ID[{input_device_id}]无效，将自动选择"
+                        )
                         self.mic_device_id = None
                 except Exception as e:
                     logger.warning(f"验证配置输入设备失败: {e}，将自动选择")
@@ -267,16 +294,24 @@ class AudioCodec:
             # --- 验证配置中的输出设备 ---
             if output_device_id is not None:
                 try:
-                    if isinstance(output_device_id, int) and 0 <= output_device_id < len(devices):
+                    if isinstance(
+                        output_device_id, int
+                    ) and 0 <= output_device_id < len(devices):
                         d = devices[output_device_id]
                         if d["max_output_channels"] > 0:
                             self.speaker_device_id = output_device_id
-                            logger.info(f"使用配置的扬声器设备: [{output_device_id}] {d['name']}")
+                            logger.info(
+                                f"使用配置的扬声器设备: [{output_device_id}] {d['name']}"
+                            )
                         else:
-                            logger.warning(f"配置的设备[{output_device_id}]不支持输出，将自动选择")
+                            logger.warning(
+                                f"配置的设备[{output_device_id}]不支持输出，将自动选择"
+                            )
                             self.speaker_device_id = None
                     else:
-                        logger.warning(f"配置的输出设备ID[{output_device_id}]无效，将自动选择")
+                        logger.warning(
+                            f"配置的输出设备ID[{output_device_id}]无效，将自动选择"
+                        )
                         self.speaker_device_id = None
                 except Exception as e:
                     logger.warning(f"验证配置输出设备失败: {e}，将自动选择")
@@ -295,7 +330,9 @@ class AudioCodec:
                     d = devices[picked_input]
                     logger.info(f"自动选择麦克风设备: [{picked_input}] {d['name']}")
                 else:
-                    logger.warning("未找到可用输入设备（将使用系统默认，且不写入索引）。")
+                    logger.warning(
+                        "未找到可用输入设备（将使用系统默认，且不写入索引）。"
+                    )
 
             if picked_output is None:
                 picked_output = self._auto_pick_device("output")
@@ -304,10 +341,14 @@ class AudioCodec:
                     d = devices[picked_output]
                     logger.info(f"自动选择扬声器设备: [{picked_output}] {d['name']}")
                 else:
-                    logger.warning("未找到可用输出设备（将使用系统默认，且不写入索引）。")
+                    logger.warning(
+                        "未找到可用输出设备（将使用系统默认，且不写入索引）。"
+                    )
 
             # --- 仅当配置原本缺少对应条目时，才写入（避免第二次覆盖） ---
-            need_write = (not had_cfg_input and picked_input is not None) or (not had_cfg_output and picked_output is not None)
+            need_write = (not had_cfg_input and picked_input is not None) or (
+                not had_cfg_output and picked_output is not None
+            )
             if need_write:
                 await self._save_default_audio_config(
                     input_device_id=picked_input if not had_cfg_input else None,
@@ -317,10 +358,18 @@ class AudioCodec:
         except Exception as e:
             logger.warning(f"设备选择失败: {e}，将使用系统默认（不写入配置）")
             # 允许 None，让 PortAudio 用系统默认端点
-            self.mic_device_id = self.mic_device_id if isinstance(self.mic_device_id, int) else None
-            self.speaker_device_id = self.speaker_device_id if isinstance(self.speaker_device_id, int) else None
+            self.mic_device_id = (
+                self.mic_device_id if isinstance(self.mic_device_id, int) else None
+            )
+            self.speaker_device_id = (
+                self.speaker_device_id
+                if isinstance(self.speaker_device_id, int)
+                else None
+            )
 
-    async def _save_default_audio_config(self, input_device_id: Optional[int], output_device_id: Optional[int]):
+    async def _save_default_audio_config(
+        self, input_device_id: Optional[int], output_device_id: Optional[int]
+    ):
         """
         保存默认音频设备配置到配置文件（仅针对传入的非空设备；不会覆盖已有字段）。
         """
@@ -331,20 +380,24 @@ class AudioCodec:
             # 保存输入设备配置
             if input_device_id is not None and 0 <= input_device_id < len(devices):
                 d = devices[input_device_id]
-                audio_config_patch.update({
-                    "input_device_id": input_device_id,
-                    "input_device_name": d["name"],
-                    "input_sample_rate": int(d["default_samplerate"]),
-                })
+                audio_config_patch.update(
+                    {
+                        "input_device_id": input_device_id,
+                        "input_device_name": d["name"],
+                        "input_sample_rate": int(d["default_samplerate"]),
+                    }
+                )
 
             # 保存输出设备配置
             if output_device_id is not None and 0 <= output_device_id < len(devices):
                 d = devices[output_device_id]
-                audio_config_patch.update({
-                    "output_device_id": output_device_id,
-                    "output_device_name": d["name"],
-                    "output_sample_rate": int(d["default_samplerate"]),
-                })
+                audio_config_patch.update(
+                    {
+                        "output_device_id": output_device_id,
+                        "output_device_name": d["name"],
+                        "output_sample_rate": int(d["default_samplerate"]),
+                    }
+                )
 
             if audio_config_patch:
                 # merge：不覆盖已有键
@@ -429,7 +482,11 @@ class AudioCodec:
                     return
 
             # 应用AEC处理（仅 macOS 需要）
-            if (self._aec_enabled and len(audio_data) == AudioConfig.INPUT_FRAME_SIZE and self.aec_processor._is_macos):
+            if (
+                self._aec_enabled
+                and len(audio_data) == AudioConfig.INPUT_FRAME_SIZE
+                and self.aec_processor._is_macos
+            ):
                 try:
                     audio_data = self.aec_processor.process_audio(audio_data)
                 except Exception as e:
@@ -526,9 +583,9 @@ class AudioCodec:
             else:
                 out_len = len(audio_data) // AudioConfig.CHANNELS
                 if out_len > 0:
-                    outdata[:out_len] = audio_data[: out_len * AudioConfig.CHANNELS].reshape(
-                        -1, AudioConfig.CHANNELS
-                    )
+                    outdata[:out_len] = audio_data[
+                        : out_len * AudioConfig.CHANNELS
+                    ].reshape(-1, AudioConfig.CHANNELS)
                 if out_len < frames:
                     outdata[out_len:] = 0
 
@@ -558,7 +615,9 @@ class AudioCodec:
 
             need = frames * AudioConfig.CHANNELS
             if len(self._resample_output_buffer) >= need:
-                frame_data = [self._resample_output_buffer.popleft() for _ in range(need)]
+                frame_data = [
+                    self._resample_output_buffer.popleft() for _ in range(need)
+                ]
                 output_array = np.array(frame_data, dtype=np.int16)
                 outdata[:] = output_array.reshape(-1, AudioConfig.CHANNELS)
             else:
@@ -698,34 +757,30 @@ class AudioCodec:
         """
         if not self._aec_enabled or not self.aec_processor:
             return {"enabled": False, "reason": "AEC未启用或初始化失败"}
-        
+
         try:
-            return {
-                "enabled": True,
-                **self.aec_processor.get_status()
-            }
+            return {"enabled": True, **self.aec_processor.get_status()}
         except Exception as e:
             return {"enabled": False, "reason": f"获取状态失败: {e}"}
 
     def toggle_aec(self, enabled: bool) -> bool:
-        """
-        切换AEC启用状态.
-        
+        """切换AEC启用状态.
+
         Args:
             enabled: 是否启用AEC
-            
+
         Returns:
             实际的AEC状态
         """
         if not self.aec_processor:
             logger.warning("AEC处理器未初始化，无法切换状态")
             return False
-        
+
         self._aec_enabled = enabled and self.aec_processor._is_initialized
-        
+
         if enabled and not self._aec_enabled:
             logger.warning("无法启用AEC，处理器未正确初始化")
-        
+
         logger.info(f"AEC状态: {'启用' if self._aec_enabled else '禁用'}")
         return self._aec_enabled
 
@@ -846,19 +901,36 @@ class AudioCodec:
 
     async def _cleanup_resampler(self, resampler, name):
         """
-        清理重采样器.
+        清理重采样器 - 刷新缓冲区并释放资源.
         """
         if resampler:
             try:
+                # 刷新缓冲区
                 if hasattr(resampler, "resample_chunk"):
                     empty_array = np.array([], dtype=np.int16)
                     resampler.resample_chunk(empty_array, last=True)
             except Exception as e:
-                logger.warning(f"清理{name}重采样器失败: {e}")
+                logger.warning(f"刷新{name}重采样器缓冲区失败: {e}")
+
+            try:
+                # 尝试显式关闭（如果支持）
+                if hasattr(resampler, "close"):
+                    resampler.close()
+                    logger.debug(f"{name}重采样器已关闭")
+            except Exception as e:
+                logger.warning(f"关闭{name}重采样器失败: {e}")
 
     async def close(self):
-        """
-        关闭音频编解码器.
+        """关闭音频编解码器.
+
+        正确的销毁顺序：
+        1. 设置关闭标志，阻止新的操作
+        2. 停止音频流（停止硬件回调）
+        3. 等待回调完全结束
+        4. 清空所有队列和缓冲区（打破对 resampler 的间接引用）
+        5. 清空回调引用
+        6. 清理 resampler（刷新 + 关闭）
+        7. 置 None + 强制 GC（释放 nanobind 包装的 C++ 对象）
         """
         if self._is_closing:
             return
@@ -867,11 +939,11 @@ class AudioCodec:
         logger.info("开始关闭音频编解码器...")
 
         try:
-            await self.clear_audio_queue()
-
+            # 1. 停止音频流（停止硬件回调，这是最关键的第一步）
             if self.input_stream:
                 try:
-                    self.input_stream.stop()
+                    if self.input_stream.active:
+                        self.input_stream.stop()
                     self.input_stream.close()
                 except Exception as e:
                     logger.warning(f"关闭输入流失败: {e}")
@@ -880,22 +952,48 @@ class AudioCodec:
 
             if self.output_stream:
                 try:
-                    self.output_stream.stop()
+                    if self.output_stream.active:
+                        self.output_stream.stop()
                     self.output_stream.close()
                 except Exception as e:
                     logger.warning(f"关闭输出流失败: {e}")
                 finally:
                     self.output_stream = None
 
+            # 2. 等待回调完全停止（给正在执行的回调一点时间完成）
+            await asyncio.sleep(0.05)
+
+            # 3. 清空回调引用（打破闭包引用链）
+            self._encoded_audio_callback = None
+
+            # 4. 清空所有队列和缓冲区（关键！必须在清理 resampler 之前）
+            # 这些缓冲区可能间接持有 resampler 处理过的数据或引用
+            await self.clear_audio_queue()
+
+            # 清空重采样缓冲区（可能持有 numpy 数组，间接引用 resampler）
+            if self._resample_input_buffer:
+                self._resample_input_buffer.clear()
+            if self._resample_output_buffer:
+                self._resample_output_buffer.clear()
+
+            # 5. 第一次 GC，清理队列和缓冲区中的对象
+            gc.collect()
+
+            # 6. 清理并释放重采样器（刷新缓冲区 + 显式关闭）
             await self._cleanup_resampler(self.input_resampler, "输入")
             await self._cleanup_resampler(self.output_resampler, "输出")
+
+            # 7. 显式置 None（断开 Python 引用）
             self.input_resampler = None
             self.output_resampler = None
 
-            self._resample_input_buffer.clear()
-            self._resample_output_buffer.clear()
+            # 8. 第二次 GC，释放 resampler 对象（触发 nanobind 析构）
+            gc.collect()
 
-            # 关闭AEC处理器
+            # 额外等待，确保 nanobind 有时间完成析构
+            await asyncio.sleep(0.01)
+
+            # 9. 关闭 AEC 处理器
             if self.aec_processor:
                 try:
                     await self.aec_processor.close()
@@ -904,9 +1002,11 @@ class AudioCodec:
                 finally:
                     self.aec_processor = None
 
+            # 10. 释放编解码器
             self.opus_encoder = None
             self.opus_decoder = None
 
+            # 11. 最后一次 GC，确保所有对象被回收
             gc.collect()
 
             logger.info("音频资源已完全释放")

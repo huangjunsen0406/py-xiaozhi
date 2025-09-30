@@ -3,7 +3,7 @@
 激活窗口数据模型 - 用于QML数据绑定
 """
 
-from PyQt5.QtCore import QObject, pyqtSignal, pyqtProperty
+from PyQt5.QtCore import QObject, pyqtProperty, pyqtSignal
 
 
 class ActivationModel(QObject):
@@ -90,36 +90,50 @@ class ActivationModel(QObject):
 
     # 便捷方法
     def update_device_info(self, serial_number=None, mac_address=None):
-        """更新设备信息"""
+        """
+        更新设备信息.
+        """
         if serial_number is not None:
             self.serialNumber = serial_number
         if mac_address is not None:
             self.macAddress = mac_address
 
     def update_activation_status(self, status, color="#6c757d"):
-        """更新激活状态"""
+        """
+        更新激活状态.
+        """
         self.activationStatus = status
         self.statusColor = color
 
     def update_activation_code(self, code):
-        """更新激活码"""
+        """
+        更新激活码.
+        """
         self.activationCode = code
 
     def reset_activation_code(self):
-        """重置激活码"""
+        """
+        重置激活码.
+        """
         self.activationCode = "--"
 
     def set_status_activated(self):
-        """设置为已激活状态"""
+        """
+        设置为已激活状态.
+        """
         self.update_activation_status("已激活", "#28a745")
         self.reset_activation_code()
 
     def set_status_not_activated(self):
-        """设置为未激活状态"""
+        """
+        设置为未激活状态.
+        """
         self.update_activation_status("未激活", "#dc3545")
 
     def set_status_inconsistent(self, local_activated=False, server_activated=False):
-        """设置状态不一致"""
+        """
+        设置状态不一致.
+        """
         if local_activated and not server_activated:
             self.update_activation_status("状态不一致(需重新激活)", "#ff9900")
         else:

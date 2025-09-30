@@ -1,5 +1,5 @@
-from pathlib import Path
 import os
+from pathlib import Path
 
 from PyQt5.QtWidgets import (
     QDialog,
@@ -10,11 +10,11 @@ from PyQt5.QtWidgets import (
 
 from src.utils.config_manager import ConfigManager
 from src.utils.logging_config import get_logger
+from src.views.settings.components.audio import AudioWidget
+from src.views.settings.components.camera import CameraWidget
 from src.views.settings.components.shortcuts_settings import ShortcutsSettingsWidget
 from src.views.settings.components.system_options import SystemOptionsWidget
 from src.views.settings.components.wake_word import WakeWordWidget
-from src.views.settings.components.camera import CameraWidget
-from src.views.settings.components.audio import AudioWidget
 
 
 class SettingsWindow(QDialog):
@@ -33,7 +33,7 @@ class SettingsWindow(QDialog):
         self.camera_tab = None
         self.audio_tab = None
         self.shortcuts_tab = None
-        
+
         # UI控件
         self.ui_controls = {}
 
@@ -116,11 +116,13 @@ class SettingsWindow(QDialog):
         获取UI控件引用.
         """
         # 只需要获取主要的按钮控件
-        self.ui_controls.update({
-            "save_btn": self.findChild(QPushButton, "save_btn"),
-            "cancel_btn": self.findChild(QPushButton, "cancel_btn"),
-            "reset_btn": self.findChild(QPushButton, "reset_btn"),
-        })
+        self.ui_controls.update(
+            {
+                "save_btn": self.findChild(QPushButton, "save_btn"),
+                "cancel_btn": self.findChild(QPushButton, "cancel_btn"),
+                "reset_btn": self.findChild(QPushButton, "reset_btn"),
+            }
+        )
 
     def _connect_events(self):
         """
@@ -175,41 +177,41 @@ class SettingsWindow(QDialog):
         try:
             # 从各个组件收集配置数据
             all_config_data = {}
-            
+
             # 系统选项配置
             if self.system_options_tab:
                 system_config = self.system_options_tab.get_config_data()
                 all_config_data.update(system_config)
-            
+
             # 唤醒词配置
             if self.wake_word_tab:
                 wake_word_config = self.wake_word_tab.get_config_data()
                 all_config_data.update(wake_word_config)
                 # 保存唤醒词文件
                 self.wake_word_tab.save_keywords()
-            
+
             # 摄像头配置
             if self.camera_tab:
                 camera_config = self.camera_tab.get_config_data()
                 all_config_data.update(camera_config)
-            
+
             # 音频设备配置
             if self.audio_tab:
                 audio_config = self.audio_tab.get_config_data()
                 all_config_data.update(audio_config)
-            
+
             # 快捷键配置
             if self.shortcuts_tab:
                 # 快捷键组件有自己的保存方法
                 self.shortcuts_tab.apply_settings()
-            
+
             # 批量更新配置
             for config_path, value in all_config_data.items():
                 self.config_manager.update_config(config_path, value)
-            
+
             self.logger.info("配置保存成功")
             return True
-        
+
         except Exception as e:
             self.logger.error(f"保存配置时出错: {e}", exc_info=True)
             return False
@@ -237,21 +239,21 @@ class SettingsWindow(QDialog):
             # 让各个组件重置为默认值
             if self.system_options_tab:
                 self.system_options_tab.reset_to_defaults()
-            
+
             if self.wake_word_tab:
                 self.wake_word_tab.reset_to_defaults()
-            
+
             if self.camera_tab:
                 self.camera_tab.reset_to_defaults()
-            
+
             if self.audio_tab:
                 self.audio_tab.reset_to_defaults()
-            
+
             if self.shortcuts_tab:
                 self.shortcuts_tab.reset_to_defaults()
-            
+
             self.logger.info("所有组件配置已重置为默认值")
-        
+
         except Exception as e:
             self.logger.error(f"重置配置失败: {e}", exc_info=True)
             QMessageBox.critical(self, "错误", f"重置配置时发生错误: {str(e)}")
@@ -281,6 +283,7 @@ class SettingsWindow(QDialog):
         """
         try:
             import sys
+
             from PyQt5.QtWidgets import QApplication
 
             # 获取当前执行的程序路径和参数

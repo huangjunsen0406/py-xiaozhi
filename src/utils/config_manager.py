@@ -71,8 +71,8 @@ class ConfigManager:
             "output_device_id": None,
             "output_device_name": None,
             "input_sample_rate": None,
-            "output_sample_rate": None
-        }
+            "output_sample_rate": None,
+        },
     }
 
     def __new__(cls):

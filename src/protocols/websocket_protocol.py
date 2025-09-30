@@ -339,7 +339,9 @@ class WebsocketProtocol(Protocol):
         """
         return {
             "connected": self.connected,
-            "websocket_closed": self.websocket.close_code is not None if self.websocket else True,
+            "websocket_closed": (
+                self.websocket.close_code is not None if self.websocket else True
+            ),
             "is_closing": self._is_closing,
             "auto_reconnect_enabled": self._auto_reconnect_enabled,
             "reconnect_attempts": self._reconnect_attempts,

@@ -20,7 +20,7 @@ def setup_logging():
 
     # 创建根日志记录器
     root_logger = logging.getLogger()
-    root_logger.setLevel(logging.WARNING)  # 设置根日志级别
+    root_logger.setLevel(logging.INFO)  # 设置根日志级别
 
     # 清除已有的处理器（避免重复添加）
     if root_logger.handlers:
@@ -28,7 +28,7 @@ def setup_logging():
 
     # 创建控制台处理器
     console_handler = logging.StreamHandler()
-    console_handler.setLevel(logging.WARNING)
+    console_handler.setLevel(logging.INFO)
 
     # 创建按天切割的文件处理器
     file_handler = TimedRotatingFileHandler(
@@ -38,7 +38,7 @@ def setup_logging():
         backupCount=30,  # 保留30天的日志
         encoding="utf-8",
     )
-    file_handler.setLevel(logging.WARNING)
+    file_handler.setLevel(logging.INFO)
     file_handler.suffix = "%Y-%m-%d.log"  # 日志文件后缀格式
 
     # 创建格式化器

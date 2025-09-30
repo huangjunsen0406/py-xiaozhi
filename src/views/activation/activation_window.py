@@ -6,10 +6,10 @@
 from pathlib import Path
 from typing import Optional
 
-from PyQt5.QtCore import QSize, pyqtSignal, QUrl, Qt
+from PyQt5.QtCore import QSize, Qt, QUrl, pyqtSignal
+from PyQt5.QtGui import QPainterPath, QRegion
 from PyQt5.QtQuickWidgets import QQuickWidget
 from PyQt5.QtWidgets import QApplication, QVBoxLayout, QWidget
-from PyQt5.QtGui import QPainterPath, QRegion
 
 from src.core.system_initializer import SystemInitializer
 from src.utils.device_activator import DeviceActivator
@@ -391,7 +391,9 @@ class ActivationWindow(BaseWindow, AsyncMixin):
             mac = data.get("mac_address")
             if serial or mac:
                 self.logger.info(f"通过信号更新设备信息: SN={serial}, MAC={mac}")
-                self.activation_model.update_device_info(serial_number=serial, mac_address=mac)
+                self.activation_model.update_device_info(
+                    serial_number=serial, mac_address=mac
+                )
 
     def _on_retry_clicked(self):
         """
