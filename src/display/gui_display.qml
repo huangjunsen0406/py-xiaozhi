@@ -138,8 +138,10 @@ Rectangle {
                     Loader {
                         id: emotionLoader
                         anchors.centerIn: parent
-                        width: Math.min(parent.width * 0.8, 200)
-                        height: Math.min(parent.height * 0.8, 200)
+                        // 保持正方形，取宽高中较小值的 85%
+                        property real maxSize: Math.min(parent.width, parent.height) * 0.85
+                        width: maxSize
+                        height: maxSize
 
                         sourceComponent: {
                             var path = displayModel ? displayModel.emotionPath : ""
@@ -159,11 +161,12 @@ Rectangle {
                         Component {
                             id: gifComponent
                             AnimatedImage {
-                                fillMode: Image.PreserveAspectFit
+                                fillMode: Image.PreserveAspectCrop
                                 source: displayModel ? ("file://" + displayModel.emotionPath) : ""
                                 playing: true
                                 speed: 1.05
                                 cache: true
+                                clip: true
                             }
                         }
 
@@ -171,9 +174,10 @@ Rectangle {
                         Component {
                             id: imageComponent
                             Image {
-                                fillMode: Image.PreserveAspectFit
+                                fillMode: Image.PreserveAspectCrop
                                 source: displayModel ? ("file://" + displayModel.emotionPath) : ""
                                 cache: true
+                                clip: true
                             }
                         }
 
