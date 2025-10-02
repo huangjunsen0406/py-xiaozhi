@@ -68,7 +68,19 @@ class ActivationWindow(BaseWindow, AsyncMixin):
         设置UI.
         """
         # 设置无边框窗口
-        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
+        # 检测显示服务器类型以兼容Wayland
+        import os
+        is_wayland = os.environ.get('WAYLAND_DISPLAY') or os.environ.get('XDG_SESSION_TYPE') == 'wayland'
+
+        if is_wayland:
+            # Wayland环境：不使用WindowStaysOnTopHint（不支持）
+            self.setWindowFlags(Qt.FramelessWindowHint | Qt.Window)
+            self.logger.info("检测到Wayland环境，使用兼容窗口标志")
+        else:
+            # X11环境：使用完整特性
+            self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
+            self.logger.info("检测到X11环境，使用完整窗口标志")
+
         self.setAttribute(Qt.WA_TranslucentBackground)
 
         # 创建中央widget
@@ -83,7 +95,11 @@ class ActivationWindow(BaseWindow, AsyncMixin):
         # 创建QML widget
         self.qml_widget = QQuickWidget()
         self.qml_widget.setResizeMode(QQuickWidget.SizeRootObjectToView)
-        self.qml_widget.setAttribute(Qt.WA_AlwaysStackOnTop)
+
+        # 仅在X11环境下使用WA_AlwaysStackOnTop（Wayland不支持）
+        if not is_wayland:
+            self.qml_widget.setAttribute(Qt.WA_AlwaysStackOnTop)
+
         self.qml_widget.setClearColor(Qt.transparent)
 
         # 注册数据模型到QML上下文
@@ -93,6 +109,17 @@ class ActivationWindow(BaseWindow, AsyncMixin):
         # 加载QML文件
         qml_file = Path(__file__).parent / "activation_window.qml"
         self.qml_widget.setSource(QUrl.fromLocalFile(str(qml_file)))
+
+        # 检查QML是否加载成功
+        if self.qml_widget.status() == QQuickWidget.Error:
+            self.logger.error("QML加载失败，可能原因：")
+            for error in self.qml_widget.errors():
+                self.logger.error(f"  - {error.toString()}")
+
+            # 在Wayland环境下，如果QML加载失败，提示用户使用CLI模式
+            if is_wayland:
+                self.logger.warning("Wayland环境下QML加载失败，建议使用CLI模式激活")
+                self.logger.info("使用命令: python main.py --mode cli")
 
         # 添加到布局
         layout.addWidget(self.qml_widget)

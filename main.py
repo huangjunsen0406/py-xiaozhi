@@ -85,6 +85,21 @@ if __name__ == "__main__":
         args = parse_args()
         setup_logging()
 
+        # 检测Wayland环境并设置Qt平台插件配置
+        import os
+        is_wayland = os.environ.get('WAYLAND_DISPLAY') or os.environ.get('XDG_SESSION_TYPE') == 'wayland'
+
+        if args.mode == "gui" and is_wayland:
+            # 在Wayland环境下，确保Qt使用正确的平台插件
+            if 'QT_QPA_PLATFORM' not in os.environ:
+                # 优先使用wayland插件，失败则回退到xcb（X11兼容层）
+                os.environ['QT_QPA_PLATFORM'] = 'wayland;xcb'
+                logger.info("Wayland环境：设置QT_QPA_PLATFORM=wayland;xcb")
+
+            # 禁用一些在Wayland下不稳定的Qt特性
+            os.environ.setdefault('QT_WAYLAND_DISABLE_WINDOWDECORATION', '1')
+            logger.info("Wayland环境检测完成，已应用兼容性配置")
+
         # 统一设置信号处理：忽略 macOS 上可能出现的 SIGTRAP，避免“trace trap”导致进程退出
         try:
             if hasattr(signal, "SIGINT"):
