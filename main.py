@@ -1,6 +1,7 @@
 import argparse
 import asyncio
 import sys
+import signal
 
 from src.application import Application
 from src.utils.logging_config import get_logger, setup_logging
@@ -84,6 +85,20 @@ if __name__ == "__main__":
         args = parse_args()
         setup_logging()
 
+        # 统一设置信号处理：忽略 macOS 上可能出现的 SIGTRAP，避免“trace trap”导致进程退出
+        try:
+            if hasattr(signal, "SIGINT"):
+                # 交由 qasync/Qt 处理 Ctrl+C；保持默认或后续由 GUI 层处理
+                pass
+            if hasattr(signal, "SIGTERM"):
+                # 允许进程收到终止信号时走正常关闭路径
+                pass
+            if hasattr(signal, "SIGTRAP"):
+                signal.signal(signal.SIGTRAP, signal.SIG_IGN)
+        except Exception:
+            # 某些平台/环境不支持设置这些信号，忽略即可
+            pass
+
         if args.mode == "gui":
             # 在GUI模式下，由main统一创建 QApplication 与 qasync 事件循环
             try:
@@ -98,6 +113,12 @@ if __name__ == "__main__":
             loop = qasync.QEventLoop(qt_app)
             asyncio.set_event_loop(loop)
             logger.info("已在main中创建qasync事件循环")
+
+            # 确保关闭最后一个窗口不会自动退出应用，避免事件环提前停止
+            try:
+                qt_app.setQuitOnLastWindowClosed(False)
+            except Exception:
+                pass
 
             with loop:
                 exit_code = loop.run_until_complete(

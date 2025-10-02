@@ -285,6 +285,12 @@ class Application:
     def _on_network_error(self, error_message=None):
         if error_message:
             logger.error(error_message)
+
+        # await self.set_device_state(DeviceState.IDLE)
+        self.spawn(
+                            self.set_device_state(DeviceState.IDLE),
+                            "state:tts_start_idle",
+                        )
         # 出错即请求关闭
         # if self._shutdown_event and not self._shutdown_event.is_set():
         #     self._shutdown_event.set()
