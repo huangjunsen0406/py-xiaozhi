@@ -286,11 +286,7 @@ class Application:
         if error_message:
             logger.error(error_message)
 
-        # await self.set_device_state(DeviceState.IDLE)
-        self.spawn(
-                            self.set_device_state(DeviceState.IDLE),
-                            "state:tts_start_idle",
-                        )
+        self.keep_listening = False
         # 出错即请求关闭
         # if self._shutdown_event and not self._shutdown_event.is_set():
         #     self._shutdown_event.set()
@@ -337,7 +333,7 @@ class Application:
                                     )
                             except Exception:
                                 pass
-                            await self.set_device_state(DeviceState.LISTENING)
+                            self.keep_listening and await self.set_device_state(DeviceState.LISTENING)
 
                         self.spawn(_restart_listening(), "state:tts_stop_restart")
                     else:
