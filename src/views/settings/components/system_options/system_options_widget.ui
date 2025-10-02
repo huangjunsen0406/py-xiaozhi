@@ -134,7 +134,33 @@
          </property>
         </widget>
        </item>
-       <item row="8" column="0" colspan="2">
+       <item row="8" column="0">
+        <widget class="QLabel" name="label_window_size">
+         <property name="text">
+          <string>主界面宽高:</string>
+         </property>
+        </widget>
+       </item>
+       <item row="8" column="1">
+        <widget class="QComboBox" name="window_size_combo">
+         <item>
+          <property name="text">
+           <string>默认</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>75%</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>100%</string>
+          </property>
+         </item>
+        </widget>
+       </item>
+       <item row="9" column="0" colspan="2">
         <widget class="QGroupBox" name="mqtt_group">
          <property name="title">
           <string>MQTT配置</string>

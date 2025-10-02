@@ -65,6 +65,7 @@ class SystemOptionsWidget(QWidget):
                 "activation_version_combo": self.findChild(
                     QComboBox, "activation_version_combo"
                 ),
+                "window_size_combo": self.findChild(QComboBox, "window_size_combo"),
             }
         )
 
@@ -143,6 +144,20 @@ class SystemOptionsWidget(QWidget):
             if self.ui_controls["activation_version_combo"]:
                 combo = self.ui_controls["activation_version_combo"]
                 combo.setCurrentText(activation_version)
+
+            # 窗口大小模式
+            window_size_mode = self.config_manager.get_config(
+                "SYSTEM_OPTIONS.WINDOW_SIZE_MODE", "default"
+            )
+            if self.ui_controls["window_size_combo"]:
+                # 映射配置值到显示文本（默认 = 50%）
+                mode_to_text = {
+                    "default": "默认",
+                    "screen_75": "75%",
+                    "screen_100": "100%",
+                }
+                combo = self.ui_controls["window_size_combo"]
+                combo.setCurrentText(mode_to_text.get(window_size_mode, "默认"))
 
             # MQTT配置
             mqtt_info = self.config_manager.get_config(
@@ -245,6 +260,18 @@ class SystemOptionsWidget(QWidget):
                 config_data["SYSTEM_OPTIONS.NETWORK.ACTIVATION_VERSION"] = (
                     activation_version
                 )
+
+            # 窗口大小模式
+            if self.ui_controls["window_size_combo"]:
+                # 映射显示文本到配置值（默认 = 50%）
+                text_to_mode = {
+                    "默认": "default",
+                    "75%": "screen_75",
+                    "100%": "screen_100",
+                }
+                window_size_text = self.ui_controls["window_size_combo"].currentText()
+                window_size_mode = text_to_mode.get(window_size_text, "default")
+                config_data["SYSTEM_OPTIONS.WINDOW_SIZE_MODE"] = window_size_mode
 
             # MQTT配置
             mqtt_config = {}

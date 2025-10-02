@@ -192,8 +192,67 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         self.root = QWidget()
         self.root.setWindowTitle("")
         self.root.setWindowFlags(Qt.FramelessWindowHint | Qt.Window)
-        self.root.resize(*self.DEFAULT_WINDOW_SIZE)
+
+        # 根据配置计算窗口大小
+        window_size, is_fullscreen = self._calculate_window_size()
+        self.root.resize(*window_size)
+
+        # 保存是否全屏的状态，在 show 时使用
+        self._is_fullscreen = is_fullscreen
+
         self.root.closeEvent = self._closeEvent
+
+    def _calculate_window_size(self) -> tuple:
+        """根据配置计算窗口大小，返回 (宽, 高, 是否全屏)"""
+        try:
+            from src.utils.config_manager import ConfigManager
+
+            config_manager = ConfigManager.get_instance()
+            window_size_mode = config_manager.get_config(
+                "SYSTEM_OPTIONS.WINDOW_SIZE_MODE", "default"
+            )
+
+            # 获取屏幕尺寸（可用区域，排除任务栏等）
+            desktop = QApplication.desktop()
+            screen_rect = desktop.availableGeometry()
+            screen_width = screen_rect.width()
+            screen_height = screen_rect.height()
+
+            # 根据模式计算窗口大小
+            if window_size_mode == "default":
+                # 默认使用 50%
+                width = int(screen_width * 0.5)
+                height = int(screen_height * 0.5)
+                is_fullscreen = False
+            elif window_size_mode == "screen_75":
+                width = int(screen_width * 0.75)
+                height = int(screen_height * 0.75)
+                is_fullscreen = False
+            elif window_size_mode == "screen_100":
+                # 100% 使用真正的全屏模式
+                width = screen_width
+                height = screen_height
+                is_fullscreen = True
+            else:
+                # 未知模式使用 50%
+                width = int(screen_width * 0.5)
+                height = int(screen_height * 0.5)
+                is_fullscreen = False
+
+            return ((width, height), is_fullscreen)
+
+        except Exception as e:
+            self.logger.error(f"计算窗口大小失败: {e}", exc_info=True)
+            # 错误时返回屏幕 50%
+            try:
+                desktop = QApplication.desktop()
+                screen_rect = desktop.availableGeometry()
+                return (
+                    (int(screen_rect.width() * 0.5), int(screen_rect.height() * 0.5)),
+                    False,
+                )
+            except Exception:
+                return (self.DEFAULT_WINDOW_SIZE, False)
 
     def _load_qml(self):
         """加载 QML 界面"""
@@ -221,7 +280,13 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
     async def _finalize_startup(self):
         """完成启动流程"""
         await self.update_emotion("neutral")
-        self.root.show()
+
+        # 根据配置决定显示模式
+        if getattr(self, "_is_fullscreen", False):
+            self.root.showFullScreen()
+        else:
+            self.root.show()
+
         self._setup_system_tray()
 
     # =========================================================================
