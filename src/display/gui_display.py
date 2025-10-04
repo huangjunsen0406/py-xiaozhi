@@ -124,7 +124,24 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
 
         self._last_emotion_name = emotion_name
         asset_path = self._get_emotion_asset_path(emotion_name)
-        self.display_model.update_emotion(asset_path)
+
+        # 将本地文件路径转换为 QML 可用的 URL（file:///...），
+        # 非文件（如 emoji 字符）保持原样。
+        def to_qml_url(p: str) -> str:
+            if not p:
+                return ""
+            if p.startswith(("qrc:/", "file:")):
+                return p
+            # 仅当路径存在时才转换为 file URL，避免把 emoji 当作路径
+            try:
+                if os.path.exists(p):
+                    return QUrl.fromLocalFile(p).toString()
+            except Exception:
+                pass
+            return p
+
+        url_or_text = to_qml_url(asset_path)
+        self.display_model.update_emotion(url_or_text)
 
     async def update_button_status(self, text: str):
         """更新按钮状态"""

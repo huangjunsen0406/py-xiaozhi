@@ -162,11 +162,16 @@ Rectangle {
                             id: gifComponent
                             AnimatedImage {
                                 fillMode: Image.PreserveAspectCrop
-                                source: displayModel ? ("file://" + displayModel.emotionPath) : ""
+                                source: displayModel ? displayModel.emotionPath : ""
                                 playing: true
                                 speed: 1.05
                                 cache: true
                                 clip: true
+                                onStatusChanged: {
+                                    if (status === Image.Error) {
+                                        console.error("AnimatedImage error:", errorString, "src=", source)
+                                    }
+                                }
                             }
                         }
 
@@ -175,9 +180,14 @@ Rectangle {
                             id: imageComponent
                             Image {
                                 fillMode: Image.PreserveAspectCrop
-                                source: displayModel ? ("file://" + displayModel.emotionPath) : ""
+                                source: displayModel ? displayModel.emotionPath : ""
                                 cache: true
                                 clip: true
+                                onStatusChanged: {
+                                    if (status === Image.Error) {
+                                        console.error("Image error:", errorString, "src=", source)
+                                    }
+                                }
                             }
                         }
 
