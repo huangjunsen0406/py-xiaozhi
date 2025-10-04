@@ -123,13 +123,13 @@ class Application:
             return 0
 
         except Exception as e:
-            logger.error(f"示例应用运行失败: {e}", exc_info=True)
+            logger.error(f"应用运行失败: {e}", exc_info=True)
             return 1
         finally:
             try:
                 await self.shutdown()
             except Exception as e:
-                logger.error(f"关闭示例应用时出错: {e}")
+                logger.error(f"关闭应用时出错: {e}")
 
     async def connect_protocol(self):
         """
@@ -348,7 +348,7 @@ class Application:
 
     async def _on_audio_channel_opened(self):
         logger.info("协议通道已打开")
-        # 通道打开后进入 LISTENING（示例：简化为直读直写）
+        # 通道打开后进入 LISTENING（：简化为直读直写）
         await self.set_device_state(DeviceState.LISTENING)
 
     async def _on_audio_channel_closed(self):
@@ -470,9 +470,7 @@ class Application:
             if self.protocol:
                 try:
                     try:
-                        await asyncio.wait_for(
-                            self.protocol.close_audio_channel(), timeout=2.0
-                        )
+                        self._main_loop.create_task(self.protocol.close_audio_channel())
                     except asyncio.TimeoutError:
                         logger.warning("关闭协议超时，跳过等待")
                 except Exception as e:
@@ -490,4 +488,4 @@ class Application:
 
             logger.info("Application 关闭完成")
         except Exception as e:
-            logger.error(f"关闭示例应用时出错: {e}", exc_info=True)
+            logger.error(f"关闭应用时出错: {e}", exc_info=True)
