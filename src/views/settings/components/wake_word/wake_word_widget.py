@@ -15,6 +15,13 @@ from src.utils.config_manager import ConfigManager
 from src.utils.logging_config import get_logger
 from src.utils.resource_finder import get_project_root, resource_finder
 
+# 导入拼音转换库
+try:
+    from pypinyin import lazy_pinyin, Style
+    PYPINYIN_AVAILABLE = True
+except ImportError:
+    PYPINYIN_AVAILABLE = False
+
 
 class WakeWordWidget(QWidget):
     """
@@ -31,6 +38,13 @@ class WakeWordWidget(QWidget):
 
         # UI控件引用
         self.ui_controls = {}
+
+        # 声母表（用于拼音分割）
+        self.initials = [
+            'b', 'p', 'm', 'f', 'd', 't', 'n', 'l',
+            'g', 'k', 'h', 'j', 'q', 'x',
+            'zh', 'ch', 'sh', 'r', 'z', 'c', 's', 'y', 'w'
+        ]
 
         # 初始化UI
         self._setup_ui()
@@ -208,19 +222,22 @@ class WakeWordWidget(QWidget):
 
     def _load_keywords_from_file(self) -> str:
         """
-        从 keywords.txt 文件加载唤醒词，按完整格式显示.
+        从 keywords.txt 文件加载唤醒词，只显示中文部分.
         """
         try:
             # 获取配置的模型路径
             model_path = self.config_manager.get_config(
-                "WAKE_WORD_OPTIONS.MODEL_PATH", ""
+                "WAKE_WORD_OPTIONS.MODEL_PATH", "models"
             )
-            if not model_path:
-                # 如果没有配置模型路径，使用默认的models目录
-                keywords_file = get_project_root() / "models" / "keywords.txt"
-            else:
-                # 使用配置的模型路径
-                keywords_file = Path(model_path) / "keywords.txt"
+
+            # 使用 resource_finder 统一查找（和运行时保持一致）
+            model_dir = resource_finder.find_directory(model_path)
+
+            if model_dir is None:
+                self.logger.warning(f"模型目录不存在: {model_path}")
+                return ""
+
+            keywords_file = model_dir / "keywords.txt"
 
             if not keywords_file.exists():
                 self.logger.warning(f"关键词文件不存在: {keywords_file}")
@@ -231,8 +248,9 @@ class WakeWordWidget(QWidget):
                 for line in f:
                     line = line.strip()
                     if line and "@" in line and not line.startswith("#"):
-                        # 保持完整格式: 拼音 @中文
-                        keywords.append(line)
+                        # 只提取@后面的中文部分显示
+                        chinese_part = line.split("@", 1)[1].strip()
+                        keywords.append(chinese_part)
 
             return "\n".join(keywords)
 
@@ -240,56 +258,116 @@ class WakeWordWidget(QWidget):
             self.logger.error(f"读取关键词文件失败: {e}")
             return ""
 
+    def _split_pinyin(self, pinyin: str) -> list:
+        """
+        将拼音按声母韵母分隔.
+
+        例如: "xiǎo" -> ["x", "iǎo"]
+              "mǐ" -> ["m", "ǐ"]
+        """
+        if not pinyin:
+            return []
+
+        # 按长度优先尝试匹配声母（zh, ch, sh优先）
+        for initial in sorted(self.initials, key=len, reverse=True):
+            if pinyin.startswith(initial):
+                final = pinyin[len(initial):]
+                if final:
+                    return [initial, final]
+                else:
+                    return [initial]
+
+        # 没有声母（零声母）
+        return [pinyin]
+
+    def _chinese_to_keyword_format(self, chinese_text: str) -> str:
+        """
+        将中文转换为keyword格式.
+
+        Args:
+            chinese_text: 中文文本，如"小米小米"
+
+        Returns:
+            keyword格式，如"x iǎo m ǐ x iǎo m ǐ @小米小米"
+        """
+        if not PYPINYIN_AVAILABLE:
+            self.logger.error("pypinyin库未安装，无法自动转换")
+            return f"# 转换失败（缺少pypinyin） - {chinese_text}"
+
+        try:
+            # 转换为带声调拼音
+            pinyin_list = lazy_pinyin(chinese_text, style=Style.TONE)
+
+            # 分割每个拼音
+            split_parts = []
+            for pinyin in pinyin_list:
+                parts = self._split_pinyin(pinyin)
+                split_parts.extend(parts)
+
+            # 拼接结果
+            pinyin_str = " ".join(split_parts)
+            keyword_line = f"{pinyin_str} @{chinese_text}"
+
+            return keyword_line
+
+        except Exception as e:
+            self.logger.error(f"转换拼音失败: {e}")
+            return f"# 转换失败 - {chinese_text}"
+
     def _save_keywords_to_file(self, keywords_text: str):
         """
-        保存唤醒词到 keywords.txt 文件，支持完整格式.
+        保存唤醒词到 keywords.txt 文件，自动将中文转换为拼音格式.
         """
         try:
+            # 检查pypinyin是否可用
+            if not PYPINYIN_AVAILABLE:
+                QMessageBox.warning(
+                    self,
+                    "缺少依赖",
+                    "自动拼音转换功能需要安装 pypinyin 库\n\n"
+                    "请运行: pip install pypinyin",
+                )
+                return
+
             # 获取配置的模型路径
             model_path = self.config_manager.get_config(
-                "WAKE_WORD_OPTIONS.MODEL_PATH", ""
+                "WAKE_WORD_OPTIONS.MODEL_PATH", "models"
             )
-            if not model_path:
-                # 如果没有配置模型路径，使用默认的models目录
-                keywords_file = get_project_root() / "models" / "keywords.txt"
-            else:
-                # 使用配置的模型路径
-                keywords_file = Path(model_path) / "keywords.txt"
 
-            # 处理输入的关键词文本
+            # 使用 resource_finder 统一查找（和运行时保持一致）
+            model_dir = resource_finder.find_directory(model_path)
+
+            if model_dir is None:
+                self.logger.error(f"模型目录不存在: {model_path}")
+                QMessageBox.warning(
+                    self,
+                    "错误",
+                    f"模型目录不存在: {model_path}\n请先配置正确的模型路径。",
+                )
+                return
+
+            keywords_file = model_dir / "keywords.txt"
+
+            # 处理输入的关键词文本（每行一个中文）
             lines = [line.strip() for line in keywords_text.split("\n") if line.strip()]
 
             processed_lines = []
-            has_invalid_lines = False
-
-            for line in lines:
-                if "@" in line:
-                    # 完整格式：拼音 @中文
-                    processed_lines.append(line)
-                else:
-                    # 只有中文，没有拼音 - 标记为无效
-                    processed_lines.append(f"# 无效：缺少拼音格式 - {line}")
-                    has_invalid_lines = True
-                    self.logger.warning(
-                        f"关键词 '{line}' 缺少拼音，需要格式：拼音 @中文"
-                    )
+            for chinese_text in lines:
+                # 自动转换为拼音格式
+                keyword_line = self._chinese_to_keyword_format(chinese_text)
+                processed_lines.append(keyword_line)
 
             # 写入文件
             with open(keywords_file, "w", encoding="utf-8") as f:
                 f.write("\n".join(processed_lines) + "\n")
 
-            self.logger.info(f"成功保存关键词到 {keywords_file}")
-
-            # 如果有无效格式，提示用户
-            if has_invalid_lines:
-                QMessageBox.warning(
-                    self,
-                    "格式错误",
-                    "检测到无效的关键词格式！\n\n"
-                    "正确格式：拼音 @中文\n"
-                    "示例：x iǎo ài t óng x ué @小爱同学\n\n"
-                    "无效的行已被注释，请手动修正后重新保存。",
-                )
+            self.logger.info(f"成功保存 {len(processed_lines)} 个关键词到 {keywords_file}")
+            QMessageBox.information(
+                self,
+                "保存成功",
+                f"成功保存 {len(processed_lines)} 个唤醒词\n\n"
+                f"已自动转换为拼音格式",
+            )
 
         except Exception as e:
             self.logger.error(f"保存关键词文件失败: {e}")
@@ -355,14 +433,14 @@ class WakeWordWidget(QWidget):
 
     def _get_default_keywords(self) -> str:
         """
-        获取默认关键词列表，完整格式.
+        获取默认关键词列表，只返回中文.
         """
         default_keywords = [
-            "x iǎo ài t óng x ué @小爱同学",
-            "n ǐ h ǎo w èn w èn @你好问问",
-            "x iǎo y ì x iǎo y ì @小艺小艺",
-            "x iǎo m ǐ x iǎo m ǐ @小米小米",
-            "n ǐ h ǎo x iǎo zh ì @你好小智",
-            "j iā w éi s ī @贾维斯",
+            "小爱同学",
+            "你好问问",
+            "小艺小艺",
+            "小米小米",
+            "你好小智",
+            "贾维斯",
         ]
         return "\n".join(default_keywords)

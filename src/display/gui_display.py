@@ -84,7 +84,9 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         abort_callback: Optional[Callable] = None,
         send_text_callback: Optional[Callable] = None,
     ):
-        """设置回调函数"""
+        """
+        设置回调函数.
+        """
         self._callbacks.update(
             {
                 "button_press": press_callback,
@@ -97,7 +99,9 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         )
 
     async def update_status(self, status: str, connected: bool):
-        """更新状态文本并处理相关逻辑"""
+        """
+        更新状态文本并处理相关逻辑.
+        """
         self.display_model.update_status(status, connected)
 
         # 跟踪状态变化
@@ -114,11 +118,15 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             self.system_tray.update_status(status, self.is_connected)
 
     async def update_text(self, text: str):
-        """更新 TTS 文本"""
+        """
+        更新 TTS 文本.
+        """
         self.display_model.update_text(text)
 
     async def update_emotion(self, emotion_name: str):
-        """更新表情显示"""
+        """
+        更新表情显示.
+        """
         if emotion_name == self._last_emotion_name:
             return
 
@@ -144,18 +152,24 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         self.display_model.update_emotion(url_or_text)
 
     async def update_button_status(self, text: str):
-        """更新按钮状态"""
+        """
+        更新按钮状态.
+        """
         if self.auto_mode:
             self.display_model.update_button_text(text)
 
     async def toggle_mode(self):
-        """切换对话模式"""
+        """
+        切换对话模式.
+        """
         if self._callbacks["mode"]:
             self._on_mode_button_click()
             self.logger.debug("通过快捷键切换了对话模式")
 
     async def toggle_window_visibility(self):
-        """切换窗口可见性"""
+        """
+        切换窗口可见性.
+        """
         if not self.root:
             return
 
@@ -167,7 +181,9 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             self._show_main_window()
 
     async def close(self):
-        """关闭窗口处理"""
+        """
+        关闭窗口处理.
+        """
         self._running = False
         if self.system_tray:
             self.system_tray.hide()
@@ -179,7 +195,9 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
     # =========================================================================
 
     async def start(self):
-        """启动 GUI"""
+        """
+        启动 GUI.
+        """
         try:
             self._configure_environment()
             self._create_main_window()
@@ -191,7 +209,9 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             raise
 
     def _configure_environment(self):
-        """配置环境"""
+        """
+        配置环境.
+        """
         os.environ.setdefault("QT_LOGGING_RULES", "qt.qpa.fonts.debug=false")
 
         self.app = QApplication.instance()
@@ -205,7 +225,9 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         self._setup_activation_handler()
 
     def _create_main_window(self):
-        """创建主窗口"""
+        """
+        创建主窗口.
+        """
         self.root = QWidget()
         self.root.setWindowTitle("")
         self.root.setWindowFlags(Qt.FramelessWindowHint | Qt.Window)
@@ -220,7 +242,9 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         self.root.closeEvent = self._closeEvent
 
     def _calculate_window_size(self) -> tuple:
-        """根据配置计算窗口大小，返回 (宽, 高, 是否全屏)"""
+        """
+        根据配置计算窗口大小，返回 (宽, 高, 是否全屏)
+        """
         try:
             from src.utils.config_manager import ConfigManager
 
@@ -272,7 +296,9 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
                 return (self.DEFAULT_WINDOW_SIZE, False)
 
     def _load_qml(self):
-        """加载 QML 界面"""
+        """
+        加载 QML 界面.
+        """
         self.qml_widget = QQuickWidget()
         self.qml_widget.setResizeMode(QQuickWidget.SizeRootObjectToView)
         self.qml_widget.setClearColor(Qt.white)
@@ -291,11 +317,15 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         layout.addWidget(self.qml_widget)
 
     def _setup_interactions(self):
-        """设置交互（信号、托盘）"""
+        """
+        设置交互（信号、托盘）
+        """
         self._connect_qml_signals()
 
     async def _finalize_startup(self):
-        """完成启动流程"""
+        """
+        完成启动流程.
+        """
         await self.update_emotion("neutral")
 
         # 根据配置决定显示模式
@@ -311,7 +341,9 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
     # =========================================================================
 
     def _connect_qml_signals(self):
-        """连接 QML 信号到 Python 槽"""
+        """
+        连接 QML 信号到 Python 槽.
+        """
         root_object = self.qml_widget.rootObject()
         if not root_object:
             self.logger.warning("QML 根对象未找到，无法设置信号连接")
@@ -351,23 +383,33 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
     # =========================================================================
 
     def _on_manual_button_press(self):
-        """手动模式按钮按下"""
+        """
+        手动模式按钮按下.
+        """
         self._dispatch_callback("button_press")
 
     def _on_manual_button_release(self):
-        """手动模式按钮释放"""
+        """
+        手动模式按钮释放.
+        """
         self._dispatch_callback("button_release")
 
     def _on_auto_button_click(self):
-        """自动模式按钮点击"""
+        """
+        自动模式按钮点击.
+        """
         self._dispatch_callback("auto")
 
     def _on_abort_button_click(self):
-        """中止按钮点击"""
+        """
+        中止按钮点击.
+        """
         self._dispatch_callback("abort")
 
     def _on_mode_button_click(self):
-        """对话模式切换按钮点击"""
+        """
+        对话模式切换按钮点击.
+        """
         if self._callbacks["mode"] and not self._callbacks["mode"]():
             return
 
@@ -377,7 +419,9 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         self.display_model.set_auto_mode(self.auto_mode)
 
     def _on_send_button_click(self, text: str):
-        """处理发送文本按钮点击"""
+        """
+        处理发送文本按钮点击.
+        """
         text = text.strip()
         if not text or not self._callbacks["send_text"]:
             return
@@ -387,13 +431,17 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             task.add_done_callback(
                 lambda t: t.cancelled()
                 or not t.exception()
-                or self.logger.error(f"发送文本任务异常: {t.exception()}", exc_info=True)
+                or self.logger.error(
+                    f"发送文本任务异常: {t.exception()}", exc_info=True
+                )
             )
         except Exception as e:
             self.logger.error(f"发送文本时出错: {e}")
 
     def _on_settings_button_click(self):
-        """处理设置按钮点击"""
+        """
+        处理设置按钮点击.
+        """
         try:
             from src.views.settings import SettingsWindow
 
@@ -403,7 +451,9 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             self.logger.error(f"打开设置窗口失败: {e}", exc_info=True)
 
     def _dispatch_callback(self, callback_name: str, *args):
-        """通用回调调度器"""
+        """
+        通用回调调度器.
+        """
         callback = self._callbacks.get(callback_name)
         if callback:
             callback(*args)
@@ -413,17 +463,23 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
     # =========================================================================
 
     def _on_title_drag_start(self, _x, _y):
-        """标题栏拖动开始"""
+        """
+        标题栏拖动开始.
+        """
         self._dragging = True
         self._drag_position = QCursor.pos() - self.root.pos()
 
     def _on_title_drag_move(self, _x, _y):
-        """标题栏拖动移动"""
+        """
+        标题栏拖动移动.
+        """
         if self._dragging and self._drag_position:
             self.root.move(QCursor.pos() - self._drag_position)
 
     def _on_title_drag_end(self):
-        """标题栏拖动结束"""
+        """
+        标题栏拖动结束.
+        """
         self._dragging = False
         self._drag_position = None
 
@@ -432,7 +488,9 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
     # =========================================================================
 
     def _get_emotion_asset_path(self, emotion_name: str) -> str:
-        """获取表情资源文件路径，自动匹配常见后缀"""
+        """
+        获取表情资源文件路径，自动匹配常见后缀.
+        """
         if emotion_name in self._emotion_cache:
             return self._emotion_cache[emotion_name]
 
@@ -452,7 +510,9 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         return path
 
     def _find_emotion_file(self, emotion_dir: Path, name: str) -> Optional[Path]:
-        """在指定目录查找表情文件"""
+        """
+        在指定目录查找表情文件.
+        """
         for ext in self.EMOTION_EXTENSIONS:
             file_path = emotion_dir / f"{name}{ext}"
             if file_path.exists():
@@ -464,7 +524,9 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
     # =========================================================================
 
     def _setup_signal_handlers(self):
-        """设置信号处理器（Ctrl+C）"""
+        """
+        设置信号处理器（Ctrl+C）
+        """
         try:
             signal.signal(
                 signal.SIGINT,
@@ -474,7 +536,9 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             self.logger.warning(f"设置信号处理器失败: {e}")
 
     def _setup_activation_handler(self):
-        """设置应用激活处理器（macOS Dock 图标点击恢复窗口）"""
+        """
+        设置应用激活处理器（macOS Dock 图标点击恢复窗口）
+        """
         try:
             import platform
 
@@ -487,12 +551,16 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             self.logger.warning(f"设置应用激活处理器失败: {e}")
 
     def _on_application_state_changed(self, state):
-        """应用状态变化处理（macOS Dock 点击时恢复窗口）"""
+        """
+        应用状态变化处理（macOS Dock 点击时恢复窗口）
+        """
         if state == Qt.ApplicationActive and self.root and not self.root.isVisible():
             QTimer.singleShot(0, self._show_main_window)
 
     def _setup_system_tray(self):
-        """设置系统托盘"""
+        """
+        设置系统托盘.
+        """
         if os.getenv("XIAOZHI_DISABLE_TRAY") == "1":
             self.logger.warning("已通过环境变量禁用系统托盘 (XIAOZHI_DISABLE_TRAY=1)")
             return
@@ -522,7 +590,9 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
     # =========================================================================
 
     def _show_main_window(self):
-        """显示主窗口"""
+        """
+        显示主窗口.
+        """
         if not self.root:
             return
 
@@ -534,12 +604,16 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         self.root.raise_()
 
     def _minimize_window(self):
-        """最小化窗口"""
+        """
+        最小化窗口.
+        """
         if self.root:
             self.root.showMinimized()
 
     def _quit_application(self):
-        """退出应用程序"""
+        """
+        退出应用程序.
+        """
         self.logger.info("开始退出应用程序...")
         self._running = False
 
@@ -583,7 +657,9 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             QApplication.quit()
 
     def _closeEvent(self, event):
-        """处理窗口关闭事件"""
+        """
+        处理窗口关闭事件.
+        """
         # 如果系统托盘可用，最小化到托盘
         if self.system_tray and (
             getattr(self.system_tray, "is_available", lambda: False)()

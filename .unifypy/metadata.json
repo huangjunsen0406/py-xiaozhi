@@ -2,11 +2,9 @@
   "version": "2.0.0",
   "created": "2025-08-19T15:07:11.089056",
   "app_id": "503E4A6A-DA22-5752-8253-F6CF03E9BFBF",
-  "config_hash": "e32b81534706d60e521a218d425df6c402b212924b1c1522c2b4417f315bbadb",
+  "config_hash": "dc46a15e93799790f35e5bade78de4bb256c36556ec6c1a42a8fb0067dd26f86",
   "platform_hashes": {
-    "windows": "99101123f4e9fc26148edc96d9e3ff6486951b59a797a06ec49034c752f2ab21",
-    "macos": "038abecc3793918cb965e6c275307806ab218640d49b0d61bb988224abf2ce12",
-    "linux": "41a2479c1c48ba9d17ecc8e9b73bb36d80436fe6d86bc893f8ad975886c0e9dc"
+    "macos": "230d65af2c46a35adbda39f3eee812e26cd07d077691117f709588f7c32a9a89"
   },
-  "last_updated": "2025-08-19T15:07:11.094083"
+  "last_updated": "2025-10-13T00:44:20.202748"
 }

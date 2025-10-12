@@ -148,7 +148,7 @@ class AudioPlugin(Plugin):
         try:
             if not self.app:
                 return False
-            if self.app.device_state == DeviceState.LISTENING:
+            if self.app.device_state == DeviceState.LISTENING and not self.app.aborted:
                 return True
             return (
                 self.app.device_state == DeviceState.SPEAKING

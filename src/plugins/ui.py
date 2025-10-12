@@ -25,7 +25,9 @@ class UIPlugin(Plugin):
         self.is_first = True
 
     async def setup(self, app: Any) -> None:
-        """初始化 UI 插件"""
+        """
+        初始化 UI 插件.
+        """
         self.app = app
 
         # 创建对应的 display 实例
@@ -36,7 +38,9 @@ class UIPlugin(Plugin):
             app.use_console_input = False
 
     def _create_display(self):
-        """根据模式创建 display 实例"""
+        """
+        根据模式创建 display 实例.
+        """
         if self.mode == "gui":
             from src.display.gui_display import GuiDisplay
 
@@ -49,7 +53,9 @@ class UIPlugin(Plugin):
             return CliDisplay()
 
     async def start(self) -> None:
-        """启动 UI 显示"""
+        """
+        启动 UI 显示.
+        """
         if not self.display:
             return
 
@@ -60,7 +66,9 @@ class UIPlugin(Plugin):
         self.app.spawn(self.display.start(), name=f"ui:{self.mode}:start")
 
     async def _setup_callbacks(self) -> None:
-        """设置 display 回调"""
+        """
+        设置 display 回调.
+        """
         if self._is_gui:
             # GUI 需要调度到异步任务
             callbacks = {
@@ -81,11 +89,15 @@ class UIPlugin(Plugin):
         await self.display.set_callbacks(**callbacks)
 
     def _wrap_callback(self, coro_func):
-        """包装协程函数为可调度的 lambda"""
+        """
+        包装协程函数为可调度的 lambda.
+        """
         return lambda: self.app.spawn(coro_func(), name="ui:callback")
 
     async def on_incoming_json(self, message: Any) -> None:
-        """处理传入的 JSON 消息"""
+        """
+        处理传入的 JSON 消息.
+        """
         if not self.display or not isinstance(message, dict):
             return
 
@@ -102,7 +114,9 @@ class UIPlugin(Plugin):
                 await self.display.update_emotion(emotion)
 
     async def on_device_state_changed(self, state: Any) -> None:
-        """设备状态变化处理"""
+        """
+        设备状态变化处理.
+        """
         if not self.display:
             return
 
@@ -117,7 +131,9 @@ class UIPlugin(Plugin):
             await self.display.update_status(status_text, True)
 
     async def shutdown(self) -> None:
-        """清理 UI 资源，关闭窗口"""
+        """
+        清理 UI 资源，关闭窗口.
+        """
         if self.display:
             await self.display.close()
             self.display = None
@@ -125,22 +141,37 @@ class UIPlugin(Plugin):
     # ===== 回调函数 =====
 
     async def _send_text(self, text: str):
-        """发送文本到服务端"""
+        """
+        发送文本到服务端.
+        """
+        if self.app.device_state == DeviceState.SPEAKING:
+            audio_plugin = self.app.plugins.get_plugin("audio")
+            if audio_plugin:
+                await audio_plugin.codec.clear_audio_queue()
+            await self.app.abort_speaking(None)
         if await self.app.connect_protocol():
             await self.app.protocol.send_wake_word_detected(text)
 
     async def _press(self):
-        """手动模式：按下开始录音"""
+        """
+        手动模式：按下开始录音.
+        """
         await self.app.start_listening_manual()
 
     async def _release(self):
-        """手动模式：释放停止录音"""
+        """
+        手动模式：释放停止录音.
+        """
         await self.app.stop_listening_manual()
 
     async def _auto_toggle(self):
-        """自动模式切换"""
+        """
+        自动模式切换.
+        """
         await self.app.start_auto_conversation()
 
     async def _abort(self):
-        """中断对话"""
+        """
+        中断对话.
+        """
         await self.app.abort_speaking(AbortReason.USER_INTERRUPTION)
