@@ -75,8 +75,8 @@
           <item>
            <widget class="QLabel" name="keywords_help">
             <property name="text">
-             <string>格式：拼音 @中文
-例如：x iǎo ài t óng x ué @小爱同学</string>
+             <string>请输入中文唤醒词，保存时会自动转换为拼音格式
+例如：小米小米（将自动转换为：x iǎo m ǐ x iǎo m ǐ @小米小米）</string>
             </property>
             <property name="styleSheet">
              <string>color: #666666; font-size: 11px;</string>
@@ -92,7 +92,7 @@
              </size>
             </property>
             <property name="placeholderText">
-             <string>请输入唤醒词，每行一个，格式：拼音 @中文</string>
+             <string>请输入中文唤醒词，每行一个（如：小米小米）</string>
             </property>
            </widget>
           </item>

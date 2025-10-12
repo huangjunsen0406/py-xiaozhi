@@ -188,7 +188,6 @@ class Application:
             ok = await self.connect_protocol()
             if not ok:
                 return
-
             self.keep_listening = False
 
             # 如果说话中发送打断
@@ -333,7 +332,9 @@ class Application:
                                     )
                             except Exception:
                                 pass
-                            self.keep_listening and await self.set_device_state(DeviceState.LISTENING)
+                            self.keep_listening and await self.set_device_state(
+                                DeviceState.LISTENING
+                            )
 
                         self.spawn(_restart_listening(), "state:tts_stop_restart")
                     else:
@@ -376,6 +377,9 @@ class Application:
         # 锁外广播，避免插件回调引起潜在的长耗时阻塞
         try:
             await self.plugins.notify_device_state_changed(state)
+            if state == DeviceState.LISTENING:
+                await asyncio.sleep(0.5)
+                self.aborted = False
         except Exception:
             pass
 
@@ -419,7 +423,12 @@ class Application:
         中止语音输出.
         """
 
+        if self.aborted:
+            logger.debug(f"已经中止，忽略重复的中止请求: {reason}")
+            return
+
         logger.info(f"中止语音输出，原因: {reason}")
+        self.aborted = True
         await self.protocol.send_abort_speaking(reason)
         await self.set_device_state(DeviceState.IDLE)
 

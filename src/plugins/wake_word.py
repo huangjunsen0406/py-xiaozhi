@@ -1,5 +1,6 @@
 from typing import Any
 
+from src.constants.constants import AbortReason
 from src.plugins.base import Plugin
 
 
@@ -56,11 +57,18 @@ class WakeWordPlugin(Plugin):
     async def _on_detected(self, wake_word, full_text):
         # 检测到唤醒词：切到自动对话（根据 AEC 自动选择实时/自动停）
         try:
+            print(wake_word, full_text)
             # 若正在说话，交给应用的打断/状态机处理
             if hasattr(self.app, "device_state") and hasattr(
                 self.app, "start_auto_conversation"
             ):
-                await self.app.start_auto_conversation()
+                if self.app.is_speaking():
+                    await self.app.abort_speaking(AbortReason.WAKE_WORD_DETECTED)
+                    audio_plugin = self.app.plugins.get_plugin("audio")
+                    if audio_plugin:
+                        await audio_plugin.codec.clear_audio_queue()
+                else:
+                    await self.app.start_auto_conversation()
         except Exception:
             pass
 

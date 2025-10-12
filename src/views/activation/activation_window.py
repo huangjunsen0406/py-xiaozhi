@@ -70,7 +70,11 @@ class ActivationWindow(BaseWindow, AsyncMixin):
         # 设置无边框窗口
         # 检测显示服务器类型以兼容Wayland
         import os
-        is_wayland = os.environ.get('WAYLAND_DISPLAY') or os.environ.get('XDG_SESSION_TYPE') == 'wayland'
+
+        is_wayland = (
+            os.environ.get("WAYLAND_DISPLAY")
+            or os.environ.get("XDG_SESSION_TYPE") == "wayland"
+        )
 
         if is_wayland:
             # Wayland环境：不使用WindowStaysOnTopHint（不支持）
