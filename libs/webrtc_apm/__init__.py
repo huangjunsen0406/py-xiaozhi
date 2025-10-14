@@ -4,21 +4,22 @@ WebRTC 音频处理模块的 Python ctypes 封装器。
 """
 
 import ctypes
+import os
 import platform
 import sys
-import os
-from pathlib import Path
 from enum import IntEnum
+from pathlib import Path
 from typing import Optional
+
 
 # 平台特定的库加载
 def _get_library_path() -> str:
     """获取平台特定的库路径。"""
     current_dir = Path(__file__).parent
-    
+
     system = platform.system().lower()
     arch = platform.machine().lower()
-    
+
     # 标准化架构名称
     if arch in ['x86_64', 'amd64']:
         arch = 'x64'
@@ -26,7 +27,7 @@ def _get_library_path() -> str:
         arch = 'arm64'
     elif arch in ['i386', 'i686', 'x86']:
         arch = 'x86'
-    
+
     if system == 'linux':
         lib_path = current_dir / 'linux' / arch / 'libwebrtc_apm.so'
     elif system == 'darwin':
@@ -35,14 +36,33 @@ def _get_library_path() -> str:
         lib_path = current_dir / 'windows' / arch / 'libwebrtc_apm.dll'
     else:
         raise RuntimeError(f"Unsupported platform: {system}")
-    
+
     if not lib_path.exists():
         raise FileNotFoundError(f"Library not found: {lib_path}")
-    
+
     return str(lib_path)
 
-# 加载库
-_lib = ctypes.CDLL(_get_library_path())
+# 延迟加载库（仅在macOS平台需要时加载）
+_lib = None
+
+def _ensure_library_loaded():
+    """确保库已加载（仅macOS平台）。"""
+    global _lib
+
+    # 检查是否为macOS平台
+    system = platform.system().lower()
+    if system != 'darwin':
+        raise RuntimeError(
+            f"WebRTC APM library is only supported on macOS, current platform: {system}. "
+            f"Windows and Linux should use system-level AEC instead."
+        )
+
+    # 如果已加载，直接返回
+    if _lib is not None:
+        return
+
+    # 加载库
+    _lib = ctypes.CDLL(_get_library_path())
 
 # 枚举类型
 class DownmixMethod(IntEnum):
@@ -215,48 +235,58 @@ class Config(ctypes.Structure):
         ('gain_control2', GainController2),
     ]
 
-# 函数定义
-_lib.WebRTC_APM_Create.argtypes = []
-_lib.WebRTC_APM_Create.restype = ctypes.c_void_p
+# 函数定义（延迟初始化）
+def _init_function_signatures():
+    """初始化函数签名（仅在库加载后调用）。"""
+    global _lib
+    if _lib is None:
+        raise RuntimeError("Library not loaded. Call _ensure_library_loaded() first.")
 
-_lib.WebRTC_APM_Destroy.argtypes = [ctypes.c_void_p]
-_lib.WebRTC_APM_Destroy.restype = None
+    _lib.WebRTC_APM_Create.argtypes = []
+    _lib.WebRTC_APM_Create.restype = ctypes.c_void_p
 
-_lib.WebRTC_APM_CreateStreamConfig.argtypes = [ctypes.c_int, ctypes.c_int]
-_lib.WebRTC_APM_CreateStreamConfig.restype = ctypes.c_void_p
+    _lib.WebRTC_APM_Destroy.argtypes = [ctypes.c_void_p]
+    _lib.WebRTC_APM_Destroy.restype = None
 
-_lib.WebRTC_APM_DestroyStreamConfig.argtypes = [ctypes.c_void_p]
-_lib.WebRTC_APM_DestroyStreamConfig.restype = ctypes.c_void_p
+    _lib.WebRTC_APM_CreateStreamConfig.argtypes = [ctypes.c_int, ctypes.c_int]
+    _lib.WebRTC_APM_CreateStreamConfig.restype = ctypes.c_void_p
 
-_lib.WebRTC_APM_ApplyConfig.argtypes = [ctypes.c_void_p, ctypes.POINTER(Config)]
-_lib.WebRTC_APM_ApplyConfig.restype = ctypes.c_int
+    _lib.WebRTC_APM_DestroyStreamConfig.argtypes = [ctypes.c_void_p]
+    _lib.WebRTC_APM_DestroyStreamConfig.restype = ctypes.c_void_p
 
-_lib.WebRTC_APM_ProcessReverseStream.argtypes = [
-    ctypes.c_void_p,
-    ctypes.POINTER(ctypes.c_short),
-    ctypes.c_void_p,
-    ctypes.c_void_p,
-    ctypes.POINTER(ctypes.c_short),
-]
-_lib.WebRTC_APM_ProcessReverseStream.restype = ctypes.c_int
+    _lib.WebRTC_APM_ApplyConfig.argtypes = [ctypes.c_void_p, ctypes.POINTER(Config)]
+    _lib.WebRTC_APM_ApplyConfig.restype = ctypes.c_int
 
-_lib.WebRTC_APM_ProcessStream.argtypes = [
-    ctypes.c_void_p,
-    ctypes.POINTER(ctypes.c_short),
-    ctypes.c_void_p,
-    ctypes.c_void_p,
-    ctypes.POINTER(ctypes.c_short),
-]
-_lib.WebRTC_APM_ProcessStream.restype = ctypes.c_int
+    _lib.WebRTC_APM_ProcessReverseStream.argtypes = [
+        ctypes.c_void_p,
+        ctypes.POINTER(ctypes.c_short),
+        ctypes.c_void_p,
+        ctypes.c_void_p,
+        ctypes.POINTER(ctypes.c_short),
+    ]
+    _lib.WebRTC_APM_ProcessReverseStream.restype = ctypes.c_int
 
-_lib.WebRTC_APM_SetStreamDelayMs.argtypes = [ctypes.c_void_p, ctypes.c_int]
-_lib.WebRTC_APM_SetStreamDelayMs.restype = None
+    _lib.WebRTC_APM_ProcessStream.argtypes = [
+        ctypes.c_void_p,
+        ctypes.POINTER(ctypes.c_short),
+        ctypes.c_void_p,
+        ctypes.c_void_p,
+        ctypes.POINTER(ctypes.c_short),
+    ]
+    _lib.WebRTC_APM_ProcessStream.restype = ctypes.c_int
+
+    _lib.WebRTC_APM_SetStreamDelayMs.argtypes = [ctypes.c_void_p, ctypes.c_int]
+    _lib.WebRTC_APM_SetStreamDelayMs.restype = None
 
 class WebRTCAudioProcessing:
     """WebRTC 音频处理的高级 Python 封装器。"""
-    
+
     def __init__(self):
         """初始化音频处理模块。"""
+        # 确保库已加载（仅macOS）
+        _ensure_library_loaded()
+        _init_function_signatures()
+
         self._handle = _lib.WebRTC_APM_Create()
         if not self._handle:
             raise RuntimeError("Failed to create WebRTC APM instance")
