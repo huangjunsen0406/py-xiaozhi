@@ -57,7 +57,6 @@ class WakeWordPlugin(Plugin):
     async def _on_detected(self, wake_word, full_text):
         # 检测到唤醒词：切到自动对话（根据 AEC 自动选择实时/自动停）
         try:
-            print(wake_word, full_text)
             # 若正在说话，交给应用的打断/状态机处理
             if hasattr(self.app, "device_state") and hasattr(
                 self.app, "start_auto_conversation"
