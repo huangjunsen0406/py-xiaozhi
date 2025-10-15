@@ -324,9 +324,3 @@ def handle_verification_code(text: str) -> None:
         return
 
     copy_to_clipboard(code)
-
-    from src.utils.config_manager import ConfigManager
-
-    config = ConfigManager.get_instance()
-    ota_url = config.get_config("SYSTEM_OPTIONS.NETWORK.AUTHORIZATION_URL", "")
-    open_url(ota_url)

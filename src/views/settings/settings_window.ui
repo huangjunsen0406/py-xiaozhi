@@ -61,10 +61,7 @@
            <item row="0" column="1">
             <widget class="QLineEdit" name="client_id_edit">
              <property name="readOnly">
-              <bool>true</bool>
-             </property>
-             <property name="styleSheet">
-              <string>background-color: #f5f5f5;</string>
+              <bool>false</bool>
              </property>
             </widget>
            </item>
@@ -81,10 +78,7 @@
            <item row="1" column="1">
             <widget class="QLineEdit" name="device_id_edit">
              <property name="readOnly">
-              <bool>true</bool>
-             </property>
-             <property name="styleSheet">
-              <string>background-color: #f5f5f5;</string>
+              <bool>false</bool>
              </property>
             </widget>
            </item>

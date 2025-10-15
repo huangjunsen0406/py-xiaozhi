@@ -231,6 +231,15 @@ class SystemOptionsWidget(QWidget):
         config_data = {}
 
         try:
+            # 客户端ID和设备ID
+            client_id = self._get_text_value("client_id_edit")
+            if client_id:
+                config_data["SYSTEM_OPTIONS.CLIENT_ID"] = client_id
+
+            device_id = self._get_text_value("device_id_edit")
+            if device_id:
+                config_data["SYSTEM_OPTIONS.DEVICE_ID"] = device_id
+
             # 系统选项 - 网络配置
             ota_url = self._get_text_value("ota_url_edit")
             if ota_url:
