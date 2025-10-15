@@ -1,6 +1,7 @@
 import asyncio
 import json
 import socket
+import ssl
 
 import aiohttp
 
@@ -132,9 +133,17 @@ class Ota:
         payload = self.build_payload()
 
         try:
+            # 禁用SSL证书验证以支持自签名证书
+            ssl_context = ssl.create_default_context()
+            ssl_context.check_hostname = False
+            ssl_context.verify_mode = ssl.CERT_NONE
+
             # 使用aiohttp异步发送请求
             timeout = aiohttp.ClientTimeout(total=10)
-            async with aiohttp.ClientSession(timeout=timeout) as session:
+            connector = aiohttp.TCPConnector(ssl=ssl_context)
+            async with aiohttp.ClientSession(
+                timeout=timeout, connector=connector
+            ) as session:
                 async with session.post(
                     self.ota_version_url, headers=headers, json=payload
                 ) as response:

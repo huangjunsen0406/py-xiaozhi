@@ -428,19 +428,26 @@ class ActivationWindow(BaseWindow, AsyncMixin):
 
     def _on_retry_clicked(self):
         """
-        重新激活按钮点击.
+        跳转激活按钮点击 - 打开激活网页.
         """
-        self.logger.info("用户请求重新激活")
+        self.logger.info("用户点击跳转激活")
 
-        # 检查是否已经关闭
-        if self.is_shutdown_requested():
-            return
+        # 从配置中获取激活URL并打开
+        try:
+            from src.utils.common_utils import open_url
+            from src.utils.config_manager import ConfigManager
 
-        # 重置状态
-        self.activation_model.reset_activation_code()
-
-        # 重新开始初始化
-        self.create_task(self._start_initialization(), "retry_initialization")
+            config = ConfigManager.get_instance()
+            ota_url = config.get_config("SYSTEM_OPTIONS.NETWORK.AUTHORIZATION_URL", "")
+            if ota_url:
+                open_url(ota_url)
+                self.update_status("已打开激活页面，请在浏览器中输入验证码")
+            else:
+                self.logger.error("未配置激活URL")
+                self.update_status("错误: 未配置激活URL")
+        except Exception as e:
+            self.logger.error(f"打开激活页面失败: {e}")
+            self.update_status(f"打开激活页面失败: {e}")
 
     def _on_copy_code_clicked(self):
         """
