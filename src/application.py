@@ -99,14 +99,14 @@ class Application:
             # 插件：setup（延迟导入AudioPlugin，确保上面setup_opus已执行）
             from src.plugins.audio import AudioPlugin
 
-            # 注册音频、UI、MCP、IoT、唤醒词、快捷键与日程插件（UI模式可通过配置 SYSTEM_OPTIONS.UI.MODE 指定 gui/cli）
+            # 注册音频、UI、MCP、IoT、唤醒词、快捷键与日程插件（UI模式从run参数传入）
             self.plugins.register(
                 McpPlugin(),
                 IoTPlugin(),
                 AudioPlugin(),
                 WakeWordPlugin(),
                 CalendarPlugin(),
-                UIPlugin(mode="gui"),
+                UIPlugin(mode=mode),
                 ShortcutsPlugin(),
             )
             await self.plugins.setup_all(self)
@@ -361,7 +361,7 @@ class Application:
         """
         仅供主程序内部调用：设置设备状态。插件请只读获取。
         """
-        print(f"set_device_state: {state}")
+        # print(f"set_device_state: {state}")
         if not self._state_lock:
             self.device_state = state
             try:
