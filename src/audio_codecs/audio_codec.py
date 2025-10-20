@@ -169,10 +169,20 @@ class AudioCodec:
                 output_device_info = sd.query_devices(self.speaker_device_id)
             else:
                 output_device_info = sd.query_devices(kind="output")
+            # 从配置或设备获取采样率
+            audio_config = self.config.get_config("AUDIO_DEVICES", {}) or {}
+            configured_input_rate = audio_config.get("input_sample_rate")
+            configured_output_rate = audio_config.get("output_sample_rate")
 
-            self.device_input_sample_rate = int(input_device_info["default_samplerate"])
-            self.device_output_sample_rate = int(
-                output_device_info["default_samplerate"]
+            self.device_input_sample_rate = (
+                configured_input_rate
+                if configured_input_rate is not None
+                else int(input_device_info["default_samplerate"])
+            )
+            self.device_output_sample_rate = (
+                configured_output_rate
+                if configured_output_rate is not None
+                else int(output_device_info["default_samplerate"])
             )
 
             frame_duration_sec = AudioConfig.FRAME_DURATION / 1000
