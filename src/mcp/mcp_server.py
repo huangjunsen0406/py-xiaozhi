@@ -351,6 +351,12 @@ class McpServer:
         bazi_manager = get_bazi_manager()
         bazi_manager.init_tools(self.add_tool, PropertyList, Property, PropertyType)
 
+        # 添加温度和湿度工具
+        from src.mcp.tools.temperature import get_temperature_manager
+
+        temperature_manager = get_temperature_manager()
+        temperature_manager.init_tools(self.add_tool, PropertyList, Property, PropertyType)
+
         # 恢复原有工具
         self.tools.extend(original_tools)
 
