@@ -169,6 +169,7 @@ class AudioCodec:
                 output_device_info = sd.query_devices(self.speaker_device_id)
             else:
                 output_device_info = sd.query_devices(kind="output")
+
             # 从配置或设备获取采样率
             audio_config = self.config.get_config("AUDIO_DEVICES", {}) or {}
             configured_input_rate = audio_config.get("input_sample_rate")
