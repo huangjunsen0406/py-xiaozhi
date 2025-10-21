@@ -7,7 +7,7 @@ cryptography==44.0.1
 numpy==1.26.4
 sounddevice>=0.4.4
 pygame==2.6.1
-# PyQt5==5.15.11
+PyQt5==5.15.11
 opencv-python-headless==4.11.0.86
 soxr==0.5.0.post1
 psutil==7.0.0
