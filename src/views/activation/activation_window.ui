@@ -1,0 +1,377 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>ActivationWindow</class>
+ <widget class="QMainWindow" name="ActivationWindow">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>600</width>
+    <height>350</height>
+   </rect>
+  </property>
+  <property name="minimumSize">
+   <size>
+    <width>450</width>
+    <height>300</height>
+   </size>
+  </property>
+  <property name="windowTitle">
+   <string>设备激活 - py-xiaozhi</string>
+  </property>
+  <property name="windowIcon">
+   <iconset>
+    <normaloff>.</normaloff>.</iconset>
+  </property>
+  <widget class="QWidget" name="centralwidget">
+   <layout class="QVBoxLayout" name="verticalLayout">
+    <property name="spacing">
+     <number>10</number>
+    </property>
+    <property name="leftMargin">
+     <number>10</number>
+    </property>
+    <property name="topMargin">
+     <number>10</number>
+    </property>
+    <property name="rightMargin">
+     <number>10</number>
+    </property>
+    <property name="bottomMargin">
+     <number>10</number>
+    </property>
+    <item>
+     <widget class="QFrame" name="info_frame">
+      <property name="frameShape">
+       <enum>QFrame::StyledPanel</enum>
+      </property>
+      <property name="styleSheet">
+       <string>QFrame { background-color: white; border: 1px solid #dee2e6; border-radius: 8px; padding: 10px; }</string>
+      </property>
+      <layout class="QVBoxLayout" name="info_layout">
+       <property name="spacing">
+        <number>6</number>
+       </property>
+       <property name="leftMargin">
+        <number>5</number>
+       </property>
+       <property name="topMargin">
+        <number>5</number>
+       </property>
+       <property name="rightMargin">
+        <number>5</number>
+       </property>
+       <property name="bottomMargin">
+        <number>5</number>
+       </property>
+       <item>
+        <widget class="QLabel" name="info_title">
+         <property name="text">
+          <string>设备信息</string>
+         </property>
+         <property name="alignment">
+          <set>Qt::AlignLeft</set>
+         </property>
+         <property name="styleSheet">
+          <string>font-weight: bold; font-size: 12pt; margin-bottom: 5px;</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <layout class="QVBoxLayout" name="device_info_layout">
+         <property name="spacing">
+          <number>6</number>
+         </property>
+         <item>
+          <layout class="QHBoxLayout" name="serial_layout">
+           <property name="spacing">
+            <number>10</number>
+           </property>
+           <item>
+            <widget class="QLabel" name="serial_label">
+             <property name="text">
+              <string>设备序列号:</string>
+             </property>
+             <property name="alignment">
+              <set>Qt::AlignLeft</set>
+             </property>
+             <property name="styleSheet">
+              <string>font-weight: bold; min-width: 90px;</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QLabel" name="serial_value">
+             <property name="text">
+              <string>--</string>
+             </property>
+             <property name="alignment">
+              <set>Qt::AlignLeft</set>
+             </property>
+             <property name="styleSheet">
+              <string>color: #495057; font-family: monospace;</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <spacer name="serial_spacer">
+             <property name="orientation">
+              <enum>Qt::Horizontal</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>40</width>
+               <height>20</height>
+              </size>
+             </property>
+            </spacer>
+           </item>
+          </layout>
+         </item>
+         <item>
+          <layout class="QHBoxLayout" name="mac_layout">
+           <property name="spacing">
+            <number>10</number>
+           </property>
+           <item>
+            <widget class="QLabel" name="mac_label">
+             <property name="text">
+              <string>MAC地址:</string>
+             </property>
+             <property name="alignment">
+              <set>Qt::AlignLeft</set>
+             </property>
+             <property name="styleSheet">
+              <string>font-weight: bold; min-width: 90px;</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QLabel" name="mac_value">
+             <property name="text">
+              <string>--</string>
+             </property>
+             <property name="alignment">
+              <set>Qt::AlignLeft</set>
+             </property>
+             <property name="styleSheet">
+              <string>color: #495057; font-family: monospace;</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <spacer name="mac_spacer">
+             <property name="orientation">
+              <enum>Qt::Horizontal</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>40</width>
+               <height>20</height>
+              </size>
+             </property>
+            </spacer>
+           </item>
+          </layout>
+         </item>
+         <item>
+          <layout class="QHBoxLayout" name="status_layout">
+           <property name="spacing">
+            <number>10</number>
+           </property>
+           <item>
+            <widget class="QLabel" name="status_label">
+             <property name="text">
+              <string>激活状态:</string>
+             </property>
+             <property name="alignment">
+              <set>Qt::AlignLeft</set>
+             </property>
+             <property name="styleSheet">
+              <string>font-weight: bold; min-width: 90px;</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QLabel" name="status_value">
+             <property name="text">
+              <string>检查中...</string>
+             </property>
+             <property name="alignment">
+              <set>Qt::AlignLeft</set>
+             </property>
+             <property name="styleSheet">
+              <string>color: #6c757d;</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <spacer name="status_spacer">
+             <property name="orientation">
+              <enum>Qt::Horizontal</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>40</width>
+               <height>20</height>
+              </size>
+             </property>
+            </spacer>
+           </item>
+          </layout>
+         </item>
+         <item>
+          <layout class="QHBoxLayout" name="activation_code_layout">
+           <property name="spacing">
+            <number>10</number>
+           </property>
+           <item>
+            <widget class="QLabel" name="activation_code_label">
+             <property name="text">
+              <string>激活码:</string>
+             </property>
+             <property name="alignment">
+              <set>Qt::AlignLeft</set>
+             </property>
+             <property name="styleSheet">
+              <string>font-weight: bold; min-width: 90px;</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QLabel" name="activation_code_value">
+             <property name="text">
+              <string>--</string>
+             </property>
+             <property name="alignment">
+              <set>Qt::AlignLeft</set>
+             </property>
+             <property name="styleSheet">
+              <string>color: #dc3545; font-family: monospace; font-weight: bold;</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="copy_code_btn">
+             <property name="text">
+              <string>复制验证码</string>
+             </property>
+             <property name="styleSheet">
+              <string>
+                QPushButton {
+                  background-color: #17a2b8;
+                  color: white;
+                  border: none;
+                  padding: 6px 12px;
+                  border-radius: 4px;
+                  font-weight: bold;
+                  font-size: 10pt;
+                }
+                QPushButton:hover {
+                  background-color: #138496;
+                }
+                QPushButton:pressed {
+                  background-color: #10707f;
+                }
+              </string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <spacer name="activation_code_spacer">
+             <property name="orientation">
+              <enum>Qt::Horizontal</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>40</width>
+               <height>20</height>
+              </size>
+             </property>
+            </spacer>
+           </item>
+          </layout>
+         </item>
+        </layout>
+       </item>
+      </layout>
+     </widget>
+    </item>
+    <item>
+     <layout class="QHBoxLayout" name="button_layout">
+      <property name="spacing">
+       <number>8</number>
+      </property>
+      <item>
+       <spacer name="button_spacer">
+        <property name="orientation">
+         <enum>Qt::Horizontal</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size>
+          <width>40</width>
+          <height>20</height>
+         </size>
+        </property>
+       </spacer>
+      </item>
+      <item>
+       <widget class="QPushButton" name="retry_btn">
+        <property name="text">
+         <string>重新激活</string>
+        </property>
+        <property name="styleSheet">
+         <string>
+           QPushButton {
+             background-color: #6c757d;
+             color: white;
+             border: none;
+             padding: 6px 12px;
+             border-radius: 4px;
+             font-weight: bold;
+             min-width: 80px;
+           }
+           QPushButton:hover {
+             background-color: #5a6268;
+           }
+           QPushButton:pressed {
+             background-color: #495057;
+           }
+         </string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="close_btn">
+        <property name="text">
+         <string>关闭</string>
+        </property>
+        <property name="styleSheet">
+         <string>
+           QPushButton {
+             background-color: #dc3545;
+             color: white;
+             border: none;
+             padding: 6px 12px;
+             border-radius: 4px;
+             font-weight: bold;
+             min-width: 80px;
+           }
+           QPushButton:hover {
+             background-color: #c82333;
+           }
+           QPushButton:pressed {
+             background-color: #bd2130;
+           }
+         </string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </item>
+   </layout>
+  </widget>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
