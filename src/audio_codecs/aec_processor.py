@@ -34,6 +34,10 @@ class AECProcessor:
         self.reference_device_id = None
         self.reference_sample_rate = None
 
+        # 参考信号重采样器（仅 macOS 使用）
+        self.reference_resampler = None
+        self._resample_reference_buffer = deque()
+
         # 缓冲区
         self._reference_buffer = deque()
         self._webrtc_frame_size = 160  # WebRTC标准：16kHz, 10ms = 160 samples
@@ -140,6 +144,20 @@ class AECProcessor:
             self.reference_device_id = reference_device["id"]
             self.reference_sample_rate = int(reference_device["default_samplerate"])
 
+            # 创建高质量重采样器（如需要）
+            if self.reference_sample_rate != AudioConfig.INPUT_SAMPLE_RATE:
+                import soxr
+                self.reference_resampler = soxr.ResampleStream(
+                    self.reference_sample_rate,
+                    AudioConfig.INPUT_SAMPLE_RATE,
+                    num_channels=1,
+                    dtype="int16",
+                    quality="QQ",  # 快速质量，与AudioCodec一致
+                )
+                logger.info(
+                    f"参考信号重采样: {self.reference_sample_rate}Hz → {AudioConfig.INPUT_SAMPLE_RATE}Hz (使用soxr)"
+                )
+
             # 创建参考信号输入流（固定使用10ms帧，匹配WebRTC标准）
             webrtc_frame_duration = 0.01  # 10ms，WebRTC标准帧长度
             reference_frame_size = int(
@@ -215,19 +233,24 @@ class AECProcessor:
         try:
             audio_data = indata.copy().flatten()
 
-            # 重采样到16kHz（如果需要）
-            if self.reference_sample_rate != AudioConfig.INPUT_SAMPLE_RATE:
-                # 简单的降采样处理（实际应用中应使用更好的重采样器）
-                ratio = AudioConfig.INPUT_SAMPLE_RATE / self.reference_sample_rate
-                target_length = int(len(audio_data) * ratio)
-                audio_data = np.interp(
-                    np.linspace(0, len(audio_data) - 1, target_length),
-                    np.arange(len(audio_data)),
-                    audio_data,
-                ).astype(np.int16)
+            # 使用soxr高质量重采样
+            if self.reference_resampler:
+                # 重采样到16kHz
+                resampled_data = self.reference_resampler.resample_chunk(
+                    audio_data, last=False
+                )
+                if len(resampled_data) > 0:
+                    self._resample_reference_buffer.extend(resampled_data.astype(np.int16))
 
-            # 添加到参考缓冲区
-            self._reference_buffer.extend(audio_data)
+                # 从缓冲区提取WebRTC标准帧
+                while len(self._resample_reference_buffer) >= self._webrtc_frame_size:
+                    for _ in range(self._webrtc_frame_size):
+                        self._reference_buffer.append(
+                            self._resample_reference_buffer.popleft()
+                        )
+            else:
+                # 无需重采样，直接使用
+                self._reference_buffer.extend(audio_data)
 
             # 保持缓冲区大小合理
             max_buffer_size = self._webrtc_frame_size * 20  # 保持约200ms的数据
@@ -374,62 +397,6 @@ class AECProcessor:
 
         return np.array(frame_data, dtype=np.int16)
 
-    def is_reference_available(self) -> bool:
-        """
-        检查参考信号是否可用.
-        """
-        if self._is_windows or self._is_linux:
-            # Windows 和 Linux 使用系统级AEC，总是可用
-            return self._is_initialized
-
-        # macOS 需要检查参考信号流
-        return (
-            self.reference_stream is not None
-            and self.reference_stream.active
-            and len(self._reference_buffer) >= self._webrtc_frame_size
-        )
-
-    def get_status(self) -> Dict[str, Any]:
-        """
-        获取AEC处理器状态.
-        """
-        status = {
-            "initialized": self._is_initialized,
-            "platform": self._platform,
-            "reference_available": self.is_reference_available(),
-        }
-
-        if self._is_windows:
-            status.update(
-                {"aec_type": "system_level", "description": "Windows 系统底层回声消除"}
-            )
-        elif self._is_linux:
-            status.update(
-                {
-                    "aec_type": "system_level",
-                    "description": "Linux 系统级回声消除（PulseAudio）",
-                }
-            )
-        elif self._is_macos:
-            status.update(
-                {
-                    "aec_type": "webrtc_blackhole",
-                    "description": "WebRTC + BlackHole 参考信号",
-                    "reference_device_id": self.reference_device_id,
-                    "reference_buffer_size": len(self._reference_buffer),
-                    "webrtc_apm_active": self.apm is not None,
-                }
-            )
-        else:
-            status.update(
-                {
-                    "aec_type": "unsupported",
-                    "description": f"平台 {self._platform} 暂不支持AEC",
-                }
-            )
-
-        return status
-
     async def close(self):
         """
         关闭AEC处理器.
@@ -453,6 +420,17 @@ class AECProcessor:
                     finally:
                         self.reference_stream = None
 
+                # 清理重采样器
+                if self.reference_resampler:
+                    try:
+                        # 刷新重采样器缓冲区
+                        empty_array = np.array([], dtype=np.int16)
+                        self.reference_resampler.resample_chunk(empty_array, last=True)
+                    except Exception as e:
+                        logger.debug(f"刷新参考信号重采样器缓冲区失败: {e}")
+                    finally:
+                        self.reference_resampler = None
+
                 # 清理WebRTC APM
                 if self.apm:
                     try:
@@ -469,6 +447,7 @@ class AECProcessor:
 
             # 清理缓冲区
             self._reference_buffer.clear()
+            self._resample_reference_buffer.clear()
 
             self._is_initialized = False
             logger.info("AEC处理器已关闭")

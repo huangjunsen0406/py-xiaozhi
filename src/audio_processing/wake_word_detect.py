@@ -326,26 +326,6 @@ class WakeWordDetector:
 
         logger.info("Sherpa-ONNX KeywordSpotter检测器已停止")
 
-    async def pause(self):
-        """
-        暂停检测.
-        """
-        self.paused = True
-        logger.debug("KWS检测已暂停")
-
-    async def resume(self):
-        """
-        恢复检测.
-        """
-        self.paused = False
-        logger.debug("KWS检测已恢复")
-
-    def is_running(self) -> bool:
-        """
-        检查是否正在运行.
-        """
-        return self.is_running_flag and not self.paused
-
     def _validate_config(self):
         """
         验证配置参数.
@@ -365,22 +345,3 @@ class WakeWordDetector:
         logger.info(
             f"KWS配置验证完成 - 阈值: {self.keywords_threshold}, 分数: {self.keywords_score}"
         )
-
-    def get_performance_stats(self):
-        """
-        获取性能统计信息.
-        """
-        return {
-            "enabled": self.enabled,
-            "engine": "sherpa-onnx-kws",
-            "provider": self.provider,
-            "num_threads": self.num_threads,
-            "keywords_threshold": self.keywords_threshold,
-            "keywords_score": self.keywords_score,
-            "is_running": self.is_running(),
-        }
-
-    def clear_cache(self):
-        """
-        清空缓存.
-        """

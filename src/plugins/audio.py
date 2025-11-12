@@ -8,8 +8,9 @@ from src.utils.logging_config import get_logger
 
 logger = get_logger(__name__)
 
-# from src.utils.opus_loader import setup_opus
-# setup_opus()
+# 常量配置
+AUDIO_QUEUE_SIZE = 50
+MAX_CONCURRENT_AUDIO_SENDS = 4
 
 
 class AudioPlugin(Plugin):
@@ -17,16 +18,16 @@ class AudioPlugin(Plugin):
 
     def __init__(self) -> None:
         super().__init__()
-        self.app = None  # ApplicationExample
+        self.app = None
         self.codec: AudioCodec | None = None
-        self._loop = None
-        self._send_sem = asyncio.Semaphore(4)
+        self._main_loop = None
+        self._send_sem = asyncio.Semaphore(MAX_CONCURRENT_AUDIO_SENDS)
         self._audio_queue: asyncio.Queue | None = None
         self._audio_consumer_task: asyncio.Task | None = None
 
     async def setup(self, app: Any) -> None:
         self.app = app
-        self._loop = app._main_loop
+        self._main_loop = app._main_loop
 
         if os.getenv("XIAOZHI_DISABLE_AUDIO") == "1":
             return
@@ -36,7 +37,7 @@ class AudioPlugin(Plugin):
             await self.codec.initialize()
 
             # 创建音频队列
-            self._audio_queue = asyncio.Queue(maxsize=50)
+            self._audio_queue = asyncio.Queue(maxsize=AUDIO_QUEUE_SIZE)
 
             # 设置编码音频回调：录音数据入队，由消费者发送
             self.codec.set_encoded_callback(self._enqueue_audio)
@@ -48,32 +49,10 @@ class AudioPlugin(Plugin):
             )
 
             # 暴露给应用，便于唤醒词插件使用
-            try:
-                setattr(self.app, "audio_codec", self.codec)
-            except AttributeError as e:
-                logger.warning(f"无法设置audio_codec属性: {e}")
+            self.app.audio_codec = self.codec
         except Exception as e:
             logger.error(f"音频插件初始化失败: {e}", exc_info=True)
             self.codec = None
-
-    async def start(self) -> None:
-        if self.codec:
-            try:
-                await self.codec.start()
-            except Exception as e:
-                logger.error(f"启动音频流失败: {e}", exc_info=True)
-
-    async def on_protocol_connected(self, protocol: Any) -> None:
-        # 协议连上时确保音频流已启动
-        if self.codec:
-            try:
-                await self.codec.start()
-            except Exception as e:
-                logger.warning(f"协议连接后启动音频流失败: {e}")
-
-    async def on_incoming_json(self, message: Any) -> None:
-        # 示例：不处理
-        await asyncio.sleep(0)
 
     async def on_incoming_audio(self, data: bytes) -> None:
         """
@@ -87,16 +66,6 @@ class AudioPlugin(Plugin):
                 await self.codec.write_audio(data)
             except Exception as e:
                 logger.debug(f"写入音频数据失败: {e}")
-
-    async def stop(self) -> None:
-        """
-        停止音频流（保留 codec 实例）
-        """
-        if self.codec:
-            try:
-                await self.codec.stop()
-            except Exception as e:
-                logger.warning(f"停止音频流失败: {e}")
 
     async def shutdown(self) -> None:
         """
@@ -112,44 +81,33 @@ class AudioPlugin(Plugin):
 
         if self.codec:
             try:
-                # 确保先停止流，再关闭（避免回调还在执行）
-                try:
-                    await self.codec.stop()
-                except Exception as e:
-                    logger.warning(f"关闭前停止音频流失败: {e}")
-
-                # 关闭并释放所有音频资源
                 await self.codec.close()
             except Exception as e:
                 logger.error(f"关闭音频编解码器失败: {e}", exc_info=True)
             finally:
-                # 清空引用，帮助 GC
                 self.codec = None
 
-        # 清空应用引用，打破潜在循环引用
-        if self.app and hasattr(self.app, "audio_codec"):
-            try:
-                self.app.audio_codec = None
-            except AttributeError as e:
-                logger.warning(f"清空audio_codec引用失败: {e}")
+        # 清空应用引用
+        if self.app:
+            self.app.audio_codec = None
 
     # -------------------------
     # 内部：音频队列处理
     # -------------------------
     def _enqueue_audio(self, encoded_data: bytes) -> None:
         """音频线程回调：安全入队"""
-        if not self._audio_queue or not self._loop:
+        if not self._audio_queue or not self._main_loop:
             return
         try:
             # 使用 call_soon_threadsafe 在主循环中入队
-            self._loop.call_soon_threadsafe(
+            self._main_loop.call_soon_threadsafe(
                 self._audio_queue.put_nowait, encoded_data
             )
         except asyncio.QueueFull:
             # 队列满时丢弃最旧数据
             try:
-                self._loop.call_soon_threadsafe(self._audio_queue.get_nowait)
-                self._loop.call_soon_threadsafe(
+                self._main_loop.call_soon_threadsafe(self._audio_queue.get_nowait)
+                self._main_loop.call_soon_threadsafe(
                     self._audio_queue.put_nowait, encoded_data
                 )
             except Exception:
@@ -165,8 +123,9 @@ class AudioPlugin(Plugin):
                 await self._process_audio(encoded_data)
             except asyncio.CancelledError:
                 break
-            except Exception:
+            except Exception as e:
                 # 继续处理，避免消费者崩溃
+                logger.debug(f"音频消费者处理异常: {e}")
                 await asyncio.sleep(0.01)
 
     async def _process_audio(self, encoded_data: bytes) -> None:
