@@ -9,41 +9,7 @@ from typing import Any, Dict
 
 from src.utils.logging_config import get_logger
 
-from .device_status import get_device_status
-
 logger = get_logger(__name__)
-
-
-async def get_system_status(args: Dict[str, Any]) -> str:
-    """
-    获取完整的系统状态.
-    """
-    try:
-        logger.info("[SystemTools] 开始获取系统状态")
-
-        # 使用线程池执行同步的设备状态获取，避免阻塞事件循环
-        status = await asyncio.to_thread(get_device_status)
-
-        # 添加音频/音量状态信息
-        audio_status = await _get_audio_status()
-        status["audio_speaker"] = audio_status
-
-        # 添加应用状态信息
-        app_status = _get_application_status()
-        status["application"] = app_status
-
-        logger.info("[SystemTools] 系统状态获取成功")
-        return json.dumps(status, ensure_ascii=False, indent=2)
-
-    except Exception as e:
-        logger.error(f"[SystemTools] 获取系统状态失败: {e}", exc_info=True)
-        # 返回默认状态
-        fallback_status = {
-            "error": str(e),
-            "audio_speaker": {"volume": 50, "muted": False, "available": False},
-            "application": {"device_state": "unknown", "iot_devices": 0},
-        }
-        return json.dumps(fallback_status, ensure_ascii=False)
 
 
 async def set_volume(args: Dict[str, Any]) -> bool:
