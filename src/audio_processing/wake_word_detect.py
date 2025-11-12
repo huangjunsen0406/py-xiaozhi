@@ -1,5 +1,6 @@
 import asyncio
 import time
+from collections import deque
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -23,7 +24,10 @@ class WakeWordDetector:
         self.paused = False
         self.detection_task = None
 
-        # 防重复触发机制 - 缩短冷却时间提高响应
+        # 音频数据队列（用于异步处理）
+        self._audio_queue = asyncio.Queue(maxsize=100)
+
+        # 防重复触发机制
         self.last_detection_time = 0
         self.detection_cooldown = 1.5  # 1.5秒冷却时间
 
@@ -142,10 +146,24 @@ class WakeWordDetector:
         """
         self.on_detected_callback = callback
 
+    def on_audio_data(self, audio_data: np.ndarray):
+        if not self.enabled or not self.is_running_flag or self.paused:
+            return
+        
+        try:
+            # 将音频数据放入队列，由检测循环异步处理
+            self._audio_queue.put_nowait(audio_data.copy())
+        except asyncio.QueueFull:
+            # 队列满时丢弃最旧数据
+            try:
+                self._audio_queue.get_nowait()
+                self._audio_queue.put_nowait(audio_data.copy())
+            except asyncio.QueueEmpty:
+                self._audio_queue.put_nowait(audio_data.copy())
+        except Exception as e:
+            logger.debug(f"音频数据入队失败: {e}")
+
     async def start(self, audio_codec) -> bool:
-        """
-        启动唤醒词检测器.
-        """
         if not self.enabled:
             logger.warning("唤醒词功能未启用")
             return False
@@ -162,10 +180,13 @@ class WakeWordDetector:
             # 创建检测流
             self.stream = self.keyword_spotter.create_stream()
 
+            # 注册为音频监听器（观察者模式）
+            self.audio_codec.add_audio_listener(self)
+
             # 启动检测任务
             self.detection_task = asyncio.create_task(self._detection_loop())
 
-            logger.info("Sherpa-ONNX KeywordSpotter检测器启动成功")
+            logger.info("Sherpa-ONNX KeywordSpotter检测器启动成功（观察者模式）")
             return True
         except Exception as e:
             logger.error(f"启动KeywordSpotter检测器失败: {e}")
@@ -174,7 +195,7 @@ class WakeWordDetector:
 
     async def _detection_loop(self):
         """
-        检测循环.
+        检测循环
         """
         error_count = 0
         MAX_ERRORS = 5
@@ -183,10 +204,6 @@ class WakeWordDetector:
             try:
                 if self.paused:
                     await asyncio.sleep(0.1)
-                    continue
-
-                if not self.audio_codec:
-                    await asyncio.sleep(0.5)
                     continue
 
                 # 处理音频数据
@@ -218,38 +235,39 @@ class WakeWordDetector:
                 await asyncio.sleep(1)
 
     async def _process_audio(self):
-        """处理音频数据 - 批量处理优化"""
+        """
+        处理音频数据
+        """
         try:
-            if not self.audio_codec or not self.stream:
+            if not self.stream:
                 return
 
-            # 批量获取多个音频帧以提高效率
-            audio_batches = []
-            for _ in range(3):  # 一次处理最多3帧
-                data = await self.audio_codec.get_raw_audio_for_detection()
-                if data:
-                    audio_batches.append(data)
-
-            if not audio_batches:
-                return
-
-            # 批量处理音频数据
-            for data in audio_batches:
-                # 转换音频格式
-                if isinstance(data, bytes):
-                    samples = (
-                        np.frombuffer(data, dtype=np.int16).astype(np.float32) / 32768.0
-                    )
-                else:
-                    samples = np.array(data, dtype=np.float32)
-
-                # 提供音频数据给KeywordSpotter
-                self.stream.accept_waveform(
-                    sample_rate=self.sample_rate, waveform=samples
+            # 从队列获取音频数据（使用短超时避免阻塞）
+            try:
+                audio_data = await asyncio.wait_for(
+                    self._audio_queue.get(),
+                    timeout=0.01  # 10ms超时
                 )
+            except asyncio.TimeoutError:
+                return
 
-            # 处理检测结果
-            while self.keyword_spotter.is_ready(self.stream):
+            if audio_data is None or len(audio_data) == 0:
+                return
+
+            # 转换音频格式为 float32
+            if audio_data.dtype == np.int16:
+                samples = audio_data.astype(np.float32) / 32768.0
+            else:
+                samples = audio_data.astype(np.float32)
+
+            # 提供音频数据给KeywordSpotter
+            self.stream.accept_waveform(
+                sample_rate=self.sample_rate,
+                waveform=samples
+            )
+
+            # 检查是否准备好解码
+            if self.keyword_spotter.is_ready(self.stream):
                 self.keyword_spotter.decode_stream(self.stream)
                 result = self.keyword_spotter.get_result(self.stream)
 
@@ -257,7 +275,6 @@ class WakeWordDetector:
                     await self._handle_detection_result(result)
                     # 重置流状态
                     self.keyword_spotter.reset_stream(self.stream)
-                    break  # 检测到后立即处理，不继续批量处理
 
         except Exception as e:
             logger.debug(f"KWS音频处理错误: {e}")
@@ -289,12 +306,23 @@ class WakeWordDetector:
         """
         self.is_running_flag = False
 
+        # 从AudioCodec移除监听器
+        if self.audio_codec:
+            self.audio_codec.remove_audio_listener(self)
+
         if self.detection_task:
             self.detection_task.cancel()
             try:
                 await self.detection_task
             except asyncio.CancelledError:
                 pass
+
+        # 清空队列
+        while not self._audio_queue.empty():
+            try:
+                self._audio_queue.get_nowait()
+            except asyncio.QueueEmpty:
+                break
 
         logger.info("Sherpa-ONNX KeywordSpotter检测器已停止")
 
