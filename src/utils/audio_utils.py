@@ -236,18 +236,3 @@ def select_audio_device(
             return pack(i)
 
     return None
-
-# ===== 示例 =====
-# if __name__ == "__main__":
-#     # Windows/macOS：不启用 name hints（可省略 allow_name_hints）
-#     # Linux：默认启用 name hints；如需禁用，传 allow_name_hints=False
-#     in_info  = select_audio_device("input",  include_virtual=False)
-#     out_info = select_audio_device("output", include_virtual=False)
-
-#     print("picked input :", in_info)
-#     print("picked output:", out_info)
-
-#     if in_info and out_info:
-#         sd.default.device = (in_info["index"], out_info["index"])
-#         print("sd.default.device =", sd.default.device)
-#         print("sd.default.device =", sd.default.device)

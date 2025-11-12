@@ -97,18 +97,22 @@ class SystemToolsManager:
         add_tool(
             (
                 "self.audio_speaker.set_volume",
-                "Set system speaker volume to an absolute value (0–100). Always "
-                "provide integer 'volume'.\n"
-                "Use this tool when:\n"
-                "1. User asks to set volume to a specific percent/number (e.g., '音量设为50%')\n"
-                "2. User asks to increase/decrease volume relatively ('调大/调小一点'): first call "
-                "`self.get_device_status` to read current audio_speaker.volume, compute a target within 0–100, "
-                "then call this tool\n"
-                "3. Ensuring volume stays within 0–100 (do not guess current value)\n\n"
-                "Parameters:\n"
-                "- volume: INTEGER in [0, 100] (absolute target)\n\n"
-                "Notes: If the current volume is unknown, do NOT assume it — call `self.get_device_status` first. "
-                "To mute, set volume=0. This tool does not toggle mute state.",
+                "【音量控制】当用户提到：调音量、声音大小、音量设为、调大声音、调小声音、声音太大/太小、"
+                "静音、取消静音、增大音量、降低音量、把声音、音量调整、声音调节 时调用本工具。\n"
+                "功能：设置系统扬声器音量到绝对值(0-100)。\n"
+                "使用场景：\n"
+                "1. 用户要求设置音量到具体数值 (例如: '音量设为50', '把声音调到80', 'volume to 30')\n"
+                "2. 用户要求相对调整音量 ('调大一点', '声音小一点', '再大声点'): 必须先调用 "
+                "`self.get_device_status` 获取当前 audio_speaker.volume, 计算目标值(保持在0-100内), 然后调用本工具\n"
+                "3. 静音/取消静音: 静音设volume=0, 取消静音可设为之前的值或默认值(如30-50)\n\n"
+                "参数说明：\n"
+                "- volume: 整数类型，范围[0, 100]，表示目标音量的绝对值\n\n"
+                "重要提示：如果当前音量未知，切勿猜测 —— 必须先调用 `self.get_device_status` 获取。"
+                "本工具不支持切换静音状态，要静音请设置volume=0。\n"
+                "English: Set the volume of the audio speaker. If the current volume is unknown, "
+                "you must call `self.get_device_status` tool first and then call this tool. "
+                "Use when user mentions: volume, sound, louder, quieter, mute, unmute, adjust volume. "
+                "Examples: '音量设为50', '调大声音', '声音小一点', 'set volume to 80', 'turn it up'.",
                 volume_props,
                 set_volume,
             )

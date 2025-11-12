@@ -284,19 +284,21 @@ class McpServer:
         # 注册take_photo工具
         properties = PropertyList([Property("question", PropertyType.STRING)])
         VISION_DESC = (
-            "【图像/识图/OCR/问答】当用户提到：拍照、识图、读取/提取文字、OCR、翻译图片文字、"
-            "看一下这张图/截图、这是什么、数一数、识别二维码/条码、对比两张图、分析场景/报错截图、"
-            "表格/票据信息抽取、图片问答 时调用本工具。"
-            "功能：①拍照或接收已有图片/截图/URL；②物体/场景/标签识别；③OCR(多语)与翻译；④计数/位置；"
-            "⑤二维码/条码读取；⑥关键信息抽取(表格/票据)；⑦两图对比；⑧就图回答问题。"
-            "输入建议：{ mode:'capture'|'upload'|'url', image?, url?, question?, target_lang? }；"
-            "若用户未提供图片且允许，可触发拍照(mode='capture')。"
-            "避免：纯文本知识问答、与图片无关的请求。"
-            "English: Vision/OCR/QA tool. Use when the user provides or asks about a photo/screenshot/image: "
-            "describe, classify, OCR, translate, count objects, read QR/barcodes, extract tables/receipts, "
-            "compare two images, image QA. Inputs as above. Do NOT use for pure text queries."
-            "Examples: '这张图是什么', 'OCR这张发票并翻译成英文', '数一下图里有几只猫', '读一下这个二维码', "
-            "'对比这两张UI截图的差异', '把截图里的表格提取成CSV'。"
+            "【拍照识图】当用户提到：拍照、拍张照、照张相、看一下、看看、帮我看、这是什么、识别、"
+            "识图、看图、图片、照片、帮我瞧瞧 时调用本工具。\n"
+            "功能：拍照并分析图片内容，回答用户关于图片的问题。\n"
+            "使用场景：\n"
+            "1. 用户要求拍照看东西 (例如: '帮我看看这是什么', '拍个照', '看看前面是什么')\n"
+            "2. 物体/场景识别 ('这是什么东西', '帮我认一下', '识别一下')\n"
+            "3. 文字识别OCR ('读一下上面的字', '提取文字', '这上面写的什么')\n"
+            "4. 图片问答 ('图里有几个人', '这个是什么颜色', '上面有什么内容')\n\n"
+            "参数说明：\n"
+            "- question: 字符串类型，用户想了解的关于图片的问题\n\n"
+            "使用提示：当用户说'看'、'看看'、'这是什么'等模糊表达时，优先使用本工具进行拍照识别。\n"
+            "English: Take a photo and explain it. Use this tool after the user asks you to see something.\n"
+            "Args: `question` - The question that you want to ask about the photo.\n"
+            "Return: A JSON object that provides the photo information.\n"
+            "Examples: '帮我看看这是什么', '拍个照', '看看前面', 'take a photo', 'what is this'."
         )
 
         self.add_tool(
