@@ -33,7 +33,6 @@ class VolumeController:
         "pactl": ("_get_pactl_volume", "_set_pactl_volume"),
         "wpctl": ("_get_wpctl_volume", "_set_wpctl_volume"),
         "amixer": ("_get_amixer_volume", "_set_amixer_volume"),
-        "alsamixer": (None, "_set_alsamixer_volume"),
     }
 
     # 平台特定的模块依赖
@@ -175,12 +174,8 @@ class VolumeController:
                 self.linux_tool = tool
                 break
 
-        # 检查alsamixer作为备选
-        if not self.linux_tool and shutil.which("alsamixer") and shutil.which("expect"):
-            self.linux_tool = "alsamixer"
-
         if not self.linux_tool:
-            self.logger.error("未找到可用的Linux音量控制工具")
+            self.logger.error("未找到可用的Linux音量控制工具 (pactl/wpctl/amixer)")
             raise Exception("未找到可用的Linux音量控制工具")
 
         self.logger.debug(f"Linux音量控制初始化成功，使用: {self.linux_tool}")
@@ -276,11 +271,21 @@ class VolumeController:
         def get_volume():
             result = self._run_command(["pactl", "list", "sinks"])
             if result and result.returncode == 0:
+                # 支持多种格式:
+                # 1. Volume: front-left: 65535 / 65% / -10.77 dB
+                # 2. Volume: 65%
+                # 使用更宽松的匹配规则
                 for line in result.stdout.split("\n"):
-                    if "Volume:" in line and "front-left:" in line:
+                    if "Volume:" in line:
+                        # 提取所有百分比，取第一个
                         match = re.search(r"(\d+)%", line)
                         if match:
-                            return int(match.group(1))
+                            volume = int(match.group(1))
+                            self.logger.debug(f"pactl获取音量成功: {volume}%")
+                            return volume
+                self.logger.warning("pactl输出中未找到音量信息")
+            else:
+                self.logger.warning(f"pactl命令执行失败: {result.returncode if result else 'None'}")
             return self.DEFAULT_VOLUME
 
         return get_volume
@@ -289,9 +294,13 @@ class VolumeController:
     def _set_pactl_volume(self) -> Callable[[int], None]:
         @self._safe_execute("通过pactl设置音量")
         def set_volume(volume):
-            self._run_command(
+            result = self._run_command(
                 ["pactl", "set-sink-volume", "@DEFAULT_SINK@", f"{volume}%"]
             )
+            if result and result.returncode == 0:
+                self.logger.debug(f"pactl设置音量成功: {volume}%")
+            else:
+                self.logger.warning(f"pactl设置音量失败: {result.returncode if result else 'None'}")
 
         return set_volume
 
@@ -299,11 +308,18 @@ class VolumeController:
     def _get_wpctl_volume(self) -> Callable[[], int]:
         @self._safe_execute("通过wpctl获取音量", self.DEFAULT_VOLUME)
         def get_volume():
-            result = self._run_command(
-                ["wpctl", "get-volume", "@DEFAULT_AUDIO_SINK@"], check=True
-            )
-            if result:
-                return int(float(result.stdout.split(" ")[1]) * 100)
+            result = self._run_command(["wpctl", "get-volume", "@DEFAULT_AUDIO_SINK@"])
+            if result and result.returncode == 0:
+                # 支持多种输出格式: "Volume: 0.65", "0.65", "Volume: 0.65 [MUTED]"
+                match = re.search(r"(\d+\.?\d*)", result.stdout)
+                if match:
+                    volume = int(float(match.group(1)) * 100)
+                    self.logger.debug(f"wpctl获取音量成功: {volume}%")
+                    return volume
+                else:
+                    self.logger.warning(f"wpctl输出格式无法解析: {result.stdout}")
+            else:
+                self.logger.warning(f"wpctl命令执行失败: {result.returncode if result else 'None'}")
             return self.DEFAULT_VOLUME
 
         return get_volume
@@ -312,10 +328,13 @@ class VolumeController:
     def _set_wpctl_volume(self) -> Callable[[int], None]:
         @self._safe_execute("通过wpctl设置音量")
         def set_volume(volume):
-            self._run_command(
-                ["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", f"{volume}%"],
-                check=True,
+            result = self._run_command(
+                ["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", f"{volume / 100.0:.2f}"]
             )
+            if result and result.returncode == 0:
+                self.logger.debug(f"wpctl设置音量成功: {volume}%")
+            else:
+                self.logger.warning(f"wpctl设置音量失败: {result.returncode if result else 'None'}")
 
         return set_volume
 
@@ -325,9 +344,19 @@ class VolumeController:
         def get_volume():
             result = self._run_command(["amixer", "get", "Master"])
             if result and result.returncode == 0:
-                match = re.search(r"(\d+)%", result.stdout)
+                # 支持多种格式:
+                # 1. Mono: Playback 65 [65%] [-10.77dB] [on]
+                # 2. Front Left: Playback 65 [65%] [-10.77dB] [on]
+                # 提取第一个百分比数值
+                match = re.search(r"\[(\d+)%\]", result.stdout)
                 if match:
-                    return int(match.group(1))
+                    volume = int(match.group(1))
+                    self.logger.debug(f"amixer获取音量成功: {volume}%")
+                    return volume
+                else:
+                    self.logger.warning(f"amixer输出格式无法解析: {result.stdout}")
+            else:
+                self.logger.warning(f"amixer命令执行失败: {result.returncode if result else 'None'}")
             return self.DEFAULT_VOLUME
 
         return get_volume
@@ -336,23 +365,11 @@ class VolumeController:
     def _set_amixer_volume(self) -> Callable[[int], None]:
         @self._safe_execute("通过amixer设置音量")
         def set_volume(volume):
-            self._run_command(["amixer", "sset", "Master", f"{volume}%"])
-
-        return set_volume
-
-    @property
-    def _set_alsamixer_volume(self) -> Callable[[int], None]:
-        @self._safe_execute("通过alsamixer设置音量")
-        def set_volume(volume):
-            script = f"""
-            spawn alsamixer
-            send "m"
-            send "{volume}"
-            send "%"
-            send "q"
-            expect eof
-            """
-            self._run_command(["expect", "-c", script])
+            result = self._run_command(["amixer", "sset", "Master", f"{volume}%"])
+            if result and result.returncode == 0:
+                self.logger.debug(f"amixer设置音量成功: {volume}%")
+            else:
+                self.logger.warning(f"amixer设置音量失败: {result.returncode if result else 'None'}")
 
         return set_volume
 
@@ -396,7 +413,7 @@ class VolumeController:
         """
         检查Linux工具依赖.
         """
-        tools = ["pactl", "wpctl", "amixer", "alsamixer"]
+        tools = ["pactl", "wpctl", "amixer"]
         found = any(shutil.which(tool) for tool in tools)
         if not found:
             missing.append("pulseaudio-utils、wireplumber 或 alsa-utils")
