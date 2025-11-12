@@ -10,7 +10,7 @@ from src.utils.logging_config import get_logger
 from .app_management.killer import kill_application, list_running_applications
 from .app_management.launcher import launch_application
 from .app_management.scanner import scan_installed_applications
-from .tools import get_system_status, set_volume
+from .tools import set_volume
 
 logger = get_logger(__name__)
 
@@ -33,9 +33,6 @@ class SystemToolsManager:
         """
         try:
             logger.info("[SystemManager] 开始注册系统工具")
-
-            # 注册获取设备状态工具
-            self._register_device_status_tool(add_tool, PropertyList)
 
             # 注册音量控制工具
             self._register_volume_control_tool(
@@ -64,27 +61,6 @@ class SystemToolsManager:
             logger.error(f"[SystemManager] 系统工具注册失败: {e}", exc_info=True)
             raise
 
-    def _register_device_status_tool(self, add_tool, PropertyList):
-        """
-        注册设备状态查询工具.
-        """
-        add_tool(
-            (
-                "self.get_device_status",
-                "Provides comprehensive real-time system information including "
-                "OS details, CPU usage, memory status, disk usage, battery info, "
-                "audio speaker volume and settings, and application state.\n"
-                "Use this tool for: \n"
-                "1. Answering questions about current system condition\n"
-                "2. Getting detailed hardware and software status\n"
-                "3. Checking current audio volume level and mute status\n"
-                "4. As the first step before controlling device settings",
-                PropertyList(),
-                get_system_status,
-            )
-        )
-        logger.debug("[SystemManager] 注册设备状态工具成功")
-
     def _register_volume_control_tool(
         self, add_tool, PropertyList, Property, PropertyType
     ):
@@ -97,22 +73,12 @@ class SystemToolsManager:
         add_tool(
             (
                 "self.audio_speaker.set_volume",
-                "【音量控制】当用户提到：调音量、声音大小、音量设为、调大声音、调小声音、声音太大/太小、"
-                "静音、取消静音、增大音量、降低音量、把声音、音量调整、声音调节 时调用本工具。\n"
-                "功能：设置系统扬声器音量到绝对值(0-100)。\n"
-                "使用场景：\n"
-                "1. 用户要求设置音量到具体数值 (例如: '音量设为50', '把声音调到80', 'volume to 30')\n"
-                "2. 用户要求相对调整音量 ('调大一点', '声音小一点', '再大声点'): 必须先调用 "
-                "`self.get_device_status` 获取当前 audio_speaker.volume, 计算目标值(保持在0-100内), 然后调用本工具\n"
-                "3. 静音/取消静音: 静音设volume=0, 取消静音可设为之前的值或默认值(如30-50)\n\n"
-                "参数说明：\n"
-                "- volume: 整数类型，范围[0, 100]，表示目标音量的绝对值\n\n"
-                "重要提示：如果当前音量未知，切勿猜测 —— 必须先调用 `self.get_device_status` 获取。"
-                "本工具不支持切换静音状态，要静音请设置volume=0。\n"
-                "English: Set the volume of the audio speaker. If the current volume is unknown, "
-                "you must call `self.get_device_status` tool first and then call this tool. "
-                "Use when user mentions: volume, sound, louder, quieter, mute, unmute, adjust volume. "
-                "Examples: '音量设为50', '调大声音', '声音小一点', 'set volume to 80', 'turn it up'.",
+                "Set the system speaker volume to an absolute value (0-100).\n"
+                "Use when user mentions: volume, sound, louder, quieter, mute, unmute, adjust volume.\n"
+                "Examples: 'set volume to 50', 'turn volume up', 'make it louder', 'mute', "
+                "'音量设为50', '调大声音', '声音小一点', '静音'.\n"
+                "Parameter:\n"
+                "- volume: Integer (0-100) representing the target volume level. Set to 0 for mute.",
                 volume_props,
                 set_volume,
             )
@@ -255,17 +221,17 @@ class SystemToolsManager:
         """
         获取管理器状态.
         """
+        available_tools = [
+            "set_volume",
+            "launch_application",
+            "scan_installed_applications",
+            "kill_application",
+            "list_running_applications",
+        ]
         return {
             "initialized": self._initialized,
-            "tools_count": 6,  # 当前注册的工具数量
-            "available_tools": [
-                "get_device_status",
-                "set_volume",
-                "launch_application",
-                "scan_installed_applications",
-                "kill_application",
-                "list_running_applications",
-            ],
+            "tools_count": len(available_tools),
+            "available_tools": available_tools,
         }
 
 
