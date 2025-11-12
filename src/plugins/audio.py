@@ -3,8 +3,10 @@ import os
 from typing import Any
 
 from src.audio_codecs.audio_codec import AudioCodec
-from src.constants.constants import DeviceState, ListeningMode
 from src.plugins.base import Plugin
+from src.utils.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 # from src.utils.opus_loader import setup_opus
 # setup_opus()
@@ -19,6 +21,8 @@ class AudioPlugin(Plugin):
         self.codec: AudioCodec | None = None
         self._loop = None
         self._send_sem = asyncio.Semaphore(4)
+        self._audio_queue: asyncio.Queue | None = None
+        self._audio_consumer_task: asyncio.Task | None = None
 
     async def setup(self, app: Any) -> None:
         self.app = app
@@ -30,41 +34,59 @@ class AudioPlugin(Plugin):
         try:
             self.codec = AudioCodec()
             await self.codec.initialize()
-            # 录音编码后的回调（来自音频线程）
-            self.codec.set_encoded_audio_callback(self._on_encoded_audio)
+
+            # 创建音频队列
+            self._audio_queue = asyncio.Queue(maxsize=50)
+
+            # 设置编码音频回调：录音数据入队，由消费者发送
+            self.codec.set_encoded_callback(self._enqueue_audio)
+
+            # 启动音频消费者任务
+            self._audio_consumer_task = app.spawn(
+                self._audio_consumer(),
+                "audio:consumer"
+            )
+
             # 暴露给应用，便于唤醒词插件使用
             try:
                 setattr(self.app, "audio_codec", self.codec)
-            except Exception:
-                pass
-        except Exception:
+            except AttributeError as e:
+                logger.warning(f"无法设置audio_codec属性: {e}")
+        except Exception as e:
+            logger.error(f"音频插件初始化失败: {e}", exc_info=True)
             self.codec = None
 
     async def start(self) -> None:
         if self.codec:
             try:
-                await self.codec.start_streams()
-            except Exception:
-                pass
+                await self.codec.start()
+            except Exception as e:
+                logger.error(f"启动音频流失败: {e}", exc_info=True)
 
     async def on_protocol_connected(self, protocol: Any) -> None:
         # 协议连上时确保音频流已启动
         if self.codec:
             try:
-                await self.codec.start_streams()
-            except Exception:
-                pass
+                await self.codec.start()
+            except Exception as e:
+                logger.warning(f"协议连接后启动音频流失败: {e}")
 
     async def on_incoming_json(self, message: Any) -> None:
         # 示例：不处理
         await asyncio.sleep(0)
 
     async def on_incoming_audio(self, data: bytes) -> None:
+        """
+        接收服务端返回的音频数据并播放
+
+        Args:
+            data: 服务端返回的Opus编码音频数据
+        """
         if self.codec:
             try:
                 await self.codec.write_audio(data)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"写入音频数据失败: {e}")
 
     async def stop(self) -> None:
         """
@@ -72,27 +94,34 @@ class AudioPlugin(Plugin):
         """
         if self.codec:
             try:
-                await self.codec.stop_streams()
-            except Exception:
-                pass
+                await self.codec.stop()
+            except Exception as e:
+                logger.warning(f"停止音频流失败: {e}")
 
     async def shutdown(self) -> None:
         """
         完全关闭并释放音频资源.
         """
+        # 停止音频消费者任务
+        if self._audio_consumer_task and not self._audio_consumer_task.done():
+            self._audio_consumer_task.cancel()
+            try:
+                await self._audio_consumer_task
+            except asyncio.CancelledError:
+                pass
+
         if self.codec:
             try:
                 # 确保先停止流，再关闭（避免回调还在执行）
                 try:
-                    await self.codec.stop_streams()
-                except Exception:
-                    pass
+                    await self.codec.stop()
+                except Exception as e:
+                    logger.warning(f"关闭前停止音频流失败: {e}")
 
                 # 关闭并释放所有音频资源
                 await self.codec.close()
-            except Exception:
-                # 日志已在 codec.close() 中记录
-                pass
+            except Exception as e:
+                logger.error(f"关闭音频编解码器失败: {e}", exc_info=True)
             finally:
                 # 清空引用，帮助 GC
                 self.codec = None
@@ -101,60 +130,65 @@ class AudioPlugin(Plugin):
         if self.app and hasattr(self.app, "audio_codec"):
             try:
                 self.app.audio_codec = None
-            except Exception:
-                pass
+            except AttributeError as e:
+                logger.warning(f"清空audio_codec引用失败: {e}")
 
     # -------------------------
-    # 内部：发送麦克风音频
+    # 内部：音频队列处理
     # -------------------------
-    def _on_encoded_audio(self, encoded_data: bytes) -> None:
-        # 音频线程回调 -> 切回主loop
+    def _enqueue_audio(self, encoded_data: bytes) -> None:
+        """音频线程回调：安全入队"""
+        if not self._audio_queue or not self._loop:
+            return
         try:
-            if not self.app or not self._loop or not self.app.running:
-                return
-            if self._loop.is_closed():
-                return
-            self._loop.call_soon_threadsafe(self._schedule_send_audio, encoded_data)
+            # 使用 call_soon_threadsafe 在主循环中入队
+            self._loop.call_soon_threadsafe(
+                self._audio_queue.put_nowait, encoded_data
+            )
+        except asyncio.QueueFull:
+            # 队列满时丢弃最旧数据
+            try:
+                self._loop.call_soon_threadsafe(self._audio_queue.get_nowait)
+                self._loop.call_soon_threadsafe(
+                    self._audio_queue.put_nowait, encoded_data
+                )
+            except Exception:
+                pass
         except Exception:
             pass
 
-    def _schedule_send_audio(self, encoded_data: bytes) -> None:
-        if not self.app or not self.app.running or not self.app.protocol:
-            return
+    async def _audio_consumer(self) -> None:
+        """异步消费音频队列"""
+        while True:
+            try:
+                encoded_data = await self._audio_queue.get()
+                await self._process_audio(encoded_data)
+            except asyncio.CancelledError:
+                break
+            except Exception:
+                # 继续处理，避免消费者崩溃
+                await asyncio.sleep(0.01)
 
-        async def _send():
-            async with self._send_sem:
-                # 仅在允许的设备状态下发送麦克风音频
-                try:
-                    if not (
-                        self.app.protocol
-                        and self.app.protocol.is_audio_channel_opened()
-                    ):
-                        return
-                    if self._should_send_microphone_audio():
-                        await self.app.protocol.send_audio(encoded_data)
-                except Exception:
-                    pass
+    async def _process_audio(self, encoded_data: bytes) -> None:
+        """处理单个音频数据包"""
+        async with self._send_sem:
+            try:
+                if not (
+                    self.app
+                    and self.app.running
+                    and self.app.protocol
+                    and self.app.protocol.is_audio_channel_opened()
+                ):
+                    return
 
-        # 交给应用的任务管理
-        self.app.spawn(_send(), name="audio:send")
+                if self._should_send_microphone_audio():
+                    await self.app.protocol.send_audio(encoded_data)
+            except Exception:
+                pass
 
     def _should_send_microphone_audio(self) -> bool:
-        """与应用状态机对齐：
-
-        - LISTENING 时发送
-        - SPEAKING 且 AEC 开启 且 keep_listening 且 REALTIME 模式 时发送
-        """
+        """委托给应用的统一状态机规则"""
         try:
-            if not self.app:
-                return False
-            if self.app.device_state == DeviceState.LISTENING and not self.app.aborted:
-                return True
-            return (
-                self.app.device_state == DeviceState.SPEAKING
-                and getattr(self.app, "aec_enabled", False)
-                and bool(getattr(self.app, "keep_listening", False))
-                and getattr(self.app, "listening_mode", None) == ListeningMode.REALTIME
-            )
+            return self.app and self.app.should_capture_audio()
         except Exception:
             return False

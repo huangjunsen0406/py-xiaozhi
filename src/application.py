@@ -258,11 +258,6 @@ class Application:
         return task
 
     def schedule_command_nowait(self, fn, *args, **kwargs) -> None:
-        """简化的“立即调度”：把任意可调用丢回主loop执行。
-
-        - 若返回协程，会被自动创建子任务执行（fire-and-forget）。
-        - 若是同步函数，直接在事件循环线程里运行（尽量保持轻量）。
-        """
         if not self._main_loop or self._main_loop.is_closed():
             logger.warning("主事件循环未就绪，拒绝调度")
             return
@@ -407,6 +402,20 @@ class Application:
     def is_audio_channel_opened(self) -> bool:
         try:
             return bool(self.protocol and self.protocol.is_audio_channel_opened())
+        except Exception:
+            return False
+
+    def should_capture_audio(self) -> bool:
+        try:
+            if self.device_state == DeviceState.LISTENING and not self.aborted:
+                return True
+
+            return (
+                self.device_state == DeviceState.SPEAKING
+                and self.aec_enabled
+                and self.keep_listening
+                and self.listening_mode == ListeningMode.REALTIME
+            )
         except Exception:
             return False
 
