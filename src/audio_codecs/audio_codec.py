@@ -621,41 +621,6 @@ class AudioCodec:
         except Exception as e:
             logger.warning(f"音频写入失败，丢弃此帧: {e}")
 
-    async def start(self):
-        """启动音频流"""
-        try:
-            if self.input_stream and not self.input_stream.active:
-                try:
-                    self.input_stream.start()
-                except Exception as e:
-                    logger.warning(f"启动输入流时出错: {e}")
-                    await self.reinitialize_stream(is_input=True)
-            
-            if self.output_stream and not self.output_stream.active:
-                try:
-                    self.output_stream.start()
-                except Exception as e:
-                    logger.warning(f"启动输出流时出错: {e}")
-                    await self.reinitialize_stream(is_input=False)
-            
-            logger.info("音频流已启动")
-        except Exception as e:
-            logger.error(f"启动音频流失败: {e}")
-
-    async def stop(self):
-        """停止音频流"""
-        try:
-            if self.input_stream and self.input_stream.active:
-                self.input_stream.stop()
-        except Exception as e:
-            logger.warning(f"停止输入流失败: {e}")
-        
-        try:
-            if self.output_stream and self.output_stream.active:
-                self.output_stream.stop()
-        except Exception as e:
-            logger.warning(f"停止输出流失败: {e}")
-
     async def reinitialize_stream(self, is_input: bool = True):
         """
         重建音频流（处理设备错误/断开）
@@ -751,81 +716,7 @@ class AudioCodec:
             gc.collect()
             logger.debug("执行垃圾回收以释放内存")
 
-    async def wait_for_audio_complete(self, timeout: float = 10.0):
-        """
-        等待播放完成
-        
-        Args:
-            timeout: 超时时间（秒）
-        
-        使用场景:
-            - TTS播放完成后再继续对话
-            - 确保音频完整播放后关闭流
-        """
-        start = time.time()
-        
-        while not self._output_buffer.empty() and time.time() - start < timeout:
-            await asyncio.sleep(0.05)
-        
-        await asyncio.sleep(0.3)
-        
-        if not self._output_buffer.empty():
-            output_remaining = self._output_buffer.qsize()
-            logger.warning(f"音频播放超时，剩余队列: {output_remaining} 帧")
-
-    def is_active(self) -> bool:
-        """检查音频流是否活跃"""
-        input_active = self.input_stream and self.input_stream.active
-        output_active = self.output_stream and self.output_stream.active
-        return input_active or output_active
-
-    def get_buffer_status(self) -> dict:
-        """获取缓冲区状态"""
-        return {
-            "output_queue_size": self._output_buffer.qsize(),
-            "input_resample_buffer": len(self._resample_input_buffer),
-            "output_resample_buffer": len(self._resample_output_buffer),
-        }
-
-    # ============= AEC 控制方法（可选）=============
-
-    def is_aec_enabled(self) -> bool:
-        """检查AEC是否启用"""
-        return self._aec_enabled
-
-    def get_aec_status(self) -> dict:
-        """获取AEC状态信息"""
-        if not self._aec_enabled or not self.audio_processor:
-            return {"enabled": False, "reason": "AEC未启用或初始化失败"}
-        
-        try:
-            return {"enabled": True, **self.audio_processor.get_status()}
-        except Exception as e:
-            return {"enabled": False, "reason": f"获取状态失败: {e}"}
-
-    def toggle_aec(self, enabled: bool) -> bool:
-        """
-        切换AEC启用状态
-        
-        Args:
-            enabled: 是否启用AEC
-        
-        Returns:
-            实际的AEC状态
-        """
-        if not self.audio_processor:
-            logger.warning("AEC处理器未初始化，无法切换状态")
-            return False
-        
-        self._aec_enabled = enabled and self.audio_processor._is_initialized
-        
-        if enabled and not self._aec_enabled:
-            logger.warning("无法启用AEC，处理器未正确初始化")
-        
-        logger.info(f"AEC状态: {'启用' if self._aec_enabled else '禁用'}")
-        return self._aec_enabled
-
-    # ============= 资源清理 =============
+    # ============= AEC 控制方法 =============
 
     async def _cleanup_resampler(self, resampler, name: str):
         """清理重采样器资源"""
