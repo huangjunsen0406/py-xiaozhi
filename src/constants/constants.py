@@ -100,7 +100,7 @@ class AudioConfig:
     CHANNELS = 1  # 服务端协议要求：单声道
 
     # 设备声道限制（避免多声道设备性能浪费）
-    MAX_INPUT_CHANNELS = 2   # 最多使用2个输入声道（立体声）
+    MAX_INPUT_CHANNELS = 2  # 最多使用2个输入声道（立体声）
     MAX_OUTPUT_CHANNELS = 2  # 最多使用2个输出声道（立体声）
 
     # 动态获取帧长度

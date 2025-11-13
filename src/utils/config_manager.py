@@ -72,8 +72,8 @@ class ConfigManager:
             "output_device_name": None,
             "input_sample_rate": None,
             "output_sample_rate": None,
-            "input_device_channel": None,
-            "output_device_channel": None
+            "input_channels": None,
+            "output_channels": None,
         },
     }
 

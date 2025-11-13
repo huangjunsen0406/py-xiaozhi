@@ -8,6 +8,7 @@ class Plugin:
     """
 
     name: str = "plugin"
+    priority: int = 50  # 优先级，数值越小越优先（范围: 1-100）
 
     def __init__(self) -> None:
         self._started = False

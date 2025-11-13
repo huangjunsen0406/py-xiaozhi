@@ -296,6 +296,7 @@ class PluginShortcutManager:
 
 class ShortcutsPlugin(Plugin):
     name = "shortcuts"
+    priority = 70  # 最低优先级，依赖 UIPlugin
 
     def __init__(self) -> None:
         super().__init__()

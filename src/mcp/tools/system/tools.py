@@ -4,7 +4,6 @@
 """
 
 import asyncio
-import json
 from typing import Any, Dict
 
 from src.utils.logging_config import get_logger

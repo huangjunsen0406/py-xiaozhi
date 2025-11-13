@@ -147,6 +147,7 @@ class AECProcessor:
             # 创建高质量重采样器（如需要）
             if self.reference_sample_rate != AudioConfig.INPUT_SAMPLE_RATE:
                 import soxr
+
                 self.reference_resampler = soxr.ResampleStream(
                     self.reference_sample_rate,
                     AudioConfig.INPUT_SAMPLE_RATE,
@@ -240,7 +241,9 @@ class AECProcessor:
                     audio_data, last=False
                 )
                 if len(resampled_data) > 0:
-                    self._resample_reference_buffer.extend(resampled_data.astype(np.int16))
+                    self._resample_reference_buffer.extend(
+                        resampled_data.astype(np.int16)
+                    )
 
                 # 从缓冲区提取WebRTC标准帧
                 while len(self._resample_reference_buffer) >= self._webrtc_frame_size:

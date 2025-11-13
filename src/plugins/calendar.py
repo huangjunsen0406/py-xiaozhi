@@ -36,6 +36,7 @@ class _AppAdapter:
 
 class CalendarPlugin(Plugin):
     name = "calendar"
+    priority = 40  # 独立服务，中等优先级
 
     def __init__(self) -> None:
         super().__init__()

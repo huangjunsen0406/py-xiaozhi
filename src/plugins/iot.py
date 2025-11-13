@@ -5,6 +5,7 @@ from src.plugins.base import Plugin
 
 class IoTPlugin(Plugin):
     name = "iot"
+    priority = 50  # 独立服务，默认优先级
 
     def __init__(self) -> None:
         super().__init__()

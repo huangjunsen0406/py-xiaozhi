@@ -8,6 +8,7 @@ class UIPlugin(Plugin):
     """UI 插件 - 管理 CLI/GUI 显示"""
 
     name = "ui"
+    priority = 60  # UI 需要在其他插件完成后初始化
 
     # 设备状态文本映射
     STATE_TEXT_MAP = {

@@ -5,7 +5,7 @@ from .base import Plugin
 
 class PluginManager:
     """
-    轻量插件管理器：统一setup/start/stop/shutdown广播；错误隔离。
+    轻量插件管理器：统一setup/start/stop/shutdown广播；错误隔离。 插件按 priority 排序后注册（数值越小越优先）。
     """
 
     def __init__(self) -> None:
@@ -13,7 +13,9 @@ class PluginManager:
         self._by_name: dict[str, Plugin] = {}
 
     def register(self, *plugins: Plugin) -> None:
-        for p in plugins:
+        # 按 priority 排序（数值越小越优先）
+        sorted_plugins = sorted(plugins, key=lambda p: getattr(p, "priority", 50))
+        for p in sorted_plugins:
             if p not in self._plugins:
                 self._plugins.append(p)
                 try:

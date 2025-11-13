@@ -100,6 +100,9 @@ class Application:
             from src.plugins.audio import AudioPlugin
 
             # 注册音频、UI、MCP、IoT、唤醒词、快捷键与日程插件（UI模式从run参数传入）
+            # 插件会自动按 priority 排序：
+            # AudioPlugin(10) -> McpPlugin(20) -> WakeWordPlugin(30) -> CalendarPlugin(40)
+            # -> IoTPlugin(50) -> UIPlugin(60) -> ShortcutsPlugin(70)
             self.plugins.register(
                 McpPlugin(),
                 IoTPlugin(),

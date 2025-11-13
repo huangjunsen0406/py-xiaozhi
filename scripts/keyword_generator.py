@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-唤醒词自动生成工具
+"""唤醒词自动生成工具.
 
 功能：
 1. 输入中文自动转换为带声调拼音
@@ -14,7 +13,7 @@ import sys
 from pathlib import Path
 
 try:
-    from pypinyin import lazy_pinyin, Style
+    from pypinyin import Style, lazy_pinyin
 except ImportError:
     print("❌ 缺少依赖: pypinyin")
     print("请安装: pip install pypinyin")
@@ -23,8 +22,7 @@ except ImportError:
 
 class KeywordGenerator:
     def __init__(self, model_dir: Path):
-        """
-        初始化唤醒词生成器
+        """初始化唤醒词生成器.
 
         Args:
             model_dir: 模型目录路径（包含tokens.txt和keywords.txt）
@@ -38,22 +36,44 @@ class KeywordGenerator:
 
         # 声母表（需要分离的）
         self.initials = [
-            'b', 'p', 'm', 'f', 'd', 't', 'n', 'l',
-            'g', 'k', 'h', 'j', 'q', 'x',
-            'zh', 'ch', 'sh', 'r', 'z', 'c', 's', 'y', 'w'
+            "b",
+            "p",
+            "m",
+            "f",
+            "d",
+            "t",
+            "n",
+            "l",
+            "g",
+            "k",
+            "h",
+            "j",
+            "q",
+            "x",
+            "zh",
+            "ch",
+            "sh",
+            "r",
+            "z",
+            "c",
+            "s",
+            "y",
+            "w",
         ]
 
     def _load_tokens(self) -> set:
-        """加载tokens.txt中的所有可用token"""
+        """
+        加载tokens.txt中的所有可用token.
+        """
         if not self.tokens_file.exists():
             print(f"⚠️  警告: tokens文件不存在: {self.tokens_file}")
             return set()
 
         tokens = set()
-        with open(self.tokens_file, 'r', encoding='utf-8') as f:
+        with open(self.tokens_file, "r", encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
-                if line and not line.startswith('#'):
+                if line and not line.startswith("#"):
                     # 格式: "token id" 或 "token"
                     parts = line.split()
                     if parts:
@@ -63,12 +83,9 @@ class KeywordGenerator:
         return tokens
 
     def _split_pinyin(self, pinyin: str) -> list:
-        """
-        将拼音按声母韵母分隔
+        """将拼音按声母韵母分隔.
 
-        例如: "xiǎo" -> ["x", "iǎo"]
-              "mǐ" -> ["m", "ǐ"]
-              "ài" -> ["ài"]  (零声母)
+        例如: "xiǎo" -> ["x", "iǎo"]       "mǐ" -> ["m", "ǐ"]       "ài" -> ["ài"]  (零声母)
         """
         if not pinyin:
             return []
@@ -76,7 +93,7 @@ class KeywordGenerator:
         # 按长度优先尝试匹配声母（zh, ch, sh优先）
         for initial in sorted(self.initials, key=len, reverse=True):
             if pinyin.startswith(initial):
-                final = pinyin[len(initial):]
+                final = pinyin[len(initial) :]
                 if final:
                     return [initial, final]
                 else:
@@ -86,8 +103,7 @@ class KeywordGenerator:
         return [pinyin]
 
     def chinese_to_keyword_format(self, chinese_text: str) -> str:
-        """
-        将中文转换为keyword格式
+        """将中文转换为keyword格式.
 
         Args:
             chinese_text: 中文文本，如"小米小米"
@@ -117,14 +133,15 @@ class KeywordGenerator:
 
         # 如果有缺失的token，给出警告
         if missing_tokens:
-            print(f"⚠️  警告: 以下token不在tokens.txt中: {', '.join(set(missing_tokens))}")
+            print(
+                f"⚠️  警告: 以下token不在tokens.txt中: {', '.join(set(missing_tokens))}"
+            )
             print(f"   生成的关键词可能无法正常工作")
 
         return keyword_line
 
     def add_keyword(self, chinese_text: str, append: bool = True) -> bool:
-        """
-        添加唤醒词到keywords.txt
+        """添加唤醒词到keywords.txt.
 
         Args:
             chinese_text: 中文唤醒词
@@ -139,16 +156,16 @@ class KeywordGenerator:
 
             # 检查是否已存在
             if self.keywords_file.exists():
-                with open(self.keywords_file, 'r', encoding='utf-8') as f:
+                with open(self.keywords_file, "r", encoding="utf-8") as f:
                     content = f.read()
                     if f"@{chinese_text}" in content:
                         print(f"⚠️  关键词 '{chinese_text}' 已存在")
                         return False
 
             # 写入文件
-            mode = 'a' if append else 'w'
-            with open(self.keywords_file, mode, encoding='utf-8') as f:
-                f.write(keyword_line + '\n')
+            mode = "a" if append else "w"
+            with open(self.keywords_file, mode, encoding="utf-8") as f:
+                f.write(keyword_line + "\n")
 
             print(f"✅ 成功添加: {keyword_line}")
             return True
@@ -158,8 +175,7 @@ class KeywordGenerator:
             return False
 
     def batch_add_keywords(self, chinese_texts: list, overwrite: bool = False):
-        """
-        批量添加唤醒词
+        """批量添加唤醒词.
 
         Args:
             chinese_texts: 中文列表
@@ -183,7 +199,9 @@ class KeywordGenerator:
         print(f"\n📊 完成: 成功添加 {success_count}/{len(chinese_texts)} 个关键词")
 
     def list_keywords(self):
-        """列出当前所有关键词"""
+        """
+        列出当前所有关键词.
+        """
         if not self.keywords_file.exists():
             print("⚠️  keywords.txt 不存在")
             return
@@ -191,14 +209,16 @@ class KeywordGenerator:
         print(f"\n📄 当前关键词列表 ({self.keywords_file}):")
         print("-" * 60)
 
-        with open(self.keywords_file, 'r', encoding='utf-8') as f:
+        with open(self.keywords_file, "r", encoding="utf-8") as f:
             for i, line in enumerate(f, 1):
                 line = line.strip()
-                if line and not line.startswith('#'):
+                if line and not line.startswith("#"):
                     # 提取中文部分显示
-                    if '@' in line:
-                        pinyin_part, chinese_part = line.split('@', 1)
-                        print(f"{i}. {chinese_part.strip():15s} -> {pinyin_part.strip()}")
+                    if "@" in line:
+                        pinyin_part, chinese_part = line.split("@", 1)
+                        print(
+                            f"{i}. {chinese_part.strip():15s} -> {pinyin_part.strip()}"
+                        )
                     else:
                         print(f"{i}. {line}")
 
@@ -206,7 +226,9 @@ class KeywordGenerator:
 
 
 def main():
-    """主函数"""
+    """
+    主函数.
+    """
     import argparse
 
     parser = argparse.ArgumentParser(
@@ -228,46 +250,27 @@ def main():
 
   # 测试转换（不写入文件）
   python keyword_generator.py -t "小米小米"
-        """
+        """,
     )
 
     parser.add_argument(
-        '-m', '--model-dir',
-        default='models',
-        help='模型目录路径（默认: models）'
+        "-m", "--model-dir", default="models", help="模型目录路径（默认: models）"
     )
 
-    parser.add_argument(
-        '-a', '--add',
-        help='添加单个关键词（中文）'
-    )
+    parser.add_argument("-a", "--add", help="添加单个关键词（中文）")
 
     parser.add_argument(
-        '-b', '--batch',
-        nargs='+',
-        help='批量添加关键词（多个中文，空格分隔）'
+        "-b", "--batch", nargs="+", help="批量添加关键词（多个中文，空格分隔）"
     )
 
-    parser.add_argument(
-        '-f', '--file',
-        help='从文件批量导入（每行一个中文）'
-    )
+    parser.add_argument("-f", "--file", help="从文件批量导入（每行一个中文）")
+
+    parser.add_argument("-l", "--list", action="store_true", help="列出当前所有关键词")
+
+    parser.add_argument("-t", "--test", help="测试转换（不写入文件）")
 
     parser.add_argument(
-        '-l', '--list',
-        action='store_true',
-        help='列出当前所有关键词'
-    )
-
-    parser.add_argument(
-        '-t', '--test',
-        help='测试转换（不写入文件）'
-    )
-
-    parser.add_argument(
-        '--overwrite',
-        action='store_true',
-        help='覆盖模式（清空现有关键词）'
+        "--overwrite", action="store_true", help="覆盖模式（清空现有关键词）"
     )
 
     args = parser.parse_args()
@@ -313,7 +316,7 @@ def main():
             print(f"❌ 文件不存在: {input_file}")
             sys.exit(1)
 
-        with open(input_file, 'r', encoding='utf-8') as f:
+        with open(input_file, "r", encoding="utf-8") as f:
             keywords = [line.strip() for line in f if line.strip()]
 
         print(f"📥 从文件导入 {len(keywords)} 个关键词")
@@ -332,7 +335,7 @@ def main():
             while True:
                 chinese = input("请输入中文唤醒词: ").strip()
 
-                if not chinese or chinese.lower() == 'q':
+                if not chinese or chinese.lower() == "q":
                     break
 
                 generator.add_keyword(chinese)
