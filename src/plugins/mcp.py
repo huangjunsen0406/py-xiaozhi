@@ -2,6 +2,9 @@ from typing import Any, Optional
 
 from src.mcp.mcp_server import McpServer
 from src.plugins.base import Plugin
+from src.utils.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
 class McpPlugin(Plugin):
@@ -37,14 +40,14 @@ class McpPlugin(Plugin):
         if not isinstance(message, dict):
             return
         try:
-            if message.get("type") != "mcp":
-                return
-            payload = message.get("payload")
-            if not payload:
-                return
-            if self._server is None:
-                self._server = McpServer.get_instance()
-            await self._server.parse_message(payload)
+            # 处理 MCP 消息
+            if message.get("type") == "mcp":
+                payload = message.get("payload")
+                if not payload:
+                    return
+                if self._server is None:
+                    self._server = McpServer.get_instance()
+                await self._server.parse_message(payload)
         except Exception:
             pass
 

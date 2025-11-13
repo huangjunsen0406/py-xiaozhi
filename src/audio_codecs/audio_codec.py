@@ -650,6 +650,47 @@ class AudioCodec:
         except Exception as e:
             logger.warning(f"音频写入失败，丢弃此帧: {e}")
 
+    async def write_pcm_direct(self, pcm_data: np.ndarray):
+        """直接写入 PCM 数据到播放队列（供 MusicPlayer 使用）
+
+        Args:
+            pcm_data: 24kHz 单声道 PCM 数据 (np.int16)
+
+        说明:
+            此方法绕过 Opus 解码，直接将 PCM 数据写入播放队列。
+            主要用于本地音乐播放，数据已由 FFmpeg 解码为目标格式。
+        """
+        try:
+            # 验证数据格式
+            expected_length = AudioConfig.OUTPUT_FRAME_SIZE * AudioConfig.CHANNELS
+
+            # 如果数据长度不匹配，进行填充或截断
+            if len(pcm_data) != expected_length:
+                if len(pcm_data) < expected_length:
+                    # 填充静音
+                    padded = np.zeros(expected_length, dtype=np.int16)
+                    padded[: len(pcm_data)] = pcm_data
+                    pcm_data = padded
+                    logger.debug(
+                        f"PCM 数据不足，填充静音: {len(pcm_data)} → {expected_length}"
+                    )
+                else:
+                    # 截断多余数据
+                    pcm_data = pcm_data[:expected_length]
+                    logger.debug(
+                        f"PCM 数据过长，截断: {len(pcm_data)} → {expected_length}"
+                    )
+
+            # 放入播放队列（不替换旧数据，阻塞等待）
+            if not safe_queue_put(self._output_buffer, pcm_data, replace_oldest=False):
+                # 队列满时阻塞等待
+                await asyncio.wait_for(self._output_buffer.put(pcm_data), timeout=2.0)
+
+        except asyncio.TimeoutError:
+            logger.warning("播放队列阻塞超时，丢弃 PCM 帧")
+        except Exception as e:
+            logger.warning(f"写入 PCM 数据失败: {e}")
+
     async def reinitialize_stream(self, is_input: bool = True):
         """重建音频流（处理设备错误/断开）
 
