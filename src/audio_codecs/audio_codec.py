@@ -205,12 +205,8 @@ class AudioCodec:
         raw_input_channels = in_info["channels"]
         raw_output_channels = out_info["channels"]
 
-        self.input_channels = min(
-            raw_input_channels, AudioConfig.MAX_INPUT_CHANNELS
-        )
-        self.output_channels = min(
-            raw_output_channels, AudioConfig.MAX_OUTPUT_CHANNELS
-        )
+        self.input_channels = min(raw_input_channels, AudioConfig.MAX_INPUT_CHANNELS)
+        self.output_channels = min(raw_output_channels, AudioConfig.MAX_OUTPUT_CHANNELS)
 
         # 记录设备信息
         self.mic_device_id = in_info["index"]
@@ -249,9 +245,7 @@ class AudioCodec:
         self.config.update_config(
             "AUDIO_DEVICES.input_sample_rate", self.device_input_sample_rate
         )
-        self.config.update_config(
-            "AUDIO_DEVICES.input_channels", self.input_channels
-        )
+        self.config.update_config("AUDIO_DEVICES.input_channels", self.input_channels)
 
         self.config.update_config(
             "AUDIO_DEVICES.output_device_id", self.speaker_device_id
@@ -260,9 +254,7 @@ class AudioCodec:
         self.config.update_config(
             "AUDIO_DEVICES.output_sample_rate", self.device_output_sample_rate
         )
-        self.config.update_config(
-            "AUDIO_DEVICES.output_channels", self.output_channels
-        )
+        self.config.update_config("AUDIO_DEVICES.output_channels", self.output_channels)
 
     async def _create_opus_codecs(self):
         """

@@ -241,12 +241,9 @@ class WakeWordDetector:
             if not self.stream:
                 return
 
-            # 从队列获取音频数据（使用短超时避免阻塞）
             try:
-                audio_data = await asyncio.wait_for(
-                    self._audio_queue.get(), timeout=0.01  # 10ms超时
-                )
-            except asyncio.TimeoutError:
+                audio_data = self._audio_queue.get_nowait()
+            except asyncio.QueueEmpty:
                 return
 
             if audio_data is None or len(audio_data) == 0:
@@ -272,7 +269,8 @@ class WakeWordDetector:
                     self.keyword_spotter.reset_stream(self.stream)
 
         except Exception as e:
-            logger.debug(f"KWS音频处理错误: {e}")
+            logger.error(f"KWS音频处理错误: {e}", exc_info=True)
+            raise  # 重新抛出异常,让 _detection_loop 捕获
 
     async def _handle_detection_result(self, result):
         """
