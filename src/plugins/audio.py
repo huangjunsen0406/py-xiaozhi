@@ -45,10 +45,9 @@ class AudioPlugin(Plugin):
             self.codec = None
 
     async def on_device_state_changed(self, state):
-        """设备状态变化时清空音频队列
+        """设备状态变化时清空音频队列.
 
-        特别处理：进入 LISTENING 状态时，等待音频硬件输出完全停止，
-        避免 TTS 尾音被麦克风捕获导致误触发。
+        特别处理：进入 LISTENING 状态时，等待音频硬件输出完全停止， 避免 TTS 尾音被麦克风捕获导致误触发。
         """
         if not self.codec:
             return
@@ -208,7 +207,7 @@ class AudioPlugin(Plugin):
 
     def _schedule_send_audio(self, encoded_data: bytes) -> None:
         """
-        在主事件循环中调度发送任务
+        在主事件循环中调度发送任务.
         """
         if not self.app or not self.app.running or not self.app.protocol:
             return
