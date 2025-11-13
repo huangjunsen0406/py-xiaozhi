@@ -1,7 +1,7 @@
 <template>
   <div class="chart-container">
     <div ref="architectureChart" class="w-full h-[500px]"></div>
-    <p class="chart-description">核心架构图：展示了应用核心、资源管理器、MCP服务器、通信协议层、音频处理系统、用户界面系统、IoT设备管理等模块的关系</p>
+    <p class="chart-description">核心架构图：展示了应用核心、插件管理器、MCP服务器、通信协议层、音频编解码、音频处理、IoT设备管理等模块的关系及数据流向</p>
   </div>
 </template>
 
@@ -51,38 +51,44 @@ const createChartOption = (darkMode) => ({
       layout: 'force',
       data: [
         { name: '应用核心', value: 'Application', category: 0, symbolSize: 70 },
+        { name: '插件管理器', value: 'Plugin Manager', category: 1, symbolSize: 50 },
         { name: 'MCP服务器', value: 'MCP Server', category: 1, symbolSize: 50 },
         { name: '通信协议层', value: 'Protocols', category: 1, symbolSize: 50 },
-        { name: '音频处理系统', value: 'Audio Processing', category: 1, symbolSize: 50 },
-        { name: '用户界面系统', value: 'UI System', category: 1, symbolSize: 50 },
+        { name: '音频编解码', value: 'Audio Codec', category: 1, symbolSize: 50 },
+        { name: '音频处理', value: 'Audio Processing', category: 1, symbolSize: 50 },
         { name: 'IoT设备管理', value: 'IoT Management', category: 1, symbolSize: 50 },
         { name: 'WebSocket', value: 'WebSocket', category: 2, symbolSize: 30 },
         { name: 'MQTT', value: 'MQTT', category: 2, symbolSize: 30 },
         { name: 'MCP工具生态', value: 'MCP Tools Ecosystem', category: 2, symbolSize: 30 },
-        { name: 'AEC处理', value: 'AEC Processing', category: 2, symbolSize: 30 },
+        { name: 'Opus编解码', value: 'Opus Codec', category: 2, symbolSize: 30 },
+        { name: 'AEC处理器', value: 'AEC Processor', category: 2, symbolSize: 30 },
+        { name: '音频重采样', value: 'Resampling', category: 2, symbolSize: 30 },
         { name: 'VAD检测', value: 'VAD Detection', category: 2, symbolSize: 30 },
         { name: '唤醒词检测', value: 'Wakeword Detection', category: 2, symbolSize: 30 },
-        { name: 'PyQt5 GUI', value: 'PyQt5 GUI', category: 2, symbolSize: 30 },
-        { name: 'CLI界面', value: 'CLI Interface', category: 2, symbolSize: 30 },
+        { name: 'UI插件', value: 'UI Plugin', category: 2, symbolSize: 30 },
+        { name: '音频插件', value: 'Audio Plugin', category: 2, symbolSize: 30 },
         { name: 'Thing抽象', value: 'Thing Abstract', category: 2, symbolSize: 30 },
-        { name: '智能家居', value: 'Smart Home', category: 2, symbolSize: 30 }
+        { name: '设备管理器', value: 'Thing Manager', category: 2, symbolSize: 30 }
       ],
       links: [
-        { source: '应用核心', target: 'MCP服务器' },
+        { source: '应用核心', target: '插件管理器' },
         { source: '应用核心', target: '通信协议层' },
-        { source: '应用核心', target: '音频处理系统' },
-        { source: '应用核心', target: '用户界面系统' },
-        { source: '应用核心', target: 'IoT设备管理' },
+        { source: '插件管理器', target: 'MCP服务器' },
+        { source: '插件管理器', target: 'UI插件' },
+        { source: '插件管理器', target: '音频插件' },
+        { source: '插件管理器', target: 'IoT设备管理' },
+        { source: '音频插件', target: '音频编解码' },
+        { source: '音频插件', target: '音频处理' },
         { source: '通信协议层', target: 'WebSocket' },
         { source: '通信协议层', target: 'MQTT' },
         { source: 'MCP服务器', target: 'MCP工具生态' },
-        { source: '音频处理系统', target: 'AEC处理' },
-        { source: '音频处理系统', target: 'VAD检测' },
-        { source: '音频处理系统', target: '唤醒词检测' },
-        { source: '用户界面系统', target: 'PyQt5 GUI' },
-        { source: '用户界面系统', target: 'CLI界面' },
+        { source: '音频编解码', target: 'Opus编解码' },
+        { source: '音频编解码', target: 'AEC处理器' },
+        { source: '音频编解码', target: '音频重采样' },
+        { source: '音频处理', target: 'VAD检测' },
+        { source: '音频处理', target: '唤醒词检测' },
         { source: 'IoT设备管理', target: 'Thing抽象' },
-        { source: 'IoT设备管理', target: '智能家居' }
+        { source: 'IoT设备管理', target: '设备管理器' }
       ],
       categories: [
         { 
