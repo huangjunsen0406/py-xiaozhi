@@ -642,19 +642,21 @@ class AudioWidget(QWidget):
                     "output_device_combo"
                 ].currentText()
 
-            # 设备的采样率信息由设备自动确定，不需要用户配置
-            # 保存设备的默认采样率用于后续使用
+            # 设备的采样率和声道信息由设备自动确定，不需要用户配置
+            # 保存设备的默认采样率和声道用于后续使用
             input_device = next(
                 (d for d in self.input_devices if d["id"] == input_device_id), None
             )
             if input_device:
                 audio_config["input_sample_rate"] = int(input_device["sample_rate"])
+                audio_config["input_channels"] = min(input_device["channels"], 8)
 
             output_device = next(
                 (d for d in self.output_devices if d["id"] == output_device_id), None
             )
             if output_device:
                 audio_config["output_sample_rate"] = int(output_device["sample_rate"])
+                audio_config["output_channels"] = min(output_device["channels"], 8)
 
             if audio_config:
                 config_data["AUDIO_DEVICES"] = audio_config

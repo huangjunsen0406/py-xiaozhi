@@ -70,8 +70,8 @@ class AudioCodec:
         # 设备原生信息
         self.device_input_sample_rate = None
         self.device_output_sample_rate = None
-        self.device_input_channels = None
-        self.device_output_channels = None
+        self.input_channels = None
+        self.output_channels = None
         self.mic_device_id = None
         self.speaker_device_id = None
 
@@ -174,8 +174,8 @@ class AudioCodec:
         self.device_output_sample_rate = audio_config.get(
             "output_sample_rate", AudioConfig.OUTPUT_SAMPLE_RATE
         )
-        self.device_input_channels = audio_config.get("input_channels", 1)
-        self.device_output_channels = audio_config.get("output_channels", 1)
+        self.input_channels = audio_config.get("input_channels", 1)
+        self.output_channels = audio_config.get("output_channels", 1)
 
         # 计算设备帧大小
         self._device_input_frame_size = int(
@@ -186,8 +186,8 @@ class AudioCodec:
         )
 
         logger.info(
-            f"加载设备配置 | 输入: {self.device_input_sample_rate}Hz {self.device_input_channels}ch | "
-            f"输出: {self.device_output_sample_rate}Hz {self.device_output_channels}ch"
+            f"加载设备配置 | 输入: {self.device_input_sample_rate}Hz {self.input_channels}ch | "
+            f"输出: {self.device_output_sample_rate}Hz {self.output_channels}ch"
         )
 
     async def _auto_detect_devices(self):
@@ -205,10 +205,10 @@ class AudioCodec:
         raw_input_channels = in_info["channels"]
         raw_output_channels = out_info["channels"]
 
-        self.device_input_channels = min(
+        self.input_channels = min(
             raw_input_channels, AudioConfig.MAX_INPUT_CHANNELS
         )
-        self.device_output_channels = min(
+        self.output_channels = min(
             raw_output_channels, AudioConfig.MAX_OUTPUT_CHANNELS
         )
 
@@ -229,18 +229,18 @@ class AudioCodec:
         # 日志输出
         if raw_input_channels > AudioConfig.MAX_INPUT_CHANNELS:
             logger.info(
-                f"输入设备支持 {raw_input_channels} 声道，限制使用前 {self.device_input_channels} 声道"
+                f"输入设备支持 {raw_input_channels} 声道，限制使用前 {self.input_channels} 声道"
             )
         if raw_output_channels > AudioConfig.MAX_OUTPUT_CHANNELS:
             logger.info(
-                f"输出设备支持 {raw_output_channels} 声道，限制使用前 {self.device_output_channels} 声道"
+                f"输出设备支持 {raw_output_channels} 声道，限制使用前 {self.output_channels} 声道"
             )
 
         logger.info(
-            f"选择输入设备: {in_info['name']} ({self.device_input_sample_rate}Hz, {self.device_input_channels}ch)"
+            f"选择输入设备: {in_info['name']} ({self.device_input_sample_rate}Hz, {self.input_channels}ch)"
         )
         logger.info(
-            f"选择输出设备: {out_info['name']} ({self.device_output_sample_rate}Hz, {self.device_output_channels}ch)"
+            f"选择输出设备: {out_info['name']} ({self.device_output_sample_rate}Hz, {self.output_channels}ch)"
         )
 
         # 保存配置（首次运行时保存）
@@ -250,7 +250,7 @@ class AudioCodec:
             "AUDIO_DEVICES.input_sample_rate", self.device_input_sample_rate
         )
         self.config.update_config(
-            "AUDIO_DEVICES.input_channels", self.device_input_channels
+            "AUDIO_DEVICES.input_channels", self.input_channels
         )
 
         self.config.update_config(
@@ -261,7 +261,7 @@ class AudioCodec:
             "AUDIO_DEVICES.output_sample_rate", self.device_output_sample_rate
         )
         self.config.update_config(
-            "AUDIO_DEVICES.output_channels", self.device_output_channels
+            "AUDIO_DEVICES.output_channels", self.output_channels
         )
 
     async def _create_opus_codecs(self):
@@ -292,9 +292,9 @@ class AudioCodec:
         """
         # 输入转换器配置
         # 1. 声道下混标记
-        self._need_input_downmix = self.device_input_channels > 1
+        self._need_input_downmix = self.input_channels > 1
         if self._need_input_downmix:
-            logger.info(f"输入声道下混: {self.device_input_channels}ch → 1ch")
+            logger.info(f"输入声道下混: {self.input_channels}ch → 1ch")
 
         # 2. 采样率重采样器
         if self.device_input_sample_rate != AudioConfig.INPUT_SAMPLE_RATE:
@@ -323,9 +323,9 @@ class AudioCodec:
             )
 
         # 2. 声道上混标记
-        self._need_output_upmix = self.device_output_channels > 1
+        self._need_output_upmix = self.output_channels > 1
         if self._need_output_upmix:
-            logger.info(f"输出声道上混: 1ch → {self.device_output_channels}ch")
+            logger.info(f"输出声道上混: 1ch → {self.output_channels}ch")
 
     async def _create_streams(self):
         """
@@ -336,7 +336,7 @@ class AudioCodec:
             self.input_stream = sd.InputStream(
                 device=self.mic_device_id,
                 samplerate=self.device_input_sample_rate,  # 设备原生采样率
-                channels=self.device_input_channels,  # 设备原生声道数
+                channels=self.input_channels,  # 设备原生声道数
                 dtype=np.int16,
                 blocksize=self._device_input_frame_size,  # 设备原生帧大小
                 callback=self._input_callback,
@@ -348,7 +348,7 @@ class AudioCodec:
             self.output_stream = sd.OutputStream(
                 device=self.speaker_device_id,
                 samplerate=self.device_output_sample_rate,  # 设备原生采样率
-                channels=self.device_output_channels,  # 设备原生声道数
+                channels=self.output_channels,  # 设备原生声道数
                 dtype=np.int16,
                 blocksize=self._device_output_frame_size,  # 设备原生帧大小
                 callback=self._output_callback,
@@ -360,8 +360,8 @@ class AudioCodec:
             self.output_stream.start()
 
             logger.info(
-                f"音频流已启动 | 输入: {self.device_input_sample_rate}Hz {self.device_input_channels}ch | "
-                f"输出: {self.device_output_sample_rate}Hz {self.device_output_channels}ch"
+                f"音频流已启动 | 输入: {self.device_input_sample_rate}Hz {self.input_channels}ch | "
+                f"输出: {self.device_output_sample_rate}Hz {self.output_channels}ch"
             )
 
         except Exception as e:
@@ -496,7 +496,7 @@ class AudioCodec:
             if self._need_output_upmix:
                 # 单声道 → 多声道（复制到所有声道）
                 multi_channel = upmix_mono_to_channels(
-                    mono_samples, self.device_output_channels
+                    mono_samples, self.output_channels
                 )
                 outdata[:] = multi_channel
             else:
@@ -544,7 +544,7 @@ class AudioCodec:
                 if self._need_output_upmix:
                     # 单声道 → 多声道（复制到所有声道）
                     multi_channel = upmix_mono_to_channels(
-                        mono_data, self.device_output_channels
+                        mono_data, self.output_channels
                     )
                     outdata[:] = multi_channel
                 else:
@@ -714,7 +714,7 @@ class AudioCodec:
                 self.input_stream = sd.InputStream(
                     device=self.mic_device_id,
                     samplerate=self.device_input_sample_rate,
-                    channels=self.device_input_channels,
+                    channels=self.input_channels,
                     dtype=np.int16,
                     blocksize=self._device_input_frame_size,
                     callback=self._input_callback,
@@ -732,7 +732,7 @@ class AudioCodec:
                 self.output_stream = sd.OutputStream(
                     device=self.speaker_device_id,
                     samplerate=self.device_output_sample_rate,
-                    channels=self.device_output_channels,
+                    channels=self.output_channels,
                     dtype=np.int16,
                     blocksize=self._device_output_frame_size,
                     callback=self._output_callback,
