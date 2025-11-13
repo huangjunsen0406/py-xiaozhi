@@ -9,7 +9,6 @@ from src.utils.logging_config import get_logger
 logger = get_logger(__name__)
 
 # 常量配置
-AUDIO_QUEUE_SIZE = 50
 MAX_CONCURRENT_AUDIO_SENDS = 4
 
 
@@ -23,8 +22,7 @@ class AudioPlugin(Plugin):
         self.codec: AudioCodec | None = None
         self._main_loop = None
         self._send_sem = asyncio.Semaphore(MAX_CONCURRENT_AUDIO_SENDS)
-        self._audio_queue: asyncio.Queue | None = None
-        self._audio_consumer_task: asyncio.Task | None = None
+        self._in_silence_period = False  # 静默期标志，用于防止TTS尾音被捕获
 
     async def setup(self, app: Any) -> None:
         self.app = app
@@ -37,22 +35,36 @@ class AudioPlugin(Plugin):
             self.codec = AudioCodec()
             await self.codec.initialize()
 
-            # 创建音频队列
-            self._audio_queue = asyncio.Queue(maxsize=AUDIO_QUEUE_SIZE)
-
-            # 设置编码音频回调：录音数据入队，由消费者发送
-            self.codec.set_encoded_callback(self._enqueue_audio)
-
-            # 启动音频消费者任务
-            self._audio_consumer_task = app.spawn(
-                self._audio_consumer(), "audio:consumer"
-            )
+            # 设置编码音频回调：直接发送，不走队列
+            self.codec.set_encoded_callback(self._on_encoded_audio)
 
             # 暴露给应用，便于唤醒词插件使用
             self.app.audio_codec = self.codec
         except Exception as e:
             logger.error(f"音频插件初始化失败: {e}", exc_info=True)
             self.codec = None
+
+    async def on_device_state_changed(self, state):
+        """设备状态变化时清空音频队列
+
+        特别处理：进入 LISTENING 状态时，等待音频硬件输出完全停止，
+        避免 TTS 尾音被麦克风捕获导致误触发。
+        """
+        if not self.codec:
+            return
+
+        from src.constants.constants import DeviceState
+
+        # 如果进入监听状态，清空队列并等待硬件输出完全停止
+        if state == DeviceState.LISTENING:
+            # 设置静默期标志，阻止麦克风音频发送
+            self._in_silence_period = True
+            try:
+                # 等待硬件 DAC 输出完成（50-100ms）+ 声波传播（20ms）+ 安全余量
+                await asyncio.sleep(0.2)
+            finally:
+                # 清空和等待完成后，解除静默期
+                self._in_silence_period = False
 
     async def on_incoming_json(self, message: Any) -> None:
         """处理 TTS 事件，控制音乐播放.
@@ -73,6 +85,7 @@ class AudioPlugin(Plugin):
                 elif state == "stop":
                     # TTS 结束：恢复音乐播放
                     await self._resume_music_after_tts()
+                    await self.codec.clear_audio_queue()
         except Exception as e:
             logger.error(f"处理 TTS 事件失败: {e}", exc_info=True)
 
@@ -176,70 +189,54 @@ class AudioPlugin(Plugin):
             self.app.audio_codec = None
 
     # -------------------------
-    # 内部：音频队列处理
+    # 内部：直接发送录音音频（不走队列）
     # -------------------------
-    def _enqueue_audio(self, encoded_data: bytes) -> None:
+    def _on_encoded_audio(self, encoded_data: bytes) -> None:
         """
-        音频线程回调：安全入队.
+        音频线程回调：切换到主循环并直接发送（参考旧版本）
         """
-        if not self._audio_queue or not self._main_loop:
-            return
         try:
-            # 使用 call_soon_threadsafe 在主循环中入队
+            if not self.app or not self._main_loop or not self.app.running:
+                return
+            if self._main_loop.is_closed():
+                return
             self._main_loop.call_soon_threadsafe(
-                self._audio_queue.put_nowait, encoded_data
+                self._schedule_send_audio, encoded_data
             )
-        except asyncio.QueueFull:
-            # 队列满时丢弃最旧数据
-            try:
-                self._main_loop.call_soon_threadsafe(self._audio_queue.get_nowait)
-                self._main_loop.call_soon_threadsafe(
-                    self._audio_queue.put_nowait, encoded_data
-                )
-            except Exception:
-                pass
         except Exception:
             pass
 
-    async def _audio_consumer(self) -> None:
+    def _schedule_send_audio(self, encoded_data: bytes) -> None:
         """
-        异步消费音频队列.
+        在主事件循环中调度发送任务
         """
-        while True:
-            try:
-                encoded_data = await self._audio_queue.get()
-                await self._process_audio(encoded_data)
-            except asyncio.CancelledError:
-                break
-            except Exception as e:
-                # 继续处理，避免消费者崩溃
-                logger.debug(f"音频消费者处理异常: {e}")
-                await asyncio.sleep(0.01)
+        if not self.app or not self.app.running or not self.app.protocol:
+            return
 
-    async def _process_audio(self, encoded_data: bytes) -> None:
-        """
-        处理单个音频数据包.
-        """
-        async with self._send_sem:
-            try:
-                if not (
-                    self.app
-                    and self.app.running
-                    and self.app.protocol
-                    and self.app.protocol.is_audio_channel_opened()
-                ):
-                    return
+        async def _send():
+            async with self._send_sem:
+                try:
+                    if not (
+                        self.app.protocol
+                        and self.app.protocol.is_audio_channel_opened()
+                    ):
+                        return
+                    if self._should_send_microphone_audio():
+                        await self.app.protocol.send_audio(encoded_data)
+                except Exception:
+                    pass
 
-                if self._should_send_microphone_audio():
-                    await self.app.protocol.send_audio(encoded_data)
-            except Exception:
-                pass
+        # 创建任务但不等待，实现"发完即忘"
+        self.app.spawn(_send(), name="audio:send")
 
     def _should_send_microphone_audio(self) -> bool:
         """
-        委托给应用的统一状态机规则.
+        委托给应用的统一状态机规则，并检查静默期标志.
         """
         try:
+            # 静默期内禁止发送音频（防止TTS尾音被捕获）
+            if self._in_silence_period:
+                return False
             return self.app and self.app.should_capture_audio()
         except Exception:
             return False
