@@ -320,6 +320,10 @@ class Application:
                         # 继续对话：根据当前模式重启监听
                         async def _restart_listening():
                             try:
+                                # 先设置状态为 LISTENING，触发音频队列清空和硬件停止等待
+                                await self.set_device_state(DeviceState.LISTENING)
+
+                                # 等待音频硬件完全停止后，再发送监听指令
                                 # REALTIME 且已在 LISTENING 时无需重复发送
                                 if not (
                                     self.listening_mode == ListeningMode.REALTIME
@@ -330,9 +334,6 @@ class Application:
                                     )
                             except Exception:
                                 pass
-                            self.keep_listening and await self.set_device_state(
-                                DeviceState.LISTENING
-                            )
 
                         self.spawn(_restart_listening(), "state:tts_stop_restart")
                     else:
