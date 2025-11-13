@@ -17,7 +17,8 @@ from src.utils.resource_finder import get_project_root, resource_finder
 
 # 导入拼音转换库
 try:
-    from pypinyin import lazy_pinyin, Style
+    from pypinyin import Style, lazy_pinyin
+
     PYPINYIN_AVAILABLE = True
 except ImportError:
     PYPINYIN_AVAILABLE = False
@@ -41,9 +42,29 @@ class WakeWordWidget(QWidget):
 
         # 声母表（用于拼音分割）
         self.initials = [
-            'b', 'p', 'm', 'f', 'd', 't', 'n', 'l',
-            'g', 'k', 'h', 'j', 'q', 'x',
-            'zh', 'ch', 'sh', 'r', 'z', 'c', 's', 'y', 'w'
+            "b",
+            "p",
+            "m",
+            "f",
+            "d",
+            "t",
+            "n",
+            "l",
+            "g",
+            "k",
+            "h",
+            "j",
+            "q",
+            "x",
+            "zh",
+            "ch",
+            "sh",
+            "r",
+            "z",
+            "c",
+            "s",
+            "y",
+            "w",
         ]
 
         # 初始化UI
@@ -259,11 +280,9 @@ class WakeWordWidget(QWidget):
             return ""
 
     def _split_pinyin(self, pinyin: str) -> list:
-        """
-        将拼音按声母韵母分隔.
+        """将拼音按声母韵母分隔.
 
-        例如: "xiǎo" -> ["x", "iǎo"]
-              "mǐ" -> ["m", "ǐ"]
+        例如: "xiǎo" -> ["x", "iǎo"]       "mǐ" -> ["m", "ǐ"]
         """
         if not pinyin:
             return []
@@ -271,7 +290,7 @@ class WakeWordWidget(QWidget):
         # 按长度优先尝试匹配声母（zh, ch, sh优先）
         for initial in sorted(self.initials, key=len, reverse=True):
             if pinyin.startswith(initial):
-                final = pinyin[len(initial):]
+                final = pinyin[len(initial) :]
                 if final:
                     return [initial, final]
                 else:
@@ -281,8 +300,7 @@ class WakeWordWidget(QWidget):
         return [pinyin]
 
     def _chinese_to_keyword_format(self, chinese_text: str) -> str:
-        """
-        将中文转换为keyword格式.
+        """将中文转换为keyword格式.
 
         Args:
             chinese_text: 中文文本，如"小米小米"
@@ -361,12 +379,13 @@ class WakeWordWidget(QWidget):
             with open(keywords_file, "w", encoding="utf-8") as f:
                 f.write("\n".join(processed_lines) + "\n")
 
-            self.logger.info(f"成功保存 {len(processed_lines)} 个关键词到 {keywords_file}")
+            self.logger.info(
+                f"成功保存 {len(processed_lines)} 个关键词到 {keywords_file}"
+            )
             QMessageBox.information(
                 self,
                 "保存成功",
-                f"成功保存 {len(processed_lines)} 个唤醒词\n\n"
-                f"已自动转换为拼音格式",
+                f"成功保存 {len(processed_lines)} 个唤醒词\n\n" f"已自动转换为拼音格式",
             )
 
         except Exception as e:

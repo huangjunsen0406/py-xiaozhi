@@ -8,44 +8,50 @@ import sounddevice as sd
 
 # 可选：屏蔽常见虚拟/聚合设备（默认不选它们）
 _VIRTUAL_PATTERNS = [
-    r"blackhole", r"aggregate", r"multi[-\s]?output",  # macOS
-    r"monitor", r"echo[-\s]?cancel",                   # Linux Pulse/PipeWire
-    r"vb[-\s]?cable", r"voicemeeter", r"cable (input|output)",  # Windows
+    r"blackhole",
+    r"aggregate",
+    r"multi[-\s]?output",  # macOS
+    r"monitor",
+    r"echo[-\s]?cancel",  # Linux Pulse/PipeWire
+    r"vb[-\s]?cable",
+    r"voicemeeter",
+    r"cable (input|output)",  # Windows
     r"loopback",
 ]
+
 
 def _is_virtual(name: str) -> bool:
     n = name.casefold()
     return any(re.search(pat, n) for pat in _VIRTUAL_PATTERNS)
+
 
 def downmix_to_mono(
     pcm: np.ndarray | bytes,
     *,
     keepdims: bool = True,
     dtype: np.dtype | str = np.int16,
-    in_channels: int | None = None
+    in_channels: int | None = None,
 ) -> np.ndarray | bytes:
-    """
-    将任意格式的音频下混为单声道
-    
+    """将任意格式的音频下混为单声道.
+
     支持两种输入:
     1. np.ndarray: 形状 (N,) 或 (N, C) 的 PCM 数组
     2. bytes: PCM 字节流 (需指定 dtype 和 in_channels)
-    
+
     Args:
         pcm: 输入音频数据 (ndarray 或 bytes)
         keepdims: True 返回 (N,1)，False 返回 (N,) (仅 ndarray 输入)
         dtype: PCM 数据类型 (仅 bytes 输入时使用)
         in_channels: 输入声道数 (仅 bytes 输入时必需)
-    
+
     Returns:
         单声道音频数据 (与输入类型相同)
-    
+
     Examples:
         >>> # ndarray 输入
         >>> stereo = np.random.randint(-32768, 32767, (1000, 2), dtype=np.int16)
         >>> mono = downmix_to_mono(stereo, keepdims=False)  # shape: (1000,)
-        
+
         >>> # bytes 输入
         >>> stereo_bytes = b'...'  # 立体声 PCM 数据
         >>> mono_bytes = downmix_to_mono(stereo_bytes, dtype=np.int16, in_channels=2)
@@ -57,7 +63,7 @@ def downmix_to_mono(
         arr = np.frombuffer(pcm, dtype=dtype).reshape(-1, in_channels)
         mono_arr = downmix_to_mono(arr, keepdims=False)  # bytes 输出不需要 keepdims
         return mono_arr.tobytes()
-    
+
     # ndarray 输入: 直接处理
     x = np.asarray(pcm)
     if x.ndim == 1:
@@ -80,15 +86,16 @@ def downmix_to_mono(
     return y[:, None] if keepdims else y
 
 
-def safe_queue_put(queue: asyncio.Queue, item: Any, replace_oldest: bool = True) -> bool:
-    """
-    安全地将项目放入队列，队列满时可选择丢弃最旧数据
-    
+def safe_queue_put(
+    queue: asyncio.Queue, item: Any, replace_oldest: bool = True
+) -> bool:
+    """安全地将项目放入队列，队列满时可选择丢弃最旧数据.
+
     Args:
         queue: asyncio.Queue 对象
         item: 要入队的数据
         replace_oldest: True=队列满时丢弃最旧数据并放入新数据, False=直接丢弃新数据
-    
+
     Returns:
         True=成功入队, False=队列满且未入队
     """
@@ -109,19 +116,18 @@ def safe_queue_put(queue: asyncio.Queue, item: Any, replace_oldest: bool = True)
 
 
 def upmix_mono_to_channels(mono_data: np.ndarray, num_channels: int) -> np.ndarray:
-    """
-    将单声道音频上混到多声道（复制到所有声道）
-    
+    """将单声道音频上混到多声道（复制到所有声道）
+
     Args:
         mono_data: 单声道音频数据，形状 (N,)
         num_channels: 目标声道数
-    
+
     Returns:
         多声道音频数据，形状 (N, num_channels)
     """
     if num_channels == 1:
         return mono_data.reshape(-1, 1)
-    
+
     # 复制单声道到所有声道
     return np.tile(mono_data.reshape(-1, 1), (1, num_channels))
 
@@ -145,8 +151,8 @@ def select_audio_device(
     allow_name_hints: Optional[bool] = None,  # None=Linux 才启用；True/False 可强制
 ) -> Optional[Dict[str, Any]]:
     """
-    选择音频设备：HostAPI 默认 →（可选：设备名 hints，仅 Linux）→ sounddevice 系统默认 → 第一个可用
-    返回：{index, name, sample_rate, channels} 或 None
+    选择音频设备：HostAPI 默认 →（可选：设备名 hints，仅 Linux）→ sounddevice 系统默认 → 第一个可用 返回：{index, name,
+    sample_rate, channels} 或 None.
     """
     assert kind in ("input", "output")
     system = platform.system().lower()
@@ -161,22 +167,24 @@ def select_audio_device(
 
     # Linux 才默认启用 name hints；其它平台默认关闭（可通过参数打开）
     if allow_name_hints is None:
-        allow_name_hints = (system == "linux")
+        allow_name_hints = system == "linux"
 
     DEVICE_NAME_HINTS = {
-        "input":  ["default", "sysdefault", "pulse", "pipewire"],
+        "input": ["default", "sysdefault", "pulse", "pipewire"],
         "output": ["default", "sysdefault", "dmix", "pulse", "pipewire"],
     }
 
     # 枚举
     try:
         hostapis = list(sd.query_hostapis())
-        devices  = list(sd.query_devices())
+        devices = list(sd.query_devices())
     except Exception:
         hostapis, devices = [], []
 
-    key_host_default = "default_input_device" if kind == "input" else "default_output_device"
-    key_channels     = "max_input_channels"   if kind == "input" else "max_output_channels"
+    key_host_default = (
+        "default_input_device" if kind == "input" else "default_output_device"
+    )
+    key_channels = "max_input_channels" if kind == "input" else "max_output_channels"
 
     def pack(idx: int, base: Optional[dict] = None) -> Optional[Dict[str, Any]]:
         if base is None:
@@ -223,7 +231,9 @@ def select_audio_device(
 
     # 2) sounddevice 的系统默认（已考虑平台默认路由）
     try:
-        info = sd.query_devices(kind=kind)  # dict，含 index / default_samplerate / max_*_channels
+        info = sd.query_devices(
+            kind=kind
+        )  # dict，含 index / default_samplerate / max_*_channels
         packed = pack(int(info.get("index")), base=info)
         if packed:
             return packed

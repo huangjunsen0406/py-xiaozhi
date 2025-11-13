@@ -15,6 +15,7 @@ MAX_CONCURRENT_AUDIO_SENDS = 4
 
 class AudioPlugin(Plugin):
     name = "audio"
+    priority = 10  # 最高优先级，其他插件依赖 audio_codec
 
     def __init__(self) -> None:
         super().__init__()
@@ -44,8 +45,7 @@ class AudioPlugin(Plugin):
 
             # 启动音频消费者任务
             self._audio_consumer_task = app.spawn(
-                self._audio_consumer(),
-                "audio:consumer"
+                self._audio_consumer(), "audio:consumer"
             )
 
             # 暴露给应用，便于唤醒词插件使用
@@ -55,8 +55,7 @@ class AudioPlugin(Plugin):
             self.codec = None
 
     async def on_incoming_audio(self, data: bytes) -> None:
-        """
-        接收服务端返回的音频数据并播放
+        """接收服务端返回的音频数据并播放.
 
         Args:
             data: 服务端返回的Opus编码音频数据
@@ -95,7 +94,9 @@ class AudioPlugin(Plugin):
     # 内部：音频队列处理
     # -------------------------
     def _enqueue_audio(self, encoded_data: bytes) -> None:
-        """音频线程回调：安全入队"""
+        """
+        音频线程回调：安全入队.
+        """
         if not self._audio_queue or not self._main_loop:
             return
         try:
@@ -116,7 +117,9 @@ class AudioPlugin(Plugin):
             pass
 
     async def _audio_consumer(self) -> None:
-        """异步消费音频队列"""
+        """
+        异步消费音频队列.
+        """
         while True:
             try:
                 encoded_data = await self._audio_queue.get()
@@ -129,7 +132,9 @@ class AudioPlugin(Plugin):
                 await asyncio.sleep(0.01)
 
     async def _process_audio(self, encoded_data: bytes) -> None:
-        """处理单个音频数据包"""
+        """
+        处理单个音频数据包.
+        """
         async with self._send_sem:
             try:
                 if not (
@@ -146,7 +151,9 @@ class AudioPlugin(Plugin):
                 pass
 
     def _should_send_microphone_audio(self) -> bool:
-        """委托给应用的统一状态机规则"""
+        """
+        委托给应用的统一状态机规则.
+        """
         try:
             return self.app and self.app.should_capture_audio()
         except Exception:

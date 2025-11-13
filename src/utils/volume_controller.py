@@ -285,7 +285,9 @@ class VolumeController:
                             return volume
                 self.logger.warning("pactl输出中未找到音量信息")
             else:
-                self.logger.warning(f"pactl命令执行失败: {result.returncode if result else 'None'}")
+                self.logger.warning(
+                    f"pactl命令执行失败: {result.returncode if result else 'None'}"
+                )
             return self.DEFAULT_VOLUME
 
         return get_volume
@@ -300,7 +302,9 @@ class VolumeController:
             if result and result.returncode == 0:
                 self.logger.debug(f"pactl设置音量成功: {volume}%")
             else:
-                self.logger.warning(f"pactl设置音量失败: {result.returncode if result else 'None'}")
+                self.logger.warning(
+                    f"pactl设置音量失败: {result.returncode if result else 'None'}"
+                )
 
         return set_volume
 
@@ -319,7 +323,9 @@ class VolumeController:
                 else:
                     self.logger.warning(f"wpctl输出格式无法解析: {result.stdout}")
             else:
-                self.logger.warning(f"wpctl命令执行失败: {result.returncode if result else 'None'}")
+                self.logger.warning(
+                    f"wpctl命令执行失败: {result.returncode if result else 'None'}"
+                )
             return self.DEFAULT_VOLUME
 
         return get_volume
@@ -334,7 +340,9 @@ class VolumeController:
             if result and result.returncode == 0:
                 self.logger.debug(f"wpctl设置音量成功: {volume}%")
             else:
-                self.logger.warning(f"wpctl设置音量失败: {result.returncode if result else 'None'}")
+                self.logger.warning(
+                    f"wpctl设置音量失败: {result.returncode if result else 'None'}"
+                )
 
         return set_volume
 
@@ -356,7 +364,9 @@ class VolumeController:
                 else:
                     self.logger.warning(f"amixer输出格式无法解析: {result.stdout}")
             else:
-                self.logger.warning(f"amixer命令执行失败: {result.returncode if result else 'None'}")
+                self.logger.warning(
+                    f"amixer命令执行失败: {result.returncode if result else 'None'}"
+                )
             return self.DEFAULT_VOLUME
 
         return get_volume
@@ -369,7 +379,9 @@ class VolumeController:
             if result and result.returncode == 0:
                 self.logger.debug(f"amixer设置音量成功: {volume}%")
             else:
-                self.logger.warning(f"amixer设置音量失败: {result.returncode if result else 'None'}")
+                self.logger.warning(
+                    f"amixer设置音量失败: {result.returncode if result else 'None'}"
+                )
 
         return set_volume
 

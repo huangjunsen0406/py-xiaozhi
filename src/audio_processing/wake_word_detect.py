@@ -1,6 +1,5 @@
 import asyncio
 import time
-from collections import deque
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -149,7 +148,7 @@ class WakeWordDetector:
     def on_audio_data(self, audio_data: np.ndarray):
         if not self.enabled or not self.is_running_flag or self.paused:
             return
-        
+
         try:
             # 将音频数据放入队列，由检测循环异步处理
             self._audio_queue.put_nowait(audio_data.copy())
@@ -195,7 +194,7 @@ class WakeWordDetector:
 
     async def _detection_loop(self):
         """
-        检测循环
+        检测循环.
         """
         error_count = 0
         MAX_ERRORS = 5
@@ -236,7 +235,7 @@ class WakeWordDetector:
 
     async def _process_audio(self):
         """
-        处理音频数据
+        处理音频数据.
         """
         try:
             if not self.stream:
@@ -245,8 +244,7 @@ class WakeWordDetector:
             # 从队列获取音频数据（使用短超时避免阻塞）
             try:
                 audio_data = await asyncio.wait_for(
-                    self._audio_queue.get(),
-                    timeout=0.01  # 10ms超时
+                    self._audio_queue.get(), timeout=0.01  # 10ms超时
                 )
             except asyncio.TimeoutError:
                 return
@@ -261,10 +259,7 @@ class WakeWordDetector:
                 samples = audio_data.astype(np.float32)
 
             # 提供音频数据给KeywordSpotter
-            self.stream.accept_waveform(
-                sample_rate=self.sample_rate,
-                waveform=samples
-            )
+            self.stream.accept_waveform(sample_rate=self.sample_rate, waveform=samples)
 
             # 检查是否准备好解码
             if self.keyword_spotter.is_ready(self.stream):

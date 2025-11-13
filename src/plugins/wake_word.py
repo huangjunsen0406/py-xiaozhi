@@ -9,6 +9,7 @@ logger = get_logger(__name__)
 
 class WakeWordPlugin(Plugin):
     name = "wake_word"
+    priority = 30  # 依赖 AudioPlugin
 
     def __init__(self) -> None:
         super().__init__()
