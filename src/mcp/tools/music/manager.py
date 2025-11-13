@@ -40,8 +40,11 @@ class MusicToolsManager:
                 add_tool, PropertyList, Property, PropertyType
             )
 
-            # 注册播放/暂停工具
-            self._register_play_pause_tool(add_tool, PropertyList)
+            # 注册暂停工具
+            self._register_pause_tool(add_tool, PropertyList)
+
+            # 注册恢复工具
+            self._register_resume_tool(add_tool, PropertyList)
 
             # 注册停止工具
             self._register_stop_tool(add_tool, PropertyList)
@@ -51,9 +54,6 @@ class MusicToolsManager:
 
             # 注册获取歌词工具
             self._register_get_lyrics_tool(add_tool, PropertyList)
-
-            # 注册获取状态工具
-            self._register_get_status_tool(add_tool, PropertyList)
 
             # 注册获取本地歌单工具
             self._register_get_local_playlist_tool(
@@ -84,35 +84,57 @@ class MusicToolsManager:
         add_tool(
             (
                 "music_player.search_and_play",
-                "Search for a song and start playing it. Finds songs by name and "
-                "automatically starts playback. Use this to play specific songs "
-                "requested by the user.",
+                "搜索并播放指定的歌曲。根据歌名在线搜索歌曲并自动开始播放。"
+                "如果已有音乐在播放，会自动停止当前音乐并播放新歌曲。"
+                "用于播放用户请求的特定歌曲，例如'播放周杰伦的稻香'、'听一下孤勇者'。",
                 search_props,
                 search_and_play_wrapper,
             )
         )
         logger.debug("[MusicManager] 注册搜索播放工具成功")
 
-    def _register_play_pause_tool(self, add_tool, PropertyList):
+    def _register_pause_tool(self, add_tool, PropertyList):
         """
-        注册播放/暂停工具.
+        注册暂停工具.
         """
 
-        async def play_pause_wrapper(args: Dict[str, Any]) -> str:
-            result = await self._music_player.play_pause()
-            return result.get("message", "播放状态切换完成")
+        async def pause_wrapper(args: Dict[str, Any]) -> str:
+            result = await self._music_player.pause()
+            return result.get("message", "已暂停")
 
         add_tool(
             (
-                "music_player.play_pause",
-                "Toggle between play and pause states. If music is playing, it will "
-                "pause. If music is paused or stopped, it will resume or start playing. "
-                "Use this when user wants to pause/resume music.",
+                "music_player.pause",
+                "暂停当前正在播放的音乐。调用此工具会立即停止音乐播放，保持当前位置。"
+                "用户可以稍后调用 resume 恢复播放。"
+                "注意：不要在 TTS 说话时主动调用此工具，TTS 会自动临时暂停音乐。"
+                "只有当用户明确说'暂停'、'暂停音乐'、'先停一下'等时才调用。",
                 PropertyList(),
-                play_pause_wrapper,
+                pause_wrapper,
             )
         )
-        logger.debug("[MusicManager] 注册播放暂停工具成功")
+        logger.debug("[MusicManager] 注册暂停工具成功")
+
+    def _register_resume_tool(self, add_tool, PropertyList):
+        """
+        注册恢复工具.
+        """
+
+        async def resume_wrapper(args: Dict[str, Any]) -> str:
+            result = await self._music_player.resume()
+            return result.get("message", "已恢复播放")
+
+        add_tool(
+            (
+                "music_player.resume",
+                "恢复播放之前暂停的音乐。从暂停的位置继续播放。"
+                "只有当音乐处于'已暂停'状态（用户主动暂停）时才调用此工具。"
+                "如果音乐只是被 TTS 临时打断，TTS 结束后会自动恢复，无需调用此工具。",
+                PropertyList(),
+                resume_wrapper,
+            )
+        )
+        logger.debug("[MusicManager] 注册恢复工具成功")
 
     def _register_stop_tool(self, add_tool, PropertyList):
         """
@@ -126,9 +148,9 @@ class MusicToolsManager:
         add_tool(
             (
                 "music_player.stop",
-                "Stop music playback completely. This will stop the current song "
-                "and reset the position to the beginning. Use this when user wants "
-                "to stop music completely.",
+                "完全停止音乐播放。停止当前歌曲并重置播放位置到开头。"
+                "与 pause（暂停）的区别：stop 是完全结束播放，pause 是临时暂停。"
+                "用于用户说'停止音乐'、'关闭音乐'、'别放了'等明确要求结束播放的场景。",
                 PropertyList(),
                 stop_wrapper,
             )
@@ -152,9 +174,9 @@ class MusicToolsManager:
         add_tool(
             (
                 "music_player.seek",
-                "Jump to a specific position in the currently playing song. "
-                "Position is specified in seconds from the beginning. Use this "
-                "when user wants to skip to a specific part of a song.",
+                "跳转到歌曲的指定位置。position 参数单位为秒（从开头计算）。"
+                "用于用户要求'快进到2分钟'、'跳到副歌部分'、'回到开头'、'跳转30%'、'跳到30秒'等场景。"
+                "注意：如果用户说'快进30秒'，需要先获取当前位置，再加上30秒。",
                 seek_props,
                 seek_wrapper,
             )
@@ -177,59 +199,13 @@ class MusicToolsManager:
         add_tool(
             (
                 "music_player.get_lyrics",
-                "Get the lyrics of the currently playing song. Returns the complete "
-                "lyrics with timestamps. Use this when user asks for lyrics or wants "
-                "to see the words of the current song.",
+                "获取当前播放歌曲的歌词。返回完整歌词及时间戳。"
+                "用于用户询问'这首歌的歌词是什么'、'帮我看看歌词'、'歌词里唱的什么'等场景。",
                 PropertyList(),
                 get_lyrics_wrapper,
             )
         )
         logger.debug("[MusicManager] 注册获取歌词工具成功")
-
-    def _register_get_status_tool(self, add_tool, PropertyList):
-        """
-        注册获取状态工具.
-        """
-
-        async def get_status_wrapper(args: Dict[str, Any]) -> str:
-            result = await self._music_player.get_status()
-            if result.get("status") == "success":
-                status_info = []
-                status_info.append(f"当前歌曲: {result.get('current_song', '无')}")
-                status_info.append(
-                    f"播放状态: {'播放中' if result.get('is_playing') else '已停止'}"
-                )
-                if result.get("is_playing"):
-                    if result.get("paused"):
-                        status_info.append("状态: 已暂停")
-                    else:
-                        status_info.append("状态: 正在播放")
-
-                    duration = result.get("duration", 0)
-                    position = result.get("position", 0)
-                    progress = result.get("progress", 0)
-
-                    status_info.append(f"播放时长: {self._format_time(duration)}")
-                    status_info.append(f"当前位置: {self._format_time(position)}")
-                    status_info.append(f"播放进度: {progress}%")
-                    has_lyrics = "是" if result.get("has_lyrics") else "否"
-                    status_info.append(f"歌词可用: {has_lyrics}")
-
-                return "\n".join(status_info)
-            else:
-                return "获取播放器状态失败"
-
-        add_tool(
-            (
-                "music_player.get_status",
-                "Get the current status of the music player including current song, "
-                "play state, position, duration, and progress. Use this to check "
-                "what's currently playing or get detailed playback information.",
-                PropertyList(),
-                get_status_wrapper,
-            )
-        )
-        logger.debug("[MusicManager] 注册获取状态工具成功")
 
     def _register_get_local_playlist_tool(
         self, add_tool, PropertyList, Property, PropertyType
@@ -262,11 +238,11 @@ class MusicToolsManager:
         add_tool(
             (
                 "music_player.get_local_playlist",
-                "Get the local music playlist from cache. Shows all songs that have been "
-                "downloaded and cached locally. Returns songs in format 'Title - Artist'. "
-                "To play a song from this list, use search_and_play with just the song title "
-                "(not the full 'Title - Artist' format). For example: if the list shows "
-                "'菊花台 - 周杰伦', call search_and_play with song_name='菊花台'.",
+                "获取本地音乐歌单。显示所有已下载并缓存的歌曲。"
+                "返回格式：'歌名 - 歌手'，例如'菊花台 - 周杰伦'。"
+                "用于用户询问'我有哪些歌'、'本地歌曲列表'、'缓存了什么音乐'等场景。"
+                "注意：播放列表中的歌曲时，只需使用歌名调用 search_and_play，"
+                "例如列表显示'菊花台 - 周杰伦'，调用 search_and_play(song_name='菊花台') 即可。",
                 refresh_props,
                 get_local_playlist_wrapper,
             )
@@ -286,25 +262,6 @@ class MusicToolsManager:
         检查管理器是否已初始化.
         """
         return self._initialized
-
-    def get_status(self) -> Dict[str, Any]:
-        """
-        获取管理器状态.
-        """
-        return {
-            "initialized": self._initialized,
-            "tools_count": 7,  # 当前注册的工具数量
-            "available_tools": [
-                "search_and_play",
-                "play_pause",
-                "stop",
-                "seek",
-                "get_lyrics",
-                "get_status",
-                "get_local_playlist",
-            ],
-            "music_player_ready": self._music_player is not None,
-        }
 
 
 # 全局管理器实例

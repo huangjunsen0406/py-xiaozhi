@@ -1,8 +1,3 @@
-"""音乐播放器单例实现.
-
-提供单例模式的音乐播放器，在注册时初始化，支持异步操作。
-"""
-
 import asyncio
 import shutil
 import tempfile
@@ -10,9 +5,10 @@ import time
 from pathlib import Path
 from typing import List, Optional, Tuple
 
-import pygame
+import numpy as np
 import requests
 
+from src.audio_codecs.music_decoder import MusicDecoder
 from src.constants.constants import AudioConfig
 from src.utils.logging_config import get_logger
 from src.utils.resource_finder import get_user_cache_dir
@@ -109,14 +105,11 @@ class MusicMetadata:
 
 
 class MusicPlayer:
-    """音乐播放器 - 专为IoT设备设计
-
-    只保留核心功能：搜索、播放、暂停、停止、跳转
-    """
-
     def __init__(self):
-        # 根据服务器类型优化pygame mixer初始化
-        self._init_pygame_mixer()
+        # FFmpeg 解码器和播放队列
+        self.decoder: Optional[MusicDecoder] = None
+        self._music_queue: Optional[asyncio.Queue] = None
+        self._playback_task: Optional[asyncio.Task] = None
 
         # 核心播放状态
         self.current_song = ""
@@ -127,6 +120,14 @@ class MusicPlayer:
         self.paused = False
         self.current_position = 0
         self.start_play_time = 0
+        self._pause_source: Optional[str] = None  # "tts" | "manual" | None
+
+        # 当前播放文件路径（用于暂停/恢复）
+        self._current_file_path: Optional[Path] = None
+
+        # 延迟启动：等待TTS结束后启动
+        self._deferred_start_path: Optional[Path] = None
+        self._deferred_start_position: float = 0.0
 
         # 歌词相关
         self.lyrics = []  # 歌词列表，格式为 [(时间, 文本), ...]
@@ -155,52 +156,30 @@ class MusicPlayer:
         # 清理临时缓存
         self._clean_temp_cache()
 
-        # 获取应用程序实例
+        # 获取应用程序实例和 AudioCodec
         self.app = None
+        self.audio_codec = None
         self._initialize_app_reference()
 
         # 本地歌单缓存
         self._local_playlist = None
         self._last_scan_time = 0
 
-        logger.info("音乐播放器单例初始化完成")
-
-    def _init_pygame_mixer(self):
-        """
-        根据服务器类型优化pygame mixer初始化.
-        """
-        try:
-
-            # 预初始化mixer以设置缓冲区
-            pygame.mixer.pre_init(
-                frequency=AudioConfig.OUTPUT_SAMPLE_RATE,
-                size=-16,  # 16位有符号
-                channels=AudioConfig.CHANNELS,
-                buffer=1024,
-            )
-
-            # 正式初始化
-            pygame.mixer.init()
-
-            logger.info(
-                f"pygame mixer初始化完成 - 采样率: {AudioConfig.OUTPUT_SAMPLE_RATE}Hz"
-            )
-
-        except Exception as e:
-            logger.warning(f"优化pygame初始化失败，使用默认配置: {e}")
-            # 回退到默认配置
-            pygame.mixer.init(
-                frequency=AudioConfig.OUTPUT_SAMPLE_RATE, channels=AudioConfig.CHANNELS
-            )
+        logger.info("音乐播放器单例初始化完成 (FFmpeg + AudioCodec 模式)")
 
     def _initialize_app_reference(self):
         """
-        初始化应用程序引用.
+        初始化应用程序引用和 AudioCodec.
         """
         try:
             from src.application import Application
 
             self.app = Application.get_instance()
+            self.audio_codec = getattr(self.app, "audio_codec", None)
+
+            if not self.audio_codec:
+                logger.warning("AudioCodec 未初始化，音乐播放可能不可用")
+
         except Exception as e:
             logger.warning(f"获取Application实例失败: {e}")
             self.app = None
@@ -414,56 +393,36 @@ class MusicPlayer:
             if MUTAGEN_AVAILABLE:
                 metadata.extract_metadata()
 
-            # 停止当前播放
-            if self.is_playing:
-                pygame.mixer.music.stop()
-
-            # 加载并播放
-            pygame.mixer.music.load(str(file_path))
-            pygame.mixer.music.play()
-
-            # 更新播放状态
+            # 更新歌曲信息
             title = metadata.title or "未知标题"
             artist = metadata.artist or "未知艺术家"
             self.current_song = f"{title} - {artist}"
             self.song_id = file_id
             self.total_duration = metadata.duration or 0
             self.current_url = str(file_path)  # 本地文件路径
-            self.is_playing = True
-            self.paused = False
-            self.current_position = 0
-            self.start_play_time = time.time()
-            self.current_lyric_index = -1
             self.lyrics = []  # 本地文件暂不支持歌词
 
-            logger.info(f"开始播放本地音乐: {self.current_song}")
+            # 直接开始播放
+            success = await self._start_playback(file_path)
 
-            # 更新UI
-            if self.app and hasattr(self.app, "set_chat_message"):
-                await self._safe_update_ui(f"正在播放本地音乐: {self.current_song}")
-
-            return {
-                "status": "success",
-                "message": f"正在播放本地音乐: {self.current_song}",
-            }
+            if success:
+                # 返回歌曲信息（包含时长等详细信息）
+                duration_str = self._format_time(self.total_duration)
+                return {
+                    "status": "success",
+                    "message": f"正在播放: {self.current_song}",
+                    "song": self.current_song,
+                    "duration": duration_str,
+                    "total_seconds": self.total_duration,
+                }
+            else:
+                return {"status": "error", "message": "播放失败"}
 
         except Exception as e:
             logger.error(f"播放本地音乐失败: {e}")
             return {"status": "error", "message": f"播放失败: {str(e)}"}
 
-    # 属性getter方法
-    async def get_current_song(self):
-        return self.current_song
-
-    async def get_is_playing(self):
-        return self.is_playing
-
-    async def get_paused(self):
-        return self.paused
-
-    async def get_duration(self):
-        return self.total_duration
-
+    # 内部方法：位置和进度计算
     async def get_position(self):
         if not self.is_playing or self.paused:
             return self.current_position
@@ -491,7 +450,11 @@ class MusicPlayer:
         """
         if self.is_playing:
             logger.info(f"歌曲播放完成: {self.current_song}")
-            pygame.mixer.music.stop()
+            # 停止解码器
+            if self.decoder:
+                await self.decoder.stop()
+                self.decoder = None
+
             self.is_playing = False
             self.paused = False
             self.current_position = self.total_duration
@@ -515,9 +478,14 @@ class MusicPlayer:
             # 播放歌曲
             success = await self._play_url(url)
             if success:
+                # 返回歌曲信息（包含时长等详细信息）
+                duration_str = self._format_time(self.total_duration)
                 return {
                     "status": "success",
                     "message": f"正在播放: {self.current_song}",
+                    "song": self.current_song,
+                    "duration": duration_str,
+                    "total_seconds": self.total_duration,
                 }
             else:
                 return {"status": "error", "message": "播放失败"}
@@ -526,111 +494,229 @@ class MusicPlayer:
             logger.error(f"搜索播放失败: {e}")
             return {"status": "error", "message": f"操作失败: {str(e)}"}
 
-    async def play_pause(self) -> dict:
-        """
-        播放/暂停切换.
-        """
-        try:
-            if not self.is_playing and self.current_url:
-                # 重新播放
-                success = await self._play_url(self.current_url)
-                return {
-                    "status": "success" if success else "error",
-                    "message": (
-                        f"开始播放: {self.current_song}" if success else "播放失败"
-                    ),
-                }
-
-            elif self.is_playing and self.paused:
-                # 恢复播放
-                pygame.mixer.music.unpause()
-                self.paused = False
-                self.start_play_time = time.time() - self.current_position
-
-                # 更新UI
-                if self.app and hasattr(self.app, "set_chat_message"):
-                    await self._safe_update_ui(f"继续播放: {self.current_song}")
-
-                return {
-                    "status": "success",
-                    "message": f"继续播放: {self.current_song}",
-                }
-
-            elif self.is_playing and not self.paused:
-                # 暂停播放
-                pygame.mixer.music.pause()
-                self.paused = True
-                self.current_position = time.time() - self.start_play_time
-
-                # 更新UI
-                if self.app and hasattr(self.app, "set_chat_message"):
-                    pos_str = self._format_time(self.current_position)
-                    dur_str = self._format_time(self.total_duration)
-                    await self._safe_update_ui(
-                        f"已暂停: {self.current_song} [{pos_str}/{dur_str}]"
-                    )
-
-                return {"status": "success", "message": f"已暂停: {self.current_song}"}
-
-            else:
-                return {"status": "error", "message": "没有可播放的歌曲"}
-
-        except Exception as e:
-            logger.error(f"播放暂停操作失败: {e}")
-            return {"status": "error", "message": f"操作失败: {str(e)}"}
-
     async def stop(self) -> dict:
         """
         停止播放.
         """
         try:
-            if not self.is_playing:
+            if not self.is_playing and not self._pending_play:
                 return {"status": "info", "message": "没有正在播放的歌曲"}
 
-            pygame.mixer.music.stop()
             current_song = self.current_song
+
+            # 停止解码器
+            if self.decoder:
+                await self.decoder.stop()
+                self.decoder = None
+
+            # 取消播放任务
+            if self._playback_task and not self._playback_task.done():
+                self._playback_task.cancel()
+                try:
+                    await self._playback_task
+                except asyncio.CancelledError:
+                    pass
+
+            # 清空队列
+            if self._music_queue:
+                while not self._music_queue.empty():
+                    try:
+                        self._music_queue.get_nowait()
+                    except asyncio.QueueEmpty:
+                        break
+
+            # 重置状态
             self.is_playing = False
             self.paused = False
+            self._pause_source = None  # 清除暂停来源标记
+            self._pending_play = False
+            self._pending_file_path = None
             self.current_position = 0
 
             # 更新UI
             if self.app and hasattr(self.app, "set_chat_message"):
                 await self._safe_update_ui(f"已停止: {current_song}")
 
-            return {"status": "success", "message": f"已停止: {current_song}"}
+            logger.info(f"停止播放: {current_song}")
+            return {"status": "success", "message": "已停止"}
 
         except Exception as e:
             logger.error(f"停止播放失败: {e}")
             return {"status": "error", "message": f"停止失败: {str(e)}"}
 
+    async def pause(self, source: str = "manual") -> dict:
+        """暂停播放（只停止解码器，不清空队列）.
+
+        Args:
+            source: 暂停来源，"manual"=用户主动暂停, "tts"=TTS触发的暂停
+        """
+        try:
+            if not self.is_playing:
+                return {"status": "info", "message": "没有正在播放的歌曲"}
+
+            if self.paused:
+                # 如果已经暂停，但来源不同，更新来源（用户意图优先）
+                if self._pause_source != source:
+                    old_source = self._pause_source
+                    self._pause_source = source
+                    logger.info(f"更新暂停来源: {old_source} → {source}")
+                return {"status": "info", "message": "已经处于暂停状态"}
+
+            # ✅ 立即设置暂停标志，防止重复调用
+            self.paused = True
+            self._pause_source = source
+
+            # 记录暂停时的播放位置
+            if self.start_play_time > 0:
+                self.current_position = time.time() - self.start_play_time
+
+            # 停止解码器（停止生成新数据）
+            if self.decoder:
+                await self.decoder.stop()
+                self.decoder = None
+
+            # 等待解码器完全停止
+            await asyncio.sleep(0.05)
+
+            # 清空音乐内部队列（但不清空 AudioCodec 共享队列）
+            cleared_count = 0
+            if self._music_queue:
+                while not self._music_queue.empty():
+                    try:
+                        self._music_queue.get_nowait()
+                        cleared_count += 1
+                    except asyncio.QueueEmpty:
+                        break
+
+            logger.info(
+                f"暂停播放: {self.current_song} at {self._format_time(self.current_position)}, "
+                f"来源: {source}, 清空 {cleared_count} 帧音乐内部队列"
+            )
+
+            return {"status": "success", "message": "已暂停"}
+
+        except Exception as e:
+            logger.error(f"暂停播放失败: {e}", exc_info=True)
+            return {"status": "error", "message": f"暂停失败: {str(e)}"}
+
+    async def resume(self) -> dict:
+        """
+        恢复播放（从暂停位置重启解码）.
+        """
+        try:
+            if not self.is_playing:
+                return {"status": "info", "message": "没有正在播放的歌曲"}
+
+            if not self.paused:
+                return {"status": "info", "message": "当前未暂停"}
+
+            if not self._current_file_path or not self._current_file_path.exists():
+                return {"status": "error", "message": "无法找到音频文件"}
+
+            # ✅ 从暂停位置重新启动解码和播放
+            logger.info(
+                f"恢复播放: {self.current_song} from {self._format_time(self.current_position)}"
+            )
+
+            # 重新创建音乐队列
+            self._music_queue = asyncio.Queue(maxsize=100)
+
+            # 重新启动 FFmpeg 解码器（从暂停位置开始）
+            self.decoder = MusicDecoder(
+                sample_rate=AudioConfig.OUTPUT_SAMPLE_RATE,
+                channels=AudioConfig.CHANNELS,
+            )
+
+            success = await self.decoder.start_decode(
+                self._current_file_path, self._music_queue, self.current_position
+            )
+            if not success:
+                logger.error("重启解码器失败")
+                return {"status": "error", "message": "恢复播放失败"}
+
+            # 取消旧的播放任务（如果存在）
+            if self._playback_task and not self._playback_task.done():
+                self._playback_task.cancel()
+                try:
+                    await self._playback_task
+                except asyncio.CancelledError:
+                    pass
+
+            # 启动新的播放任务
+            self._playback_task = asyncio.create_task(self._playback_loop())
+
+            # 恢复状态
+            self.paused = False
+            self._pause_source = None  # 清除暂停来源标记
+            self.start_play_time = time.time() - self.current_position  # 调整时间基准
+
+            # 更新UI
+            if self.app and hasattr(self.app, "set_chat_message"):
+                await self._safe_update_ui(f"继续播放: {self.current_song}")
+
+            return {"status": "success", "message": "已恢复播放"}
+
+        except Exception as e:
+            logger.error(f"恢复播放失败: {e}")
+            return {"status": "error", "message": f"恢复失败: {str(e)}"}
+
     async def seek(self, position: float) -> dict:
         """
-        跳转到指定位置.
+        跳转到指定位置（通过重新解码实现）.
         """
         try:
             if not self.is_playing:
                 return {"status": "error", "message": "没有正在播放的歌曲"}
 
-            position = max(0, min(position, self.total_duration))
-            self.current_position = position
-            self.start_play_time = time.time() - position
+            if not self._current_file_path or not self._current_file_path.exists():
+                return {"status": "error", "message": "无法找到音频文件"}
 
-            pygame.mixer.music.rewind()
-            pygame.mixer.music.set_pos(position)
+            # 限制跳转范围
+            if position < 0:
+                position = 0
+            elif position >= self.total_duration:
+                position = max(0, self.total_duration - 1)
 
-            if self.paused:
-                pygame.mixer.music.pause()
+            # ✅ 关键：立即停止当前播放（类似切歌）
+            # 停止解码器
+            if self.decoder:
+                await self.decoder.stop()
+                self.decoder = None
 
-            # 更新UI
-            pos_str = self._format_time(position)
-            dur_str = self._format_time(self.total_duration)
-            if self.app and hasattr(self.app, "set_chat_message"):
-                await self._safe_update_ui(f"已跳转到: {pos_str}/{dur_str}")
+            # 等待解码器完全停止
+            await asyncio.sleep(0.05)
 
-            return {"status": "success", "message": f"已跳转到: {position:.1f}秒"}
+            # 清空音乐队列
+            cleared_count = 0
+            if self._music_queue:
+                while not self._music_queue.empty():
+                    try:
+                        self._music_queue.get_nowait()
+                        cleared_count += 1
+                    except asyncio.QueueEmpty:
+                        break
+
+            # 清空 AudioCodec 播放队列（立即停止播放）
+            if self.audio_codec:
+                await self.audio_codec.clear_audio_queue()
+
+            logger.info(
+                f"跳转到 {self._format_time(position)}，清空 {cleared_count} 帧音乐数据"
+            )
+
+            # 从新位置重新开始播放
+            success = await self._start_playback(self._current_file_path, position)
+
+            if success:
+                return {
+                    "status": "success",
+                    "message": f"已跳转到 {self._format_time(position)}",
+                }
+            else:
+                return {"status": "error", "message": "跳转失败"}
 
         except Exception as e:
-            logger.error(f"跳转失败: {e}")
+            logger.error(f"跳转失败: {e}", exc_info=True)
             return {"status": "error", "message": f"跳转失败: {str(e)}"}
 
     async def get_lyrics(self) -> dict:
@@ -653,21 +739,38 @@ class MusicPlayer:
         }
 
     async def get_status(self) -> dict:
-        """
-        获取播放器状态.
+        """获取播放器状态.
+
+        注意：只返回用户可见的状态，不返回内部暂停标志。 TTS 临时暂停不应该让 AI 认为音乐"已暂停"。
         """
         position = await self.get_position()
         progress = await self.get_progress()
 
+        # 判断实际播放状态（排除 TTS 临时暂停）
+        if not self.is_playing:
+            playing_state = "未播放"
+        elif self.paused and self._pause_source == "manual":
+            # 只有用户主动暂停才报告"已暂停"
+            playing_state = "已暂停"
+        elif self.is_playing:
+            playing_state = "播放中"
+        else:
+            playing_state = "未知"
+
+        duration_str = self._format_time(self.total_duration)
+        position_str = self._format_time(position)
+
         return {
             "status": "success",
-            "current_song": self.current_song,
-            "is_playing": self.is_playing,
-            "paused": self.paused,
-            "duration": self.total_duration,
-            "position": position,
-            "progress": progress,
-            "has_lyrics": len(self.lyrics) > 0,
+            "message": (
+                f"当前歌曲: {self.current_song}\n"
+                f"播放状态: {playing_state}\n"
+                f"暂停来源状态: {self._pause_source} tts是说话时临时暂停\n"
+                f"播放时长: {duration_str}\n"
+                f"当前位置: {position_str}\n"
+                f"播放进度: {progress}%\n"
+                f"歌词可用: {'是' if len(self.lyrics) > 0 else '否'}"
+            ),
         }
 
     # 内部方法
@@ -758,30 +861,86 @@ class MusicPlayer:
 
     async def _play_url(self, url: str) -> bool:
         """
-        播放指定URL.
+        播放指定URL（新实现：使用 FFmpeg + AudioCodec）
         """
         try:
+            # 检查 AudioCodec 是否可用
+            if not self.audio_codec:
+                logger.error("AudioCodec 未初始化，无法播放音乐")
+                return False
+
             # 停止当前播放
             if self.is_playing:
-                pygame.mixer.music.stop()
+                await self.stop()
 
             # 检查缓存或下载
             file_path = await self._get_or_download_file(url)
             if not file_path:
                 return False
 
-            # 加载并播放
-            pygame.mixer.music.load(str(file_path))
-            pygame.mixer.music.play()
+            # 直接开始播放
+            return await self._start_playback(file_path)
 
-            self.current_url = url
+        except Exception as e:
+            logger.error(f"播放失败: {e}")
+            return False
+
+    async def _start_playback(
+        self, file_path: Path, start_position: float = 0.0
+    ) -> bool:
+        """开始播放音乐（内部方法）
+
+        Args:
+            file_path: 音频文件路径
+            start_position: 开始位置（秒），默认从头开始
+        """
+        try:
+            # ✅ 检查 TTS 状态：如果TTS正在播放，延迟启动
+            if self.app and self.app.is_speaking():
+                logger.info("TTS 播放中，音乐延迟启动")
+                self._deferred_start_path = file_path
+                self._deferred_start_position = start_position
+                # 标记为"准备播放"状态（AudioPlugin恢复时会检查）
+                self.is_playing = True
+                self.paused = True
+                return True
+
+            # 清除延迟启动标志
+            self._deferred_start_path = None
+            self._deferred_start_position = 0.0
+
+            # 保存当前文件路径（用于暂停/恢复）
+            self._current_file_path = file_path
+
+            # 创建音乐队列
+            self._music_queue = asyncio.Queue(maxsize=100)
+
+            # 启动 FFmpeg 解码器（支持从指定位置开始）
+            self.decoder = MusicDecoder(
+                sample_rate=AudioConfig.OUTPUT_SAMPLE_RATE,  # 24000Hz
+                channels=AudioConfig.CHANNELS,  # 1 channel
+            )
+
+            success = await self.decoder.start_decode(
+                file_path, self._music_queue, start_position
+            )
+            if not success:
+                logger.error("启动音频解码器失败")
+                return False
+
+            # 启动播放任务
+            self._playback_task = asyncio.create_task(self._playback_loop())
+
+            # 更新播放状态
             self.is_playing = True
             self.paused = False
-            self.current_position = 0
-            self.start_play_time = time.time()
-            self.current_lyric_index = -1  # 重置歌词索引
+            self._pending_play = False
+            self.current_position = start_position  # 从指定位置开始
+            self.start_play_time = time.time() - start_position  # 调整时间基准
+            self.current_lyric_index = -1
 
-            logger.info(f"开始播放: {self.current_song}")
+            position_info = f" from {start_position:.1f}s" if start_position > 0 else ""
+            logger.info(f"开始播放: {self.current_song}{position_info}")
 
             # 更新UI
             if self.app and hasattr(self.app, "set_chat_message"):
@@ -793,8 +952,60 @@ class MusicPlayer:
             return True
 
         except Exception as e:
-            logger.error(f"播放失败: {e}")
+            logger.error(f"启动播放失败: {e}")
             return False
+
+    async def _playback_loop(self):
+        """
+        播放循环：从队列取PCM，写入AudioCodec.
+        """
+        try:
+            while self.is_playing:
+                if self.paused:
+                    await asyncio.sleep(0.1)
+                    continue
+
+                # 从音乐队列取数据
+                try:
+                    audio_data = await asyncio.wait_for(
+                        self._music_queue.get(), timeout=5.0
+                    )
+                except asyncio.TimeoutError:
+                    logger.warning("音乐队列读取超时")
+                    continue
+
+                if audio_data is None:
+                    # EOF，播放结束
+                    logger.info("音乐播放完成")
+                    await self._handle_playback_finished()
+                    break
+
+                # ✅ 关键：写入 AudioCodec 播放队列
+                await self._write_to_audio_codec(audio_data)
+
+        except asyncio.CancelledError:
+            logger.debug("播放循环被取消")
+        except Exception as e:
+            logger.error(f"播放循环异常: {e}")
+
+    async def _write_to_audio_codec(self, pcm_data: np.ndarray):
+        """
+        将 PCM 数据写入 AudioCodec 播放队列.
+        """
+        try:
+            if not self.audio_codec:
+                return
+
+            # 确保是单声道数据
+            if pcm_data.ndim > 1:
+                # 立体声转单声道（取平均）
+                pcm_data = pcm_data.mean(axis=1).astype(np.int16)
+
+            # 调用 AudioCodec 的 write_pcm_direct 方法
+            await self.audio_codec.write_pcm_direct(pcm_data)
+
+        except Exception as e:
+            logger.warning(f"写入 AudioCodec 失败: {e}")
 
     async def _get_or_download_file(self, url: str) -> Optional[Path]:
         """获取或下载文件.
