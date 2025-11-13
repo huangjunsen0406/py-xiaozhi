@@ -47,81 +47,109 @@ const modules = [
     icon: CogIcon,
     features: [
       '应用主类，单例模式管理全局状态',
-      '异步任务管理和状态机控制',
-      '设备状态(IDLE/CONNECTING/LISTENING/SPEAKING)',
-      '线程安全的命令队列处理'
+      '异步事件驱动架构，基于asyncio',
+      '设备状态机(IDLE/LISTENING/SPEAKING)',
+      '统一任务池管理和生命周期控制',
+      '插件化架构，通过PluginManager协调各模块'
+    ]
+  },
+  {
+    name: 'src/plugins/',
+    icon: CpuChipIcon,
+    features: [
+      '插件管理器，按优先级排序注册插件',
+      '统一生命周期管理(setup/start/stop/shutdown)',
+      '事件广播机制(协议连接、JSON消息、音频数据)',
+      '插件隔离，错误不传播',
+      '包含Audio、MCP、IoT、UI、WakeWord等核心插件'
     ]
   },
   {
     name: 'src/mcp/',
     icon: WrenchIcon,
     features: [
-      '基于JSON-RPC 2.0的MCP服务器',
-      '丰富的工具生态系统(系统、日历、地图等)',
-      '可扩展的插件架构',
-      '类型安全的参数验证'
+      '基于MCP协议的工具服务器',
+      '丰富的工具生态(系统、日历、音乐、地图、八字等)',
+      'Property/Method抽象，支持异步调用',
+      '类型安全的参数验证和默认值处理',
+      '工具分类管理(camera/calendar/timer/music等)'
     ]
   },
   {
     name: 'src/protocols/',
     icon: ArrowsRightLeftIcon,
     features: [
-      '抽象协议接口设计',
-      'WebSocket和MQTT协议实现',
-      'TLS加密和自动重连机制',
-      '统一的通信抽象层'
+      '抽象Protocol基类，定义统一接口',
+      'WebSocket和MQTT双协议实现',
+      'WSS/TLS加密传输，自动重连机制',
+      '支持文本/音频/IoT/MCP消息类型',
+      '连接状态管理和错误回调'
     ]
   },
   {
     name: 'src/audio_codecs/',
     icon: DocumentIcon,
     features: [
-      '基于Opus的实时音频编解码',
-      'WebRTC音频回声消除(AEC)处理器',
-      'SoXR高质量音频重采样',
-      '系统音频录制与环回处理',
-      '异步音频流处理',
-      '低延迟音频缓冲管理'
+      'Opus编解码器(16kHz编码/24kHz解码)',
+      'WebRTC AEC回声消除处理器',
+      'SoXR实时音频重采样(支持任意采样率)',
+      '智能声道转换(下混/上混)',
+      '设备原生格式自适应',
+      '低延迟流式缓冲(5ms处理)',
+      '观察者模式解耦音频监听器'
     ]
   },
   {
     name: 'src/audio_processing/',
     icon: SpeakerXMarkIcon,
     features: [
-      'AEC声学回声消除处理器',
-      '基于Sherpa-ONNX的语音活动检测(VAD)',
-      '多语言唤醒词检测',
-      '实时音频处理和回调机制'
+      '基于Sherpa-ONNX的唤醒词检测',
+      '支持多唤醒词和拼音匹配',
+      'VAD语音活动检测',
+      '实时音频流处理',
+      '异步事件通知机制'
     ]
   },
   {
-    name: 'src/display/',
+    name: 'src/views/',
     icon: ComputerDesktopIcon,
     features: [
-      '策略模式的UI系统架构',
-      'PyQt5 GUI和CLI界面实现',
-      '异步界面更新',
-      '状态显示和用户交互'
+      'PyQt5 GUI界面(设置窗口/激活窗口)',
+      '系统托盘和全局快捷键支持',
+      '音频设备/摄像头/唤醒词配置界面',
+      '异步UI更新和线程安全',
+      '基础窗口组件和混入类'
     ]
   },
   {
     name: 'src/iot/',
     icon: LightBulbIcon,
     features: [
-      '基于Thing抽象的IoT设备框架',
-      '统一设备管理和状态同步',
-      '动态设备发现',
-      '智能家居设备控制'
+      'Thing基类定义设备抽象',
+      'Property/Method异步属性和方法',
+      'ThingManager统一设备管理',
+      '状态增量更新和并发获取',
+      '支持灯光/音量/定时器等设备类型'
     ]
   },
   {
     name: 'src/utils/',
     icon: MapIcon,
     features: [
-      '配置管理和设备指纹',
-      '日志系统和资源查找',
-      '音量控制和通用工具',
-      '跨平台兼容性处理'
+      'ConfigManager分层配置管理',
+      '点记法访问配置(如AUDIO_DEVICES.input_device_id)',
+      '设备指纹生成和激活管理',
+      '统一日志系统和资源查找',
+      '音量控制和跨平台工具函数'
+    ]
+  },
+  {
+    name: 'src/core/',
+    icon: ServerIcon,
+    features: [
+      'OTA在线更新模块',
+      '系统初始化器',
+      '版本检查和升级管理'
     ]
   }
 ];

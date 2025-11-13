@@ -18,15 +18,19 @@ import ArchitectureFeatures from './components/ArchitectureFeatures.vue'
 <p class="page-description">基于 Python 实现的小智语音客户端，采用模块化设计，支持多种通信协议和设备集成</p>
 
 ## 核心架构
+
 <CoreArchitecture/>
 
 ## 模块详情
+
 <ModuleDetails/>
 
 ## 技术栈
+
 <TechnologyStack/>
 
 ## 架构特点
+
 <ArchitectureFeatures/>
 </div>
 
