@@ -82,6 +82,9 @@ class MusicDecoder:
             return False
 
     async def _read_pcm_stream(self, output_queue: asyncio.Queue):
+        """读取 PCM 流并写入队列,使用队列占用率 + 时间兜底的双重限速策略."""
+        import time
+
         frame_duration_ms = AudioConfig.FRAME_DURATION
         frame_size_samples = int(self.sample_rate * (frame_duration_ms / 1000))
         frame_size_bytes = frame_size_samples * 2 * self.channels
@@ -90,8 +93,10 @@ class MusicDecoder:
             f"{frame_size_bytes}字节, {frame_duration_ms}ms"
         )
 
-        eof_reached = False  # 标记是否正常到达EOF
-        frame_count = 0  # 统计已解码帧数
+        eof_reached = False
+        frame_count = 0
+        start_time = time.time()  # 记录解码开始时间
+
         try:
             while not self._stopped:
                 # 读取一帧数据
@@ -124,10 +129,42 @@ class MusicDecoder:
                 if self.channels > 1:
                     audio_array = audio_array.reshape(-1, self.channels)
 
+                # ========== 双重限速策略 ==========
+
+                # 策略1: 基于队列占用率的动态限速
+                queue_ratio = output_queue.qsize() / output_queue.maxsize if output_queue.maxsize > 0 else 0
+
+                if queue_ratio < 0.3:
+                    # 队列低于30%，快速填充
+                    queue_based_sleep = 0
+                elif queue_ratio < 0.7:
+                    # 队列30-70%，适度限速
+                    queue_based_sleep = 0.03
+                else:
+                    # 队列70%+，大幅限速
+                    queue_based_sleep = 0.06
+
+                # 策略2: 时间兜底，确保不超过理论播放速度
+                expected_elapsed = frame_count * (frame_duration_ms / 1000.0)
+                actual_elapsed = time.time() - start_time
+
+                if actual_elapsed < expected_elapsed:
+                    # 解码速度超过理论播放速度，强制等待
+                    time_based_sleep = expected_elapsed - actual_elapsed
+                else:
+                    time_based_sleep = 0
+
+                # 取两种策略的最大值，确保既不过快填充队列，也不超过播放速度
+                target_sleep = max(queue_based_sleep, time_based_sleep)
+
+                if target_sleep > 0:
+                    await asyncio.sleep(target_sleep)
+
+                # 写入队列（带超时保护）
                 try:
                     await asyncio.wait_for(output_queue.put(audio_array), timeout=5.0)
                 except asyncio.TimeoutError:
-                    logger.warning("音频队列阻塞，跳过帧")
+                    logger.warning(f"音频队列写入超时，跳过帧 {frame_count}")
                     continue
 
         except asyncio.CancelledError:

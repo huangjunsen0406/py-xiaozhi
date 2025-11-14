@@ -980,13 +980,13 @@ class MusicPlayer:
                     await self._handle_playback_finished()
                     break
 
-                # ✅ 关键：写入 AudioCodec 播放队列
+                # 写入 AudioCodec 播放队列
                 await self._write_to_audio_codec(audio_data)
 
         except asyncio.CancelledError:
             logger.debug("播放循环被取消")
         except Exception as e:
-            logger.error(f"播放循环异常: {e}")
+            logger.error(f"播放循环异常: {e}", exc_info=True)
 
     async def _write_to_audio_codec(self, pcm_data: np.ndarray):
         """
@@ -994,6 +994,7 @@ class MusicPlayer:
         """
         try:
             if not self.audio_codec:
+                logger.error("AudioCodec 未初始化")
                 return
 
             # 确保是单声道数据
@@ -1005,7 +1006,7 @@ class MusicPlayer:
             await self.audio_codec.write_pcm_direct(pcm_data)
 
         except Exception as e:
-            logger.warning(f"写入 AudioCodec 失败: {e}")
+            logger.error(f"写入 AudioCodec 失败: {e}", exc_info=True)
 
     async def _get_or_download_file(self, url: str) -> Optional[Path]:
         """获取或下载文件.
