@@ -45,6 +45,33 @@ async def set_volume(args: Dict[str, Any]) -> bool:
         return False
 
 
+async def get_volume(args: Dict[str, Any]) -> int:
+    """
+    获取当前音量.
+    """
+    try:
+        logger.info("[SystemTools] 获取当前音量")
+
+        # 直接使用VolumeController获取音量
+        from src.utils.volume_controller import VolumeController
+
+        # 检查依赖并创建音量控制器
+        if not VolumeController.check_dependencies():
+            logger.warning("[SystemTools] 音量控制依赖不完整，返回默认音量")
+            return VolumeController.DEFAULT_VOLUME
+
+        volume_controller = VolumeController()
+        current_volume = await asyncio.to_thread(volume_controller.get_volume)
+        logger.info(f"[SystemTools] 当前音量: {current_volume}")
+        return current_volume
+
+    except Exception as e:
+        logger.error(f"[SystemTools] 获取音量失败: {e}", exc_info=True)
+        from src.utils.volume_controller import VolumeController
+
+        return VolumeController.DEFAULT_VOLUME
+
+
 async def _get_audio_status() -> Dict[str, Any]:
     """
     获取音频状态.
