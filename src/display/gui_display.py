@@ -31,6 +31,7 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
     # 常量定义
     EMOTION_EXTENSIONS = (".gif", ".png", ".jpg", ".jpeg", ".webp")
     DEFAULT_WINDOW_SIZE = (880, 560)
+    MINIMUM_WINDOW_SIZE = (480, 360)
     DEFAULT_FONT_SIZE = 12
     QUIT_TIMEOUT_MS = 3000
 
@@ -235,6 +236,9 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         # 根据配置计算窗口大小
         window_size, is_fullscreen = self._calculate_window_size()
         self.root.resize(*window_size)
+
+        # 设置最小窗口尺寸
+        self.root.setMinimumSize(*self.MINIMUM_WINDOW_SIZE)
 
         # 保存是否全屏的状态，在 show 时使用
         self._is_fullscreen = is_fullscreen
