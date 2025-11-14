@@ -10,7 +10,7 @@ from src.utils.logging_config import get_logger
 from .app_management.killer import kill_application, list_running_applications
 from .app_management.launcher import launch_application
 from .app_management.scanner import scan_installed_applications
-from .tools import set_volume
+from .tools import get_volume, set_volume
 
 logger = get_logger(__name__)
 
@@ -36,6 +36,11 @@ class SystemToolsManager:
 
             # 注册音量控制工具
             self._register_volume_control_tool(
+                add_tool, PropertyList, Property, PropertyType
+            )
+
+            # 注册音量获取工具
+            self._register_volume_get_tool(
                 add_tool, PropertyList, Property, PropertyType
             )
 
@@ -84,6 +89,28 @@ class SystemToolsManager:
             )
         )
         logger.debug("[SystemManager] 注册音量控制工具成功")
+
+    def _register_volume_get_tool(
+        self, add_tool, PropertyList, Property, PropertyType
+    ):
+        """
+        注册音量获取工具.
+        """
+        get_volume_props = PropertyList([])
+        add_tool(
+            (
+                "self.audio_speaker.get_volume",
+                "Get the current system speaker volume level.\n"
+                "Use when user asks about: current volume, volume level, how loud, what's the volume.\n"
+                "Examples: 'what is the current volume?', 'how loud is it?', 'check volume level', "
+                "'现在音量多少?', '查看音量', '音量是多少'.\n"
+                "Returns:\n"
+                "- Integer (0-100) representing the current volume level.",
+                get_volume_props,
+                get_volume,
+            )
+        )
+        logger.debug("[SystemManager] 注册音量获取工具成功")
 
     def _register_app_launcher_tool(
         self, add_tool, PropertyList, Property, PropertyType
@@ -223,6 +250,7 @@ class SystemToolsManager:
         """
         available_tools = [
             "set_volume",
+            "get_volume",
             "launch_application",
             "scan_installed_applications",
             "kill_application",
