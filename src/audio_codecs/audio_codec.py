@@ -294,7 +294,7 @@ class AudioCodec:
                 self.device_input_sample_rate,
                 AudioConfig.INPUT_SAMPLE_RATE,
                 num_channels=1,  # 重采样器处理单声道（下混后）
-                dtype="int16",
+                dtype="float32",
                 quality="QQ",  # 快速质量（低延迟）
             )
             logger.info(f"输入重采样: {self.device_input_sample_rate}Hz → 16kHz")
@@ -306,7 +306,7 @@ class AudioCodec:
                 AudioConfig.OUTPUT_SAMPLE_RATE,
                 self.device_output_sample_rate,
                 num_channels=1,  # 重采样器处理单声道（上混前）
-                dtype="int16",
+                dtype="float32",
                 quality="QQ",
             )
             logger.info(
@@ -329,7 +329,7 @@ class AudioCodec:
                 device=self.mic_device_id,
                 samplerate=self.device_input_sample_rate,  # 设备原生采样率
                 channels=self.input_channels,  # 设备原生声道数
-                dtype=np.int16,
+                dtype=np.float32,
                 blocksize=self._device_input_frame_size,  # 设备原生帧大小
                 callback=self._input_callback,
                 finished_callback=self._input_finished_callback,
@@ -341,7 +341,7 @@ class AudioCodec:
                 device=self.speaker_device_id,
                 samplerate=self.device_output_sample_rate,  # 设备原生采样率
                 channels=self.output_channels,  # 设备原生声道数
-                dtype=np.int16,
+                dtype=np.float32,
                 blocksize=self._device_output_frame_size,  # 设备原生帧大小
                 callback=self._output_callback,
                 finished_callback=self._output_finished_callback,
@@ -374,7 +374,7 @@ class AudioCodec:
             # 步骤1: 声道下混（立体声/多声道 → 单声道）
             if self._need_input_downmix:
                 # indata shape: (frames, channels)
-                audio_data = downmix_to_mono(indata, keepdims=False).astype(np.int16)
+                audio_data = downmix_to_mono(indata, keepdims=False)
             else:
                 audio_data = indata.flatten()  # 已经是单声道
 
@@ -388,17 +388,20 @@ class AudioCodec:
             if len(audio_data) != AudioConfig.INPUT_FRAME_SIZE:
                 return
 
-            # 步骤4: AEC处理（如果启用）
+            # 步骤4: 转换为 int16 供 Opus 编码和 AEC 处理
+            audio_data_int16 = (audio_data * 32768.0).astype(np.int16)
+
+            # 步骤5: AEC处理（如果启用）
             if self._aec_enabled and self.audio_processor._is_macos:
                 try:
-                    audio_data = self.audio_processor.process_audio(audio_data)
+                    audio_data_int16 = self.audio_processor.process_audio(audio_data_int16)
                 except Exception as e:
                     logger.warning(f"AEC处理失败，使用原始音频: {e}")
 
-            # 步骤5: Opus编码并实时发送
+            # 步骤6: Opus编码并实时发送
             if self._encoded_callback:
                 try:
-                    pcm_data = audio_data.astype(np.int16).tobytes()
+                    pcm_data = audio_data_int16.tobytes()
                     encoded_data = self.opus_encoder.encode(
                         pcm_data, AudioConfig.INPUT_FRAME_SIZE
                     )
@@ -407,10 +410,10 @@ class AudioCodec:
                 except Exception as e:
                     logger.warning(f"实时录音编码失败: {e}")
 
-            # 步骤6: 通知音频监听器（解耦唤醒词检测）
+            # 步骤7: 通知音频监听器（解耦唤醒词检测）
             for listener in self._audio_listeners:
                 try:
-                    listener.on_audio_data(audio_data.copy())
+                    listener.on_audio_data(audio_data_int16.copy())
                 except Exception as e:
                     logger.warning(f"音频监听器处理失败: {e}")
 
@@ -424,7 +427,7 @@ class AudioCodec:
         try:
             resampled_data = self.input_resampler.resample_chunk(audio_data, last=False)
             if len(resampled_data) > 0:
-                self._resample_input_buffer.extend(resampled_data.astype(np.int16))
+                self._resample_input_buffer.extend(resampled_data)
 
             # 累积到目标帧大小
             expected_frame_size = AudioConfig.INPUT_FRAME_SIZE
@@ -436,7 +439,7 @@ class AudioCodec:
             for _ in range(expected_frame_size):
                 frame_data.append(self._resample_input_buffer.popleft())
 
-            return np.array(frame_data, dtype=np.int16)
+            return np.array(frame_data, dtype=np.float32)
 
         except Exception as e:
             logger.error(f"输入重采样失败: {e}")
@@ -469,10 +472,11 @@ class AudioCodec:
         处理流程:
         1. 从队列取出单声道数据 (OUTPUT_FRAME_SIZE个样本)
         2. 截取或填充到所需帧数
-        3. 如需上混,复制到多声道;否则直接输出
+        3. 转换 int16 → float32
+        4. 如需上混,复制到多声道;否则直接输出
         """
         try:
-            # 从播放队列获取音频数据（单声道数据）
+            # 从播放队列获取音频数据（单声道 int16 数据）
             audio_data = self._output_buffer.get_nowait()
 
             # audio_data 是单声道数据,长度通常 = OUTPUT_FRAME_SIZE
@@ -484,16 +488,19 @@ class AudioCodec:
                 mono_samples = np.zeros(frames, dtype=np.int16)
                 mono_samples[: len(audio_data)] = audio_data
 
+            # 转换为 float32 用于播放
+            mono_samples_float = mono_samples.astype(np.float32) / 32768.0
+
             # 声道处理
             if self._need_output_upmix:
                 # 单声道 → 多声道（复制到所有声道）
                 multi_channel = upmix_mono_to_channels(
-                    mono_samples, self.output_channels
+                    mono_samples_float, self.output_channels
                 )
                 outdata[:] = multi_channel
             else:
                 # 单声道输出
-                outdata[:, 0] = mono_samples
+                outdata[:, 0] = mono_samples_float
 
         except asyncio.QueueEmpty:
             # 无数据时输出静音
@@ -503,8 +510,8 @@ class AudioCodec:
         """重采样播放（24kHz → 设备采样率）
 
         处理流程:
-        1. 从队列取出24kHz单声道数据
-        2. 重采样到设备采样率（仍为单声道）
+        1. 从队列取出24kHz单声道 int16 数据
+        2. 转换为 float32 并重采样到设备采样率（仍为单声道）
         3. 累积到缓冲区,凑够所需帧数
         4. 如需上混,复制到多声道;否则直接输出
         """
@@ -514,14 +521,14 @@ class AudioCodec:
             while len(self._resample_output_buffer) < frames:
                 try:
                     audio_data = self._output_buffer.get_nowait()
+                    # 转换 int16 → float32
+                    audio_data_float = audio_data.astype(np.float32) / 32768.0
                     # 24kHz单声道 → 设备采样率单声道重采样
                     resampled_data = self.output_resampler.resample_chunk(
-                        audio_data, last=False
+                        audio_data_float, last=False
                     )
                     if len(resampled_data) > 0:
-                        self._resample_output_buffer.extend(
-                            resampled_data.astype(np.int16)
-                        )
+                        self._resample_output_buffer.extend(resampled_data)
                 except asyncio.QueueEmpty:
                     break
 
@@ -530,7 +537,7 @@ class AudioCodec:
                 frame_data = []
                 for _ in range(frames):
                     frame_data.append(self._resample_output_buffer.popleft())
-                mono_data = np.array(frame_data, dtype=np.int16)
+                mono_data = np.array(frame_data, dtype=np.float32)
 
                 # 声道处理
                 if self._need_output_upmix:
@@ -707,7 +714,7 @@ class AudioCodec:
                     device=self.mic_device_id,
                     samplerate=self.device_input_sample_rate,
                     channels=self.input_channels,
-                    dtype=np.int16,
+                    dtype=np.float32,
                     blocksize=self._device_input_frame_size,
                     callback=self._input_callback,
                     finished_callback=self._input_finished_callback,
@@ -725,7 +732,7 @@ class AudioCodec:
                     device=self.speaker_device_id,
                     samplerate=self.device_output_sample_rate,
                     channels=self.output_channels,
-                    dtype=np.int16,
+                    dtype=np.float32,
                     blocksize=self._device_output_frame_size,
                     callback=self._output_callback,
                     finished_callback=self._output_finished_callback,
@@ -788,7 +795,7 @@ class AudioCodec:
         try:
             # 刷新缓冲区
             if hasattr(resampler, "resample_chunk"):
-                empty_array = np.array([], dtype=np.int16)
+                empty_array = np.array([], dtype=np.float32)
                 resampler.resample_chunk(empty_array, last=True)
         except Exception as e:
             logger.debug(f"刷新{name}重采样器缓冲区失败: {e}")
