@@ -1,0 +1,1 @@
+import{_ as i,c as a,o as n,ae as t}from"./chunks/framework.BGWP4WZ_.js";const r=JSON.parse('{"title":"配置说明","description":"","frontmatter":{},"headers":[],"relativePath":"guide/配置说明.md","filePath":"guide/配置说明.md"}'),h={name:"guide/配置说明.md"};function l(p,s,k,e,E,d){return n(),a("div",null,s[0]||(s[0]=[t("",148)]))}const g=i(h,[["render",l]]);export{r as __pageData,g as default};

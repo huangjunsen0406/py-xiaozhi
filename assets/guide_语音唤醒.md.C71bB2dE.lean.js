@@ -1,0 +1,1 @@
+import{_ as i,c as a,o as n,ae as t}from"./chunks/framework.BGWP4WZ_.js";const E=JSON.parse('{"title":"语音唤醒功能","description":"","frontmatter":{},"headers":[],"relativePath":"guide/语音唤醒.md","filePath":"guide/语音唤醒.md"}'),h={name:"guide/语音唤醒.md"};function l(p,s,e,k,d,r){return n(),a("div",null,s[0]||(s[0]=[t("",98)]))}const g=i(h,[["render",l]]);export{E as __pageData,g as default};
