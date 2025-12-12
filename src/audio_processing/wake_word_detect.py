@@ -9,7 +9,7 @@ import sherpa_onnx
 from src.constants.constants import AudioConfig
 from src.utils.config_manager import ConfigManager
 from src.logging import get_logger
-from src.utils.resource_finder import resource_finder
+from src.utils.resource_finder import get_app_root
 
 logger = get_logger()
 
@@ -60,14 +60,10 @@ class WakeWordDetector:
         """
         # 模型路径配置
         model_path = config.get_config("WAKE_WORD_OPTIONS.MODEL_PATH", "models")
-        self.model_dir = resource_finder.find_directory(model_path)
+        self.model_dir = get_app_root() / model_path
 
-        if self.model_dir is None:
-            # 兜底方案：尝试直接使用路径
-            self.model_dir = Path(model_path)
-            logger.warning(
-                f"ResourceFinder未找到模型目录，使用原始路径: {self.model_dir}"
-            )
+        if not self.model_dir.exists():
+            logger.warning(f"模型目录不存在: {self.model_dir}")
 
         # KWS参数配置 - 优化速度
         self.num_threads = config.get_config(

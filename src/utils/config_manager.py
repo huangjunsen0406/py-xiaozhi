@@ -3,13 +3,13 @@ import uuid
 from typing import Any, Dict
 
 from src.logging import get_logger
-from src.utils.resource_finder import resource_finder
+from src.utils.resource_finder import get_app_root, get_config_dir
 
 logger = get_logger()
 
 
 class ConfigManager:
-    """配置管理器 - 单例模式"""
+    """配置管理器"""
 
     _instance = None
 
@@ -128,11 +128,10 @@ class ConfigManager:
         初始化配置文件路径.
         """
         # 使用resource_finder查找或创建配置目录
-        self.config_dir = resource_finder.find_config_dir()
-        if not self.config_dir:
+        self.config_dir = get_config_dir()
+        if not self.config_dir.exists():
             # 如果找不到配置目录，在项目根目录下创建
-            project_root = resource_finder.get_project_root()
-            self.config_dir = project_root / "config"
+            self.config_dir = get_app_root() / "config"
             self.config_dir.mkdir(parents=True, exist_ok=True)
             logger.info(f"创建配置目录: {self.config_dir.absolute()}")
 
@@ -146,7 +145,7 @@ class ConfigManager:
         """
         确保必要的目录存在.
         """
-        project_root = resource_finder.get_project_root()
+        project_root = get_app_root()
 
         # 创建 models 目录
         models_dir = project_root / "models"
@@ -165,17 +164,8 @@ class ConfigManager:
         加载配置文件，如果不存在则创建.
         """
         try:
-            # 首先尝试使用resource_finder查找配置文件
-            config_file_path = resource_finder.find_file("config/config.json")
-
-            if config_file_path:
-                logger.debug(f"使用resource_finder找到配置文件: {config_file_path}")
-                config = json.loads(config_file_path.read_text(encoding="utf-8"))
-                return self._merge_configs(self.DEFAULT_CONFIG, config)
-
-            # 如果resource_finder没找到，尝试使用实例变量中的路径
             if self.config_file.exists():
-                logger.debug(f"使用实例路径找到配置文件: {self.config_file}")
+                logger.debug(f"找到配置文件: {self.config_file}")
                 config = json.loads(self.config_file.read_text(encoding="utf-8"))
                 return self._merge_configs(self.DEFAULT_CONFIG, config)
             else:

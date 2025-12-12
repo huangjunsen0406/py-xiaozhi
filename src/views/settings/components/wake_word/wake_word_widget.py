@@ -13,7 +13,7 @@ from PyQt5.QtWidgets import (
 
 from src.utils.config_manager import ConfigManager
 from src.logging import get_logger
-from src.utils.resource_finder import get_project_root, resource_finder
+from src.utils.resource_finder import get_app_root, get_models_dir
 
 # 导入拼音转换库
 try:
@@ -175,14 +175,7 @@ class WakeWordWidget(QWidget):
         try:
             current_path = self._get_text_value("model_path_edit")
             if not current_path:
-                # 使用resource_finder查找默认models目录
-                models_dir = resource_finder.find_models_dir()
-                if models_dir:
-                    current_path = str(models_dir)
-                else:
-                    # 如果找不到，使用项目根目录下的models
-                    project_root = resource_finder.get_project_root()
-                    current_path = str(project_root / "models")
+                current_path = str(get_models_dir())
 
             selected_path = QFileDialog.getExistingDirectory(
                 self, "选择模型目录", current_path
@@ -208,7 +201,7 @@ class WakeWordWidget(QWidget):
             import os
 
             # 获取项目根目录
-            project_root = get_project_root()
+            project_root = get_app_root()
 
             # 检查是否在同一盘符（仅在Windows上适用）
             if os.name == "nt":  # Windows系统
@@ -251,10 +244,10 @@ class WakeWordWidget(QWidget):
                 "WAKE_WORD_OPTIONS.MODEL_PATH", "models"
             )
 
-            # 使用 resource_finder 统一查找（和运行时保持一致）
-            model_dir = resource_finder.find_directory(model_path)
+            # 使用 get_app_root 统一查找（和运行时保持一致）
+            model_dir = get_app_root() / model_path
 
-            if model_dir is None:
+            if not model_dir.exists():
                 self.logger.warning(f"模型目录不存在: {model_path}")
                 return ""
 
@@ -352,10 +345,10 @@ class WakeWordWidget(QWidget):
                 "WAKE_WORD_OPTIONS.MODEL_PATH", "models"
             )
 
-            # 使用 resource_finder 统一查找（和运行时保持一致）
-            model_dir = resource_finder.find_directory(model_path)
+            # 使用 get_app_root 统一查找（和运行时保持一致）
+            model_dir = get_app_root() / model_path
 
-            if model_dir is None:
+            if not model_dir.exists():
                 self.logger.error(f"模型目录不存在: {model_path}")
                 QMessageBox.warning(
                     self,

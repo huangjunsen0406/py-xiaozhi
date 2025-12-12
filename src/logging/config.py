@@ -181,9 +181,9 @@ class LoggingConfigManager:
         """获取默认日志目录."""
         # 尝试从项目根目录获取
         try:
-            from src.utils.resource_finder import get_project_root
+            from src.utils.resource_finder import get_app_root
 
-            return get_project_root() / "logs"
+            return get_app_root() / "logs"
         except ImportError:
             return Path.cwd() / "logs"
 

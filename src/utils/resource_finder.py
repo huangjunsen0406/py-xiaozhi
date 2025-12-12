@@ -1,400 +1,164 @@
-# resource_finder.py
+"""
+统一资源路径解析器 - 开发/打包通用
+
+核心 API：
+- get_app_root()      应用根目录
+- get_app_name()      应用名称（自动推断）
+- get_user_data_dir() 用户数据目录
+- get_user_cache_dir() 缓存目录
+- get_lib_path()      动态库路径
+- get_models_dir()    模型目录
+- get_assets_dir()    资源目录
+- get_config_dir()    配置目录
+"""
+
 from __future__ import annotations
 
-import json
-import os
-import plistlib
+import platform as plat
 import sys
+from functools import lru_cache
 from pathlib import Path
-from typing import Dict, List, Optional, Union
-
-PathLike = Union[str, Path]
-_MANIFEST_CANDIDATES = ("unifypy.json", "app.json", "package.json")
+from typing import Optional
 
 
-class ResourceFinder:
+@lru_cache(maxsize=1)
+def get_app_root() -> Path:
     """
-    统一资源定位：开发、PyInstaller（onedir/onefile）、安装后皆可用。
+    应用根目录（开发/打包通用）
+
+    - 开发时: 项目根目录
+    - 打包后: _MEIPASS（PyInstaller onedir）
     """
-
-    _instance: "ResourceFinder" = None
-
-    def __new__(cls):
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-        return cls._instance
-
-    def __init__(self):
-        if getattr(self, "_initd", False):
-            return
-        self._initd = True
-
-        # 运行基目录（_MEIPASS / exe_dir / project_root）
-        self._base_dir = self._runtime_base_dir()
-
-        # 加载元信息（manifest/Info.plist/环境变量）
-        self._meta = self._load_app_meta(self._base_dir)
-        self._app_name = self._derive_app_name(self._meta)
-
-        # 构建搜索路径（有序、去重）
-        self._search_dirs = self._build_search_dirs()
-
-    # -------------- 公共 API --------------
-
-    def get_app_meta(self) -> Dict:
-        """
-        返回应用元信息。
-        """
-        return dict(self._meta)
-
-    def get_app_name(self) -> str:
-        """
-        返回应用名（manifest/display_name/name → .app 名 → exe/项目名）。
-        """
-        return self._app_name
-
-    def get_project_root(self) -> Path:
-        """
-        开发态返回源码根；打包态返回运行基目录。
-        """
-        if not self._is_frozen():
-            return self._detect_project_root(default=self._base_dir)
-        return self._base_dir
-
-    def get_user_data_dir(self, create: bool = True) -> Path:
-        """
-        用户数据（可写）目录。
-        """
-        home = Path.home()
-        if sys.platform == "win32":
-            p = home / "AppData" / "Local" / self._app_name
-        elif sys.platform == "darwin":
-            p = home / "Library" / "Application Support" / self._app_name
-        else:
-            p = home / ".local" / "share" / self._app_name
-        if create:
-            p.mkdir(parents=True, exist_ok=True)
-        return p.resolve()
-
-    def get_user_cache_dir(self, create: bool = True) -> Path:
-        p = self.get_user_data_dir(create=False) / "cache"
-        if create:
-            p.mkdir(parents=True, exist_ok=True)
-        return p.resolve()
-
-    def find_file(self, relpath: PathLike) -> Optional[Path]:
-        """
-        按相对路径查文件。
-        """
-        return self._find(relpath, want_dir=False)
-
-    def find_directory(self, relpath: PathLike) -> Optional[Path]:
-        """
-        按相对路径查目录。
-        """
-        return self._find(relpath, want_dir=True)
-
-    # 常用别名
-    def find_models_dir(self) -> Optional[Path]:
-        return self.find_directory("models")
-
-    def find_assets_dir(self) -> Optional[Path]:
-        return self.find_directory("assets")
-
-    def find_config_dir(self) -> Optional[Path]:
-        return self.find_directory("config")
-
-    def find_libs_root(self) -> Optional[Path]:
-        return self.find_directory("libs")
-
-    # 在某个根（如 libs/models）之下继续拼接子路径查找（文件/目录）
-    def find_under(
-        self, root: str, *subparts: PathLike, want_dir: bool = True
-    ) -> Optional[Path]:
-        parts: List[str] = []
-        for s in subparts:
-            if s is None:
-                continue
-            parts.extend(Path(str(s)).parts)  # 兼容 "a/b" 合并字符串
-        rel = Path(root, *parts)
-        return self._find(rel, want_dir=want_dir)
-
-    # -------------- 兼容老签名的便捷函数 --------------
-
-    def find_libs_dir_compat(
-        self, *parts: PathLike, system: str = None, arch: str = None
-    ) -> Optional[Path]:
-        """查找 libs 或其子目录。
-
-        - 无参：返回 libs 根目录
-        - 位置参数：find_libs_dir_compat('libopus', 'Darwin', 'arm64')
-        - 关键字：find_libs_dir_compat(system='Darwin', arch='arm64')
-        - 兼容旧写法：find_libs_dir_compat(f'libopus/{system_dir}', arch_name)
-        """
-        segs: List[PathLike] = []
-        segs.extend(parts)
-        if system:
-            segs.append(system)
-        if arch:
-            segs.append(arch)
-        if not segs:
-            return self.find_under("libs", want_dir=True)
-        return self.find_under("libs", *segs, want_dir=True)
-
-    # -------------- 内部实现 --------------
-
-    def _is_frozen(self) -> bool:
-        return getattr(sys, "frozen", False)
-
-    def _runtime_base_dir(self) -> Path:
-        """
-        统一运行基目录：优先 _MEIPASS，其次 exe_dir；开发态则回到项目根。
-        """
-        if self._is_frozen():
-            return Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent)).resolve()
-        # 假设本文件位于 project/src/utils/resource_finder.py → parents[3] 是 project/
-        return self._detect_project_root(default=Path(__file__).resolve().parents[2])
-
-    def _detect_project_root(self, default: Path) -> Path:
-        """
-        向上查找带标志文件/目录的路径，尽量定位到 project/。
-        """
-        markers = {"assets", "models", "pyproject.toml", "requirements.txt", ".git"}
-        p = default
-        for parent in [p] + list(p.parents):
-            try:
-                entries = {e.name for e in parent.iterdir()}
-            except Exception:
-                continue
-            if markers & entries:
-                return parent.resolve()
-        return default.resolve()
-
-    def _load_app_meta(self, base: Path) -> Dict:
-        """
-        读取 manifest（unifypy.json/app.json/package.json）与 macOS Info.plist。环境变量可覆盖。
-        """
-        meta: Dict = {}
-
-        # 环境变量可直接注入/覆盖
-        for k in ("APP_NAME",):
-            if os.getenv(k):
-                meta["name"] = os.getenv(k)
-
-        # 1) manifest（在 base 与 base.parent 中各找一层）
-        candidates: List[Path] = []
-        for name in _MANIFEST_CANDIDATES:
-            candidates.append(base / name)
-            candidates.append(base.parent / name)
-
-        for c in candidates:
-            try:
-                if c.is_file():
-                    meta.update(json.loads(c.read_text(encoding="utf-8")))
-                    meta["_manifest_path"] = str(c)
-                    break
-            except Exception:
-                pass
-
-        # 2) macOS Info.plist（若存在 .app）
-        if sys.platform == "darwin":
-            app_root = self._locate_app_bundle_root()
-            if app_root:
-                plist = app_root / "Contents" / "Info.plist"
-                if plist.is_file():
-                    try:
-                        with plist.open("rb") as f:
-                            info = plistlib.load(f)
-                        meta.setdefault(
-                            "display_name",
-                            info.get("CFBundleDisplayName") or info.get("CFBundleName"),
-                        )
-                        meta.setdefault("name", info.get("CFBundleName"))
-                        meta.setdefault(
-                            "version",
-                            info.get("CFBundleShortVersionString")
-                            or info.get("CFBundleVersion"),
-                        )
-                        meta["_plist_path"] = str(plist)
-                    except Exception:
-                        pass
-
-        return meta
-
-    def _locate_app_bundle_root(self) -> Optional[Path]:
-        exe = Path(sys.executable).resolve()
-        for p in [exe] + list(exe.parents):
-            if p.name.endswith(".app"):
-                return p
-        return None
-
-    def _derive_app_name(self, meta: Dict) -> str:
-        name = (meta.get("name") or meta.get("display_name") or "").strip()
-        if not name and sys.platform == "darwin":
-            app_root = self._locate_app_bundle_root()
-            if app_root:
-                name = app_root.stem
-        if not name:
-            name = (
-                Path(sys.executable).stem
-                if self._is_frozen()
-                else self._detect_project_root(self._base_dir).name
-            )
-        return name.strip()
-
-    def _canon_env_keys(self) -> List[str]:
-        """
-        根据应用名动态生成环境变量名（并兼容历史 XIAOZHI_*）。
-        """
-        canon = "".join(ch if ch.isalnum() else "_" for ch in self._app_name).upper()
-        keys = [f"{canon}_DATA_DIR", f"{canon}_HOME", f"{canon}_RESOURCES_DIR"]
-        # 历史兼容：如需完全移除旧名，删掉下一行即可
-        keys += ["XIAOZHI_DATA_DIR", "XIAOZHI_HOME", "XIAOZHI_RESOURCES_DIR"]
-        return keys
-
-    def _build_search_dirs(self) -> List[Path]:
-        dirs: List[Path] = []
-
-        # 0) 环境变量（最高优先级）
-        for key in self._canon_env_keys():
-            v = os.getenv(key)
-            if v:
-                p = Path(v).resolve()
-                if p.exists():
-                    dirs.append(p)
-
-        # 1) 运行基目录（_MEIPASS / exe_dir / project_root）
-        dirs.append(self._base_dir)
-
-        # 2) PyInstaller onedir v6: 可执行旁的 _internal
-        try:
-            exe_dir = Path(sys.executable).parent.resolve()
-            internal = exe_dir / "_internal"
-            if self._is_frozen() and internal.exists():
-                dirs.append(internal)
-        except Exception:
-            pass
-
-        # 3) 系统常见安装位置
-        name = self._app_name
-        if sys.platform == "darwin":
-            candidates = [
-                Path("/Library") / "Application Support" / name,
-                Path("/usr/local/share") / name,
-                Path("/opt") / name,
-            ]
-            app_root = self._locate_app_bundle_root()
-            if app_root:
-                res = app_root / "Contents" / "Resources"
-                if res.exists():
-                    candidates.insert(0, res)
-            dirs += [c for c in candidates if c.exists()]
-        elif sys.platform.startswith("linux"):
-            dirs += [
-                p
-                for p in [
-                    Path("/usr/share") / name,
-                    Path("/usr/local/share") / name,
-                    Path("/opt") / name,
-                ]
-                if p.exists()
-            ]
-        else:  # Windows
-            dirs += [p for p in [Path("C:/ProgramData") / name] if p.exists()]
-
-        # 4) 用户数据（可写/覆盖）
-        dirs.append(self.get_user_data_dir(create=True))
-
-        # 5) 最后兜底：cwd
-        try:
-            dirs.append(Path.cwd().resolve())
-        except Exception:
-            pass
-
-        # 去重（保持顺序）
-        out, seen = [], set()
-        for d in dirs:
-            d = d.resolve()
-            if d not in seen:
-                out.append(d)
-                seen.add(d)
-        return out
-
-    def _find(self, relpath: PathLike, want_dir: bool) -> Optional[Path]:
-        rp = Path(relpath)
-        if rp.is_absolute():
-            try:
-                ok = rp.is_dir() if want_dir else rp.is_file()
-            except OSError:
-                ok = False
-            return rp if ok else None
-
-        for base in self._search_dirs:
-            p = (base / rp).resolve()
-            try:
-                ok = p.is_dir() if want_dir else p.is_file()
-            except OSError:
-                ok = False
-            if ok:
-                return p
-        return None
+    if getattr(sys, "frozen", False):
+        return Path(sys._MEIPASS)
+    # src/utils/resource_finder.py → 往上 3 级
+    return Path(__file__).resolve().parent.parent.parent
 
 
-# --------- 单例与便捷函数（含兼容） ---------
-resource_finder = ResourceFinder()
-
-
-def get_app_meta() -> Dict:
-    return resource_finder.get_app_meta()
-
-
+@lru_cache(maxsize=1)
 def get_app_name() -> str:
-    return resource_finder.get_app_name()
+    """
+    获取应用名称（自动推断）
+
+    - 开发时：项目根目录名
+    - 打包后：可执行文件名 / .app bundle 名
+    """
+    if getattr(sys, "frozen", False):
+        # macOS: 从 .app bundle 名获取
+        if sys.platform == "darwin":
+            exe = Path(sys.executable).resolve()
+            for p in [exe] + list(exe.parents):
+                if p.suffix == ".app":
+                    return p.stem
+        # Windows/Linux: 从可执行文件名获取
+        return Path(sys.executable).stem
+
+    # 开发时：从项目根目录名获取
+    return get_app_root().name
 
 
-def get_project_root() -> Path:
-    return resource_finder.get_project_root()
+@lru_cache(maxsize=1)
+def get_user_data_dir() -> Path:
+    """
+    用户数据目录（可写，存配置/数据库等）
+
+    - Windows: C:/Users/xxx/AppData/Local/{app_name}
+    - macOS:   ~/Library/Application Support/{app_name}
+    - Linux:   ~/.local/share/{app_name}
+    """
+    app_name = get_app_name()
+    home = Path.home()
+
+    if sys.platform == "win32":
+        p = home / "AppData" / "Local" / app_name
+    elif sys.platform == "darwin":
+        p = home / "Library" / "Application Support" / app_name
+    else:
+        p = home / ".local" / "share" / app_name
+
+    p.mkdir(parents=True, exist_ok=True)
+    return p
 
 
-def get_user_data_dir(create: bool = True) -> Path:
-    return resource_finder.get_user_data_dir(create)
+def get_user_cache_dir() -> Path:
+    """用户缓存目录"""
+    p = get_user_data_dir() / "cache"
+    p.mkdir(parents=True, exist_ok=True)
+    return p
 
 
-def get_user_cache_dir(create: bool = True) -> Path:
-    return resource_finder.get_user_cache_dir(create)
+@lru_cache(maxsize=1)
+def get_platform_info() -> tuple[str, str]:
+    """
+    获取平台和架构信息
+
+    Returns:
+        (platform_dir, arch_dir) 如 ("mac", "arm64")
+    """
+    machine = plat.machine().lower()
+    is_arm = "arm" in machine or "aarch64" in machine
+
+    if sys.platform == "win32":
+        return "win", "x64"
+    elif sys.platform == "darwin":
+        return "mac", "arm64" if is_arm else "x64"
+    else:
+        return "linux", "arm64" if is_arm else "x64"
 
 
-def find_file(p: PathLike) -> Optional[Path]:
-    return resource_finder.find_file(p)
+def get_lib_path(lib_name: str) -> Optional[Path]:
+    """
+    获取动态库路径
+
+    Args:
+        lib_name: 库名，如 "libopus", "webrtc_apm"
+
+    Returns:
+        库文件的完整路径，找不到返回 None
+    """
+    plat_dir, arch = get_platform_info()
+    root = get_app_root() / "libs" / lib_name
+
+    # 平台目录别名（mac/macos, win/windows）
+    plat_aliases = {
+        "mac": ["mac", "macos"],
+        "win": ["win", "windows"],
+        "linux": ["linux"],
+    }
+
+    # 扩展名
+    ext_map = {"mac": ".dylib", "win": ".dll", "linux": ".so"}
+    ext = ext_map.get(plat_dir, ".so")
+
+    # 尝试所有可能的平台目录名
+    for plat_name in plat_aliases.get(plat_dir, [plat_dir]):
+        lib_dir = root / plat_name / arch
+        if not lib_dir.exists():
+            continue
+
+        for f in lib_dir.iterdir():
+            if f.is_file() and (f.suffix == ext or ext in f.name):
+                return f
+
+    return None
 
 
-def find_directory(p: PathLike) -> Optional[Path]:
-    return resource_finder.find_directory(p)
+def get_lib_dir(lib_name: str) -> Optional[Path]:
+    """获取动态库所在目录"""
+    lib_path = get_lib_path(lib_name)
+    return lib_path.parent if lib_path else None
 
 
-def find_models_dir() -> Optional[Path]:
-    return resource_finder.find_models_dir()
+def get_models_dir() -> Path:
+    """模型目录"""
+    return get_app_root() / "models"
 
 
-def find_assets_dir() -> Optional[Path]:
-    return resource_finder.find_assets_dir()
+def get_assets_dir() -> Path:
+    """资源目录"""
+    return get_app_root() / "assets"
 
 
-def find_config_dir() -> Optional[Path]:
-    return resource_finder.find_config_dir()
-
-
-# 兼容老签名：find_libs_dir(f"libopus/{system_dir}", arch_name) / find_libs_dir(system='Darwin', arch='arm64')
-def find_libs_dir(
-    *parts: PathLike, system: str = None, arch: str = None
-) -> Optional[Path]:
-    return resource_finder.find_libs_dir_compat(*parts, system=system, arch=arch)
-
-
-# 可选：更细粒度查找
-def find_models_subdir(*parts: PathLike) -> Optional[Path]:
-    return resource_finder.find_under("models", *parts, want_dir=True)
-
-
-def find_assets_subpath(*parts: PathLike) -> Optional[Path]:
-    return resource_finder.find_under("assets", *parts, want_dir=False)
+def get_config_dir() -> Path:
+    """配置目录（应用内置）"""
+    return get_app_root() / "config"

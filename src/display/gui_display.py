@@ -17,7 +17,7 @@ from PyQt5.QtWidgets import QApplication, QVBoxLayout, QWidget
 
 from src.display.base_display import BaseDisplay
 from src.display.gui_display_model import GuiDisplayModel
-from src.utils.resource_finder import find_assets_dir
+from src.utils.resource_finder import get_assets_dir
 
 
 # 创建兼容的元类
@@ -498,17 +498,14 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         if emotion_name in self._emotion_cache:
             return self._emotion_cache[emotion_name]
 
-        assets_dir = find_assets_dir()
-        if not assets_dir:
-            path = "😊"
-        else:
-            emotion_dir = assets_dir / "emojis"
-            # 尝试查找表情文件，失败则回退到 neutral
-            path = (
-                str(self._find_emotion_file(emotion_dir, emotion_name))
-                or str(self._find_emotion_file(emotion_dir, "neutral"))
-                or "😊"
-            )
+        assets_dir = get_assets_dir()
+        emotion_dir = assets_dir / "emojis"
+        # 尝试查找表情文件，失败则回退到 neutral
+        path = (
+            str(self._find_emotion_file(emotion_dir, emotion_name))
+            or str(self._find_emotion_file(emotion_dir, "neutral"))
+            or "😊"
+        )
 
         self._emotion_cache[emotion_name] = path
         return path
