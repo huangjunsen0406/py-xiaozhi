@@ -289,7 +289,6 @@ class Application:
         #     self._shutdown_event.set()
 
     def _on_incoming_audio(self, data: bytes):
-        logger.debug(f"收到二进制消息，长度: {len(data)}")
         # 转发给插件
         self.spawn(self.plugins.notify_incoming_audio(data), "plugin:on_audio")
 

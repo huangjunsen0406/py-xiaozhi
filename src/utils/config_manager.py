@@ -283,41 +283,6 @@ class ConfigManager:
             else:
                 logger.error("保存新的客户端ID失败")
 
-    def initialize_device_id_from_fingerprint(self, device_fingerprint):
-        """
-        从设备指纹初始化设备ID.
-        """
-        if not self.get_config("SYSTEM_OPTIONS.DEVICE_ID"):
-            try:
-                # 从efuse.json获取MAC地址作为DEVICE_ID
-                mac_address = device_fingerprint.get_mac_address_from_efuse()
-                if mac_address:
-                    success = self.update_config(
-                        "SYSTEM_OPTIONS.DEVICE_ID", mac_address
-                    )
-                    if success:
-                        logger.info(f"从efuse.json获取DEVICE_ID: {mac_address}")
-                    else:
-                        logger.error("保存DEVICE_ID失败")
-                else:
-                    logger.error("无法从efuse.json获取MAC地址")
-                    # 备用方案：从设备指纹直接获取
-                    fingerprint = device_fingerprint.generate_fingerprint()
-                    mac_from_fingerprint = fingerprint.get("mac_address")
-                    if mac_from_fingerprint:
-                        success = self.update_config(
-                            "SYSTEM_OPTIONS.DEVICE_ID", mac_from_fingerprint
-                        )
-                        if success:
-                            logger.info(
-                                f"使用指纹中的MAC地址作为DEVICE_ID: "
-                                f"{mac_from_fingerprint}"
-                            )
-                        else:
-                            logger.error("保存备用DEVICE_ID失败")
-            except Exception as e:
-                logger.error(f"初始化DEVICE_ID时出错: {e}")
-
     @classmethod
     def get_instance(cls):
         """

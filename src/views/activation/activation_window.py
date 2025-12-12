@@ -11,8 +11,7 @@ from PyQt5.QtGui import QPainterPath, QRegion
 from PyQt5.QtQuickWidgets import QQuickWidget
 from PyQt5.QtWidgets import QApplication, QVBoxLayout, QWidget
 
-from src.core.system_initializer import SystemInitializer
-from src.utils.device_activator import DeviceActivator
+from src.activation import ActivationService
 from src.logging import get_logger
 
 from ..base.async_mixins import AsyncMixin, AsyncSignalEmitter
@@ -33,7 +32,7 @@ class ActivationWindow(BaseWindow, AsyncMixin):
 
     def __init__(
         self,
-        system_initializer: Optional[SystemInitializer] = None,
+        activation_service: Optional[ActivationService] = None,
         parent: Optional = None,
     ):
         # QML相关 - 必须在super().__init__之前创建
@@ -42,9 +41,8 @@ class ActivationWindow(BaseWindow, AsyncMixin):
 
         super().__init__(parent)
 
-        # 组件实例
-        self.system_initializer = system_initializer
-        self.device_activator: Optional[DeviceActivator] = None
+        # 使用统一的激活服务
+        self.activation_service = activation_service
 
         # 状态管理
         self.current_stage = None
@@ -240,8 +238,8 @@ class ActivationWindow(BaseWindow, AsyncMixin):
             self.initialization_started = True
             self.stop_update_timer()  # 停止定时器
 
-            # 只有在有系统初始化器时才启动初始化
-            if self.system_initializer is not None:
+            # 只有在有激活服务时才启动初始化
+            if self.activation_service is not None:
                 # 现在事件循环应该正在运行，可以创建异步任务
                 try:
                     self.create_task(self._start_initialization(), "initialization")
@@ -250,29 +248,29 @@ class ActivationWindow(BaseWindow, AsyncMixin):
                     # 如果还是失败，再试一次
                     self.start_update_timer(500)
             else:
-                self.logger.info("无系统初始化器，跳过自动初始化")
+                self.logger.info("无激活服务，跳过自动初始化")
 
     async def _start_initialization(self):
         """
         开始系统初始化流程.
         """
         try:
-            # 如果已经提供了SystemInitializer实例，直接使用
-            if self.system_initializer:
+            # 如果已经提供了ActivationService实例，直接使用
+            if self.activation_service:
                 self._update_device_info()
                 await self._start_activation_process()
             else:
                 # 否则创建新的实例并运行初始化
-                self.system_initializer = SystemInitializer()
+                self.activation_service = await ActivationService.get_instance()
 
                 # 运行初始化流程
-                init_result = await self.system_initializer.run_initialization()
+                init_result = await self.activation_service.initialize()
 
                 if init_result.get("success", False):
                     self._update_device_info()
 
                     # 显示状态消息
-                    self.status_message = init_result.get("status_message", "")
+                    self.status_message = init_result.get("message", "")
                     if self.status_message:
                         self.signal_emitter.emit_status(self.status_message)
 
@@ -295,24 +293,19 @@ class ActivationWindow(BaseWindow, AsyncMixin):
         """
         更新设备信息显示.
         """
-        if (
-            not self.system_initializer
-            or not self.system_initializer.device_fingerprint
-        ):
+        if not self.activation_service:
             return
 
-        device_fp = self.system_initializer.device_fingerprint
-
         # 更新序列号
-        serial_number = device_fp.get_serial_number()
+        serial_number = self.activation_service.get_serial_number()
         self.activation_model.serialNumber = serial_number if serial_number else "--"
 
         # 更新MAC地址
-        mac_address = device_fp.get_mac_address_from_efuse()
+        mac_address = self.activation_service.get_mac_address()
         self.activation_model.macAddress = mac_address if mac_address else "--"
 
         # 获取激活状态
-        activation_status = self.system_initializer.get_activation_status()
+        activation_status = self.activation_service.get_activation_status()
         local_activated = activation_status.get("local_activated", False)
         server_activated = activation_status.get("server_activated", False)
         status_consistent = activation_status.get("status_consistent", True)
@@ -339,7 +332,7 @@ class ActivationWindow(BaseWindow, AsyncMixin):
         """
         try:
             # 获取激活数据
-            activation_data = self.system_initializer.get_activation_data()
+            activation_data = self.activation_service.get_activation_data()
 
             if not activation_data:
                 self.signal_emitter.emit_error("未获取到激活数据，请检查网络连接")
@@ -350,15 +343,9 @@ class ActivationWindow(BaseWindow, AsyncMixin):
             # 显示激活信息
             self._show_activation_info(activation_data)
 
-            # 初始化设备激活器
-            config_manager = self.system_initializer.get_config_manager()
-            self.device_activator = DeviceActivator(config_manager)
-
             # 开始激活流程
             self.signal_emitter.emit_status("开始设备激活流程...")
-            activation_success = await self.device_activator.process_activation(
-                activation_data
-            )
+            activation_success = await self.activation_service.activate(activation_data)
 
             # 检查是否是因为窗口关闭而取消
             if self.is_shutdown_requested():
@@ -481,17 +468,10 @@ class ActivationWindow(BaseWindow, AsyncMixin):
         """
         获取激活结果.
         """
-        device_fingerprint = None
-        config_manager = None
-
-        if self.system_initializer:
-            device_fingerprint = self.system_initializer.device_fingerprint
-            config_manager = self.system_initializer.config_manager
-
         return {
             "is_activated": self.is_activated,
-            "device_fingerprint": device_fingerprint,
-            "config_manager": config_manager,
+            "activation_service": self.activation_service,
+            "config_manager": self.activation_service.get_config_manager() if self.activation_service else None,
         }
 
     async def shutdown_async(self):
@@ -501,8 +481,8 @@ class ActivationWindow(BaseWindow, AsyncMixin):
         self.logger.info("正在关闭激活窗口...")
 
         # 取消激活流程（如果正在进行）
-        if self.device_activator:
-            self.device_activator.cancel_activation()
+        if self.activation_service:
+            self.activation_service.cancel_activation()
             self.logger.info("已发送激活取消信号")
 
         # 先清理异步任务

@@ -147,7 +147,7 @@ def setup_logging(
             root_logger.removeHandler(handler)
 
     # 创建过滤器
-    filters = [ContextFilter()]
+    filters = [ContextFilter(), DuplicateFilter(suppress_seconds=3.0)]
     if config.enable_sensitive_filter:
         filters.append(SensitiveDataFilter(patterns=config.sensitive_patterns))
 

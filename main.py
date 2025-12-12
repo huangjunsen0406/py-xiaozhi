@@ -3,8 +3,11 @@ import asyncio
 import signal
 import sys
 
+from src.logging import setup_logging
+setup_logging()
+
 from src.application import Application
-from src.logging import get_logger, setup_logging
+from src.logging import get_logger
 
 logger = get_logger()
 
@@ -44,19 +47,67 @@ async def handle_activation(mode: str) -> bool:
         bool: 激活是否成功
     """
     try:
-        from src.core.system_initializer import SystemInitializer
+        from src.activation import ActivationService
 
         logger.info("开始设备激活流程检查...")
 
-        system_initializer = SystemInitializer()
-        # 统一使用 SystemInitializer 内的激活处理，GUI/CLI 自适应
-        result = await system_initializer.handle_activation_process(mode=mode)
-        success = bool(result.get("is_activated", False))
-        logger.info(f"激活流程完成，结果: {success}")
-        return success
+        # 获取激活服务实例
+        activation_service = await ActivationService.get_instance()
+
+        # 运行初始化
+        init_result = await activation_service.initialize()
+
+        if not init_result.get("success", False):
+            logger.error(f"初始化失败: {init_result.get('error', '未知错误')}")
+            return False
+
+        # 检查是否需要激活
+        if not init_result.get("need_activation_ui", False):
+            logger.info("设备已激活，无需激活流程")
+            return True
+
+        # 需要激活，根据模式启动激活界面
+        if mode == "gui":
+            return await _run_gui_activation(activation_service)
+        else:
+            return await _run_cli_activation(activation_service)
+
     except Exception as e:
         logger.error(f"激活流程异常: {e}", exc_info=True)
         return False
+
+
+async def _run_gui_activation(activation_service) -> bool:
+    """运行GUI激活流程."""
+    import asyncio
+    from src.views.activation.activation_window import ActivationWindow
+
+    activation_window = ActivationWindow(activation_service)
+    activation_future = asyncio.Future()
+
+    def on_activation_completed(success: bool):
+        if not activation_future.done():
+            activation_future.set_result(success)
+
+    def on_window_closed():
+        if not activation_future.done():
+            activation_future.set_result(False)
+
+    activation_window.activation_completed.connect(on_activation_completed)
+    activation_window.window_closed.connect(on_window_closed)
+    activation_window.show()
+
+    result = await activation_future
+    activation_window.close()
+    return result
+
+
+async def _run_cli_activation(activation_service) -> bool:
+    """运行CLI激活流程."""
+    from src.views.activation.cli_activation import CLIActivation
+
+    cli_activation = CLIActivation(activation_service)
+    return await cli_activation.run_activation_process()
 
 
 async def start_app(mode: str, protocol: str, skip_activation: bool) -> int:
@@ -83,7 +134,6 @@ if __name__ == "__main__":
     exit_code = 1
     try:
         args = parse_args()
-        setup_logging()
 
         # 检测Wayland环境并设置Qt平台插件配置
         import os

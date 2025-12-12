@@ -107,6 +107,10 @@ class CliDisplay(BaseDisplay):
         启动异步CLI显示.
         """
         self._loop = asyncio.get_running_loop()
+
+        # 再次清理所有 StreamHandler，确保在 start 时所有 logger 都已创建
+        self._remove_all_stream_handlers()
+
         await self._init_screen()
 
         # 启动命令处理任务
@@ -117,6 +121,25 @@ class CliDisplay(BaseDisplay):
             await asyncio.gather(command_task, input_task)
         except KeyboardInterrupt:
             await self.close()
+
+    def _remove_all_stream_handlers(self) -> None:
+        """移除所有 logger 的 stdout/stderr StreamHandler."""
+        def remove_stream_handlers(logger: logging.Logger) -> None:
+            for h in list(logger.handlers):
+                if isinstance(h, logging.StreamHandler) and getattr(h, "stream", None) in (
+                    sys.stdout,
+                    sys.stderr,
+                ):
+                    logger.removeHandler(h)
+
+        # 移除根 logger 的 StreamHandler
+        root = logging.getLogger()
+        remove_stream_handlers(root)
+
+        # 遍历所有已注册的 logger，移除它们的 StreamHandler
+        for name in list(logging.Logger.manager.loggerDict.keys()):
+            logger = logging.getLogger(name)
+            remove_stream_handlers(logger)
 
     async def _command_processor(self):
         """
@@ -177,24 +200,19 @@ class CliDisplay(BaseDisplay):
                 except Exception:
                     pass
 
-        root = logging.getLogger()
-        # 移除直接写 stdout/stderr 的处理器，避免覆盖渲染
-        for h in list(root.handlers):
-            if isinstance(h, logging.StreamHandler) and getattr(h, "stream", None) in (
-                sys.stdout,
-                sys.stderr,
-            ):
-                root.removeHandler(h)
+        # 移除所有 stdout/stderr StreamHandler
+        self._remove_all_stream_handlers()
 
+        # 添加自定义的日志处理器，将日志显示在 CLI 界面中
         handler = _DisplayLogHandler(self)
-        handler.setLevel(logging.WARNING)
+        handler.setLevel(logging.INFO)
         handler.setFormatter(
             logging.Formatter(
-                fmt="%(asctime)s [%(name)s] - %(levelname)s - %(message)s",
-                datefmt="%Y-%m-%d %H:%M:%S",
+                fmt="%(asctime)s [%(levelname)s] %(message)s",
+                datefmt="%H:%M:%S",
             )
         )
-        root.addHandler(handler)
+        logging.getLogger().addHandler(handler)
 
     async def _handle_command(self, cmd: str):
         """
@@ -219,7 +237,35 @@ class CliDisplay(BaseDisplay):
         关闭CLI显示.
         """
         self.running = False
-        print("\n正在关闭应用...\n")
+
+        # 关闭前恢复标准日志输出
+        self._restore_logging()
+
+        # 清屏并显示退出消息
+        if self._use_ansi:
+            sys.stdout.write("\x1b[2J\x1b[H")  # 清屏
+            sys.stdout.flush()
+
+        print("正在关闭应用...\n")
+
+    def _restore_logging(self):
+        """恢复标准日志输出."""
+        import logging
+
+        root = logging.getLogger()
+
+        # 移除我们添加的 DisplayLogHandler
+        for h in list(root.handlers):
+            if h.__class__.__name__ == "_DisplayLogHandler":
+                root.removeHandler(h)
+
+        # 添加一个简单的 StreamHandler 用于退出时的日志
+        handler = logging.StreamHandler(sys.stderr)
+        handler.setLevel(logging.WARNING)
+        handler.setFormatter(
+            logging.Formatter("%(levelname)s - %(message)s")
+        )
+        root.addHandler(handler)
 
     def _print_help(self):
         """

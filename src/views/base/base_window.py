@@ -117,8 +117,8 @@ class BaseWindow(QMainWindow):
         self._shutdown_event.set()
 
         # 如果是激活窗口，取消激活流程
-        if hasattr(self, "device_activator") and self.device_activator:
-            self.device_activator.cancel_activation()
+        if hasattr(self, "activation_service") and self.activation_service:
+            self.activation_service.cancel_activation()
             self.logger.info("已发送激活取消信号")
 
         # 发射关闭信号

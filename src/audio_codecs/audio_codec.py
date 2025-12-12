@@ -817,7 +817,9 @@ class AudioCodec:
         try:
             if stream.active:
                 stream.stop()
+                stream.abort()  # 强制终止，确保回调停止
             stream.close()
+            logger.debug(f"{name}流已关闭")
         except Exception as e:
             logger.warning(f"关闭{name}流失败: {e}")
 

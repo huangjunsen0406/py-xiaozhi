@@ -302,6 +302,7 @@ class WakeWordDetector:
         # 从AudioCodec移除监听器
         if self.audio_codec:
             self.audio_codec.remove_audio_listener(self)
+            self.audio_codec = None
 
         if self.detection_task:
             self.detection_task.cancel()
@@ -309,6 +310,7 @@ class WakeWordDetector:
                 await self.detection_task
             except asyncio.CancelledError:
                 pass
+            self.detection_task = None
 
         # 清空队列
         while not self._audio_queue.empty():
@@ -316,6 +318,17 @@ class WakeWordDetector:
                 self._audio_queue.get_nowait()
             except asyncio.QueueEmpty:
                 break
+
+        # 释放 sherpa-onnx 资源（避免 nanobind 泄漏警告）
+        try:
+            if self.stream is not None:
+                del self.stream
+                self.stream = None
+            if self.keyword_spotter is not None:
+                del self.keyword_spotter
+                self.keyword_spotter = None
+        except Exception as e:
+            logger.debug(f"释放 sherpa-onnx 资源时出错: {e}")
 
         logger.info("Sherpa-ONNX KeywordSpotter检测器已停止")
 
