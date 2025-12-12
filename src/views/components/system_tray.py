@@ -8,7 +8,7 @@ from PyQt5.QtCore import QObject, pyqtSignal
 from PyQt5.QtGui import QBrush, QColor, QIcon, QPainter, QPixmap
 from PyQt5.QtWidgets import QAction, QMenu, QSystemTrayIcon, QWidget
 
-from src.utils.logging_config import get_logger
+from src.logging import get_logger
 
 
 class SystemTray(QObject):
@@ -24,7 +24,7 @@ class SystemTray(QObject):
     def __init__(self, parent: Optional[QWidget] = None):
         super().__init__(parent)
 
-        self.logger = get_logger("SystemTray")
+        self.logger = get_logger()
         self.parent_widget = parent
 
         # 托盘相关组件

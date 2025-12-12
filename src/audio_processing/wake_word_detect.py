@@ -8,10 +8,10 @@ import sherpa_onnx
 
 from src.constants.constants import AudioConfig
 from src.utils.config_manager import ConfigManager
-from src.utils.logging_config import get_logger
+from src.logging import get_logger
 from src.utils.resource_finder import resource_finder
 
-logger = get_logger(__name__)
+logger = get_logger()
 
 
 class WakeWordDetector:

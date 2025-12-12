@@ -6,9 +6,9 @@ from typing import Optional
 import numpy as np
 
 from src.constants.constants import AudioConfig
-from src.utils.logging_config import get_logger
+from src.logging import get_logger
 
-logger = get_logger(__name__)
+logger = get_logger()
 
 
 class MusicDecoder:

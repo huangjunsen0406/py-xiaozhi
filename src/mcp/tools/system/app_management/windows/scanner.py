@@ -9,9 +9,9 @@ import platform
 import subprocess
 from typing import Dict, List, Optional
 
-from src.utils.logging_config import get_logger
+from src.logging import get_logger
 
-logger = get_logger(__name__)
+logger = get_logger()
 
 
 def scan_installed_applications() -> List[Dict[str, str]]:

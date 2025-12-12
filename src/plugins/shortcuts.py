@@ -6,9 +6,9 @@ from typing import Any, Dict, Optional, Set
 from src.constants.constants import AbortReason
 from src.plugins.base import Plugin
 from src.utils.config_manager import ConfigManager
-from src.utils.logging_config import get_logger
+from src.logging import get_logger
 
-logger = get_logger(__name__)
+logger = get_logger()
 
 
 @dataclass

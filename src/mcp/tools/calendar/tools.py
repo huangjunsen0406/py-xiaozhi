@@ -6,12 +6,12 @@ import json
 from datetime import datetime, timedelta
 from typing import Any, Dict
 
-from src.utils.logging_config import get_logger
+from src.logging import get_logger
 
 from .manager import get_calendar_manager
 from .models import CalendarEvent
 
-logger = get_logger(__name__)
+logger = get_logger()
 
 
 async def create_event(args: Dict[str, Any]) -> str:

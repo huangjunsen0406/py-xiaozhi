@@ -6,11 +6,11 @@
 import json
 from typing import Any, Dict
 
-from src.utils.logging_config import get_logger
+from src.logging import get_logger
 
 from .timer_service import get_timer_service
 
-logger = get_logger(__name__)
+logger = get_logger()
 
 
 async def start_countdown_timer(args: Dict[str, Any]) -> str:

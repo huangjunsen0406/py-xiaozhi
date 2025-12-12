@@ -8,9 +8,9 @@ from typing import Optional
 
 from src.core.system_initializer import SystemInitializer
 from src.utils.device_activator import DeviceActivator
-from src.utils.logging_config import get_logger
+from src.logging import get_logger
 
-logger = get_logger(__name__)
+logger = get_logger()
 
 
 class CLIActivation:

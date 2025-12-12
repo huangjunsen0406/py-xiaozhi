@@ -6,9 +6,9 @@ import aiohttp
 
 from src.utils.common_utils import handle_verification_code
 from src.utils.device_fingerprint import DeviceFingerprint
-from src.utils.logging_config import get_logger
+from src.logging import get_logger
 
-logger = get_logger(__name__)
+logger = get_logger()
 
 
 class DeviceActivator:
@@ -18,7 +18,7 @@ class DeviceActivator:
         """
         初始化设备激活器.
         """
-        self.logger = get_logger(__name__)
+        self.logger = get_logger()
         self.config_manager = config_manager
         # 使用device_fingerprint实例来管理设备身份
         self.device_fingerprint = DeviceFingerprint.get_instance()

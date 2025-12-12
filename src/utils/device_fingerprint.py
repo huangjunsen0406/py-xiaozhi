@@ -8,11 +8,11 @@ from typing import Dict, Optional, Tuple
 import machineid
 import psutil
 
-from src.utils.logging_config import get_logger
+from src.logging import get_logger
 from src.utils.resource_finder import find_config_dir
 
 # 获取日志记录器
-logger = get_logger(__name__)
+logger = get_logger()
 
 
 class DeviceFingerprint:

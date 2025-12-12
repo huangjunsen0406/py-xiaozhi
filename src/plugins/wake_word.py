@@ -2,9 +2,9 @@ from typing import Any
 
 from src.constants.constants import AbortReason
 from src.plugins.base import Plugin
-from src.utils.logging_config import get_logger
+from src.logging import get_logger
 
-logger = get_logger(__name__)
+logger = get_logger()
 
 
 class WakeWordPlugin(Plugin):

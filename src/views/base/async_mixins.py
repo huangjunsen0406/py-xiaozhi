@@ -7,9 +7,9 @@ import asyncio
 
 from PyQt5.QtCore import QObject, pyqtSignal
 
-from src.utils.logging_config import get_logger
+from src.logging import get_logger
 
-logger = get_logger(__name__)
+logger = get_logger()
 
 
 class AsyncMixin:
@@ -20,7 +20,7 @@ class AsyncMixin:
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._async_tasks = set()
-        self.logger = get_logger(self.__class__.__name__)
+        self.logger = get_logger()
 
     def run_async(self, coro, callback=None, error_callback=None):
         """
@@ -69,7 +69,7 @@ class AsyncSignalEmitter(QObject):
 
     def __init__(self):
         super().__init__()
-        self.logger = get_logger(self.__class__.__name__)
+        self.logger = get_logger()
 
     def emit_data(self, data):
         """

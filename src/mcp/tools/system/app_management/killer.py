@@ -8,11 +8,11 @@ import json
 import platform
 from typing import Any, Dict, List
 
-from src.utils.logging_config import get_logger
+from src.logging import get_logger
 
 from .utils import AppMatcher
 
-logger = get_logger(__name__)
+logger = get_logger()
 
 
 async def kill_application(args: Dict[str, Any]) -> bool:

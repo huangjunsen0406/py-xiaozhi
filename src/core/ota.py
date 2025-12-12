@@ -8,7 +8,7 @@ import aiohttp
 from src.constants.system import SystemConstants
 from src.utils.config_manager import ConfigManager
 from src.utils.device_fingerprint import DeviceFingerprint
-from src.utils.logging_config import get_logger
+from src.logging import get_logger
 
 
 class Ota:
@@ -16,7 +16,7 @@ class Ota:
     _lock = asyncio.Lock()
 
     def __init__(self):
-        self.logger = get_logger(__name__)
+        self.logger = get_logger()
         self.config = ConfigManager.get_instance()
         self.device_fingerprint = DeviceFingerprint.get_instance()
         self.mac_addr = None
@@ -154,12 +154,6 @@ class Ota:
 
                     # 解析JSON数据
                     response_data = await response.json()
-
-                    # 调试信息：打印完整的OTA响应
-                    self.logger.debug(
-                        f"OTA服务器返回数据: "
-                        f"{json.dumps(response_data, indent=4, ensure_ascii=False)}"
-                    )
 
                     return response_data
 

@@ -3,12 +3,12 @@ Camera tool for MCP.
 """
 
 from src.utils.config_manager import ConfigManager
-from src.utils.logging_config import get_logger
+from src.logging import get_logger
 
 from .normal_camera import NormalCamera
 from .vl_camera import VLCamera
 
-logger = get_logger(__name__)
+logger = get_logger()
 
 
 def get_camera_instance():

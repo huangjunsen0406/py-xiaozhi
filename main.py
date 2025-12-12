@@ -4,9 +4,9 @@ import signal
 import sys
 
 from src.application import Application
-from src.utils.logging_config import get_logger, setup_logging
+from src.logging import get_logger, setup_logging
 
-logger = get_logger(__name__)
+logger = get_logger()
 
 
 def parse_args():

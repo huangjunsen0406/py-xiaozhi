@@ -10,9 +10,9 @@ from typing import Optional
 from PyQt5.QtCore import QTimer, pyqtSignal
 from PyQt5.QtWidgets import QMainWindow, QWidget
 
-from src.utils.logging_config import get_logger
+from src.logging import get_logger
 
-logger = get_logger(__name__)
+logger = get_logger()
 
 
 class BaseWindow(QMainWindow):
@@ -26,7 +26,7 @@ class BaseWindow(QMainWindow):
 
     def __init__(self, parent: Optional[QWidget] = None):
         super().__init__(parent)
-        self.logger = get_logger(self.__class__.__name__)
+        self.logger = get_logger()
 
         # 异步任务管理
         self._tasks = set()

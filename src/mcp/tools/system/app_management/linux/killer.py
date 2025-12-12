@@ -6,9 +6,9 @@
 import subprocess
 from typing import Any, Dict, List
 
-from src.utils.logging_config import get_logger
+from src.logging import get_logger
 
-logger = get_logger(__name__)
+logger = get_logger()
 
 
 def list_running_applications(filter_name: str = "") -> List[Dict[str, Any]]:

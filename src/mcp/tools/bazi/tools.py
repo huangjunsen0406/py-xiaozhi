@@ -5,12 +5,12 @@
 import json
 from typing import Any, Dict
 
-from src.utils.logging_config import get_logger
+from src.logging import get_logger
 
 from .bazi_calculator import get_bazi_calculator
 from .engine import get_bazi_engine
 
-logger = get_logger(__name__)
+logger = get_logger()
 
 
 async def get_bazi_detail(args: Dict[str, Any]) -> str:

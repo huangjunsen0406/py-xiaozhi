@@ -13,13 +13,13 @@ from PyQt5.QtWidgets import QApplication, QVBoxLayout, QWidget
 
 from src.core.system_initializer import SystemInitializer
 from src.utils.device_activator import DeviceActivator
-from src.utils.logging_config import get_logger
+from src.logging import get_logger
 
 from ..base.async_mixins import AsyncMixin, AsyncSignalEmitter
 from ..base.base_window import BaseWindow
 from .activation_model import ActivationModel
 
-logger = get_logger(__name__)
+logger = get_logger()
 
 
 class ActivationWindow(BaseWindow, AsyncMixin):

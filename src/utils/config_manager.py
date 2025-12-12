@@ -2,10 +2,10 @@ import json
 import uuid
 from typing import Any, Dict
 
-from src.utils.logging_config import get_logger
+from src.logging import get_logger
 from src.utils.resource_finder import resource_finder
 
-logger = get_logger(__name__)
+logger = get_logger()
 
 
 class ConfigManager:
@@ -74,6 +74,26 @@ class ConfigManager:
             "output_sample_rate": None,
             "input_channels": None,
             "output_channels": None,
+        },
+        "LOGGING": {
+            "LEVEL": "INFO",  # DEBUG, INFO, WARNING, ERROR, CRITICAL
+            "FORMAT_TYPE": "colored",  # colored, json, simple
+            "ENABLE_CONSOLE": True,
+            "ENABLE_FILE": True,
+            "ENABLE_ERROR_FILE": True,
+            "ENABLE_JSON_FILE": False,
+            "ENABLE_ASYNC": False,
+            "ENABLE_SENSITIVE_FILTER": True,
+            "MAX_BYTES": 10485760,  # 10MB
+            "BACKUP_COUNT": 30,
+            "ROTATION_WHEN": "midnight",  # midnight, H, D
+            "THIRD_PARTY_LEVELS": {
+                "urllib3": "WARNING",
+                "websockets": "WARNING",
+                "asyncio": "WARNING",
+                "paho": "WARNING",
+                "PIL": "WARNING",
+            },
         },
     }
 

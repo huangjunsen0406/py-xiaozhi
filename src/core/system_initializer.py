@@ -12,9 +12,9 @@ from src.constants.system import InitializationStage
 from src.core.ota import Ota
 from src.utils.config_manager import ConfigManager
 from src.utils.device_fingerprint import DeviceFingerprint
-from src.utils.logging_config import get_logger
+from src.logging import get_logger
 
-logger = get_logger(__name__)
+logger = get_logger()
 
 
 class SystemInitializer:

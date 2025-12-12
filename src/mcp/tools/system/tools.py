@@ -6,9 +6,9 @@
 import asyncio
 from typing import Any, Dict
 
-from src.utils.logging_config import get_logger
+from src.logging import get_logger
 
-logger = get_logger(__name__)
+logger = get_logger()
 
 
 async def set_volume(args: Dict[str, Any]) -> bool:

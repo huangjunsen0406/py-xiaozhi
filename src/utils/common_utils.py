@@ -9,9 +9,9 @@ import time
 import webbrowser
 from typing import Optional
 
-from src.utils.logging_config import get_logger
+from src.logging import get_logger
 
-logger = get_logger(__name__)
+logger = get_logger()
 
 # 全局音频播放队列和锁
 _audio_queue = queue.Queue()

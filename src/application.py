@@ -23,10 +23,10 @@ from src.plugins.wake_word import WakeWordPlugin
 from src.protocols.mqtt_protocol import MqttProtocol
 from src.protocols.websocket_protocol import WebsocketProtocol
 from src.utils.config_manager import ConfigManager
-from src.utils.logging_config import get_logger
+from src.logging import get_logger
 from src.utils.opus_loader import setup_opus
 
-logger = get_logger(__name__)
+logger = get_logger()
 setup_opus()
 
 

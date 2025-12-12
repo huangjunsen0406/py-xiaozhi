@@ -9,9 +9,9 @@ from pathlib import Path
 from typing import List, Tuple, Union, cast
 
 # 获取日志记录器
-from src.utils.logging_config import get_logger
+from src.logging import get_logger
 
-logger = get_logger(__name__)
+logger = get_logger()
 
 
 # 平台常量定义

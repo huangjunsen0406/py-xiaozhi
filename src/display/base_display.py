@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Callable, Optional
 
-from src.utils.logging_config import get_logger
+from src.logging import get_logger
 
 
 class BaseDisplay(ABC):
@@ -10,7 +10,7 @@ class BaseDisplay(ABC):
     """
 
     def __init__(self):
-        self.logger = get_logger(self.__class__.__name__)
+        self.logger = get_logger()
 
     @abstractmethod
     async def set_callbacks(

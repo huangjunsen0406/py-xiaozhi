@@ -5,12 +5,12 @@
 import json
 from typing import Any, Dict, List
 
-from src.utils.logging_config import get_logger
+from src.logging import get_logger
 
 from .bazi_calculator import get_bazi_calculator
 from .marriage_analyzer import get_marriage_analyzer
 
-logger = get_logger(__name__)
+logger = get_logger()
 
 
 async def analyze_marriage_timing(args: Dict[str, Any]) -> str:

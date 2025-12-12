@@ -2,9 +2,9 @@ from typing import Any, Optional
 
 from src.mcp.mcp_server import McpServer
 from src.plugins.base import Plugin
-from src.utils.logging_config import get_logger
+from src.logging import get_logger
 
-logger = get_logger(__name__)
+logger = get_logger()
 
 
 class McpPlugin(Plugin):

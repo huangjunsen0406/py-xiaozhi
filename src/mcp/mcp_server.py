@@ -10,9 +10,9 @@ from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 from src.constants.system import SystemConstants
-from src.utils.logging_config import get_logger
+from src.logging import get_logger
 
-logger = get_logger(__name__)
+logger = get_logger()
 
 # 返回值类型
 ReturnValue = Union[bool, int, str]

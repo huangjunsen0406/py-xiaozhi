@@ -3,9 +3,9 @@ import json
 from typing import Any, Dict, Optional, Tuple
 
 from src.iot.thing import Thing
-from src.utils.logging_config import get_logger
+from src.logging import get_logger
 
-logger = get_logger(__name__)
+logger = get_logger()
 
 
 class ThingManager:

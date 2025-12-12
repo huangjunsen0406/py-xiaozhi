@@ -11,10 +11,10 @@ from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from src.constants.constants import AudioConfig
 from src.protocols.protocol import Protocol
 from src.utils.config_manager import ConfigManager
-from src.utils.logging_config import get_logger
+from src.logging import get_logger
 
 # 配置日志
-logger = get_logger(__name__)
+logger = get_logger()
 
 
 class MqttProtocol(Protocol):

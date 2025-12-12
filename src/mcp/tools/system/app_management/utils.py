@@ -8,9 +8,9 @@ import re
 import time
 from typing import Any, Dict, List, Optional
 
-from src.utils.logging_config import get_logger
+from src.logging import get_logger
 
-logger = get_logger(__name__)
+logger = get_logger()
 
 # 全局应用缓存
 _cached_applications: Optional[List[Dict[str, Any]]] = None

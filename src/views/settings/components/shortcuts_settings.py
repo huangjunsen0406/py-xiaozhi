@@ -11,9 +11,9 @@ from PyQt5.QtWidgets import (
 )
 
 from src.utils.config_manager import ConfigManager
-from src.utils.logging_config import get_logger
+from src.logging import get_logger
 
-logger = get_logger(__name__)
+logger = get_logger()
 
 
 class ShortcutsSettingsWidget(QWidget):

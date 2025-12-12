@@ -4,7 +4,7 @@ from PyQt5.QtCore import pyqtSignal
 from PyQt5.QtWidgets import QCheckBox, QComboBox, QLineEdit, QWidget
 
 from src.utils.config_manager import ConfigManager
-from src.utils.logging_config import get_logger
+from src.logging import get_logger
 
 
 class SystemOptionsWidget(QWidget):
@@ -17,7 +17,7 @@ class SystemOptionsWidget(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.logger = get_logger(__name__)
+        self.logger = get_logger()
         self.config_manager = ConfigManager.get_instance()
 
         # UI控件引用

@@ -12,7 +12,7 @@ from PyQt5.QtWidgets import (
 )
 
 from src.utils.config_manager import ConfigManager
-from src.utils.logging_config import get_logger
+from src.logging import get_logger
 from src.utils.resource_finder import get_project_root, resource_finder
 
 # 导入拼音转换库
@@ -34,7 +34,7 @@ class WakeWordWidget(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.logger = get_logger(__name__)
+        self.logger = get_logger()
         self.config_manager = ConfigManager.get_instance()
 
         # UI控件引用

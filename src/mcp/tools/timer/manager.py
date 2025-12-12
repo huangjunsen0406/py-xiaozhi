@@ -5,7 +5,7 @@
 
 from typing import Any, Dict
 
-from src.utils.logging_config import get_logger
+from src.logging import get_logger
 
 from .tools import (
     cancel_countdown_timer,
@@ -13,7 +13,7 @@ from .tools import (
     start_countdown_timer,
 )
 
-logger = get_logger(__name__)
+logger = get_logger()
 
 
 class TimerToolsManager:

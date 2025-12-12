@@ -9,7 +9,7 @@ from PyQt5.QtWidgets import (
 )
 
 from src.utils.config_manager import ConfigManager
-from src.utils.logging_config import get_logger
+from src.logging import get_logger
 from src.views.settings.components.audio import AudioWidget
 from src.views.settings.components.camera import CameraWidget
 from src.views.settings.components.shortcuts_settings import ShortcutsSettingsWidget
@@ -24,7 +24,7 @@ class SettingsWindow(QDialog):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.logger = get_logger(__name__)
+        self.logger = get_logger()
         self.config_manager = ConfigManager.get_instance()
 
         # 组件引用

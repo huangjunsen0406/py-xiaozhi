@@ -10,7 +10,7 @@ import requests
 
 from src.audio_codecs.music_decoder import MusicDecoder
 from src.constants.constants import AudioConfig
-from src.utils.logging_config import get_logger
+from src.logging import get_logger
 from src.utils.resource_finder import get_user_cache_dir
 
 # 尝试导入音乐元数据库
@@ -22,7 +22,7 @@ try:
 except ImportError:
     MUTAGEN_AVAILABLE = False
 
-logger = get_logger(__name__)
+logger = get_logger()
 
 
 class MusicMetadata:

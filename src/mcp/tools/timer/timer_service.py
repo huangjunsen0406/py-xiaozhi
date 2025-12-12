@@ -9,9 +9,9 @@ from asyncio import Task
 from datetime import datetime, timedelta
 from typing import Any, Dict, Optional
 
-from src.utils.logging_config import get_logger
+from src.logging import get_logger
 
-logger = get_logger(__name__)
+logger = get_logger()
 
 
 class TimerService:

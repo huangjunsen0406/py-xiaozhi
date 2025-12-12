@@ -2,11 +2,11 @@
 Screenshot tool for MCP.
 """
 
-from src.utils.logging_config import get_logger
+from src.logging import get_logger
 
 from .screenshot_camera import ScreenshotCamera
 
-logger = get_logger(__name__)
+logger = get_logger()
 
 
 def get_screenshot_camera_instance():
