@@ -43,15 +43,15 @@ class UIPlugin(Plugin):
         根据模式创建 display 实例.
         """
         if self.mode == "gui":
-            from src.display.gui_display import GuiDisplay
+            from src.views.main import GuiMain
 
             self._is_gui = True
-            return GuiDisplay()
+            return GuiMain()
         else:
-            from src.display.cli_display import CliDisplay
+            from src.views.main import CliMain
 
             self._is_gui = False
-            return CliDisplay()
+            return CliMain()
 
     async def start(self) -> None:
         """

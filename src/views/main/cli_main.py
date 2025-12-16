@@ -1,3 +1,8 @@
+# -*- coding: utf-8 -*-
+"""
+CLI 主窗口模块 - 终端界面实现.
+"""
+
 import asyncio
 import logging
 import os
@@ -8,12 +13,14 @@ import tty
 from collections import deque
 from typing import Callable, Optional
 
-from src.display.base_display import BaseDisplay
+from src.logging import get_logger
 
 
-class CliDisplay(BaseDisplay):
+class CliMain:
+    """CLI 主窗口类 - 终端界面实现"""
+
     def __init__(self):
-        super().__init__()
+        self.logger = get_logger()
         self.running = True
         self._use_ansi = sys.stdout.isatty()
         self._loop = None
@@ -182,7 +189,7 @@ class CliDisplay(BaseDisplay):
     # ===== 日志拦截并转发到显示区 =====
     def _install_log_handler(self) -> None:
         class _DisplayLogHandler(logging.Handler):
-            def __init__(self, display: "CliDisplay"):
+            def __init__(self, display: "CliMain"):
                 super().__init__()
                 self.display = display
 
@@ -413,7 +420,7 @@ class CliDisplay(BaseDisplay):
         # 保存光标位置
         sys.stdout.write("\x1b7")
 
-        # 在绘制前彻底清空上一帧可能残留的区域，避免视觉上出现“两层”
+        # 在绘制前彻底清空上一帧可能残留的区域，避免视觉上出现"两层"
         total_rows = 4 + body_rows  # 顶部框三行 + 底部框一行 + 正文行数
         rows_to_clear = max(self._last_drawn_rows, total_rows)
         for i in range(rows_to_clear):

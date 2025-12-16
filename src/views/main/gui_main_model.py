@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
 """
-GUI 显示窗口数据模型 - 用于 QML 数据绑定.
+GUI 主窗口数据模型 - 用于 QML 数据绑定.
 """
 
 from PyQt5.QtCore import QObject, pyqtProperty, pyqtSignal
 
 
-class GuiDisplayModel(QObject):
+class GuiMainModel(QObject):
     """
     GUI 主窗口的数据模型，用于 Python 和 QML 之间的数据绑定.
     """

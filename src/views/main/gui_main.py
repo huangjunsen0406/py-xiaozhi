@@ -1,12 +1,11 @@
 # -*- coding: utf-8 -*-
 """
-GUI 显示模块 - 使用 QML 实现.
+GUI 主窗口模块 - 使用 QML 实现.
 """
 
 import asyncio
 import os
 import signal
-from abc import ABCMeta
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -15,18 +14,14 @@ from PyQt5.QtGui import QCursor, QFont
 from PyQt5.QtQuickWidgets import QQuickWidget
 from PyQt5.QtWidgets import QApplication, QVBoxLayout, QWidget
 
-from src.display.base_display import BaseDisplay
-from src.display.gui_display_model import GuiDisplayModel
+from src.logging import get_logger
 from src.utils.resource_finder import get_assets_dir
 
-
-# 创建兼容的元类
-class CombinedMeta(type(QObject), ABCMeta):
-    pass
+from .gui_main_model import GuiMainModel
 
 
-class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
-    """GUI 显示类 - 基于 QML 的现代化界面"""
+class GuiMain(QObject):
+    """GUI 主窗口类 - 基于 QML 的现代化界面"""
 
     # 常量定义
     EMOTION_EXTENSIONS = (".gif", ".png", ".jpg", ".jpeg", ".webp")
@@ -37,7 +32,7 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
 
     def __init__(self):
         super().__init__()
-        QObject.__init__(self)
+        self.logger = get_logger()
 
         # Qt 组件
         self.app = None
@@ -46,7 +41,7 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         self.system_tray = None
 
         # 数据模型
-        self.display_model = GuiDisplayModel()
+        self.display_model = GuiMainModel()
 
         # 表情管理
         self._emotion_cache = {}
@@ -312,7 +307,7 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         qml_context.setContextProperty("displayModel", self.display_model)
 
         # 加载 QML 文件
-        qml_file = Path(__file__).parent / "gui_display.qml"
+        qml_file = Path(__file__).parent / "gui_main.qml"
         self.qml_widget.setSource(QUrl.fromLocalFile(str(qml_file)))
 
         # 设置为主窗口的中央 widget
