@@ -299,12 +299,9 @@ class TimerTask:
 
     async def _notify_execution_result(self, success: bool, result: Any):
         """
-        通知执行结果（通过TTS播报）
+        通知执行结果（通过日志记录）
         """
         try:
-            from src.application import Application
-
-            app = Application.get_instance()
             if success:
                 message = f"倒计时 {self.timer_id} 执行完成"
                 if self.description:
@@ -314,8 +311,7 @@ class TimerTask:
                 if self.description:
                     message = f"{self.description}执行失败"
 
-            print("倒计时：", message)
-            await app._send_text_tts(message)
+            logger.info(f"倒计时通知：{message}")
         except Exception as e:
             logger.warning(f"通知倒计时执行结果失败: {e}")
 

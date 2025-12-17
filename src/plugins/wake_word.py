@@ -1,8 +1,17 @@
-from typing import Any
+"""
+唤醒词插件.
+
+检测唤醒词并触发对话。
+"""
+
+from typing import TYPE_CHECKING
 
 from src.constants.constants import AbortReason
 from src.plugins.base import Plugin
 from src.logging import get_logger
+
+if TYPE_CHECKING:
+    from src.bootstrap.protocols import PluginContext, PluginCommands
 
 logger = get_logger()
 
@@ -13,11 +22,11 @@ class WakeWordPlugin(Plugin):
 
     def __init__(self) -> None:
         super().__init__()
-        self.app = None
         self.detector = None
+        self._audio_plugin = None  # 引用 AudioPlugin 获取 codec
 
-    async def setup(self, app: Any) -> None:
-        self.app = app
+    async def setup(self, ctx: "PluginContext", cmd: "PluginCommands") -> None:
+        await super().setup(ctx, cmd)
         try:
             from src.audio_processing.wake_word_detect import WakeWordDetector
 
@@ -26,7 +35,6 @@ class WakeWordPlugin(Plugin):
                 self.detector = None
                 return
 
-            # 绑定回调
             self.detector.on_detected(self._on_detected)
             self.detector.on_error = self._on_error
         except ImportError as e:
@@ -36,16 +44,18 @@ class WakeWordPlugin(Plugin):
             logger.error(f"唤醒词插件初始化失败: {e}", exc_info=True)
             self.detector = None
 
+    def set_audio_plugin(self, audio_plugin) -> None:
+        """设置 AudioPlugin 引用（由 ServiceContainer 调用）."""
+        self._audio_plugin = audio_plugin
+
     async def start(self) -> None:
         if not self.detector:
             return
         try:
-            # 需要音频编码器以提供原始PCM数据
-            audio_codec = getattr(self.app, "audio_codec", None)
-            if audio_codec is None:
-                logger.warning("未找到audio_codec，无法启动唤醒词检测")
+            if not self._audio_plugin or not self._audio_plugin.codec:
+                logger.warning("未找到 audio_codec，无法启动唤醒词检测")
                 return
-            await self.detector.start(audio_codec)
+            await self.detector.start(self._audio_plugin.codec)
         except Exception as e:
             logger.error(f"启动唤醒词检测器失败: {e}", exc_info=True)
 
@@ -64,26 +74,23 @@ class WakeWordPlugin(Plugin):
                 logger.warning(f"关闭唤醒词检测器失败: {e}")
 
     async def _on_detected(self, wake_word, full_text):
-        # 检测到唤醒词：切到自动对话（根据 AEC 自动选择实时/自动停）
+        """唤醒词检测回调."""
         try:
-            # 若正在说话，交给应用的打断/状态机处理
-            if hasattr(self.app, "device_state") and hasattr(
-                self.app, "start_auto_conversation"
-            ):
-                if self.app.is_speaking():
-                    await self.app.abort_speaking(AbortReason.WAKE_WORD_DETECTED)
-                    audio_plugin = self.app.plugins.get_plugin("audio")
-                    if audio_plugin and audio_plugin.codec:
-                        await audio_plugin.codec.clear_audio_queue()
-                else:
-                    await self.app.start_auto_conversation()
+            if self._ctx.is_speaking():
+                await self._cmd.abort_speaking(AbortReason.WAKE_WORD_DETECTED)
+                if self._audio_plugin and self._audio_plugin.codec:
+                    await self._audio_plugin.codec.clear_audio_queue()
+            else:
+                # 启动自动对话
+                await self._cmd.connect_protocol()
+                from src.constants.constants import ListeningMode
+                mode = ListeningMode.REALTIME if self._ctx.get_config().get_config(
+                    "AEC_OPTIONS.ENABLED", True
+                ) else ListeningMode.AUTO_STOP
+                await self._cmd.start_listening(mode)
         except Exception as e:
             logger.error(f"处理唤醒词检测失败: {e}", exc_info=True)
 
     def _on_error(self, error):
-        try:
-            logger.error(f"唤醒词检测错误: {error}")
-            if hasattr(self.app, "set_chat_message"):
-                self.app.set_chat_message("assistant", f"[唤醒词错误] {error}")
-        except Exception as e:
-            logger.error(f"处理唤醒词错误回调失败: {e}")
+        """唤醒词检测错误回调."""
+        logger.error(f"唤醒词检测错误: {error}")

@@ -6,7 +6,7 @@ import sys
 from src.logging import setup_logging
 setup_logging()
 
-from src.application import Application
+from src.bootstrap.container import ServiceContainer
 from src.logging import get_logger
 
 logger = get_logger()
@@ -125,9 +125,9 @@ async def start_app(mode: str, protocol: str, skip_activation: bool) -> int:
     else:
         logger.warning("跳过激活流程（调试模式）")
 
-    # 创建并启动应用程序
-    app = Application.get_instance()
-    return await app.run(mode=mode, protocol=protocol)
+    # 创建并启动应用程序（使用新的 ServiceContainer）
+    container = ServiceContainer()
+    return await container.run(mode=mode, protocol=protocol)
 
 
 if __name__ == "__main__":

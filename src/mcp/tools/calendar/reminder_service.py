@@ -28,14 +28,10 @@ class CalendarReminderService:
     def _get_application(self):
         """
         延迟加载获取应用实例.
-        """
-        try:
-            from src.application import Application
 
-            return Application.get_instance()
-        except Exception as e:
-            logger.warning(f"获取应用实例失败: {e}")
-            return None
+        注意：此方法会被 CalendarPlugin 通过 setattr 覆盖为正确的适配器。
+        """
+        return None
 
     async def start(self):
         """

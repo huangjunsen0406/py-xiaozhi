@@ -4,12 +4,19 @@ from collections import deque
 from typing import Callable, List, Optional, Protocol
 
 import numpy as np
+
+# 在导入 opuslib 之前确保 opus 库已加载
+from src.utils.opus_loader import setup_opus
+
+setup_opus()
+
 import opuslib
 import sounddevice as sd
 import soxr
 
 from src.audio_codecs.aec_processor import AECProcessor
 from src.constants.constants import AudioConfig
+from src.logging import get_logger
 from src.utils.audio_utils import (
     downmix_to_mono,
     safe_queue_put,
@@ -17,7 +24,6 @@ from src.utils.audio_utils import (
     upmix_mono_to_channels,
 )
 from src.utils.config_manager import ConfigManager
-from src.logging import get_logger
 
 logger = get_logger()
 
@@ -889,4 +895,5 @@ class AudioCodec:
     def __del__(self):
         """析构函数 - 检查资源是否正确释放"""
         if not self._is_closing:
+            logger.warning("AudioCodec未正确关闭，请调用 close() 方法")
             logger.warning("AudioCodec未正确关闭，请调用 close() 方法")

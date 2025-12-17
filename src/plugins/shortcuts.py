@@ -1,12 +1,21 @@
+"""
+快捷键插件.
+
+管理全局快捷键。
+"""
+
 import asyncio
 import time
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Set
+from typing import Dict, Optional, Set, TYPE_CHECKING
 
 from src.constants.constants import AbortReason
 from src.plugins.base import Plugin
 from src.utils.config_manager import ConfigManager
 from src.logging import get_logger
+
+if TYPE_CHECKING:
+    from src.bootstrap.protocols import PluginContext, PluginCommands
 
 logger = get_logger()
 
@@ -18,39 +27,47 @@ class ShortcutConfig:
     description: str = ""
 
 
-class _AppAdapter:
-    def __init__(self, app: Any):
-        self._app = app
+class _CmdAdapter:
+    """快捷键命令适配器."""
+
+    def __init__(self, cmd: "PluginCommands", ctx: "PluginContext"):
+        self._cmd = cmd
+        self._ctx = ctx
 
     async def start_listening(self):
         try:
-            await self._app.start_listening_manual()
+            await self._cmd.connect_protocol()
+            from src.constants.constants import ListeningMode
+            await self._cmd.start_listening(ListeningMode.MANUAL)
         except Exception:
             pass
 
     async def stop_listening(self):
         try:
-            await self._app.stop_listening_manual()
+            await self._cmd.stop_listening()
         except Exception:
             pass
 
     async def toggle_chat_state(self):
         try:
-            await self._app.start_auto_conversation()
+            await self._cmd.connect_protocol()
+            from src.constants.constants import ListeningMode
+            mode = ListeningMode.REALTIME if self._ctx.get_config().get_config(
+                "AEC_OPTIONS.ENABLED", True
+            ) else ListeningMode.AUTO_STOP
+            await self._cmd.start_listening(mode)
         except Exception:
             pass
 
     async def abort_speaking(self, reason):
         try:
-            await self._app.abort_speaking(reason)
+            await self._cmd.abort_speaking(reason)
         except Exception:
             pass
 
 
 class PluginShortcutManager:
-    """
-    插件内置的全局快捷键管理器（替代 views/components/shortcut_manager.py）。
-    """
+    """全局快捷键管理器."""
 
     def __init__(self, loop: Optional[asyncio.AbstractEventLoop]):
         self._main_loop = loop
@@ -66,31 +83,15 @@ class PluginShortcutManager:
         self._restart_in_progress = False
         self._last_activity_time = 0.0
 
-        # 应用与显示引用（由插件注入）
         self.application = None
         self.display = None
 
         self.key_mapping = {
-            "\x17": "w",
-            "\x01": "a",
-            "\x13": "s",
-            "\x04": "d",
-            "\x05": "e",
-            "\x12": "r",
-            "\x14": "t",
-            "\x06": "f",
-            "\x07": "g",
-            "\x08": "h",
-            "\x0a": "j",
-            "\x0b": "k",
-            "\x0c": "l",
-            "\x1a": "z",
-            "\x18": "x",
-            "\x03": "c",
-            "\x16": "v",
-            "\x02": "b",
-            "\x0e": "n",
-            "\x0d": "m",
+            "\x17": "w", "\x01": "a", "\x13": "s", "\x04": "d",
+            "\x05": "e", "\x12": "r", "\x14": "t", "\x06": "f",
+            "\x07": "g", "\x08": "h", "\x0a": "j", "\x0b": "k",
+            "\x0c": "l", "\x1a": "z", "\x18": "x", "\x03": "c",
+            "\x16": "v", "\x02": "b", "\x0e": "n", "\x0d": "m",
             "\x11": "q",
         }
 
@@ -99,13 +100,7 @@ class PluginShortcutManager:
 
     def _load_shortcuts(self):
         self.shortcuts.clear()
-        for name in [
-            "MANUAL_PRESS",
-            "AUTO_TOGGLE",
-            "ABORT",
-            "MODE_TOGGLE",
-            "WINDOW_TOGGLE",
-        ]:
+        for name in ["MANUAL_PRESS", "AUTO_TOGGLE", "ABORT", "MODE_TOGGLE", "WINDOW_TOGGLE"]:
             cfg = self.shortcuts_config.get(name, {}) or {}
             modifier = str(cfg.get("modifier", "ctrl")).lower()
             key = str(cfg.get("key", "")).lower()
@@ -162,7 +157,6 @@ class PluginShortcutManager:
         except Exception as e:
             logger.error(f"重新加载快捷键配置失败: {e}")
 
-    # --- 内部回调 ---
     def _on_key_press(self, key):
         if not self.running:
             return
@@ -182,12 +176,7 @@ class PluginShortcutManager:
             return
         if name in self.pressed_keys:
             self.pressed_keys.remove(name)
-        # 释放时停止按住说话
-        if (
-            self.manual_press_active
-            and len(self.pressed_keys) == 0
-            and self.application
-        ):
+        if self.manual_press_active and len(self.pressed_keys) == 0 and self.application:
             self._run_coroutine_threadsafe(self.application.stop_listening())
             self.manual_press_active = False
         self._check_shortcuts(False)
@@ -221,9 +210,7 @@ class PluginShortcutManager:
     def _check_shortcuts(self, is_press: bool):
         if not self.shortcuts:
             return
-        ctrl = any(
-            k in self.pressed_keys for k in ["ctrl", "control", "ctrl_l", "ctrl_r"]
-        )
+        ctrl = any(k in self.pressed_keys for k in ["ctrl", "control", "ctrl_l", "ctrl_r"])
         alt = any(k in self.pressed_keys for k in ["alt", "option", "alt_l", "alt_r"])
         shift = any(k in self.pressed_keys for k in ["shift", "shift_l", "shift_r"])
         cmd = "cmd" in self.pressed_keys
@@ -232,9 +219,7 @@ class PluginShortcutManager:
             if self._match(cfg, ctrl, alt, shift, cmd):
                 self._handle(kind, is_press)
 
-    def _match(
-        self, cfg: ShortcutConfig, ctrl: bool, alt: bool, shift: bool, cmd: bool
-    ) -> bool:
+    def _match(self, cfg: ShortcutConfig, ctrl: bool, alt: bool, shift: bool, cmd: bool) -> bool:
         if cfg.modifier == "ctrl" and not ctrl:
             return False
         if cfg.modifier == "alt" and not alt:
@@ -255,11 +240,8 @@ class PluginShortcutManager:
                 self.manual_press_active = False
             return
 
-        if kind == "ABORT":
-            if is_press and self.application:
-                self._run_coroutine_threadsafe(
-                    self.application.abort_speaking(AbortReason.NONE)
-                )
+        if kind == "ABORT" and is_press and self.application:
+            self._run_coroutine_threadsafe(self.application.abort_speaking(AbortReason.NONE))
             return
 
         if kind == "AUTO_TOGGLE" and is_press and self.application:
@@ -271,7 +253,6 @@ class PluginShortcutManager:
             return
 
         if kind == "WINDOW_TOGGLE" and is_press and self.display:
-            print("显示隐藏界面")
             self._run_coroutine_threadsafe(self.display.toggle_window_visibility())
             return
 
@@ -291,7 +272,6 @@ class PluginShortcutManager:
     async def _health_check_loop(self):
         while self.running and not self._restart_in_progress:
             await asyncio.sleep(30)
-            # 这里只做轻量心跳；如需重启逻辑可扩展
 
 
 class ShortcutsPlugin(Plugin):
@@ -300,29 +280,25 @@ class ShortcutsPlugin(Plugin):
 
     def __init__(self) -> None:
         super().__init__()
-        self.app: Any = None
         self._manager: Optional[PluginShortcutManager] = None
-        self._adapter: Optional[_AppAdapter] = None
+        self._adapter: Optional[_CmdAdapter] = None
+        self._loop: Optional[asyncio.AbstractEventLoop] = None
 
-    async def setup(self, app: Any) -> None:
-        self.app = app
-        self._adapter = _AppAdapter(app)
-        self._manager = PluginShortcutManager(getattr(app, "_main_loop", None))
+    async def setup(self, ctx: "PluginContext", cmd: "PluginCommands") -> None:
+        await super().setup(ctx, cmd)
+        self._adapter = _CmdAdapter(cmd, ctx)
+        self._loop = asyncio.get_running_loop()
+        self._manager = PluginShortcutManager(self._loop)
+
+    def set_ui_plugin(self, ui_plugin) -> None:
+        """设置 UIPlugin 引用（由 ServiceContainer 调用）."""
+        if self._manager and ui_plugin:
+            self._manager.display = getattr(ui_plugin, "display", None)
 
     async def start(self) -> None:
         if not self._manager:
             return
-        # 注入应用与显示引用
         self._manager.application = self._adapter
-        try:
-            display_obj = None
-            if hasattr(self.app, "plugins"):
-                ui_plugin = self.app.plugins.get_plugin("ui")
-                if ui_plugin is not None:
-                    display_obj = getattr(ui_plugin, "display", None)
-            self._manager.display = display_obj
-        except Exception:
-            pass
         await self._manager.start()
 
     async def stop(self) -> None:

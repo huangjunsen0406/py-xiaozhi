@@ -1,37 +1,34 @@
-from typing import Any
+"""
+日历插件.
+
+管理日程提醒服务。
+"""
+
+from typing import TYPE_CHECKING
 
 from src.plugins.base import Plugin
 from src.logging import get_logger
 
+if TYPE_CHECKING:
+    from src.bootstrap.protocols import PluginContext, PluginCommands
+
 logger = get_logger()
 
 
-class _AppAdapter:
-    """
-    为日程提醒服务提供 _send_text_tts 的适配器.
-    """
+class _CmdAdapter:
+    """为日程提醒服务提供 TTS 功能的适配器."""
 
-    def __init__(self, app: Any) -> None:
-        self._app = app
+    def __init__(self, cmd: "PluginCommands", ctx: "PluginContext") -> None:
+        self._cmd = cmd
+        self._ctx = ctx
 
     async def _send_text_tts(self, text: str):
         try:
-            # 通过协议触发TTS（与 ApplicationMain 的行为对齐）
-            if not getattr(self._app, "protocol", None):
-                return
-            try:
-                if not self._app.is_audio_channel_opened():
-                    await self._app.connect_protocol()
-            except Exception:
-                pass
-            await self._app.protocol.send_wake_word_detected(text)
+            if not self._ctx.is_audio_channel_opened():
+                await self._cmd.connect_protocol()
+            await self._cmd.send_text(text)
         except Exception:
-            # 兜底：无法TTS时，回退到UI文本
-            try:
-                if hasattr(self._app, "set_chat_message"):
-                    self._app.set_chat_message("assistant", text)
-            except Exception:
-                pass
+            pass
 
 
 class CalendarPlugin(Plugin):
@@ -40,18 +37,16 @@ class CalendarPlugin(Plugin):
 
     def __init__(self) -> None:
         super().__init__()
-        self.app: Any = None
         self._service = None
-        self._adapter: _AppAdapter | None = None
+        self._adapter = None
 
-    async def setup(self, app: Any) -> None:
-        self.app = app
-        self._adapter = _AppAdapter(app)
+    async def setup(self, ctx: "PluginContext", cmd: "PluginCommands") -> None:
+        await super().setup(ctx, cmd)
+        self._adapter = _CmdAdapter(cmd, ctx)
         try:
             from src.mcp.tools.calendar import get_reminder_service
 
             self._service = get_reminder_service()
-            # 覆盖其应用获取函数，返回适配器对象
             try:
                 setattr(self._service, "_get_application", lambda: self._adapter)
             except Exception:
@@ -65,7 +60,6 @@ class CalendarPlugin(Plugin):
             return
         try:
             await self._service.start()
-            # 可选：启动时检查今日日程
             try:
                 await self._service.check_daily_events()
             except Exception:

@@ -23,8 +23,8 @@ class WakeWordDetector:
         self.paused = False
         self.detection_task = None
 
-        # 音频数据队列（用于异步处理）
-        self._audio_queue = asyncio.Queue(maxsize=100)
+        # 音频数据队列（延迟创建，在 start() 时初始化）
+        self._audio_queue = None
 
         # 防重复触发机制
         self.last_detection_time = 0
@@ -145,6 +145,9 @@ class WakeWordDetector:
         if not self.enabled or not self.is_running_flag or self.paused:
             return
 
+        if self._audio_queue is None:
+            return
+
         try:
             # 将音频数据放入队列，由检测循环异步处理
             self._audio_queue.put_nowait(audio_data.copy())
@@ -171,6 +174,9 @@ class WakeWordDetector:
             self.audio_codec = audio_codec
             self.is_running_flag = True
             self.paused = False
+
+            # 在事件循环中创建队列
+            self._audio_queue = asyncio.Queue(maxsize=100)
 
             # 创建检测流
             self.stream = self.keyword_spotter.create_stream()
@@ -234,7 +240,7 @@ class WakeWordDetector:
         处理音频数据.
         """
         try:
-            if not self.stream:
+            if not self.stream or not self._audio_queue:
                 return
 
             try:
@@ -309,11 +315,13 @@ class WakeWordDetector:
             self.detection_task = None
 
         # 清空队列
-        while not self._audio_queue.empty():
-            try:
-                self._audio_queue.get_nowait()
-            except asyncio.QueueEmpty:
-                break
+        if self._audio_queue:
+            while not self._audio_queue.empty():
+                try:
+                    self._audio_queue.get_nowait()
+                except asyncio.QueueEmpty:
+                    break
+            self._audio_queue = None
 
         # 释放 sherpa-onnx 资源（避免 nanobind 泄漏警告）
         try:

@@ -170,19 +170,22 @@ class MusicPlayer:
     def _initialize_app_reference(self):
         """
         初始化应用程序引用和 AudioCodec.
+
+        注意：此方法会在 AudioPlugin 启动后通过 set_audio_codec 设置 audio_codec。
         """
-        try:
-            from src.application import Application
+        self.app = None
+        self.audio_codec = None
+        logger.debug("MusicPlayer 初始化，等待 AudioCodec 注入")
 
-            self.app = Application.get_instance()
-            self.audio_codec = getattr(self.app, "audio_codec", None)
-
-            if not self.audio_codec:
-                logger.warning("AudioCodec 未初始化，音乐播放可能不可用")
-
-        except Exception as e:
-            logger.warning(f"获取Application实例失败: {e}")
-            self.app = None
+    def set_audio_codec(self, audio_codec) -> None:
+        """
+        设置 AudioCodec 引用（由 AudioPlugin 调用）.
+        """
+        self.audio_codec = audio_codec
+        if audio_codec:
+            logger.info("MusicPlayer: AudioCodec 已注入")
+        else:
+            logger.warning("MusicPlayer: AudioCodec 设置为 None")
 
     def _init_cache_dirs(self):
         """
@@ -460,9 +463,8 @@ class MusicPlayer:
             self.current_position = self.total_duration
 
             # 更新UI显示完成状态
-            if self.app and hasattr(self.app, "set_chat_message"):
-                dur_str = self._format_time(self.total_duration)
-                await self._safe_update_ui(f"播放完成: {self.current_song} [{dur_str}]")
+            dur_str = self._format_time(self.total_duration)
+            await self._safe_update_ui(f"播放完成: {self.current_song} [{dur_str}]")
 
     # 核心方法
     async def search_and_play(self, song_name: str) -> dict:
@@ -534,8 +536,7 @@ class MusicPlayer:
             self.current_position = 0
 
             # 更新UI
-            if self.app and hasattr(self.app, "set_chat_message"):
-                await self._safe_update_ui(f"已停止: {current_song}")
+            await self._safe_update_ui(f"已停止: {current_song}")
 
             logger.info(f"停止播放: {current_song}")
             return {"status": "success", "message": "已停止"}
@@ -651,8 +652,7 @@ class MusicPlayer:
             self.start_play_time = time.time() - self.current_position  # 调整时间基准
 
             # 更新UI
-            if self.app and hasattr(self.app, "set_chat_message"):
-                await self._safe_update_ui(f"继续播放: {self.current_song}")
+            await self._safe_update_ui(f"继续播放: {self.current_song}")
 
             return {"status": "success", "message": "已恢复播放"}
 
@@ -895,16 +895,6 @@ class MusicPlayer:
             start_position: 开始位置（秒），默认从头开始
         """
         try:
-            # ✅ 检查 TTS 状态：如果TTS正在播放，延迟启动
-            if self.app and self.app.is_speaking():
-                logger.info("TTS 播放中，音乐延迟启动")
-                self._deferred_start_path = file_path
-                self._deferred_start_position = start_position
-                # 标记为"准备播放"状态（AudioPlugin恢复时会检查）
-                self.is_playing = True
-                self.paused = True
-                return True
-
             # 清除延迟启动标志
             self._deferred_start_path = None
             self._deferred_start_position = 0.0
@@ -943,8 +933,7 @@ class MusicPlayer:
             logger.info(f"开始播放: {self.current_song}{position_info}")
 
             # 更新UI
-            if self.app and hasattr(self.app, "set_chat_message"):
-                await self._safe_update_ui(f"正在播放: {self.current_song}")
+            await self._safe_update_ui(f"正在播放: {self.current_song}")
 
             # 启动歌词更新任务
             asyncio.create_task(self._lyrics_update_task())
@@ -1213,9 +1202,8 @@ class MusicPlayer:
             display_text = f"[{position_str}/{duration_str}] {text}"
 
             # 更新UI
-            if self.app and hasattr(self.app, "set_chat_message"):
-                await self._safe_update_ui(display_text)
-                logger.debug(f"显示歌词: {text}")
+            await self._safe_update_ui(display_text)
+            logger.debug(f"显示歌词: {text}")
 
     def _extract_value(self, text: str, start_marker: str, end_marker: str) -> str:
         """
@@ -1243,15 +1231,9 @@ class MusicPlayer:
 
     async def _safe_update_ui(self, message: str):
         """
-        安全地更新UI.
+        安全地更新UI（目前仅记录日志）.
         """
-        if not self.app or not hasattr(self.app, "set_chat_message"):
-            return
-
-        try:
-            self.app.set_chat_message("assistant", message)
-        except Exception as e:
-            logger.error(f"更新UI失败: {e}")
+        logger.debug(f"MusicPlayer UI: {message}")
 
     def __del__(self):
         """

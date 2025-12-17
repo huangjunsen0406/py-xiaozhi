@@ -65,6 +65,7 @@ class GuiMain(QObject):
             "auto": None,
             "abort": None,
             "send_text": None,
+            "quit": None,  # 退出回调，用于优雅关闭
         }
 
     # =========================================================================
@@ -79,6 +80,7 @@ class GuiMain(QObject):
         auto_callback: Optional[Callable] = None,
         abort_callback: Optional[Callable] = None,
         send_text_callback: Optional[Callable] = None,
+        quit_callback: Optional[Callable] = None,
     ):
         """
         设置回调函数.
@@ -91,6 +93,7 @@ class GuiMain(QObject):
                 "auto": auto_callback,
                 "abort": abort_callback,
                 "send_text": send_text_callback,
+                "quit": quit_callback,
             }
         )
 
@@ -616,40 +619,11 @@ class GuiMain(QObject):
         if self.system_tray:
             self.system_tray.hide()
 
-        try:
-            from src.application import Application
-
-            app = Application.get_instance()
-            if not app:
-                QApplication.quit()
-                return
-
-            loop = asyncio.get_event_loop()
-            if not loop.is_running():
-                QApplication.quit()
-                return
-
-            # 创建关闭任务并设置超时
-            shutdown_task = asyncio.create_task(app.shutdown())
-
-            def on_shutdown_complete(task):
-                if not task.cancelled() and task.exception():
-                    self.logger.error(f"应用程序关闭异常: {task.exception()}")
-                else:
-                    self.logger.info("应用程序正常关闭")
-                QApplication.quit()
-
-            def force_quit():
-                if not shutdown_task.done():
-                    self.logger.warning("关闭超时，强制退出")
-                    shutdown_task.cancel()
-                QApplication.quit()
-
-            shutdown_task.add_done_callback(on_shutdown_complete)
-            QTimer.singleShot(self.QUIT_TIMEOUT_MS, force_quit)
-
-        except Exception as e:
-            self.logger.error(f"关闭应用程序失败: {e}")
+        # 通过回调请求优雅关闭，让 ServiceContainer 完成清理
+        if self._callbacks["quit"]:
+            self._callbacks["quit"]()
+        else:
+            # 没有回调时直接退出（兼容独立运行场景）
             QApplication.quit()
 
     def _closeEvent(self, event):

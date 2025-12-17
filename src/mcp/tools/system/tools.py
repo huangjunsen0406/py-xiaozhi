@@ -106,18 +106,13 @@ def _get_application_status() -> Dict[str, Any]:
     获取应用状态信息.
     """
     try:
-        from src.application import Application
         from src.iot.thing_manager import ThingManager
 
-        app = Application.get_instance()
         thing_manager = ThingManager.get_instance()
-
-        # DeviceState的值直接是字符串，不需要访问.name属性
-        device_state = str(app.get_device_state())
         iot_count = len(thing_manager.things) if thing_manager else 0
 
         return {
-            "device_state": device_state,
+            "device_state": "unknown",  # 状态信息通过其他方式获取
             "iot_devices": iot_count,
         }
 

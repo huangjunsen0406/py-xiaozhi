@@ -1,7 +1,16 @@
-from typing import Any, Optional
+"""
+UI 插件.
+
+管理 CLI/GUI 显示界面。
+"""
+
+from typing import Optional, TYPE_CHECKING
 
 from src.constants.constants import AbortReason, DeviceState
 from src.plugins.base import Plugin
+
+if TYPE_CHECKING:
+    from src.bootstrap.protocols import PluginContext, PluginCommands
 
 
 class UIPlugin(Plugin):
@@ -10,7 +19,6 @@ class UIPlugin(Plugin):
     name = "ui"
     priority = 60  # UI 需要在其他插件完成后初始化
 
-    # 设备状态文本映射
     STATE_TEXT_MAP = {
         DeviceState.IDLE: "待命",
         DeviceState.LISTENING: "聆听中...",
@@ -19,29 +27,17 @@ class UIPlugin(Plugin):
 
     def __init__(self, mode: Optional[str] = None) -> None:
         super().__init__()
-        self.app = None
         self.mode = (mode or "cli").lower()
         self.display = None
         self._is_gui = False
         self.is_first = True
 
-    async def setup(self, app: Any) -> None:
-        """
-        初始化 UI 插件.
-        """
-        self.app = app
-
-        # 创建对应的 display 实例
+    async def setup(self, ctx: "PluginContext", cmd: "PluginCommands") -> None:
+        await super().setup(ctx, cmd)
         self.display = self._create_display()
 
-        # 禁用应用内控制台输入
-        if hasattr(app, "use_console_input"):
-            app.use_console_input = False
-
     def _create_display(self):
-        """
-        根据模式创建 display 实例.
-        """
+        """根据模式创建 display 实例."""
         if self.mode == "gui":
             from src.views.main import GuiMain
 
@@ -54,33 +50,24 @@ class UIPlugin(Plugin):
             return CliMain()
 
     async def start(self) -> None:
-        """
-        启动 UI 显示.
-        """
         if not self.display:
             return
 
-        # 绑定回调
         await self._setup_callbacks()
-
-        # 启动显示
-        self.app.spawn(self.display.start(), name=f"ui:{self.mode}:start")
+        self._cmd.spawn(self.display.start(), name=f"ui:{self.mode}:start")
 
     async def _setup_callbacks(self) -> None:
-        """
-        设置 display 回调.
-        """
+        """设置 display 回调."""
         if self._is_gui:
-            # GUI 需要调度到异步任务
             callbacks = {
                 "press_callback": self._wrap_callback(self._press),
                 "release_callback": self._wrap_callback(self._release),
                 "auto_callback": self._wrap_callback(self._auto_toggle),
                 "abort_callback": self._wrap_callback(self._abort),
                 "send_text_callback": self._send_text,
+                "quit_callback": self._request_shutdown,
             }
         else:
-            # CLI 直接传递协程函数
             callbacks = {
                 "auto_callback": self._auto_toggle,
                 "abort_callback": self._abort,
@@ -90,89 +77,71 @@ class UIPlugin(Plugin):
         await self.display.set_callbacks(**callbacks)
 
     def _wrap_callback(self, coro_func):
-        """
-        包装协程函数为可调度的 lambda.
-        """
-        return lambda: self.app.spawn(coro_func(), name="ui:callback")
+        """包装协程函数为可调度的 lambda."""
+        return lambda: self._cmd.spawn(coro_func(), name="ui:callback")
 
-    async def on_incoming_json(self, message: Any) -> None:
-        """
-        处理传入的 JSON 消息.
-        """
+    async def on_incoming_json(self, message) -> None:
         if not self.display or not isinstance(message, dict):
             return
 
         msg_type = message.get("type")
 
-        # tts/stt 都更新文本
         if msg_type in ("tts", "stt"):
             if text := message.get("text"):
                 await self.display.update_text(text)
-
-        # llm 更新表情
         elif msg_type == "llm":
             if emotion := message.get("emotion"):
                 await self.display.update_emotion(emotion)
 
-    async def on_device_state_changed(self, state: Any) -> None:
-        """
-        设备状态变化处理.
-        """
+    async def on_device_state_changed(self, state) -> None:
         if not self.display:
             return
 
-        # 跳过首次调用
         if self.is_first:
             self.is_first = False
             return
 
-        # 更新表情和状态
         await self.display.update_emotion("neutral")
         if status_text := self.STATE_TEXT_MAP.get(state):
             await self.display.update_status(status_text, True)
 
     async def shutdown(self) -> None:
-        """
-        清理 UI 资源，关闭窗口.
-        """
         if self.display:
             await self.display.close()
             self.display = None
 
     # ===== 回调函数 =====
 
+    def _request_shutdown(self):
+        """请求应用关闭."""
+        self._cmd.request_shutdown()
+
     async def _send_text(self, text: str):
-        """
-        发送文本到服务端.
-        """
-        if self.app.device_state == DeviceState.SPEAKING:
-            audio_plugin = self.app.plugins.get_plugin("audio")
-            if audio_plugin:
-                await audio_plugin.codec.clear_audio_queue()
-            await self.app.abort_speaking(None)
-        if await self.app.connect_protocol():
-            await self.app.protocol.send_wake_word_detected(text)
+        """发送文本到服务端."""
+        if self._ctx.is_speaking():
+            await self._cmd.abort_speaking(None)
+        if await self._cmd.connect_protocol():
+            await self._cmd.send_wake_word_detected(text)
 
     async def _press(self):
-        """
-        手动模式：按下开始录音.
-        """
-        await self.app.start_listening_manual()
+        """手动模式：按下开始录音."""
+        await self._cmd.connect_protocol()
+        from src.constants.constants import ListeningMode
+        await self._cmd.start_listening(ListeningMode.MANUAL)
 
     async def _release(self):
-        """
-        手动模式：释放停止录音.
-        """
-        await self.app.stop_listening_manual()
+        """手动模式：释放停止录音."""
+        await self._cmd.stop_listening()
 
     async def _auto_toggle(self):
-        """
-        自动模式切换.
-        """
-        await self.app.start_auto_conversation()
+        """自动模式切换."""
+        await self._cmd.connect_protocol()
+        from src.constants.constants import ListeningMode
+        mode = ListeningMode.REALTIME if self._ctx.get_config().get_config(
+            "AEC_OPTIONS.ENABLED", True
+        ) else ListeningMode.AUTO_STOP
+        await self._cmd.start_listening(mode)
 
     async def _abort(self):
-        """
-        中断对话.
-        """
-        await self.app.abort_speaking(AbortReason.USER_INTERRUPTION)
+        """中断对话."""
+        await self._cmd.abort_speaking(AbortReason.USER_INTERRUPTION)
