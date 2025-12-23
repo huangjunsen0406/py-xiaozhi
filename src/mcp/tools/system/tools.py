@@ -99,23 +99,3 @@ async def _get_audio_status() -> Dict[str, Any]:
     except Exception as e:
         logger.warning(f"[SystemTools] 获取音频状态失败: {e}")
         return {"volume": 50, "muted": False, "available": False, "error": str(e)}
-
-
-def _get_application_status() -> Dict[str, Any]:
-    """
-    获取应用状态信息.
-    """
-    try:
-        from src.iot.thing_manager import ThingManager
-
-        thing_manager = ThingManager.get_instance()
-        iot_count = len(thing_manager.things) if thing_manager else 0
-
-        return {
-            "device_state": "unknown",  # 状态信息通过其他方式获取
-            "iot_devices": iot_count,
-        }
-
-    except Exception as e:
-        logger.warning(f"[SystemTools] 获取应用状态失败: {e}")
-        return {"device_state": "unknown", "iot_devices": 0, "error": str(e)}

@@ -246,7 +246,6 @@ class ServiceContainer:
         """
         from src.plugins.audio import AudioPlugin
         from src.plugins.calendar import CalendarPlugin
-        from src.plugins.iot import IoTPlugin
         from src.plugins.mcp import McpPlugin
         from src.plugins.shortcuts import ShortcutsPlugin
         from src.plugins.ui import UIPlugin
@@ -261,7 +260,6 @@ class ServiceContainer:
         # 注册插件
         self.plugins.register(
             McpPlugin(),
-            IoTPlugin(),
             audio_plugin,
             wake_word_plugin,
             CalendarPlugin(),
