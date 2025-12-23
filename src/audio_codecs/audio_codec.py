@@ -1,5 +1,6 @@
 import asyncio
 import gc
+import threading
 from collections import deque
 from typing import Callable, List, Optional, Protocol
 
@@ -112,6 +113,7 @@ class AudioCodec:
         # 回调和监听器（解耦外部依赖）
         self._encoded_callback: Optional[Callable] = None
         self._audio_listeners: List[AudioListener] = []
+        self._listeners_lock = threading.Lock()  # 保护监听器列表的线程锁
 
         # 音频处理器（可选注入）
         self.audio_processor = audio_processor
@@ -424,11 +426,13 @@ class AudioCodec:
                     logger.warning(f"实时录音编码失败: {e}")
 
             # 步骤7: 通知音频监听器（解耦唤醒词检测）
-            for listener in self._audio_listeners:
-                try:
-                    listener.on_audio_data(audio_data_int16.copy())
-                except Exception as e:
-                    logger.warning(f"音频监听器处理失败: {e}")
+            # 使用锁保护遍历，避免列表在遍历时被修改
+            with self._listeners_lock:
+                for listener in self._audio_listeners:
+                    try:
+                        listener.on_audio_data(audio_data_int16.copy())
+                    except Exception as e:
+                        logger.warning(f"音频监听器处理失败: {e}")
 
         except Exception as e:
             logger.error(f"输入回调错误: {e}")
@@ -613,9 +617,10 @@ class AudioCodec:
             wake_word_detector = WakeWordDetector()  # 实现了 on_audio_data 方法
             audio_codec.add_audio_listener(wake_word_detector)
         """
-        if listener not in self._audio_listeners:
-            self._audio_listeners.append(listener)
-            logger.info(f"已添加音频监听器: {listener.__class__.__name__}")
+        with self._listeners_lock:
+            if listener not in self._audio_listeners:
+                self._audio_listeners.append(listener)
+                logger.info(f"已添加音频监听器: {listener.__class__.__name__}")
 
     def remove_audio_listener(self, listener: AudioListener):
         """移除音频监听器.
@@ -623,9 +628,10 @@ class AudioCodec:
         Args:
             listener: 要移除的监听器对象
         """
-        if listener in self._audio_listeners:
-            self._audio_listeners.remove(listener)
-            logger.info(f"已移除音频监听器: {listener.__class__.__name__}")
+        with self._listeners_lock:
+            if listener in self._audio_listeners:
+                self._audio_listeners.remove(listener)
+                logger.info(f"已移除音频监听器: {listener.__class__.__name__}")
 
     async def write_audio(self, opus_data: bytes):
         """解码并播放音频（服务端 Opus 数据 → 扬声器）

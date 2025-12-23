@@ -433,7 +433,7 @@ class MqttProtocol(Protocol):
                         if asyncio.iscoroutinefunction(self._on_incoming_json):
                             coro = self._on_incoming_json(json_data)
                             if coro is not None:
-                                asyncio.create_task(coro)
+                                asyncio.run_coroutine_threadsafe(coro, self.loop)
                         else:
                             self._on_incoming_json(json_data)
 
@@ -488,7 +488,8 @@ class MqttProtocol(Protocol):
                             if asyncio.iscoroutinefunction(self._on_incoming_audio):
                                 coro = self._on_incoming_audio(audio_data)
                                 if coro is not None:
-                                    asyncio.create_task(coro)
+                                    # 在事件循环中安全地创建任务
+                                    asyncio.run_coroutine_threadsafe(coro, self.loop)
                             else:
                                 self._on_incoming_audio(audio_data)
 
@@ -563,8 +564,6 @@ class MqttProtocol(Protocol):
                     f"已发送音频数据包，序列号: {self.local_sequence}，目标: "
                     f"{self.udp_server}:{self.udp_port}"
                 )
-
-            self.local_sequence += 1
             return True
         except Exception as e:
             logger.error(f"发送音频数据失败: {e}")

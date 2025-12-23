@@ -151,12 +151,14 @@ class WakeWordDetector:
             # 将音频数据放入队列，由检测循环异步处理
             self._audio_queue.put_nowait(audio_data.copy())
         except asyncio.QueueFull:
-            # 队列满时丢弃最旧数据
             try:
-                self._audio_queue.get_nowait()
+                try:
+                    self._audio_queue.get_nowait()
+                except asyncio.QueueEmpty:
+                    pass
                 self._audio_queue.put_nowait(audio_data.copy())
-            except asyncio.QueueEmpty:
-                self._audio_queue.put_nowait(audio_data.copy())
+            except (asyncio.QueueEmpty, asyncio.QueueFull):
+                logger.debug("音频队列操作失败，丢弃当前帧")
         except Exception as e:
             logger.debug(f"音频数据入队失败: {e}")
 
