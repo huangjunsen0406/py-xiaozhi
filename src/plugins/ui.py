@@ -1,16 +1,15 @@
-"""
-UI 插件.
+"""UI 插件.
 
 管理 CLI/GUI 显示界面。
 """
 
-from typing import Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 from src.constants.constants import AbortReason, DeviceState
 from src.plugins.base import Plugin
 
 if TYPE_CHECKING:
-    from src.bootstrap.protocols import PluginContext, PluginCommands
+    from src.bootstrap.protocols import PluginCommands, PluginContext
 
 
 class UIPlugin(Plugin):
@@ -37,7 +36,9 @@ class UIPlugin(Plugin):
         self.display = self._create_display()
 
     def _create_display(self):
-        """根据模式创建 display 实例."""
+        """
+        根据模式创建 display 实例.
+        """
         if self.mode == "gui":
             from src.views.main import GuiMain
 
@@ -57,7 +58,9 @@ class UIPlugin(Plugin):
         self._cmd.spawn(self.display.start(), name=f"ui:{self.mode}:start")
 
     async def _setup_callbacks(self) -> None:
-        """设置 display 回调."""
+        """
+        设置 display 回调.
+        """
         if self._is_gui:
             callbacks = {
                 "press_callback": self._wrap_callback(self._press),
@@ -77,7 +80,9 @@ class UIPlugin(Plugin):
         await self.display.set_callbacks(**callbacks)
 
     def _wrap_callback(self, coro_func):
-        """包装协程函数为可调度的 lambda."""
+        """
+        包装协程函数为可调度的 lambda.
+        """
         return lambda: self._cmd.spawn(coro_func(), name="ui:callback")
 
     async def on_incoming_json(self, message) -> None:
@@ -113,35 +118,51 @@ class UIPlugin(Plugin):
     # ===== 回调函数 =====
 
     def _request_shutdown(self):
-        """请求应用关闭."""
+        """
+        请求应用关闭.
+        """
         self._cmd.request_shutdown()
 
     async def _send_text(self, text: str):
-        """发送文本到服务端."""
+        """
+        发送文本到服务端.
+        """
         if self._ctx.is_speaking():
             await self._cmd.abort_speaking(None)
         if await self._cmd.connect_protocol():
             await self._cmd.send_wake_word_detected(text)
 
     async def _press(self):
-        """手动模式：按下开始录音."""
+        """
+        手动模式：按下开始录音.
+        """
         await self._cmd.connect_protocol()
         from src.constants.constants import ListeningMode
+
         await self._cmd.start_listening(ListeningMode.MANUAL)
 
     async def _release(self):
-        """手动模式：释放停止录音."""
+        """
+        手动模式：释放停止录音.
+        """
         await self._cmd.stop_listening()
 
     async def _auto_toggle(self):
-        """自动模式切换."""
+        """
+        自动模式切换.
+        """
         await self._cmd.connect_protocol()
         from src.constants.constants import ListeningMode
-        mode = ListeningMode.REALTIME if self._ctx.get_config().get_config(
-            "AEC_OPTIONS.ENABLED", True
-        ) else ListeningMode.AUTO_STOP
+
+        mode = (
+            ListeningMode.REALTIME
+            if self._ctx.get_config().get_config("AEC_OPTIONS.ENABLED", True)
+            else ListeningMode.AUTO_STOP
+        )
         await self._cmd.start_listening(mode)
 
     async def _abort(self):
-        """中断对话."""
+        """
+        中断对话.
+        """
         await self._cmd.abort_speaking(AbortReason.USER_INTERRUPTION)

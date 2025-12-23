@@ -2,8 +2,8 @@
 Camera tool for MCP.
 """
 
-from src.utils.config_manager import ConfigManager
 from src.logging import get_logger
+from src.utils.config_manager import ConfigManager
 
 from .normal_camera import NormalCamera
 from .vl_camera import VLCamera

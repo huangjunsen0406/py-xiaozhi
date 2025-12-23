@@ -7,7 +7,7 @@ import ctypes.util
 import os
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Union
 
 from src.logging import get_logger
 from src.utils.resource_finder import get_lib_path
@@ -16,7 +16,9 @@ logger = get_logger()
 
 
 def _find_system_opus() -> Optional[str]:
-    """查找系统安装的 opus 库"""
+    """
+    查找系统安装的 opus 库.
+    """
     if sys.platform == "win32":
         return None
 
@@ -40,8 +42,10 @@ def _find_system_opus() -> Optional[str]:
     return ctypes.util.find_library("opus")
 
 
-def _try_load(path: str | Path) -> bool:
-    """尝试加载动态库"""
+def _try_load(path: Union[str, Path]) -> bool:
+    """
+    尝试加载动态库.
+    """
     try:
         ctypes.CDLL(str(path))
         return True
@@ -50,10 +54,12 @@ def _try_load(path: str | Path) -> bool:
 
 
 def _patch_find_library(lib_path: str) -> None:
-    """修补 ctypes.util.find_library，让 opuslib 能找到库"""
+    """
+    修补 ctypes.util.find_library，让 opuslib 能找到库.
+    """
     original = ctypes.util.find_library
 
-    def patched(name: str) -> str | None:
+    def patched(name: str) -> Optional[str]:
         if name == "opus":
             return lib_path
         return original(name)
@@ -62,8 +68,7 @@ def _patch_find_library(lib_path: str) -> None:
 
 
 def setup_opus() -> bool:
-    """
-    设置 opus 库，供 opuslib 使用
+    """设置 opus 库，供 opuslib 使用.
 
     搜索顺序：
     1. 系统 opus（brew/apt）

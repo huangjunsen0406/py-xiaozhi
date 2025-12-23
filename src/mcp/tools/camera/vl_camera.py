@@ -7,8 +7,8 @@ import base64
 import cv2
 from openai import OpenAI
 
-from src.utils.config_manager import ConfigManager
 from src.logging import get_logger
+from src.utils.config_manager import ConfigManager
 
 from .base_camera import BaseCamera
 

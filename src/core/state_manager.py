@@ -1,5 +1,4 @@
-"""
-状态管理器.
+"""状态管理器.
 
 集中管理设备状态，通过事件总线广播状态变更。
 """
@@ -18,8 +17,7 @@ logger = get_logger()
 
 
 class StateManager:
-    """
-    设备状态管理器.
+    """设备状态管理器.
 
     职责:
     - 管理设备状态 (IDLE, LISTENING, SPEAKING)
@@ -64,12 +62,13 @@ class StateManager:
     # -------------------------
     @property
     def device_state(self) -> DeviceState:
-        """获取当前设备状态."""
+        """
+        获取当前设备状态.
+        """
         return self._device_state
 
     async def set_device_state(self, state: DeviceState) -> None:
-        """
-        设置设备状态.
+        """设置设备状态.
 
         Args:
             state: 新的设备状态
@@ -95,19 +94,27 @@ class StateManager:
         )
 
     def get_device_state(self) -> DeviceState:
-        """获取当前设备状态."""
+        """
+        获取当前设备状态.
+        """
         return self._device_state
 
     def is_idle(self) -> bool:
-        """是否处于空闲状态."""
+        """
+        是否处于空闲状态.
+        """
         return self._device_state == DeviceState.IDLE
 
     def is_listening(self) -> bool:
-        """是否正在监听."""
+        """
+        是否正在监听.
+        """
         return self._device_state == DeviceState.LISTENING
 
     def is_speaking(self) -> bool:
-        """是否正在说话."""
+        """
+        是否正在说话.
+        """
         return self._device_state == DeviceState.SPEAKING
 
     # -------------------------
@@ -115,15 +122,21 @@ class StateManager:
     # -------------------------
     @property
     def listening_mode(self) -> ListeningMode:
-        """获取当前监听模式."""
+        """
+        获取当前监听模式.
+        """
         return self._listening_mode
 
     def get_listening_mode(self) -> ListeningMode:
-        """获取当前监听模式."""
+        """
+        获取当前监听模式.
+        """
         return self._listening_mode
 
     def set_listening_mode(self, mode: ListeningMode) -> None:
-        """设置监听模式."""
+        """
+        设置监听模式.
+        """
         self._listening_mode = mode
         logger.debug(f"监听模式设置为: {mode}")
 
@@ -132,21 +145,29 @@ class StateManager:
     # -------------------------
     @property
     def keep_listening(self) -> bool:
-        """是否保持持续监听."""
+        """
+        是否保持持续监听.
+        """
         return self._keep_listening
 
     def is_keep_listening(self) -> bool:
-        """是否保持持续监听."""
+        """
+        是否保持持续监听.
+        """
         return self._keep_listening
 
     def set_keep_listening(self, value: bool) -> None:
-        """设置持续监听状态."""
+        """
+        设置持续监听状态.
+        """
         self._keep_listening = value
         logger.debug(f"持续监听: {value}")
 
     @property
     def aec_enabled(self) -> bool:
-        """AEC 是否启用."""
+        """
+        AEC 是否启用.
+        """
         return self._aec_enabled
 
     # -------------------------
@@ -154,19 +175,22 @@ class StateManager:
     # -------------------------
     @property
     def aborted(self) -> bool:
-        """是否已中止."""
+        """
+        是否已中止.
+        """
         return self._aborted
 
     def set_aborted(self, value: bool) -> None:
-        """设置中止状态."""
+        """
+        设置中止状态.
+        """
         self._aborted = value
 
     # -------------------------
     # 复合状态查询
     # -------------------------
     def should_capture_audio(self) -> bool:
-        """
-        是否应该采集音频.
+        """是否应该采集音频.
 
         在以下情况下需要采集:
         1. 正在监听且未中止
@@ -183,8 +207,7 @@ class StateManager:
         )
 
     def get_snapshot(self) -> dict:
-        """
-        获取状态快照.
+        """获取状态快照.
 
         返回当前所有状态的字典，用于调试和日志。
         """

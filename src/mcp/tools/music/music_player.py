@@ -168,8 +168,7 @@ class MusicPlayer:
         logger.info("音乐播放器单例初始化完成 (FFmpeg + AudioCodec 模式)")
 
     def _initialize_app_reference(self):
-        """
-        初始化应用程序引用和 AudioCodec.
+        """初始化应用程序引用和 AudioCodec.
 
         注意：此方法会在 AudioPlugin 启动后通过 set_audio_codec 设置 audio_codec。
         """

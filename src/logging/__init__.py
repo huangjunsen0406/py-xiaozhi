@@ -2,9 +2,9 @@ import inspect
 import logging
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional, Union
 
-from .config import LoggingConfig, LoggingConfigManager
+from .log_config import LoggingConfig, LoggingConfigManager
 from .context import (
     LogContext,
     clear_all_context,
@@ -30,7 +30,7 @@ from .filters import (
     SensitiveDataFilter,
 )
 from .formatters import ColoredFormatter, JsonFormatter, SimpleFormatter
-from .handlers import (
+from .log_handlers import (
     AsyncHandler,
     BufferedHandler,
     CallbackHandler,
@@ -89,17 +89,16 @@ __all__ = [
 
 
 def setup_logging(
-    level: str | None = None,
-    log_dir: str | Path | None = None,
+    level: Optional[str] = None,
+    log_dir: Union[str, Path, None] = None,
     enable_console: bool = True,
     enable_file: bool = True,
     enable_json: bool = False,
     enable_async: bool = False,
     enable_sensitive_filter: bool = True,
-    config: LoggingConfig | None = None,
-) -> Path | None:
-    """
-    初始化日志系统.
+    config: Optional[LoggingConfig] = None,
+) -> Optional[Path]:
+    """初始化日志系统.
 
     Args:
         level: 日志级别，默认根据环境自动设置
@@ -259,9 +258,8 @@ def setup_logging(
     return log_file
 
 
-def get_logger(name: str | None = None) -> logging.Logger:
-    """
-    获取配置好的日志记录器.
+def get_logger(name: Optional[str] = None) -> logging.Logger:
+    """获取配置好的日志记录器.
 
     Args:
         name: 日志记录器名称。如果不传，自动使用调用者的模块名。
@@ -296,8 +294,7 @@ def get_logger(name: str | None = None) -> logging.Logger:
 
 
 def shutdown_logging() -> None:
-    """
-    关闭日志系统，清理资源.
+    """关闭日志系统，清理资源.
 
     在应用退出时调用，确保所有日志都被写入。
     """
@@ -309,7 +306,9 @@ def shutdown_logging() -> None:
 
 # 便捷函数：创建带上下文的 logger
 class ContextLogger:
-    """带上下文支持的 Logger 包装器."""
+    """
+    带上下文支持的 Logger 包装器.
+    """
 
     def __init__(self, logger: logging.Logger) -> None:
         self._logger = logger
@@ -317,7 +316,9 @@ class ContextLogger:
     def _log_with_context(
         self, level: int, msg: str, *args: Any, **kwargs: Any
     ) -> None:
-        """带上下文信息记录日志."""
+        """
+        带上下文信息记录日志.
+        """
         extra = kwargs.pop("extra", {})
         extra.update(get_all_context())
         kwargs["extra"] = extra
@@ -343,9 +344,8 @@ class ContextLogger:
         self._log_with_context(logging.ERROR, msg, *args, **kwargs)
 
 
-def get_context_logger(name: str | None = None) -> ContextLogger:
-    """
-    获取带上下文支持的日志记录器.
+def get_context_logger(name: Optional[str] = None) -> ContextLogger:
+    """获取带上下文支持的日志记录器.
 
     Args:
         name: 日志记录器名称。如果不传，自动使用调用者的模块名。

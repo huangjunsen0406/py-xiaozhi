@@ -1,22 +1,23 @@
-"""
-日历插件.
+"""日历插件.
 
 管理日程提醒服务。
 """
 
 from typing import TYPE_CHECKING
 
-from src.plugins.base import Plugin
 from src.logging import get_logger
+from src.plugins.base import Plugin
 
 if TYPE_CHECKING:
-    from src.bootstrap.protocols import PluginContext, PluginCommands
+    from src.bootstrap.protocols import PluginCommands, PluginContext
 
 logger = get_logger()
 
 
 class _CmdAdapter:
-    """为日程提醒服务提供 TTS 功能的适配器."""
+    """
+    为日程提醒服务提供 TTS 功能的适配器.
+    """
 
     def __init__(self, cmd: "PluginCommands", ctx: "PluginContext") -> None:
         self._cmd = cmd

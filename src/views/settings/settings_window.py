@@ -8,8 +8,8 @@ from PyQt5.QtWidgets import (
     QTabWidget,
 )
 
-from src.utils.config_manager import ConfigManager
 from src.logging import get_logger
+from src.utils.config_manager import ConfigManager
 from src.views.settings.components.audio import AudioWidget
 from src.views.settings.components.camera import CameraWidget
 from src.views.settings.components.shortcuts_settings import ShortcutsSettingsWidget

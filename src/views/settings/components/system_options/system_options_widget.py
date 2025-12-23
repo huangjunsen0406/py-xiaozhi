@@ -3,8 +3,8 @@ from pathlib import Path
 from PyQt5.QtCore import pyqtSignal
 from PyQt5.QtWidgets import QCheckBox, QComboBox, QLineEdit, QWidget
 
-from src.utils.config_manager import ConfigManager
 from src.logging import get_logger
+from src.utils.config_manager import ConfigManager
 
 
 class SystemOptionsWidget(QWidget):

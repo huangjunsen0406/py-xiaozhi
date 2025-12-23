@@ -1,5 +1,4 @@
-"""
-日志过滤器模块.
+"""日志过滤器模块.
 
 提供各种日志过滤功能：
 - 敏感信息脱敏
@@ -9,13 +8,15 @@
 
 import logging
 import re
-from typing import Any
+from typing import Optional
 
 from .context import get_all_context
 
 
 class SensitiveDataFilter(logging.Filter):
-    """敏感数据过滤器，自动脱敏敏感信息."""
+    """
+    敏感数据过滤器，自动脱敏敏感信息.
+    """
 
     # 默认敏感字段模式
     DEFAULT_PATTERNS = [
@@ -55,7 +56,10 @@ class SensitiveDataFilter(logging.Filter):
             lambda m: f"{m.group(1)[:2]}***@{m.group(2)}",
         ),
         # Phone numbers (Chinese format)
-        (re.compile(r"\b1[3-9]\d{9}\b"), lambda m: m.group()[:3] + "****" + m.group()[-4:]),
+        (
+            re.compile(r"\b1[3-9]\d{9}\b"),
+            lambda m: m.group()[:3] + "****" + m.group()[-4:],
+        ),
         # IP addresses (internal only)
         (
             re.compile(r"\b(10\.\d{1,3}\.\d{1,3}\.\d{1,3})\b"),
@@ -70,7 +74,7 @@ class SensitiveDataFilter(logging.Filter):
     def __init__(
         self,
         name: str = "",
-        patterns: list[str] | None = None,
+        patterns: Optional[list[str]] = None,
         mask: str = "***",
         enable_regex: bool = True,
     ) -> None:
@@ -86,7 +90,9 @@ class SensitiveDataFilter(logging.Filter):
         )
 
     def filter(self, record: logging.LogRecord) -> bool:
-        """过滤并脱敏日志记录."""
+        """
+        过滤并脱敏日志记录.
+        """
         # 处理消息
         if record.msg:
             record.msg = self._mask_sensitive(str(record.msg))
@@ -107,7 +113,9 @@ class SensitiveDataFilter(logging.Filter):
         return True
 
     def _mask_sensitive(self, text: str) -> str:
-        """对文本中的敏感信息进行脱敏."""
+        """
+        对文本中的敏感信息进行脱敏.
+        """
         if not text:
             return text
 
@@ -131,10 +139,14 @@ class SensitiveDataFilter(logging.Filter):
 
 
 class ContextFilter(logging.Filter):
-    """上下文过滤器，将上下文信息注入到日志记录中."""
+    """
+    上下文过滤器，将上下文信息注入到日志记录中.
+    """
 
     def filter(self, record: logging.LogRecord) -> bool:
-        """将上下文信息添加到日志记录."""
+        """
+        将上下文信息添加到日志记录.
+        """
         context = get_all_context()
 
         # 添加上下文字段
@@ -154,20 +166,24 @@ class ContextFilter(logging.Filter):
 
 
 class ModuleFilter(logging.Filter):
-    """模块过滤器，只允许特定模块的日志通过."""
+    """
+    模块过滤器，只允许特定模块的日志通过.
+    """
 
     def __init__(
         self,
         name: str = "",
-        allowed_modules: list[str] | None = None,
-        denied_modules: list[str] | None = None,
+        allowed_modules: Optional[list[str]] = None,
+        denied_modules: Optional[list[str]] = None,
     ) -> None:
         super().__init__(name)
         self.allowed_modules = allowed_modules or []
         self.denied_modules = denied_modules or []
 
     def filter(self, record: logging.LogRecord) -> bool:
-        """过滤日志记录."""
+        """
+        过滤日志记录.
+        """
         module_name = record.name
 
         # 如果在拒绝列表中，直接拒绝
@@ -186,7 +202,9 @@ class ModuleFilter(logging.Filter):
 
 
 class RateLimitFilter(logging.Filter):
-    """速率限制过滤器，防止日志刷屏."""
+    """
+    速率限制过滤器，防止日志刷屏.
+    """
 
     def __init__(
         self,
@@ -200,7 +218,9 @@ class RateLimitFilter(logging.Filter):
         self._message_counts: dict[str, list[float]] = {}
 
     def filter(self, record: logging.LogRecord) -> bool:
-        """基于消息内容进行速率限制."""
+        """
+        基于消息内容进行速率限制.
+        """
         import time
 
         now = time.time()
@@ -223,7 +243,9 @@ class RateLimitFilter(logging.Filter):
 
 
 class DuplicateFilter(logging.Filter):
-    """重复日志过滤器，抑制短时间内的重复日志."""
+    """
+    重复日志过滤器，抑制短时间内的重复日志.
+    """
 
     def __init__(
         self,
@@ -235,7 +257,9 @@ class DuplicateFilter(logging.Filter):
         self._last_log: dict[str, float] = {}
 
     def filter(self, record: logging.LogRecord) -> bool:
-        """过滤重复的日志消息."""
+        """
+        过滤重复的日志消息.
+        """
         import time
 
         now = time.time()

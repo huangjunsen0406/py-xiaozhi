@@ -1,5 +1,4 @@
-"""
-日志配置模块.
+"""日志配置模块.
 
 提供日志系统的配置管理，支持：
 - 环境感知（dev/test/prod）
@@ -11,11 +10,13 @@ import os
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 
 class Environment(Enum):
-    """运行环境枚举."""
+    """
+    运行环境枚举.
+    """
 
     DEVELOPMENT = "development"
     TESTING = "testing"
@@ -24,14 +25,16 @@ class Environment(Enum):
 
 @dataclass
 class LoggingConfig:
-    """日志配置数据类."""
+    """
+    日志配置数据类.
+    """
 
     # 基础配置
     level: str = "INFO"
     format_type: str = "colored"  # colored, json, simple
 
     # 文件配置
-    log_dir: Path | None = None
+    log_dir: Optional[Path] = None
     log_file: str = "app.log"
     error_log_file: str = "error.log"
 
@@ -80,10 +83,12 @@ class LoggingConfig:
 
 
 class LoggingConfigManager:
-    """日志配置管理器."""
+    """
+    日志配置管理器.
+    """
 
-    _instance: "LoggingConfigManager | None" = None
-    _config: LoggingConfig | None = None
+    _instance: Optional["LoggingConfigManager"] = None
+    _config: Optional[LoggingConfig] = None
 
     def __new__(cls) -> "LoggingConfigManager":
         if cls._instance is None:
@@ -96,13 +101,17 @@ class LoggingConfigManager:
 
     @classmethod
     def get_instance(cls) -> "LoggingConfigManager":
-        """获取配置管理器单例."""
+        """
+        获取配置管理器单例.
+        """
         if cls._instance is None:
             cls._instance = cls()
         return cls._instance
 
     def _load_config(self) -> LoggingConfig:
-        """加载日志配置."""
+        """
+        加载日志配置.
+        """
         config = LoggingConfig()
 
         # 尝试从 ConfigManager 加载配置
@@ -165,7 +174,9 @@ class LoggingConfigManager:
         return config
 
     def _get_environment(self) -> Environment:
-        """获取当前运行环境."""
+        """
+        获取当前运行环境.
+        """
         env_str = os.environ.get("APP_ENV", "development").lower()
         env_map = {
             "dev": Environment.DEVELOPMENT,
@@ -178,7 +189,9 @@ class LoggingConfigManager:
         return env_map.get(env_str, Environment.DEVELOPMENT)
 
     def _get_default_log_dir(self) -> Path:
-        """获取默认日志目录."""
+        """
+        获取默认日志目录.
+        """
         # 尝试从项目根目录获取
         try:
             from src.utils.resource_finder import get_app_root
@@ -189,13 +202,17 @@ class LoggingConfigManager:
 
     @property
     def config(self) -> LoggingConfig:
-        """获取当前配置."""
+        """
+        获取当前配置.
+        """
         if self._config is None:
             self._config = self._load_config()
         return self._config
 
     def update_config(self, **kwargs: Any) -> None:
-        """动态更新配置."""
+        """
+        动态更新配置.
+        """
         if self._config is None:
             self._config = self._load_config()
 
@@ -204,7 +221,9 @@ class LoggingConfigManager:
                 setattr(self._config, key, value)
 
     def get_level_for_logger(self, name: str) -> str:
-        """获取特定logger的日志级别."""
+        """
+        获取特定logger的日志级别.
+        """
         if self._config is None:
             return "INFO"
 
@@ -216,5 +235,7 @@ class LoggingConfigManager:
         return self._config.level
 
     def reload(self) -> None:
-        """重新加载配置."""
+        """
+        重新加载配置.
+        """
         self._config = self._load_config()

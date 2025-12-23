@@ -1,5 +1,4 @@
-"""
-快捷键插件.
+"""快捷键插件.
 
 管理全局快捷键。
 """
@@ -7,15 +6,15 @@
 import asyncio
 import time
 from dataclasses import dataclass
-from typing import Dict, Optional, Set, TYPE_CHECKING
+from typing import TYPE_CHECKING, Dict, Optional, Set
 
 from src.constants.constants import AbortReason
+from src.logging import get_logger
 from src.plugins.base import Plugin
 from src.utils.config_manager import ConfigManager
-from src.logging import get_logger
 
 if TYPE_CHECKING:
-    from src.bootstrap.protocols import PluginContext, PluginCommands
+    from src.bootstrap.protocols import PluginCommands, PluginContext
 
 logger = get_logger()
 
@@ -28,7 +27,9 @@ class ShortcutConfig:
 
 
 class _CmdAdapter:
-    """快捷键命令适配器."""
+    """
+    快捷键命令适配器.
+    """
 
     def __init__(self, cmd: "PluginCommands", ctx: "PluginContext"):
         self._cmd = cmd
@@ -38,6 +39,7 @@ class _CmdAdapter:
         try:
             await self._cmd.connect_protocol()
             from src.constants.constants import ListeningMode
+
             await self._cmd.start_listening(ListeningMode.MANUAL)
         except Exception:
             pass
@@ -52,9 +54,12 @@ class _CmdAdapter:
         try:
             await self._cmd.connect_protocol()
             from src.constants.constants import ListeningMode
-            mode = ListeningMode.REALTIME if self._ctx.get_config().get_config(
-                "AEC_OPTIONS.ENABLED", True
-            ) else ListeningMode.AUTO_STOP
+
+            mode = (
+                ListeningMode.REALTIME
+                if self._ctx.get_config().get_config("AEC_OPTIONS.ENABLED", True)
+                else ListeningMode.AUTO_STOP
+            )
             await self._cmd.start_listening(mode)
         except Exception:
             pass
@@ -67,7 +72,9 @@ class _CmdAdapter:
 
 
 class PluginShortcutManager:
-    """全局快捷键管理器."""
+    """
+    全局快捷键管理器.
+    """
 
     def __init__(self, loop: Optional[asyncio.AbstractEventLoop]):
         self._main_loop = loop
@@ -87,11 +94,26 @@ class PluginShortcutManager:
         self.display = None
 
         self.key_mapping = {
-            "\x17": "w", "\x01": "a", "\x13": "s", "\x04": "d",
-            "\x05": "e", "\x12": "r", "\x14": "t", "\x06": "f",
-            "\x07": "g", "\x08": "h", "\x0a": "j", "\x0b": "k",
-            "\x0c": "l", "\x1a": "z", "\x18": "x", "\x03": "c",
-            "\x16": "v", "\x02": "b", "\x0e": "n", "\x0d": "m",
+            "\x17": "w",
+            "\x01": "a",
+            "\x13": "s",
+            "\x04": "d",
+            "\x05": "e",
+            "\x12": "r",
+            "\x14": "t",
+            "\x06": "f",
+            "\x07": "g",
+            "\x08": "h",
+            "\x0a": "j",
+            "\x0b": "k",
+            "\x0c": "l",
+            "\x1a": "z",
+            "\x18": "x",
+            "\x03": "c",
+            "\x16": "v",
+            "\x02": "b",
+            "\x0e": "n",
+            "\x0d": "m",
             "\x11": "q",
         }
 
@@ -100,7 +122,13 @@ class PluginShortcutManager:
 
     def _load_shortcuts(self):
         self.shortcuts.clear()
-        for name in ["MANUAL_PRESS", "AUTO_TOGGLE", "ABORT", "MODE_TOGGLE", "WINDOW_TOGGLE"]:
+        for name in [
+            "MANUAL_PRESS",
+            "AUTO_TOGGLE",
+            "ABORT",
+            "MODE_TOGGLE",
+            "WINDOW_TOGGLE",
+        ]:
             cfg = self.shortcuts_config.get(name, {}) or {}
             modifier = str(cfg.get("modifier", "ctrl")).lower()
             key = str(cfg.get("key", "")).lower()
@@ -176,7 +204,11 @@ class PluginShortcutManager:
             return
         if name in self.pressed_keys:
             self.pressed_keys.remove(name)
-        if self.manual_press_active and len(self.pressed_keys) == 0 and self.application:
+        if (
+            self.manual_press_active
+            and len(self.pressed_keys) == 0
+            and self.application
+        ):
             self._run_coroutine_threadsafe(self.application.stop_listening())
             self.manual_press_active = False
         self._check_shortcuts(False)
@@ -210,7 +242,9 @@ class PluginShortcutManager:
     def _check_shortcuts(self, is_press: bool):
         if not self.shortcuts:
             return
-        ctrl = any(k in self.pressed_keys for k in ["ctrl", "control", "ctrl_l", "ctrl_r"])
+        ctrl = any(
+            k in self.pressed_keys for k in ["ctrl", "control", "ctrl_l", "ctrl_r"]
+        )
         alt = any(k in self.pressed_keys for k in ["alt", "option", "alt_l", "alt_r"])
         shift = any(k in self.pressed_keys for k in ["shift", "shift_l", "shift_r"])
         cmd = "cmd" in self.pressed_keys
@@ -219,7 +253,9 @@ class PluginShortcutManager:
             if self._match(cfg, ctrl, alt, shift, cmd):
                 self._handle(kind, is_press)
 
-    def _match(self, cfg: ShortcutConfig, ctrl: bool, alt: bool, shift: bool, cmd: bool) -> bool:
+    def _match(
+        self, cfg: ShortcutConfig, ctrl: bool, alt: bool, shift: bool, cmd: bool
+    ) -> bool:
         if cfg.modifier == "ctrl" and not ctrl:
             return False
         if cfg.modifier == "alt" and not alt:
@@ -241,7 +277,9 @@ class PluginShortcutManager:
             return
 
         if kind == "ABORT" and is_press and self.application:
-            self._run_coroutine_threadsafe(self.application.abort_speaking(AbortReason.NONE))
+            self._run_coroutine_threadsafe(
+                self.application.abort_speaking(AbortReason.NONE)
+            )
             return
 
         if kind == "AUTO_TOGGLE" and is_press and self.application:
@@ -291,7 +329,9 @@ class ShortcutsPlugin(Plugin):
         self._manager = PluginShortcutManager(self._loop)
 
     def set_ui_plugin(self, ui_plugin) -> None:
-        """设置 UIPlugin 引用（由 ServiceContainer 调用）."""
+        """
+        设置 UIPlugin 引用（由 ServiceContainer 调用）.
+        """
         if self._manager and ui_plugin:
             self._manager.display = getattr(ui_plugin, "display", None)
 

@@ -1,5 +1,4 @@
-"""
-任务管理器.
+"""任务管理器.
 
 统一管理异步任务的创建、追踪和清理。
 """
@@ -13,8 +12,7 @@ logger = get_logger()
 
 
 class TaskManager:
-    """
-    异步任务管理器.
+    """异步任务管理器.
 
     职责:
     - 创建和追踪异步任务
@@ -42,8 +40,7 @@ class TaskManager:
         self._running: bool = False
 
     def initialize(self, loop: asyncio.AbstractEventLoop = None) -> None:
-        """
-        初始化任务管理器.
+        """初始化任务管理器.
 
         Args:
             loop: 事件循环，为 None 时使用当前运行的循环
@@ -55,22 +52,27 @@ class TaskManager:
 
     @property
     def loop(self) -> Optional[asyncio.AbstractEventLoop]:
-        """获取事件循环."""
+        """
+        获取事件循环.
+        """
         return self._loop
 
     @property
     def running(self) -> bool:
-        """是否正在运行."""
+        """
+        是否正在运行.
+        """
         return self._running
 
     @property
     def shutdown_event(self) -> Optional[asyncio.Event]:
-        """获取关闭事件."""
+        """
+        获取关闭事件.
+        """
         return self._shutdown_event
 
     def spawn(self, coro: Awaitable[Any], name: str) -> Optional[asyncio.Task]:
-        """
-        创建异步任务并追踪.
+        """创建异步任务并追踪.
 
         Args:
             coro: 协程对象
@@ -100,8 +102,7 @@ class TaskManager:
         return task
 
     def schedule_nowait(self, fn: Callable, *args, **kwargs) -> None:
-        """
-        线程安全地调度可调用对象.
+        """线程安全地调度可调用对象.
 
         如果可调用对象返回协程，会自动创建任务。
 
@@ -118,26 +119,31 @@ class TaskManager:
             try:
                 result = fn(*args, **kwargs)
                 if asyncio.iscoroutine(result):
-                    self.spawn(result, name=f"scheduled:{getattr(fn, '__name__', 'anon')}")
+                    self.spawn(
+                        result, name=f"scheduled:{getattr(fn, '__name__', 'anon')}"
+                    )
             except Exception as e:
                 logger.error(f"调度的可调用执行失败: {e}", exc_info=True)
 
         self._loop.call_soon_threadsafe(_runner)
 
     async def wait_shutdown(self) -> None:
-        """等待关闭信号."""
+        """
+        等待关闭信号.
+        """
         if self._shutdown_event:
             await self._shutdown_event.wait()
 
     def request_shutdown(self) -> None:
-        """请求关闭."""
+        """
+        请求关闭.
+        """
         if self._shutdown_event and not self._shutdown_event.is_set():
             self._shutdown_event.set()
             logger.info("收到关闭请求")
 
     async def cancel_all(self) -> None:
-        """
-        取消所有追踪的任务.
+        """取消所有追踪的任务.
 
         会等待所有任务完成或取消。
         """
@@ -164,9 +170,13 @@ class TaskManager:
         logger.info("所有任务已取消")
 
     def task_count(self) -> int:
-        """获取当前任务数量."""
+        """
+        获取当前任务数量.
+        """
         return len(self._tasks)
 
     def get_task_names(self) -> list[str]:
-        """获取所有任务名称."""
+        """
+        获取所有任务名称.
+        """
         return [t.get_name() for t in self._tasks if not t.done()]

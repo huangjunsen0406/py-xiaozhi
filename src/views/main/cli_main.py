@@ -130,10 +130,15 @@ class CliMain:
             await self.close()
 
     def _remove_all_stream_handlers(self) -> None:
-        """移除所有 logger 的 stdout/stderr StreamHandler."""
+        """
+        移除所有 logger 的 stdout/stderr StreamHandler.
+        """
+
         def remove_stream_handlers(logger: logging.Logger) -> None:
             for h in list(logger.handlers):
-                if isinstance(h, logging.StreamHandler) and getattr(h, "stream", None) in (
+                if isinstance(h, logging.StreamHandler) and getattr(
+                    h, "stream", None
+                ) in (
                     sys.stdout,
                     sys.stderr,
                 ):
@@ -256,7 +261,9 @@ class CliMain:
         print("正在关闭应用...\n")
 
     def _restore_logging(self):
-        """恢复标准日志输出."""
+        """
+        恢复标准日志输出.
+        """
         import logging
 
         root = logging.getLogger()
@@ -269,9 +276,7 @@ class CliMain:
         # 添加一个简单的 StreamHandler 用于退出时的日志
         handler = logging.StreamHandler(sys.stderr)
         handler.setLevel(logging.WARNING)
-        handler.setFormatter(
-            logging.Formatter("%(levelname)s - %(message)s")
-        )
+        handler.setFormatter(logging.Formatter("%(levelname)s - %(message)s"))
         root.addHandler(handler)
 
     def _print_help(self):

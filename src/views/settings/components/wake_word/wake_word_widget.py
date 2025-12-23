@@ -11,8 +11,8 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
-from src.utils.config_manager import ConfigManager
 from src.logging import get_logger
+from src.utils.config_manager import ConfigManager
 from src.utils.resource_finder import get_app_root, get_models_dir
 
 # 导入拼音转换库

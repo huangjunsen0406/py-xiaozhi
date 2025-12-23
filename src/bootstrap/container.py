@@ -1,5 +1,4 @@
-"""
-服务容器.
+"""服务容器.
 
 整合所有核心服务，提供统一的应用入口。
 """
@@ -7,21 +6,23 @@
 import asyncio
 from typing import Any, Awaitable, Callable, Optional
 
-from src.bootstrap.protocols import PluginContext, PluginCommands, WindowContext
+from src.bootstrap.protocols import PluginCommands, PluginContext, WindowContext
 from src.constants.constants import DeviceState, ListeningMode
 from src.core.event_bus import EventBus, Events
-from src.core.state_manager import StateManager
 from src.core.protocol_manager import ProtocolManager
+from src.core.state_manager import StateManager
 from src.core.task_manager import TaskManager
+from src.logging import get_logger
 from src.plugins.manager import PluginManager
 from src.utils.config_manager import ConfigManager
-from src.logging import get_logger
 
 logger = get_logger()
 
 
 class PluginContextAdapter:
-    """PluginContext 适配器."""
+    """
+    PluginContext 适配器.
+    """
 
     def __init__(self, container: "ServiceContainer"):
         self._container = container
@@ -55,7 +56,9 @@ class PluginContextAdapter:
 
 
 class PluginCommandsAdapter:
-    """PluginCommands 适配器."""
+    """
+    PluginCommands 适配器.
+    """
 
     def __init__(self, container: "ServiceContainer"):
         self._container = container
@@ -95,7 +98,9 @@ class PluginCommandsAdapter:
 
 
 class WindowContextAdapter:
-    """WindowContext 适配器."""
+    """
+    WindowContext 适配器.
+    """
 
     def __init__(self, container: "ServiceContainer"):
         self._container = container
@@ -122,34 +127,23 @@ class WindowContextAdapter:
         self._container.tasks.request_shutdown()
 
     def on_start_listening(self) -> None:
-        self._container.tasks.schedule_nowait(
-            self._container.start_auto_conversation
-        )
+        self._container.tasks.schedule_nowait(self._container.start_auto_conversation)
 
     def on_stop_listening(self) -> None:
-        self._container.tasks.schedule_nowait(
-            self._container.stop_listening
-        )
+        self._container.tasks.schedule_nowait(self._container.stop_listening)
 
     def on_manual_listen_press(self) -> None:
-        self._container.tasks.schedule_nowait(
-            self._container.start_listening_manual
-        )
+        self._container.tasks.schedule_nowait(self._container.start_listening_manual)
 
     def on_manual_listen_release(self) -> None:
-        self._container.tasks.schedule_nowait(
-            self._container.stop_listening_manual
-        )
+        self._container.tasks.schedule_nowait(self._container.stop_listening_manual)
 
     def on_auto_conversation_start(self) -> None:
-        self._container.tasks.schedule_nowait(
-            self._container.start_auto_conversation
-        )
+        self._container.tasks.schedule_nowait(self._container.start_auto_conversation)
 
 
 class ServiceContainer:
-    """
-    服务容器.
+    """服务容器.
 
     整合所有核心服务，作为应用的中央协调者。
     """
@@ -244,8 +238,12 @@ class ServiceContainer:
         finally:
             await self.shutdown()
 
-    async def _setup_plugins(self, mode: str, ctx: PluginContext, cmd: PluginCommands) -> None:
-        """设置插件."""
+    async def _setup_plugins(
+        self, mode: str, ctx: PluginContext, cmd: PluginCommands
+    ) -> None:
+        """
+        设置插件.
+        """
         from src.plugins.audio import AudioPlugin
         from src.plugins.calendar import CalendarPlugin
         from src.plugins.iot import IoTPlugin
@@ -279,7 +277,9 @@ class ServiceContainer:
         shortcuts_plugin.set_ui_plugin(ui_plugin)
 
     def _setup_event_handlers(self) -> None:
-        """设置事件处理器."""
+        """
+        设置事件处理器.
+        """
         self.event_bus.on(Events.AUDIO_CHANNEL_OPENED, self._on_audio_channel_opened)
         self.event_bus.on(Events.AUDIO_CHANNEL_CLOSED, self._on_audio_channel_closed)
         self.event_bus.on(Events.INCOMING_JSON, self._on_incoming_json)
@@ -288,7 +288,9 @@ class ServiceContainer:
         self.event_bus.on(Events.DEVICE_STATE_CHANGED, self._on_device_state_changed)
 
     async def shutdown(self) -> None:
-        """关闭应用."""
+        """
+        关闭应用.
+        """
         logger.info("正在关闭 ServiceContainer...")
 
         try:
@@ -305,6 +307,7 @@ class ServiceContainer:
             if self._mode == "gui":
                 try:
                     from PyQt5.QtWidgets import QApplication
+
                     if QApplication.instance():
                         logger.debug("退出 Qt 应用")
                         QApplication.quit()
@@ -352,7 +355,10 @@ class ServiceContainer:
             logger.error(f"处理 JSON 消息失败: {e}")
 
     async def _handle_tts_start(self) -> None:
-        if self.state.keep_listening and self.state.listening_mode == ListeningMode.REALTIME:
+        if (
+            self.state.keep_listening
+            and self.state.listening_mode == ListeningMode.REALTIME
+        ):
             await self.state.set_device_state(DeviceState.LISTENING)
         else:
             await self.state.set_device_state(DeviceState.SPEAKING)
@@ -360,7 +366,10 @@ class ServiceContainer:
     async def _handle_tts_stop(self) -> None:
         if self.state.keep_listening:
             await self.state.set_device_state(DeviceState.LISTENING)
-            if not (self.state.listening_mode == ListeningMode.REALTIME and self.state.is_listening()):
+            if not (
+                self.state.listening_mode == ListeningMode.REALTIME
+                and self.state.is_listening()
+            ):
                 await self.protocol.send_start_listening(self.state.listening_mode)
         else:
             await self.state.set_device_state(DeviceState.IDLE)
@@ -416,7 +425,11 @@ class ServiceContainer:
         if not ok:
             return
 
-        mode = ListeningMode.REALTIME if self.state.aec_enabled else ListeningMode.AUTO_STOP
+        mode = (
+            ListeningMode.REALTIME
+            if self.state.aec_enabled
+            else ListeningMode.AUTO_STOP
+        )
         self.state.set_listening_mode(mode)
         self.state.set_keep_listening(True)
 

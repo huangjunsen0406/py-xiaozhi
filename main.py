@@ -4,6 +4,7 @@ import signal
 import sys
 
 from src.logging import setup_logging
+
 setup_logging()
 
 from src.bootstrap.container import ServiceContainer
@@ -78,8 +79,11 @@ async def handle_activation(mode: str) -> bool:
 
 
 async def _run_gui_activation(activation_service) -> bool:
-    """运行GUI激活流程."""
+    """
+    运行GUI激活流程.
+    """
     import asyncio
+
     from src.views.activation.activation_window import ActivationWindow
 
     activation_window = ActivationWindow(activation_service)
@@ -103,7 +107,9 @@ async def _run_gui_activation(activation_service) -> bool:
 
 
 async def _run_cli_activation(activation_service) -> bool:
-    """运行CLI激活流程."""
+    """
+    运行CLI激活流程.
+    """
     from src.views.activation.cli_activation import CLIActivation
 
     cli_activation = CLIActivation(activation_service)

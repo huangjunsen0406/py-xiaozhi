@@ -9,7 +9,9 @@ logger = get_logger()
 
 
 class ConfigManager:
-    """配置管理器"""
+    """
+    配置管理器.
+    """
 
     _instance = None
 

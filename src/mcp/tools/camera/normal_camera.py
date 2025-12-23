@@ -5,8 +5,8 @@ Normal camera implementation using remote API.
 import cv2
 import requests
 
-from src.utils.config_manager import ConfigManager
 from src.logging import get_logger
+from src.utils.config_manager import ConfigManager
 
 from .base_camera import BaseCamera
 

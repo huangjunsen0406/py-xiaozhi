@@ -6,8 +6,8 @@ import threading
 from abc import ABC, abstractmethod
 from typing import Dict
 
-from src.utils.config_manager import ConfigManager
 from src.logging import get_logger
+from src.utils.config_manager import ConfigManager
 
 logger = get_logger()
 

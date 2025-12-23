@@ -1,17 +1,16 @@
-"""
-MCP 插件.
+"""MCP 插件.
 
 管理 MCP 工具和消息处理。
 """
 
-from typing import Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
+from src.logging import get_logger
 from src.mcp.mcp_server import McpServer
 from src.plugins.base import Plugin
-from src.logging import get_logger
 
 if TYPE_CHECKING:
-    from src.bootstrap.protocols import PluginContext, PluginCommands
+    from src.bootstrap.protocols import PluginCommands, PluginContext
 
 logger = get_logger()
 

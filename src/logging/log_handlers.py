@@ -1,5 +1,4 @@
-"""
-日志处理器模块.
+"""日志处理器模块.
 
 提供多种日志处理器：
 - 双重轮转文件处理器（时间 + 大小）
@@ -10,27 +9,24 @@
 import atexit
 import gzip
 import logging
-import os
 import queue
 import shutil
 import threading
 import time
-from datetime import datetime
 from logging.handlers import BaseRotatingHandler, QueueHandler, QueueListener
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Union
 
 
 class TimeSizeRotatingFileHandler(BaseRotatingHandler):
-    """
-    双重轮转文件处理器.
+    """双重轮转文件处理器.
 
     同时支持按时间和按大小轮转，先触发任一条件即执行轮转。
     """
 
     def __init__(
         self,
-        filename: str | Path,
+        filename: Union[str, Path],
         when: str = "midnight",
         interval: int = 1,
         max_bytes: int = 10 * 1024 * 1024,  # 10MB
@@ -53,7 +49,9 @@ class TimeSizeRotatingFileHandler(BaseRotatingHandler):
         super().__init__(self.baseFilename, "a", encoding=encoding, delay=delay)
 
     def _compute_rollover_time(self) -> None:
-        """计算下次轮转时间."""
+        """
+        计算下次轮转时间.
+        """
         current_time = int(time.time())
 
         if self.when == "MIDNIGHT":
@@ -80,7 +78,9 @@ class TimeSizeRotatingFileHandler(BaseRotatingHandler):
             self.suffix = "%Y-%m-%d"
 
     def shouldRollover(self, record: logging.LogRecord) -> bool:
-        """检查是否需要轮转."""
+        """
+        检查是否需要轮转.
+        """
         # 检查时间
         if time.time() >= self.rollover_at:
             return True
@@ -99,7 +99,9 @@ class TimeSizeRotatingFileHandler(BaseRotatingHandler):
         return False
 
     def doRollover(self) -> None:
-        """执行轮转."""
+        """
+        执行轮转.
+        """
         if self.stream:
             self.stream.close()
             self.stream = None
@@ -152,13 +154,17 @@ class TimeSizeRotatingFileHandler(BaseRotatingHandler):
             self.stream = self._open()
 
     def _compress_file(self, source: Path, dest: Path) -> None:
-        """压缩文件."""
+        """
+        压缩文件.
+        """
         with open(source, "rb") as f_in:
             with gzip.open(dest, "wb") as f_out:
                 shutil.copyfileobj(f_in, f_out)
 
     def _cleanup_old_files(self, directory: Path, base_name: str) -> None:
-        """清理超出保留数量的旧文件."""
+        """
+        清理超出保留数量的旧文件.
+        """
         if self.backup_count <= 0:
             return
 
@@ -182,8 +188,7 @@ class TimeSizeRotatingFileHandler(BaseRotatingHandler):
 
 
 class AsyncHandler(QueueHandler):
-    """
-    异步日志处理器.
+    """异步日志处理器.
 
     使用队列将日志写入操作移到后台线程，避免阻塞主线程。
     """
@@ -210,7 +215,9 @@ class AsyncHandler(QueueHandler):
         atexit.register(self.close)
 
     def close(self) -> None:
-        """关闭处理器."""
+        """
+        关闭处理器.
+        """
         try:
             self._listener.stop()
         except Exception:
@@ -218,7 +225,9 @@ class AsyncHandler(QueueHandler):
         super().close()
 
     def emit(self, record: logging.LogRecord) -> None:
-        """发送日志记录到队列."""
+        """
+        发送日志记录到队列.
+        """
         try:
             self.enqueue(record)
         except queue.Full:
@@ -227,15 +236,14 @@ class AsyncHandler(QueueHandler):
 
 
 class LevelSeparatedHandler(logging.Handler):
-    """
-    按级别分离的处理器.
+    """按级别分离的处理器.
 
     将不同级别的日志写入不同的文件。
     """
 
     def __init__(
         self,
-        log_dir: str | Path,
+        log_dir: Union[str, Path],
         base_name: str = "app",
         encoding: str = "utf-8",
         max_bytes: int = 10 * 1024 * 1024,
@@ -262,7 +270,9 @@ class LevelSeparatedHandler(logging.Handler):
         }
 
     def _get_handler(self, level: int) -> logging.Handler:
-        """获取或创建指定级别的处理器."""
+        """
+        获取或创建指定级别的处理器.
+        """
         if level not in self._handlers:
             filename = self._level_files.get(level, "app.log")
             filepath = self.log_dir / filename
@@ -280,7 +290,9 @@ class LevelSeparatedHandler(logging.Handler):
         return self._handlers[level]
 
     def emit(self, record: logging.LogRecord) -> None:
-        """发送日志记录到对应级别的处理器."""
+        """
+        发送日志记录到对应级别的处理器.
+        """
         try:
             handler = self._get_handler(record.levelno)
             handler.emit(record)
@@ -288,7 +300,9 @@ class LevelSeparatedHandler(logging.Handler):
             self.handleError(record)
 
     def close(self) -> None:
-        """关闭所有处理器."""
+        """
+        关闭所有处理器.
+        """
         for handler in self._handlers.values():
             handler.close()
         self._handlers.clear()
@@ -296,8 +310,7 @@ class LevelSeparatedHandler(logging.Handler):
 
 
 class BufferedHandler(logging.Handler):
-    """
-    缓冲处理器.
+    """缓冲处理器.
 
     批量写入日志，减少 I/O 操作次数。
     """
@@ -324,14 +337,18 @@ class BufferedHandler(logging.Handler):
         atexit.register(self.close)
 
     def emit(self, record: logging.LogRecord) -> None:
-        """添加日志记录到缓冲区."""
+        """
+        添加日志记录到缓冲区.
+        """
         with self._lock:
             self._buffer.append(record)
             if len(self._buffer) >= self.capacity:
                 self._flush_buffer()
 
     def _flush_buffer(self) -> None:
-        """刷新缓冲区（需要在锁内调用）."""
+        """
+        刷新缓冲区（需要在锁内调用）.
+        """
         for record in self._buffer:
             try:
                 self.target.emit(record)
@@ -340,20 +357,26 @@ class BufferedHandler(logging.Handler):
         self._buffer.clear()
 
     def _periodic_flush(self) -> None:
-        """定期刷新缓冲区."""
+        """
+        定期刷新缓冲区.
+        """
         while not self._shutdown.wait(self.flush_interval):
             with self._lock:
                 if self._buffer:
                     self._flush_buffer()
 
     def flush(self) -> None:
-        """手动刷新."""
+        """
+        手动刷新.
+        """
         with self._lock:
             self._flush_buffer()
         self.target.flush()
 
     def close(self) -> None:
-        """关闭处理器."""
+        """
+        关闭处理器.
+        """
         self._shutdown.set()
         self.flush()
         self.target.close()
@@ -361,8 +384,7 @@ class BufferedHandler(logging.Handler):
 
 
 class CallbackHandler(logging.Handler):
-    """
-    回调处理器.
+    """回调处理器.
 
     允许注册回调函数来处理特定级别的日志。
     """
@@ -374,7 +396,9 @@ class CallbackHandler(logging.Handler):
     def add_callback(
         self, level: int, callback: Callable[[logging.LogRecord], None]
     ) -> None:
-        """添加回调函数."""
+        """
+        添加回调函数.
+        """
         if level not in self._callbacks:
             self._callbacks[level] = []
         self._callbacks[level].append(callback)
@@ -382,7 +406,9 @@ class CallbackHandler(logging.Handler):
     def remove_callback(
         self, level: int, callback: Callable[[logging.LogRecord], None]
     ) -> None:
-        """移除回调函数."""
+        """
+        移除回调函数.
+        """
         if level in self._callbacks:
             try:
                 self._callbacks[level].remove(callback)
@@ -390,7 +416,9 @@ class CallbackHandler(logging.Handler):
                 pass
 
     def emit(self, record: logging.LogRecord) -> None:
-        """执行回调函数."""
+        """
+        执行回调函数.
+        """
         callbacks = self._callbacks.get(record.levelno, [])
         for callback in callbacks:
             try:

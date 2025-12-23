@@ -1,12 +1,11 @@
-"""
-事件总线.
+"""事件总线.
 
 提供组件间解耦通信机制。
 """
 
 import asyncio
-from typing import Any, Callable, Awaitable
 from collections import defaultdict
+from typing import Any, Awaitable, Callable
 
 from src.logging import get_logger
 
@@ -15,7 +14,9 @@ logger = get_logger()
 
 # 预定义事件名称
 class Events:
-    """预定义事件常量."""
+    """
+    预定义事件常量.
+    """
 
     # 设备状态
     DEVICE_STATE_CHANGED = "device_state_changed"
@@ -38,25 +39,19 @@ class Events:
 
 
 class EventBus:
-    """
-    事件总线.
+    """事件总线.
 
     支持异步事件处理，实现组件间松耦合通信。
 
-    用法:
-        bus = EventBus()
+    用法:     bus = EventBus()
 
-        # 注册处理器
-        async def on_state_changed(state):
-            print(f"State: {state}")
+    # 注册处理器 async def on_state_changed(state):     print(f"State: {state}")
 
-        bus.on(Events.DEVICE_STATE_CHANGED, on_state_changed)
+    bus.on(Events.DEVICE_STATE_CHANGED, on_state_changed)
 
-        # 触发事件
-        await bus.emit(Events.DEVICE_STATE_CHANGED, DeviceState.LISTENING)
+    # 触发事件 await bus.emit(Events.DEVICE_STATE_CHANGED, DeviceState.LISTENING)
 
-        # 移除处理器
-        bus.off(Events.DEVICE_STATE_CHANGED, on_state_changed)
+    # 移除处理器 bus.off(Events.DEVICE_STATE_CHANGED, on_state_changed)
     """
 
     def __init__(self):
@@ -66,8 +61,7 @@ class EventBus:
         self._lock = asyncio.Lock()
 
     def on(self, event: str, handler: Callable[..., Awaitable[None]]) -> None:
-        """
-        注册事件处理器.
+        """注册事件处理器.
 
         Args:
             event: 事件名称
@@ -78,8 +72,7 @@ class EventBus:
             logger.debug(f"EventBus: 注册处理器 {handler.__name__} -> {event}")
 
     def off(self, event: str, handler: Callable[..., Awaitable[None]]) -> None:
-        """
-        移除事件处理器.
+        """移除事件处理器.
 
         Args:
             event: 事件名称
@@ -90,8 +83,7 @@ class EventBus:
             logger.debug(f"EventBus: 移除处理器 {handler.__name__} <- {event}")
 
     def clear(self, event: str = None) -> None:
-        """
-        清除事件处理器.
+        """清除事件处理器.
 
         Args:
             event: 事件名称，为 None 时清除所有
@@ -104,8 +96,7 @@ class EventBus:
             logger.debug(f"EventBus: 清除事件 {event} 的所有处理器")
 
     async def emit(self, event: str, data: Any = None) -> None:
-        """
-        触发事件.
+        """触发事件.
 
         并行调用所有注册的处理器。
 
@@ -131,8 +122,7 @@ class EventBus:
             await asyncio.gather(*tasks, return_exceptions=True)
 
     async def emit_sequential(self, event: str, data: Any = None) -> None:
-        """
-        顺序触发事件.
+        """顺序触发事件.
 
         按注册顺序依次调用处理器。
 
@@ -147,7 +137,9 @@ class EventBus:
     async def _safe_call(
         self, handler: Callable[..., Awaitable[None]], data: Any
     ) -> None:
-        """安全调用处理器，捕获异常."""
+        """
+        安全调用处理器，捕获异常.
+        """
         try:
             if data is None:
                 await handler()
@@ -157,9 +149,13 @@ class EventBus:
             logger.error(f"EventBus: 处理器 {handler.__name__} 执行异常: {e}")
 
     def has_handlers(self, event: str) -> bool:
-        """检查事件是否有处理器."""
+        """
+        检查事件是否有处理器.
+        """
         return bool(self._handlers.get(event))
 
     def handler_count(self, event: str) -> int:
-        """获取事件的处理器数量."""
+        """
+        获取事件的处理器数量.
+        """
         return len(self._handlers.get(event, []))

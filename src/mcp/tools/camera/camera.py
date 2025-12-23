@@ -3,8 +3,8 @@ import threading
 import cv2
 import requests
 
-from src.utils.config_manager import ConfigManager
 from src.logging import get_logger
+from src.utils.config_manager import ConfigManager
 
 logger = get_logger()
 

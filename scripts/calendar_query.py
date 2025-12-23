@@ -9,8 +9,8 @@ import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from src.mcp.tools.calendar import get_calendar_manager
 from src.logging import get_logger
+from src.mcp.tools.calendar import get_calendar_manager
 
 # 添加项目根目录到Python路径 - 必须在导入src模块之前
 project_root = Path(__file__).parent.parent

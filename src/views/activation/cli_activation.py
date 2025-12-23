@@ -236,5 +236,9 @@ class CLIActivation:
         return {
             "is_activated": self.is_activated,
             "activation_service": self.activation_service,
-            "config_manager": self.activation_service.get_config_manager() if self.activation_service else None,
+            "config_manager": (
+                self.activation_service.get_config_manager()
+                if self.activation_service
+                else None
+            ),
         }

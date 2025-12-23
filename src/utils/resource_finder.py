@@ -23,8 +23,7 @@ from typing import Optional
 
 @lru_cache(maxsize=1)
 def get_app_root() -> Path:
-    """
-    应用根目录（开发/打包通用）
+    """应用根目录（开发/打包通用）
 
     - 开发时: 项目根目录
     - 打包后: _MEIPASS（PyInstaller onedir）
@@ -37,8 +36,7 @@ def get_app_root() -> Path:
 
 @lru_cache(maxsize=1)
 def get_app_name() -> str:
-    """
-    获取应用名称（自动推断）
+    """获取应用名称（自动推断）
 
     - 开发时：项目根目录名
     - 打包后：可执行文件名 / .app bundle 名
@@ -59,8 +57,7 @@ def get_app_name() -> str:
 
 @lru_cache(maxsize=1)
 def get_user_data_dir() -> Path:
-    """
-    用户数据目录（可写，存配置/数据库等）
+    """用户数据目录（可写，存配置/数据库等）
 
     - Windows: C:/Users/xxx/AppData/Local/{app_name}
     - macOS:   ~/Library/Application Support/{app_name}
@@ -81,7 +78,9 @@ def get_user_data_dir() -> Path:
 
 
 def get_user_cache_dir() -> Path:
-    """用户缓存目录"""
+    """
+    用户缓存目录.
+    """
     p = get_user_data_dir() / "cache"
     p.mkdir(parents=True, exist_ok=True)
     return p
@@ -89,8 +88,7 @@ def get_user_cache_dir() -> Path:
 
 @lru_cache(maxsize=1)
 def get_platform_info() -> tuple[str, str]:
-    """
-    获取平台和架构信息
+    """获取平台和架构信息.
 
     Returns:
         (platform_dir, arch_dir) 如 ("mac", "arm64")
@@ -107,8 +105,7 @@ def get_platform_info() -> tuple[str, str]:
 
 
 def get_lib_path(lib_name: str) -> Optional[Path]:
-    """
-    获取动态库路径
+    """获取动态库路径.
 
     Args:
         lib_name: 库名，如 "libopus", "webrtc_apm"
@@ -144,21 +141,29 @@ def get_lib_path(lib_name: str) -> Optional[Path]:
 
 
 def get_lib_dir(lib_name: str) -> Optional[Path]:
-    """获取动态库所在目录"""
+    """
+    获取动态库所在目录.
+    """
     lib_path = get_lib_path(lib_name)
     return lib_path.parent if lib_path else None
 
 
 def get_models_dir() -> Path:
-    """模型目录"""
+    """
+    模型目录.
+    """
     return get_app_root() / "models"
 
 
 def get_assets_dir() -> Path:
-    """资源目录"""
+    """
+    资源目录.
+    """
     return get_app_root() / "assets"
 
 
 def get_config_dir() -> Path:
-    """配置目录（应用内置）"""
+    """
+    配置目录（应用内置）
+    """
     return get_app_root() / "config"

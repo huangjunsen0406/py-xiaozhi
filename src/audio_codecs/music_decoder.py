@@ -82,7 +82,9 @@ class MusicDecoder:
             return False
 
     async def _read_pcm_stream(self, output_queue: asyncio.Queue):
-        """读取 PCM 流并写入队列,使用队列占用率 + 时间兜底的双重限速策略."""
+        """
+        读取 PCM 流并写入队列,使用队列占用率 + 时间兜底的双重限速策略.
+        """
         import time
 
         frame_duration_ms = AudioConfig.FRAME_DURATION
@@ -132,7 +134,11 @@ class MusicDecoder:
                 # ========== 双重限速策略 ==========
 
                 # 策略1: 基于队列占用率的动态限速
-                queue_ratio = output_queue.qsize() / output_queue.maxsize if output_queue.maxsize > 0 else 0
+                queue_ratio = (
+                    output_queue.qsize() / output_queue.maxsize
+                    if output_queue.maxsize > 0
+                    else 0
+                )
 
                 if queue_ratio < 0.3:
                     # 队列低于30%，快速填充

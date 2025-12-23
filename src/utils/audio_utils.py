@@ -1,7 +1,7 @@
 import asyncio
 import platform
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
 import sounddevice as sd
@@ -26,12 +26,12 @@ def _is_virtual(name: str) -> bool:
 
 
 def downmix_to_mono(
-    pcm: np.ndarray | bytes,
+    pcm: Union[np.ndarray, bytes],
     *,
     keepdims: bool = True,
-    dtype: np.dtype | str = np.int16,
-    in_channels: int | None = None,
-) -> np.ndarray | bytes:
+    dtype: Union[np.dtype, str] = np.int16,
+    in_channels: Optional[int] = None,
+) -> Union[np.ndarray, bytes]:
     """将任意格式的音频下混为单声道.
 
     支持两种输入:

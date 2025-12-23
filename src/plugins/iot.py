@@ -1,15 +1,14 @@
-"""
-IoT 插件.
+"""IoT 插件.
 
 管理物联网设备和命令处理。
 """
 
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from src.plugins.base import Plugin
 
 if TYPE_CHECKING:
-    from src.bootstrap.protocols import PluginContext, PluginCommands
+    from src.bootstrap.protocols import PluginCommands, PluginContext
 
 
 class IoTPlugin(Plugin):
@@ -32,7 +31,9 @@ class IoTPlugin(Plugin):
             pass
 
     async def on_protocol_connected(self, protocol: Any) -> None:
-        """协议连接后发送 IoT 描述符和状态."""
+        """
+        协议连接后发送 IoT 描述符和状态.
+        """
         self._protocol = protocol
         try:
             from src.iot.thing_manager import ThingManager
@@ -47,7 +48,9 @@ class IoTPlugin(Plugin):
             pass
 
     async def on_incoming_json(self, message) -> None:
-        """处理 IoT 命令消息."""
+        """
+        处理 IoT 命令消息.
+        """
         try:
             if not isinstance(message, dict):
                 return

@@ -1,5 +1,4 @@
-"""
-日志上下文管理模块.
+"""日志上下文管理模块.
 
 提供基于 contextvars 的上下文管理，支持：
 - Trace ID 追踪
@@ -11,14 +10,14 @@
 import uuid
 from contextvars import ContextVar, copy_context
 from functools import wraps
-from typing import Any, Callable, TypeVar
+from typing import Any, Callable, Optional, TypeVar
 
 # 上下文变量定义
-_trace_id: ContextVar[str | None] = ContextVar("trace_id", default=None)
-_request_id: ContextVar[str | None] = ContextVar("request_id", default=None)
-_user_id: ContextVar[str | None] = ContextVar("user_id", default=None)
-_session_id: ContextVar[str | None] = ContextVar("session_id", default=None)
-_extra_context: ContextVar[dict[str, Any] | None] = ContextVar(
+_trace_id: ContextVar[Optional[str]] = ContextVar("trace_id", default=None)
+_request_id: ContextVar[Optional[str]] = ContextVar("request_id", default=None)
+_user_id: ContextVar[Optional[str]] = ContextVar("user_id", default=None)
+_session_id: ContextVar[Optional[str]] = ContextVar("session_id", default=None)
+_extra_context: ContextVar[Optional[dict[str, Any]]] = ContextVar(
     "extra_context", default=None
 )
 
@@ -26,78 +25,104 @@ F = TypeVar("F", bound=Callable[..., Any])
 
 
 def generate_trace_id() -> str:
-    """生成唯一的 trace ID."""
+    """
+    生成唯一的 trace ID.
+    """
     return uuid.uuid4().hex[:16]
 
 
 def generate_request_id() -> str:
-    """生成唯一的 request ID."""
+    """
+    生成唯一的 request ID.
+    """
     return uuid.uuid4().hex[:12]
 
 
 # Trace ID 操作
-def set_trace_id(trace_id: str | None = None) -> str:
-    """设置 trace ID，如果未提供则自动生成."""
+def set_trace_id(trace_id: Optional[str] = None) -> str:
+    """
+    设置 trace ID，如果未提供则自动生成.
+    """
     if trace_id is None:
         trace_id = generate_trace_id()
     _trace_id.set(trace_id)
     return trace_id
 
 
-def get_trace_id() -> str | None:
-    """获取当前 trace ID."""
+def get_trace_id() -> Optional[str]:
+    """
+    获取当前 trace ID.
+    """
     return _trace_id.get()
 
 
 def clear_trace_id() -> None:
-    """清除 trace ID."""
+    """
+    清除 trace ID.
+    """
     _trace_id.set(None)
 
 
 # Request ID 操作
-def set_request_id(request_id: str | None = None) -> str:
-    """设置 request ID，如果未提供则自动生成."""
+def set_request_id(request_id: Optional[str] = None) -> str:
+    """
+    设置 request ID，如果未提供则自动生成.
+    """
     if request_id is None:
         request_id = generate_request_id()
     _request_id.set(request_id)
     return request_id
 
 
-def get_request_id() -> str | None:
-    """获取当前 request ID."""
+def get_request_id() -> Optional[str]:
+    """
+    获取当前 request ID.
+    """
     return _request_id.get()
 
 
 def clear_request_id() -> None:
-    """清除 request ID."""
+    """
+    清除 request ID.
+    """
     _request_id.set(None)
 
 
 # User ID 操作
-def set_user_id(user_id: str | None) -> None:
-    """设置用户 ID."""
+def set_user_id(user_id: Optional[str]) -> None:
+    """
+    设置用户 ID.
+    """
     _user_id.set(user_id)
 
 
-def get_user_id() -> str | None:
-    """获取当前用户 ID."""
+def get_user_id() -> Optional[str]:
+    """
+    获取当前用户 ID.
+    """
     return _user_id.get()
 
 
 # Session ID 操作
-def set_session_id(session_id: str | None) -> None:
-    """设置会话 ID."""
+def set_session_id(session_id: Optional[str]) -> None:
+    """
+    设置会话 ID.
+    """
     _session_id.set(session_id)
 
 
-def get_session_id() -> str | None:
-    """获取当前会话 ID."""
+def get_session_id() -> Optional[str]:
+    """
+    获取当前会话 ID.
+    """
     return _session_id.get()
 
 
 # 额外上下文操作
 def set_context(key: str, value: Any) -> None:
-    """设置额外的上下文数据."""
+    """
+    设置额外的上下文数据.
+    """
     ctx = _extra_context.get()
     if ctx is None:
         ctx = {}
@@ -107,7 +132,9 @@ def set_context(key: str, value: Any) -> None:
 
 
 def get_context(key: str, default: Any = None) -> Any:
-    """获取额外的上下文数据."""
+    """
+    获取额外的上下文数据.
+    """
     ctx = _extra_context.get()
     if ctx is None:
         return default
@@ -115,7 +142,9 @@ def get_context(key: str, default: Any = None) -> Any:
 
 
 def get_all_context() -> dict[str, Any]:
-    """获取所有上下文数据."""
+    """
+    获取所有上下文数据.
+    """
     result = {}
 
     trace_id = get_trace_id()
@@ -142,7 +171,9 @@ def get_all_context() -> dict[str, Any]:
 
 
 def clear_all_context() -> None:
-    """清除所有上下文数据."""
+    """
+    清除所有上下文数据.
+    """
     _trace_id.set(None)
     _request_id.set(None)
     _user_id.set(None)
@@ -151,14 +182,16 @@ def clear_all_context() -> None:
 
 
 class LogContext:
-    """日志上下文管理器，支持 with 语句."""
+    """
+    日志上下文管理器，支持 with 语句.
+    """
 
     def __init__(
         self,
-        trace_id: str | None = None,
-        request_id: str | None = None,
-        user_id: str | None = None,
-        session_id: str | None = None,
+        trace_id: Optional[str] = None,
+        request_id: Optional[str] = None,
+        user_id: Optional[str] = None,
+        session_id: Optional[str] = None,
         auto_generate_trace: bool = True,
         **extra: Any,
     ) -> None:
@@ -208,7 +241,9 @@ class LogContext:
 
 
 def with_trace(func: F) -> F:
-    """装饰器：为函数调用自动添加 trace ID."""
+    """
+    装饰器：为函数调用自动添加 trace ID.
+    """
 
     @wraps(func)
     def wrapper(*args: Any, **kwargs: Any) -> Any:
@@ -219,7 +254,9 @@ def with_trace(func: F) -> F:
 
 
 def with_context(**context_kwargs: Any) -> Callable[[F], F]:
-    """装饰器：为函数调用添加指定的上下文."""
+    """
+    装饰器：为函数调用添加指定的上下文.
+    """
 
     def decorator(func: F) -> F:
         @wraps(func)
@@ -233,7 +270,9 @@ def with_context(**context_kwargs: Any) -> Callable[[F], F]:
 
 
 def copy_context_to_thread(func: F) -> F:
-    """装饰器：将上下文复制到新线程."""
+    """
+    装饰器：将上下文复制到新线程.
+    """
 
     @wraps(func)
     def wrapper(*args: Any, **kwargs: Any) -> Any:

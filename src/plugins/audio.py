@@ -1,19 +1,18 @@
-"""
-音频插件.
+"""音频插件.
 
 负责音频采集、编码、播放和发送。
 """
 
 import asyncio
 import os
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 from src.audio_codecs.audio_codec import AudioCodec
-from src.plugins.base import Plugin
 from src.logging import get_logger
+from src.plugins.base import Plugin
 
 if TYPE_CHECKING:
-    from src.bootstrap.protocols import PluginContext, PluginCommands
+    from src.bootstrap.protocols import PluginCommands, PluginContext
 
 logger = get_logger()
 
@@ -26,7 +25,7 @@ class AudioPlugin(Plugin):
 
     def __init__(self) -> None:
         super().__init__()
-        self.codec: AudioCodec | None = None
+        self.codec: Optional[AudioCodec] = None
         self._send_sem = asyncio.Semaphore(MAX_CONCURRENT_AUDIO_SENDS)
         self._in_silence_period = False
         self._audio_consumer_task = None
@@ -46,7 +45,9 @@ class AudioPlugin(Plugin):
             self.codec = None
 
     async def on_device_state_changed(self, state):
-        """设备状态变化时处理."""
+        """
+        设备状态变化时处理.
+        """
         if not self.codec:
             return
 
@@ -60,7 +61,9 @@ class AudioPlugin(Plugin):
                 self._in_silence_period = False
 
     async def on_incoming_json(self, message) -> None:
-        """处理 TTS 事件."""
+        """
+        处理 TTS 事件.
+        """
         if not isinstance(message, dict):
             return
 
@@ -77,7 +80,9 @@ class AudioPlugin(Plugin):
             logger.error(f"处理 TTS 事件失败: {e}", exc_info=True)
 
     async def on_incoming_audio(self, data: bytes) -> None:
-        """接收并播放音频数据."""
+        """
+        接收并播放音频数据.
+        """
         if self.codec:
             try:
                 await self.codec.write_audio(data)
@@ -85,7 +90,9 @@ class AudioPlugin(Plugin):
                 logger.debug(f"写入音频数据失败: {e}")
 
     async def _pause_music_for_tts(self):
-        """TTS 开始时暂停音乐."""
+        """
+        TTS 开始时暂停音乐.
+        """
         try:
             if self.codec:
                 await self.codec.clear_audio_queue()
@@ -104,7 +111,9 @@ class AudioPlugin(Plugin):
             logger.error(f"TTS 开始处理失败: {e}", exc_info=True)
 
     async def _resume_music_after_tts(self):
-        """TTS 结束后恢复音乐."""
+        """
+        TTS 结束后恢复音乐.
+        """
         try:
             from src.mcp.tools.music.music_player import get_music_player_instance
 
@@ -127,7 +136,9 @@ class AudioPlugin(Plugin):
             logger.error(f"恢复音乐播放失败: {e}", exc_info=True)
 
     async def shutdown(self) -> None:
-        """关闭音频资源."""
+        """
+        关闭音频资源.
+        """
         if self._audio_consumer_task and not self._audio_consumer_task.done():
             self._audio_consumer_task.cancel()
             try:
@@ -144,18 +155,20 @@ class AudioPlugin(Plugin):
                 self.codec = None
 
     def _on_encoded_audio(self, encoded_data: bytes) -> None:
-        """音频编码回调（从音频线程调用）."""
+        """
+        音频编码回调（从音频线程调用）.
+        """
         try:
             if not self._cmd:
                 return
-            self._cmd.schedule_command_nowait(
-                self._send_audio_async, encoded_data
-            )
+            self._cmd.schedule_command_nowait(self._send_audio_async, encoded_data)
         except Exception:
             pass
 
     async def _send_audio_async(self, encoded_data: bytes) -> None:
-        """异步发送音频数据."""
+        """
+        异步发送音频数据.
+        """
         async with self._send_sem:
             try:
                 if not self._ctx.is_audio_channel_opened():
@@ -166,7 +179,9 @@ class AudioPlugin(Plugin):
                 pass
 
     def _should_send_microphone_audio(self) -> bool:
-        """判断是否应该发送麦克风音频."""
+        """
+        判断是否应该发送麦克风音频.
+        """
         try:
             if self._in_silence_period:
                 return False

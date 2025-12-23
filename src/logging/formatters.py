@@ -1,5 +1,4 @@
-"""
-日志格式化器模块.
+"""日志格式化器模块.
 
 提供多种日志格式化器：
 - 彩色控制台格式化器
@@ -12,13 +11,15 @@ import logging
 import sys
 import traceback
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Optional, Union
 
 from .context import get_all_context
 
 
 class ColoredFormatter(logging.Formatter):
-    """彩色日志格式化器，用于控制台输出."""
+    """
+    彩色日志格式化器，用于控制台输出.
+    """
 
     # ANSI 颜色代码
     COLORS = {
@@ -63,8 +64,8 @@ class ColoredFormatter(logging.Formatter):
 
     def __init__(
         self,
-        fmt: str | None = None,
-        datefmt: str | None = None,
+        fmt: Optional[str] = None,
+        datefmt: Optional[str] = None,
         style: str = "%",
         use_colors: bool = True,
         show_trace_id: bool = True,
@@ -76,7 +77,9 @@ class ColoredFormatter(logging.Formatter):
         self.show_thread = show_thread
 
     def _supports_color(self) -> bool:
-        """检查终端是否支持颜色."""
+        """
+        检查终端是否支持颜色.
+        """
         # Windows 终端检查
         if sys.platform == "win32":
             try:
@@ -92,7 +95,9 @@ class ColoredFormatter(logging.Formatter):
         return hasattr(sys.stdout, "isatty") and sys.stdout.isatty()
 
     def _colorize(self, text: str, color: str) -> str:
-        """给文本添加颜色."""
+        """
+        给文本添加颜色.
+        """
         if not self.use_colors:
             return text
         color_code = self.COLORS.get(color, "")
@@ -100,7 +105,9 @@ class ColoredFormatter(logging.Formatter):
         return f"{color_code}{text}{reset}"
 
     def format(self, record: logging.LogRecord) -> str:
-        """格式化日志记录."""
+        """
+        格式化日志记录.
+        """
         # 时间戳
         timestamp = datetime.fromtimestamp(record.created).strftime(
             "%Y-%m-%d %H:%M:%S.%f"
@@ -158,7 +165,9 @@ class ColoredFormatter(logging.Formatter):
         return log_line
 
     def _shorten_name(self, name: str, max_length: int = 25) -> str:
-        """缩短 logger 名称."""
+        """
+        缩短 logger 名称.
+        """
         if len(name) <= max_length:
             return name
 
@@ -181,7 +190,9 @@ class ColoredFormatter(logging.Formatter):
         return shortened
 
     def _format_exception(self, exc_info: tuple) -> str:
-        """格式化异常信息."""
+        """
+        格式化异常信息.
+        """
         lines = traceback.format_exception(*exc_info)
         if self.use_colors:
             return self._colorize("".join(lines), "RED")
@@ -189,7 +200,9 @@ class ColoredFormatter(logging.Formatter):
 
 
 class JsonFormatter(logging.Formatter):
-    """JSON 格式化器，用于日志聚合系统."""
+    """
+    JSON 格式化器，用于日志聚合系统.
+    """
 
     def __init__(
         self,
@@ -203,7 +216,9 @@ class JsonFormatter(logging.Formatter):
         self.timestamp_format = timestamp_format
 
     def format(self, record: logging.LogRecord) -> str:
-        """格式化日志记录为 JSON."""
+        """
+        格式化日志记录为 JSON.
+        """
         log_data: dict[str, Any] = {
             "timestamp": self._format_timestamp(record.created),
             "level": record.levelname,
@@ -255,8 +270,10 @@ class JsonFormatter(logging.Formatter):
 
         return json.dumps(log_data, ensure_ascii=False, default=str)
 
-    def _format_timestamp(self, created: float) -> str | float:
-        """格式化时间戳."""
+    def _format_timestamp(self, created: float) -> Union[str, float]:
+        """
+        格式化时间戳.
+        """
         if self.timestamp_format == "unix":
             return created
         elif self.timestamp_format == "unix_ms":
@@ -266,12 +283,16 @@ class JsonFormatter(logging.Formatter):
             return dt.isoformat()
 
     def _format_stack_trace(self, exc_info: tuple) -> list[str]:
-        """格式化堆栈跟踪."""
+        """
+        格式化堆栈跟踪.
+        """
         lines = traceback.format_exception(*exc_info)
         return [line.strip() for line in lines if line.strip()]
 
     def _extract_extra(self, record: logging.LogRecord) -> dict[str, Any]:
-        """提取额外字段."""
+        """
+        提取额外字段.
+        """
         # 标准 LogRecord 字段
         standard_fields = {
             "name",
@@ -312,7 +333,9 @@ class JsonFormatter(logging.Formatter):
 
 
 class SimpleFormatter(logging.Formatter):
-    """简单文本格式化器，用于文件输出."""
+    """
+    简单文本格式化器，用于文件输出.
+    """
 
     DEFAULT_FORMAT = (
         "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s | %(threadName)s"
@@ -321,8 +344,8 @@ class SimpleFormatter(logging.Formatter):
 
     def __init__(
         self,
-        fmt: str | None = None,
-        datefmt: str | None = None,
+        fmt: Optional[str] = None,
+        datefmt: Optional[str] = None,
         include_trace_id: bool = True,
     ) -> None:
         super().__init__(
@@ -332,7 +355,9 @@ class SimpleFormatter(logging.Formatter):
         self.include_trace_id = include_trace_id
 
     def format(self, record: logging.LogRecord) -> str:
-        """格式化日志记录."""
+        """
+        格式化日志记录.
+        """
         # 添加 trace_id
         if self.include_trace_id:
             trace_id = getattr(record, "trace_id", None) or get_all_context().get(

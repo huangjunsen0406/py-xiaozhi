@@ -400,7 +400,9 @@ class AudioCodec:
             # 步骤5: AEC处理（如果启用）
             if self._aec_enabled and self.audio_processor._is_macos:
                 try:
-                    audio_data_int16 = self.audio_processor.process_audio(audio_data_int16)
+                    audio_data_int16 = self.audio_processor.process_audio(
+                        audio_data_int16
+                    )
                 except Exception as e:
                     logger.warning(f"AEC处理失败，使用原始音频: {e}")
 

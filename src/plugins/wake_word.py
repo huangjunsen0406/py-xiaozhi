@@ -1,5 +1,4 @@
-"""
-唤醒词插件.
+"""唤醒词插件.
 
 检测唤醒词并触发对话。
 """
@@ -7,11 +6,11 @@
 from typing import TYPE_CHECKING
 
 from src.constants.constants import AbortReason
-from src.plugins.base import Plugin
 from src.logging import get_logger
+from src.plugins.base import Plugin
 
 if TYPE_CHECKING:
-    from src.bootstrap.protocols import PluginContext, PluginCommands
+    from src.bootstrap.protocols import PluginCommands, PluginContext
 
 logger = get_logger()
 
@@ -45,7 +44,9 @@ class WakeWordPlugin(Plugin):
             self.detector = None
 
     def set_audio_plugin(self, audio_plugin) -> None:
-        """设置 AudioPlugin 引用（由 ServiceContainer 调用）."""
+        """
+        设置 AudioPlugin 引用（由 ServiceContainer 调用）.
+        """
         self._audio_plugin = audio_plugin
 
     async def start(self) -> None:
@@ -74,7 +75,9 @@ class WakeWordPlugin(Plugin):
                 logger.warning(f"关闭唤醒词检测器失败: {e}")
 
     async def _on_detected(self, wake_word, full_text):
-        """唤醒词检测回调."""
+        """
+        唤醒词检测回调.
+        """
         try:
             if self._ctx.is_speaking():
                 await self._cmd.abort_speaking(AbortReason.WAKE_WORD_DETECTED)
@@ -84,13 +87,18 @@ class WakeWordPlugin(Plugin):
                 # 启动自动对话
                 await self._cmd.connect_protocol()
                 from src.constants.constants import ListeningMode
-                mode = ListeningMode.REALTIME if self._ctx.get_config().get_config(
-                    "AEC_OPTIONS.ENABLED", True
-                ) else ListeningMode.AUTO_STOP
+
+                mode = (
+                    ListeningMode.REALTIME
+                    if self._ctx.get_config().get_config("AEC_OPTIONS.ENABLED", True)
+                    else ListeningMode.AUTO_STOP
+                )
                 await self._cmd.start_listening(mode)
         except Exception as e:
             logger.error(f"处理唤醒词检测失败: {e}", exc_info=True)
 
     def _on_error(self, error):
-        """唤醒词检测错误回调."""
+        """
+        唤醒词检测错误回调.
+        """
         logger.error(f"唤醒词检测错误: {error}")

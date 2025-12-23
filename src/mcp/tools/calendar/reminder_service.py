@@ -26,8 +26,7 @@ class CalendarReminderService:
         self.check_interval = 30  # 检查间隔（秒）
 
     def _get_application(self):
-        """
-        延迟加载获取应用实例.
+        """延迟加载获取应用实例.
 
         注意：此方法会被 CalendarPlugin 通过 setattr 覆盖为正确的适配器。
         """

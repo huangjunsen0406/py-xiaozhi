@@ -90,9 +90,7 @@ class SystemToolsManager:
         )
         logger.debug("[SystemManager] 注册音量控制工具成功")
 
-    def _register_volume_get_tool(
-        self, add_tool, PropertyList, Property, PropertyType
-    ):
+    def _register_volume_get_tool(self, add_tool, PropertyList, Property, PropertyType):
         """
         注册音量获取工具.
         """

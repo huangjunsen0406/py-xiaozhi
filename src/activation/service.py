@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-统一激活服务
+统一激活服务.
 """
 
 import asyncio
@@ -26,7 +26,9 @@ logger = get_logger()
 
 
 class ActivationResult(TypedDict, total=False):
-    """激活结果类型."""
+    """
+    激活结果类型.
+    """
 
     success: bool
     need_activation_ui: bool
@@ -75,7 +77,9 @@ class ActivationService:
 
     @classmethod
     async def get_instance(cls) -> "ActivationService":
-        """获取单例实例（异步）."""
+        """
+        获取单例实例（异步）.
+        """
         if cls._instance is None:
             async with cls._lock:
                 if cls._instance is None:
@@ -86,13 +90,17 @@ class ActivationService:
 
     @classmethod
     def get_instance_sync(cls) -> "ActivationService":
-        """获取单例实例（同步，用于已初始化后）."""
+        """
+        获取单例实例（同步，用于已初始化后）.
+        """
         if cls._instance is None:
             raise RuntimeError("ActivationService 尚未初始化，请先调用 get_instance()")
         return cls._instance
 
     async def _async_init(self):
-        """异步初始化."""
+        """
+        异步初始化.
+        """
         if self._initialized:
             return
 
@@ -111,8 +119,7 @@ class ActivationService:
     # ========== 公共接口 ==========
 
     async def initialize(self) -> ActivationResult:
-        """
-        初始化设备并检查激活状态.
+        """初始化设备并检查激活状态.
 
         Returns:
             ActivationResult: 初始化结果
@@ -131,7 +138,7 @@ class ActivationService:
             self._initialize_config()
 
             # 3. 获取OTA配置
-            ota_result = await self._fetch_ota_config()
+            await self._fetch_ota_config()
 
             # 4. 获取激活版本
             activation_version = self.config_manager.get_config(
@@ -167,8 +174,7 @@ class ActivationService:
             )
 
     async def activate(self, activation_data: Optional[Dict] = None) -> bool:
-        """
-        执行激活流程.
+        """执行激活流程.
 
         Args:
             activation_data: 激活数据，如果为空则使用缓存的数据
@@ -206,13 +212,17 @@ class ActivationService:
             self._activation_task = None
 
     def cancel_activation(self):
-        """取消激活流程."""
+        """
+        取消激活流程.
+        """
         if self._activation_task and not self._activation_task.done():
             self.logger.info("正在取消激活任务")
             self._activation_task.cancel()
 
     def get_device_info(self) -> Dict:
-        """获取设备信息."""
+        """
+        获取设备信息.
+        """
         efuse_data = self._load_efuse_data()
         return {
             "serial_number": efuse_data.get("serial_number"),
@@ -220,44 +230,62 @@ class ActivationService:
         }
 
     def get_serial_number(self) -> Optional[str]:
-        """获取序列号."""
+        """
+        获取序列号.
+        """
         return self._load_efuse_data().get("serial_number")
 
     def get_mac_address(self) -> Optional[str]:
-        """获取MAC地址."""
+        """
+        获取MAC地址.
+        """
         return self._load_efuse_data().get("mac_address")
 
     def get_activation_status(self) -> Dict:
-        """获取激活状态."""
+        """
+        获取激活状态.
+        """
         return self._activation_status.copy()
 
     def get_activation_data(self) -> Optional[Dict]:
-        """获取激活数据."""
+        """
+        获取激活数据.
+        """
         return self._activation_data
 
     def is_activated(self) -> bool:
-        """检查是否已激活."""
+        """
+        检查是否已激活.
+        """
         return self._load_efuse_data().get("activation_status", False)
 
     def is_activating(self) -> bool:
-        """检查是否正在激活."""
+        """
+        检查是否正在激活.
+        """
         return self._is_activating
 
     def get_config_manager(self) -> ConfigManager:
-        """获取配置管理器."""
+        """
+        获取配置管理器.
+        """
         return self.config_manager
 
     # ========== 设备身份管理（私有方法） ==========
 
     def _init_file_paths(self):
-        """初始化文件路径."""
+        """
+        初始化文件路径.
+        """
         config_dir = get_config_dir()
         config_dir.mkdir(parents=True, exist_ok=True)
         self._efuse_file = config_dir / "efuse.json"
         self.logger.debug(f"efuse文件路径: {self._efuse_file}")
 
     def _ensure_efuse_file(self):
-        """确保efuse文件存在且完整."""
+        """
+        确保efuse文件存在且完整.
+        """
         fingerprint = self._generate_fresh_fingerprint()
         mac_address = fingerprint.get("mac_address")
 
@@ -268,7 +296,9 @@ class ActivationService:
             self._validate_efuse_file(fingerprint, mac_address)
 
     def _create_efuse_file(self, fingerprint: Dict, mac_address: Optional[str]):
-        """创建efuse文件."""
+        """
+        创建efuse文件.
+        """
         serial_number = self._generate_serial_number_from_fingerprint(fingerprint)
         hmac_key = self._generate_hmac_key_from_fingerprint(fingerprint)
 
@@ -284,10 +314,17 @@ class ActivationService:
         self.logger.info(f"已创建efuse配置: 序列号={serial_number}")
 
     def _validate_efuse_file(self, fingerprint: Dict, mac_address: Optional[str]):
-        """验证并修复efuse文件."""
+        """
+        验证并修复efuse文件.
+        """
         try:
             efuse_data = self._load_efuse_data_from_file()
-            required_fields = ["mac_address", "serial_number", "hmac_key", "activation_status"]
+            required_fields = [
+                "mac_address",
+                "serial_number",
+                "hmac_key",
+                "activation_status",
+            ]
             missing = [f for f in required_fields if f not in efuse_data]
 
             if missing:
@@ -296,9 +333,13 @@ class ActivationService:
                     if field == "mac_address":
                         efuse_data[field] = mac_address
                     elif field == "serial_number":
-                        efuse_data[field] = self._generate_serial_number_from_fingerprint(fingerprint)
+                        efuse_data[field] = (
+                            self._generate_serial_number_from_fingerprint(fingerprint)
+                        )
                     elif field == "hmac_key":
-                        efuse_data[field] = self._generate_hmac_key_from_fingerprint(fingerprint)
+                        efuse_data[field] = self._generate_hmac_key_from_fingerprint(
+                            fingerprint
+                        )
                     elif field == "activation_status":
                         efuse_data[field] = False
                 self._save_efuse_data(efuse_data)
@@ -310,7 +351,9 @@ class ActivationService:
             self._create_efuse_file(fingerprint, mac_address)
 
     def _ensure_device_identity(self) -> Tuple[Optional[str], Optional[str], bool]:
-        """确保设备身份信息，返回 (序列号, HMAC密钥, 是否激活)."""
+        """
+        确保设备身份信息，返回 (序列号, HMAC密钥, 是否激活).
+        """
         efuse_data = self._load_efuse_data()
         return (
             efuse_data.get("serial_number"),
@@ -319,7 +362,9 @@ class ActivationService:
         )
 
     def _generate_fresh_fingerprint(self) -> Dict:
-        """生成新的设备指纹."""
+        """
+        生成新的设备指纹.
+        """
         return {
             "system": self._system,
             "hostname": platform.node(),
@@ -328,7 +373,9 @@ class ActivationService:
         }
 
     def _get_primary_mac_address(self) -> Optional[str]:
-        """获取主要网卡MAC地址."""
+        """
+        获取主要网卡MAC地址.
+        """
         try:
             for iface, addrs in psutil.net_if_addrs().items():
                 if iface.lower().startswith(("lo", "loopback")):
@@ -343,21 +390,27 @@ class ActivationService:
         return None
 
     def _normalize_mac(self, mac: str) -> str:
-        """标准化MAC地址格式."""
+        """
+        标准化MAC地址格式.
+        """
         clean = "".join(c for c in mac if c.isalnum())
         if len(clean) != 12:
             return mac.lower()
-        return ":".join(clean[i:i+2] for i in range(0, 12, 2)).lower()
+        return ":".join(clean[i : i + 2] for i in range(0, 12, 2)).lower()
 
     def _get_machine_id(self) -> Optional[str]:
-        """获取机器ID."""
+        """
+        获取机器ID.
+        """
         try:
             return machineid.id()
         except Exception:
             return None
 
     def _generate_serial_number_from_fingerprint(self, fingerprint: Dict) -> str:
-        """从指纹生成序列号."""
+        """
+        从指纹生成序列号.
+        """
         mac = fingerprint.get("mac_address")
         if mac:
             mac_clean = mac.lower().replace(":", "")
@@ -371,7 +424,9 @@ class ActivationService:
         return f"SN-{short_hash}-{identifier.upper()}"
 
     def _generate_hmac_key_from_fingerprint(self, fingerprint: Dict) -> str:
-        """从指纹生成HMAC密钥."""
+        """
+        从指纹生成HMAC密钥.
+        """
         identifiers = []
         for key in ["hostname", "mac_address", "machine_id"]:
             if fingerprint.get(key):
@@ -381,20 +436,28 @@ class ActivationService:
         return hashlib.sha256("||".join(identifiers).encode()).hexdigest()
 
     def _generate_hmac_signature(self, challenge: str) -> Optional[str]:
-        """生成HMAC签名."""
+        """
+        生成HMAC签名.
+        """
         hmac_key = self._load_efuse_data().get("hmac_key")
         if not hmac_key or not challenge:
             return None
-        return hmac.new(hmac_key.encode(), challenge.encode(), hashlib.sha256).hexdigest()
+        return hmac.new(
+            hmac_key.encode(), challenge.encode(), hashlib.sha256
+        ).hexdigest()
 
     def _set_activation_status(self, status: bool) -> bool:
-        """设置激活状态."""
+        """
+        设置激活状态.
+        """
         efuse_data = self._load_efuse_data()
         efuse_data["activation_status"] = status
         return self._save_efuse_data(efuse_data)
 
     def _load_efuse_data(self) -> Dict:
-        """加载efuse数据（带缓存）."""
+        """
+        加载efuse数据（带缓存）.
+        """
         if self._efuse_cache is not None:
             return self._efuse_cache
         try:
@@ -403,14 +466,18 @@ class ActivationService:
             return {"activation_status": False}
 
     def _load_efuse_data_from_file(self) -> Dict:
-        """从文件加载efuse数据."""
+        """
+        从文件加载efuse数据.
+        """
         with open(self._efuse_file, "r", encoding="utf-8") as f:
             data = json.load(f)
             self._efuse_cache = data
             return data
 
     def _save_efuse_data(self, data: Dict) -> bool:
-        """保存efuse数据."""
+        """
+        保存efuse数据.
+        """
         try:
             self._efuse_file.parent.mkdir(parents=True, exist_ok=True)
             with open(self._efuse_file, "w", encoding="utf-8") as f:
@@ -424,7 +491,9 @@ class ActivationService:
     # ========== 配置初始化（私有方法） ==========
 
     def _initialize_config(self):
-        """初始化配置."""
+        """
+        初始化配置.
+        """
         # 确保CLIENT_ID存在
         self.config_manager.initialize_client_id()
 
@@ -436,13 +505,19 @@ class ActivationService:
                 self.config_manager.update_config("SYSTEM_OPTIONS.DEVICE_ID", mac)
                 self.logger.info(f"已设置DEVICE_ID: {mac}")
 
-        self.logger.info(f"CLIENT_ID: {self.config_manager.get_config('SYSTEM_OPTIONS.CLIENT_ID')}")
-        self.logger.info(f"DEVICE_ID: {self.config_manager.get_config('SYSTEM_OPTIONS.DEVICE_ID')}")
+        self.logger.info(
+            f"CLIENT_ID: {self.config_manager.get_config('SYSTEM_OPTIONS.CLIENT_ID')}"
+        )
+        self.logger.info(
+            f"DEVICE_ID: {self.config_manager.get_config('SYSTEM_OPTIONS.DEVICE_ID')}"
+        )
 
     # ========== OTA配置获取（私有方法） ==========
 
     async def _get_local_ip(self) -> str:
-        """获取本机IP."""
+        """
+        获取本机IP.
+        """
         try:
             loop = asyncio.get_running_loop()
             return await loop.run_in_executor(None, self._sync_get_ip)
@@ -450,14 +525,20 @@ class ActivationService:
             return "127.0.0.1"
 
     def _sync_get_ip(self) -> str:
-        """同步获取IP."""
+        """
+        同步获取IP.
+        """
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
             s.connect(("8.8.8.8", 80))
             return s.getsockname()[0]
 
     async def _fetch_ota_config(self) -> Dict:
-        """获取OTA配置."""
-        ota_url = self.config_manager.get_config("SYSTEM_OPTIONS.NETWORK.OTA_VERSION_URL")
+        """
+        获取OTA配置.
+        """
+        ota_url = self.config_manager.get_config(
+            "SYSTEM_OPTIONS.NETWORK.OTA_VERSION_URL"
+        )
         device_id = self.config_manager.get_config("SYSTEM_OPTIONS.DEVICE_ID")
 
         if not ota_url or not device_id:
@@ -475,7 +556,9 @@ class ActivationService:
         timeout = aiohttp.ClientTimeout(total=10)
         connector = aiohttp.TCPConnector(ssl=ssl_context)
 
-        async with aiohttp.ClientSession(timeout=timeout, connector=connector) as session:
+        async with aiohttp.ClientSession(
+            timeout=timeout, connector=connector
+        ) as session:
             async with session.post(ota_url, headers=headers, json=payload) as response:
                 if response.status != 200:
                     raise ValueError(f"OTA服务器返回错误: {response.status}")
@@ -485,7 +568,9 @@ class ActivationService:
                 return data
 
     def _build_ota_headers(self) -> Dict:
-        """构建OTA请求头."""
+        """
+        构建OTA请求头.
+        """
         headers = {
             "Device-Id": self.config_manager.get_config("SYSTEM_OPTIONS.DEVICE_ID"),
             "Client-Id": self.config_manager.get_config("SYSTEM_OPTIONS.CLIENT_ID"),
@@ -503,7 +588,9 @@ class ActivationService:
         return headers
 
     def _build_ota_payload(self) -> Dict:
-        """构建OTA请求体."""
+        """
+        构建OTA请求体.
+        """
         hmac_key = self._load_efuse_data().get("hmac_key", "unknown")
         return {
             "application": {
@@ -519,20 +606,28 @@ class ActivationService:
         }
 
     def _process_ota_response(self, data: Dict):
-        """处理OTA响应."""
+        """
+        处理OTA响应.
+        """
         # 更新MQTT配置
         if "mqtt" in data and data["mqtt"]:
-            self.config_manager.update_config("SYSTEM_OPTIONS.NETWORK.MQTT_INFO", data["mqtt"])
+            self.config_manager.update_config(
+                "SYSTEM_OPTIONS.NETWORK.MQTT_INFO", data["mqtt"]
+            )
             self.logger.info("MQTT配置已更新")
 
         # 更新WebSocket配置
         if "websocket" in data:
             ws = data["websocket"]
             if ws.get("url"):
-                self.config_manager.update_config("SYSTEM_OPTIONS.NETWORK.WEBSOCKET_URL", ws["url"])
+                self.config_manager.update_config(
+                    "SYSTEM_OPTIONS.NETWORK.WEBSOCKET_URL", ws["url"]
+                )
                 self.logger.info(f"WebSocket URL: {ws['url']}")
             token = ws.get("token", "test-token") or "test-token"
-            self.config_manager.update_config("SYSTEM_OPTIONS.NETWORK.WEBSOCKET_ACCESS_TOKEN", token)
+            self.config_manager.update_config(
+                "SYSTEM_OPTIONS.NETWORK.WEBSOCKET_ACCESS_TOKEN", token
+            )
 
         # 检查激活数据
         if "activation" in data:
@@ -547,7 +642,9 @@ class ActivationService:
     # ========== 激活状态分析（私有方法） ==========
 
     def _analyze_activation_status(self) -> ActivationResult:
-        """分析激活状态."""
+        """
+        分析激活状态.
+        """
         local = self._activation_status["local_activated"]
         server = self._activation_status["server_activated"]
         consistent = local == server
@@ -614,7 +711,9 @@ class ActivationService:
     # ========== 激活流程执行（私有方法） ==========
 
     def _show_activation_info(self, data: Dict):
-        """显示激活信息."""
+        """
+        显示激活信息.
+        """
         code = data.get("code", "------")
         message = data.get("message", "请在xiaozhi.me输入验证码")
 
@@ -628,14 +727,20 @@ class ActivationService:
 
         # 播放语音
         try:
-            from src.utils.common_utils import play_audio_nonblocking, handle_verification_code
+            from src.utils.common_utils import (
+                handle_verification_code,
+                play_audio_nonblocking,
+            )
+
             handle_verification_code(text)
             play_audio_nonblocking(text)
         except Exception as e:
             self.logger.debug(f"语音播放失败: {e}")
 
     async def _do_activate(self, challenge: str, code: str) -> bool:
-        """执行激活请求."""
+        """
+        执行激活请求.
+        """
         serial_number = self.get_serial_number()
         if not serial_number:
             self.logger.error("无序列号，无法激活")
@@ -655,7 +760,9 @@ class ActivationService:
             }
         }
 
-        ota_url = self.config_manager.get_config("SYSTEM_OPTIONS.NETWORK.OTA_VERSION_URL")
+        ota_url = self.config_manager.get_config(
+            "SYSTEM_OPTIONS.NETWORK.OTA_VERSION_URL"
+        )
         if not ota_url:
             self.logger.error("OTA URL未配置")
             return False
@@ -683,12 +790,15 @@ class ActivationService:
                     if attempt > 0:
                         try:
                             from src.utils.common_utils import play_audio_nonblocking
+
                             text = f".请登录到控制面板添加设备，输入验证码：{' '.join(code)}..."
                             play_audio_nonblocking(text)
                         except Exception:
                             pass
 
-                    async with session.post(activate_url, headers=headers, json=payload) as response:
+                    async with session.post(
+                        activate_url, headers=headers, json=payload
+                    ) as response:
                         self.logger.debug(f"激活响应: HTTP {response.status}")
 
                         if response.status == 200:

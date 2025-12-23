@@ -1,14 +1,13 @@
 import asyncio
 import time
-from pathlib import Path
 from typing import Callable, Optional
 
 import numpy as np
 import sherpa_onnx
 
 from src.constants.constants import AudioConfig
-from src.utils.config_manager import ConfigManager
 from src.logging import get_logger
+from src.utils.config_manager import ConfigManager
 from src.utils.resource_finder import get_app_root
 
 logger = get_logger()

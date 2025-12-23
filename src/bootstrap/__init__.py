@@ -1,11 +1,13 @@
-"""Bootstrap module for dependency injection and service container."""
+"""
+Bootstrap module for dependency injection and service container.
+"""
 
+from src.bootstrap.container import ServiceContainer
 from src.bootstrap.protocols import (
-    PluginContext,
     PluginCommands,
+    PluginContext,
     WindowContext,
 )
-from src.bootstrap.container import ServiceContainer
 
 __all__ = [
     "PluginContext",

@@ -10,8 +10,8 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
-from src.utils.config_manager import ConfigManager
 from src.logging import get_logger
+from src.utils.config_manager import ConfigManager
 
 logger = get_logger()
 

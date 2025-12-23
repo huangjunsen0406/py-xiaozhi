@@ -1,20 +1,18 @@
-"""
-插件管理器.
+"""插件管理器.
 
 管理插件生命周期，使用 PluginContext 和 PluginCommands 进行依赖注入。
 """
 
-from typing import Any, List, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, List, Optional
 
 from .base import Plugin
 
 if TYPE_CHECKING:
-    from src.bootstrap.protocols import PluginContext, PluginCommands
+    from src.bootstrap.protocols import PluginCommands, PluginContext
 
 
 class PluginManager:
-    """
-    轻量插件管理器.
+    """轻量插件管理器.
 
     职责:
     - 按优先级排序注册插件
@@ -27,8 +25,7 @@ class PluginManager:
         self._by_name: dict[str, Plugin] = {}
 
     def register(self, *plugins: Plugin) -> None:
-        """
-        注册插件.
+        """注册插件.
 
         按 priority 排序（数值越小越优先）。
         """
@@ -43,18 +40,17 @@ class PluginManager:
                 except Exception:
                     pass
 
-    def get_plugin(self, name: str) -> Plugin | None:
-        """根据插件名获取插件实例."""
+    def get_plugin(self, name: str) -> Optional[Plugin]:
+        """
+        根据插件名获取插件实例.
+        """
         try:
             return self._by_name.get(name)
         except Exception:
             return None
 
-    async def setup_all(
-        self, ctx: "PluginContext", cmd: "PluginCommands"
-    ) -> None:
-        """
-        初始化所有插件.
+    async def setup_all(self, ctx: "PluginContext", cmd: "PluginCommands") -> None:
+        """初始化所有插件.
 
         Args:
             ctx: 插件上下文
@@ -67,7 +63,9 @@ class PluginManager:
                 pass
 
     async def start_all(self) -> None:
-        """启动所有插件."""
+        """
+        启动所有插件.
+        """
         for p in list(self._plugins):
             try:
                 await p.start()
@@ -75,7 +73,9 @@ class PluginManager:
                 pass
 
     async def notify_protocol_connected(self, protocol: Any) -> None:
-        """通知协议已连接."""
+        """
+        通知协议已连接.
+        """
         for p in list(self._plugins):
             try:
                 if p.on_protocol_connected:
@@ -84,7 +84,9 @@ class PluginManager:
                 pass
 
     async def notify_incoming_json(self, message: Any) -> None:
-        """通知收到 JSON 消息."""
+        """
+        通知收到 JSON 消息.
+        """
         for p in list(self._plugins):
             try:
                 await p.on_incoming_json(message)
@@ -92,7 +94,9 @@ class PluginManager:
                 pass
 
     async def notify_incoming_audio(self, data: bytes) -> None:
-        """通知收到音频数据."""
+        """
+        通知收到音频数据.
+        """
         for p in list(self._plugins):
             try:
                 await p.on_incoming_audio(data)
@@ -100,7 +104,9 @@ class PluginManager:
                 pass
 
     async def notify_device_state_changed(self, state: Any) -> None:
-        """通知设备状态变更."""
+        """
+        通知设备状态变更.
+        """
         for p in list(self._plugins):
             try:
                 await p.on_device_state_changed(state)
@@ -108,7 +114,9 @@ class PluginManager:
                 pass
 
     async def stop_all(self) -> None:
-        """停止所有插件（逆序）."""
+        """
+        停止所有插件（逆序）.
+        """
         for p in reversed(self._plugins):
             try:
                 await p.stop()
@@ -116,7 +124,9 @@ class PluginManager:
                 pass
 
     async def shutdown_all(self) -> None:
-        """关闭所有插件（逆序）."""
+        """
+        关闭所有插件（逆序）.
+        """
         for p in reversed(self._plugins):
             try:
                 await p.shutdown()
