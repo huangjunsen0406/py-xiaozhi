@@ -5,25 +5,30 @@ from typing import Callable, List, Optional, Protocol
 
 import numpy as np
 
-# 在导入 opuslib 之前确保 opus 库已加载
+# ============================================================
+# Opus 库加载（必须在导入 opuslib 之前）
+# ============================================================
+# opuslib 依赖系统的 libopus 动态库，需要在导入前确保库已加载
+# 这是一个特殊情况，因此这些导入不在文件顶部
 from src.utils.opus_loader import setup_opus
 
 setup_opus()
 
-import opuslib
-import sounddevice as sd
-import soxr
+# 必须在 setup_opus() 之后导入，忽略 import 位置警告
+import opuslib  # noqa: E402
+import sounddevice as sd  # noqa: E402
+import soxr  # noqa: E402
 
-from src.audio_codecs.aec_processor import AECProcessor
-from src.constants.constants import AudioConfig
-from src.logging import get_logger
-from src.utils.audio_utils import (
+from src.audio_codecs.aec_processor import AECProcessor  # noqa: E402
+from src.constants.constants import AudioConfig  # noqa: E402
+from src.logging import get_logger  # noqa: E402
+from src.utils.audio_utils import (  # noqa: E402
     downmix_to_mono,
     safe_queue_put,
     select_audio_device,
     upmix_mono_to_channels,
 )
-from src.utils.config_manager import ConfigManager
+from src.utils.config_manager import ConfigManager  # noqa: E402
 
 logger = get_logger()
 
