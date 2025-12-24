@@ -252,14 +252,8 @@ class WakeWordDetector:
             if audio_data is None or len(audio_data) == 0:
                 return
 
-            # 转换音频格式为 float32
-            if audio_data.dtype == np.int16:
-                samples = audio_data.astype(np.float32) / 32768.0
-            else:
-                samples = audio_data.astype(np.float32)
-
             # 提供音频数据给KeywordSpotter
-            self.stream.accept_waveform(sample_rate=self.sample_rate, waveform=samples)
+            self.stream.accept_waveform(sample_rate=self.sample_rate, waveform=audio_data)
 
             # 检查是否准备好解码
             if self.keyword_spotter.is_ready(self.stream):

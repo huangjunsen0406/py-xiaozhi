@@ -54,6 +54,17 @@ class UIPlugin(Plugin):
         if not self.display:
             return
 
+        try:
+            from src.mcp.tools.music.music_player import get_music_player_instance
+
+            music_player = get_music_player_instance()
+            music_player.set_ui_display(self.display)
+        except Exception as e:
+            from src.logging import get_logger
+
+            logger = get_logger()
+            logger.debug(f"设置 MusicPlayer UI Display 失败: {e}")
+
         await self._setup_callbacks()
         self._cmd.spawn(self.display.start(), name=f"ui:{self.mode}:start")
 
@@ -112,6 +123,17 @@ class UIPlugin(Plugin):
 
     async def shutdown(self) -> None:
         if self.display:
+            try:
+                from src.mcp.tools.music.music_player import get_music_player_instance
+
+                try:
+                    music_player = get_music_player_instance()
+                    music_player.set_ui_display(None)
+                except Exception:
+                    pass
+            except Exception:
+                pass
+
             await self.display.close()
             self.display = None
 

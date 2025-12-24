@@ -245,7 +245,6 @@ class ServiceContainer:
         设置插件.
         """
         from src.plugins.audio import AudioPlugin
-        from src.plugins.calendar import CalendarPlugin
         from src.plugins.mcp import McpPlugin
         from src.plugins.shortcuts import ShortcutsPlugin
         from src.plugins.ui import UIPlugin
@@ -262,7 +261,6 @@ class ServiceContainer:
             McpPlugin(),
             audio_plugin,
             wake_word_plugin,
-            CalendarPlugin(),
             ui_plugin,
             shortcuts_plugin,
         )

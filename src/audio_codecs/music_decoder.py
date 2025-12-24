@@ -126,7 +126,10 @@ class MusicDecoder:
 
                 frame_count += 1
 
-                audio_array = np.frombuffer(chunk, dtype=np.int16)
+                # 解码为 int16（FFmpeg 输出）
+                audio_array_int16 = np.frombuffer(chunk, dtype=np.int16)
+                # 转换为 float32（AudioCodec 需要）
+                audio_array = audio_array_int16.astype(np.float32) / 32768.0
 
                 if self.channels > 1:
                     audio_array = audio_array.reshape(-1, self.channels)

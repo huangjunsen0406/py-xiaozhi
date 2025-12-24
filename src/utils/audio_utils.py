@@ -1,5 +1,4 @@
 import asyncio
-import platform
 import re
 from typing import Any, Dict, List, Optional, Union
 
@@ -144,46 +143,82 @@ def _valid(devs: List[dict], idx: int, kind: str, include_virtual: bool) -> bool
     return True
 
 
-def select_audio_device(
-    kind: str,
-    *,
-    include_virtual: bool = False,
-    allow_name_hints: Optional[bool] = None,  # None=Linux 才启用；True/False 可强制
+def find_device_by_name(
+    kind: str, device_name: str, *, include_virtual: bool = False
 ) -> Optional[Dict[str, Any]]:
-    """
-    选择音频设备：HostAPI 默认 →（可选：设备名 hints，仅 Linux）→ sounddevice 系统默认 → 第一个可用 返回：{index, name,
-    sample_rate, channels} 或 None.
+    """按名称查找设备（模糊匹配）
+
+    Args:
+        kind: "input" 或 "output"
+        device_name: 设备名称（支持部分匹配）
+        include_virtual: 是否包含虚拟设备
+
+    Returns:
+        设备信息字典，或 None
     """
     assert kind in ("input", "output")
-    system = platform.system().lower()
 
-    # HostAPI 优先表
-    if system == "windows":
-        host_order = ["wasapi", "wdm-ks", "directsound", "mme"]
-    elif system == "darwin":
-        host_order = ["core audio"]
-    else:
-        host_order = ["alsa", "jack", "oss"]  # 多数 Linux 的 PortAudio 只有 ALSA
-
-    # Linux 才默认启用 name hints；其它平台默认关闭（可通过参数打开）
-    if allow_name_hints is None:
-        allow_name_hints = system == "linux"
-
-    DEVICE_NAME_HINTS = {
-        "input": ["default", "sysdefault", "pulse", "pipewire"],
-        "output": ["default", "sysdefault", "dmix", "pulse", "pipewire"],
-    }
-
-    # 枚举
     try:
-        hostapis = list(sd.query_hostapis())
         devices = list(sd.query_devices())
     except Exception:
-        hostapis, devices = [], []
+        return None
 
-    key_host_default = (
-        "default_input_device" if kind == "input" else "default_output_device"
-    )
+    key_channels = "max_input_channels" if kind == "input" else "max_output_channels"
+    search_name = device_name.casefold().strip()
+
+    # 1. 精确匹配（忽略大小写）
+    for i, d in enumerate(devices):
+        if not _valid(devices, i, kind, include_virtual):
+            continue
+        if d.get("name", "").casefold().strip() == search_name:
+            sr = d.get("default_samplerate", None)
+            return {
+                "index": int(d.get("index", i)),
+                "name": d.get("name", "Unknown"),
+                "sample_rate": int(sr) if isinstance(sr, (int, float)) else None,
+                "channels": int(d.get(key_channels, 0)),
+            }
+
+    # 2. 模糊匹配（包含关系）
+    for i, d in enumerate(devices):
+        if not _valid(devices, i, kind, include_virtual):
+            continue
+        device_full_name = d.get("name", "").casefold()
+        if search_name in device_full_name or device_full_name in search_name:
+            sr = d.get("default_samplerate", None)
+            return {
+                "index": int(d.get("index", i)),
+                "name": d.get("name", "Unknown"),
+                "sample_rate": int(sr) if isinstance(sr, (int, float)) else None,
+                "channels": int(d.get(key_channels, 0)),
+            }
+
+    return None
+
+
+def select_audio_device(
+    kind: str, *, include_virtual: bool = False
+) -> Optional[Dict[str, Any]]:
+    """自动选择音频设备（简化版）
+
+    策略：
+    1. 系统默认设备（sounddevice 推荐）
+    2. 第一个可用的非虚拟设备
+
+    Args:
+        kind: "input" 或 "output"
+        include_virtual: 是否包含虚拟设备
+
+    Returns:
+        {index, name, sample_rate, channels} 或 None
+    """
+    assert kind in ("input", "output")
+
+    try:
+        devices = list(sd.query_devices())
+    except Exception:
+        return None
+
     key_channels = "max_input_channels" if kind == "input" else "max_output_channels"
 
     def pack(idx: int, base: Optional[dict] = None) -> Optional[Dict[str, Any]]:
@@ -203,44 +238,16 @@ def select_audio_device(
             "channels": int(d.get(key_channels, 0)),
         }
 
-    # 1) 按 HostAPI 名称匹配（包含、忽略大小写）→ 取该 HostAPI 的“默认设备”
-    for token in host_order:
-        t = token.casefold()
-        for ha in hostapis:
-            if t in str(ha.get("name", "")).casefold():
-                idx = ha.get(key_host_default, -1)
-                info = pack(idx)
-                if info:
-                    return info
-
-    # 1.5) （可选）设备名 hints，仅当 allow_name_hints=True 时启用（默认 Linux）
-    if allow_name_hints and devices:
-        hints = [h.casefold() for h in DEVICE_NAME_HINTS[kind]]
-        cands: List[int] = []
-        for i, d in enumerate(devices):
-            if not _valid(devices, i, kind, include_virtual):
-                continue
-            name_low = str(d.get("name", "")).casefold()
-            if any(h in name_low for h in hints):
-                cands.append(i)
-        if cands:
-            cands.sort()  # 稳定：索引小优先
-            info = pack(cands[0])
-            if info:
-                return info
-
-    # 2) sounddevice 的系统默认（已考虑平台默认路由）
+    # 1. sounddevice 系统默认（最可靠）
     try:
-        info = sd.query_devices(
-            kind=kind
-        )  # dict，含 index / default_samplerate / max_*_channels
+        info = sd.query_devices(kind=kind)
         packed = pack(int(info.get("index")), base=info)
         if packed:
             return packed
     except Exception:
         pass
 
-    # 3) 兜底：第一个可用（且非虚拟，除非允许）
+    # 2. 兜底：第一个可用的非虚拟设备
     for i, d in enumerate(devices):
         if _valid(devices, i, kind, include_virtual):
             return pack(i)

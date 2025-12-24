@@ -4,7 +4,6 @@ Screenshot camera implementation for capturing desktop screens.
 
 import io
 import sys
-import threading
 
 from src.logging import get_logger
 from src.mcp.tools.camera.base_camera import BaseCamera
@@ -16,20 +15,6 @@ class ScreenshotCamera(BaseCamera):
     """
     桌面截图摄像头实现.
     """
-
-    _instance = None
-    _lock = threading.Lock()
-
-    @classmethod
-    def get_instance(cls):
-        """
-        获取单例实例.
-        """
-        if cls._instance is None:
-            with cls._lock:
-                if cls._instance is None:
-                    cls._instance = cls()
-        return cls._instance
 
     def __init__(self):
         """
@@ -443,28 +428,29 @@ class ScreenshotCamera(BaseCamera):
         try:
             logger.info(f"Analyzing screenshot with question: {question}")
 
-            # 获取现有的摄像头实例来复用分析能力
+            # 复用现有的 camera 分析逻辑
             from src.mcp.tools.camera import get_camera_instance
 
             camera_instance = get_camera_instance()
 
-            # 将我们的截图数据传递给分析器
-            original_jpeg_data = camera_instance.get_jpeg_data()
-            camera_instance.set_jpeg_data(self.jpeg_data["buf"])
+            # 临时保存原始数据并替换为截图数据
+            original_buf = camera_instance.jpeg_data["buf"]
+            original_len = camera_instance.jpeg_data["len"]
 
             try:
-                # 使用现有的分析能力
-                result = camera_instance.analyze(question)
+                # 设置截图数据
+                camera_instance.jpeg_data["buf"] = self.jpeg_data["buf"]
+                camera_instance.jpeg_data["len"] = self.jpeg_data["len"]
 
-                # 恢复原始数据
-                camera_instance.set_jpeg_data(original_jpeg_data["buf"])
+                # 调用分析
+                result = camera_instance.analyze(question)
 
                 return result
 
-            except Exception as e:
-                # 恢复原始数据
-                camera_instance.set_jpeg_data(original_jpeg_data["buf"])
-                raise e
+            finally:
+                # 无论成功失败都要恢复原始数据
+                camera_instance.jpeg_data["buf"] = original_buf
+                camera_instance.jpeg_data["len"] = original_len
 
         except Exception as e:
             logger.error(f"Error analyzing screenshot: {e}", exc_info=True)

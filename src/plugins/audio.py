@@ -40,6 +40,12 @@ class AudioPlugin(Plugin):
             self.codec = AudioCodec()
             await self.codec.initialize()
             self.codec.set_encoded_callback(self._on_encoded_audio)
+
+            from src.mcp.tools.music.music_player import get_music_player_instance
+
+            music_player = get_music_player_instance()
+            music_player.set_audio_codec(self.codec)
+
         except Exception as e:
             logger.error(f"音频插件初始化失败: {e}", exc_info=True)
             self.codec = None
@@ -111,23 +117,13 @@ class AudioPlugin(Plugin):
             logger.error(f"TTS 开始处理失败: {e}", exc_info=True)
 
     async def _resume_music_after_tts(self):
-        """
-        TTS 结束后恢复音乐.
-        """
+        """TTS 结束后恢复音乐"""
         try:
             from src.mcp.tools.music.music_player import get_music_player_instance
 
             music_player = get_music_player_instance()
 
-            if music_player._deferred_start_path:
-                logger.info("TTS 播放完成，启动延迟播放的音乐")
-                file_path = music_player._deferred_start_path
-                start_pos = music_player._deferred_start_position
-                music_player._deferred_start_path = None
-                music_player._deferred_start_position = 0.0
-                await music_player._start_playback(file_path, start_pos)
-                return
-
+            # 如果音乐因 TTS 暂停，则恢复播放
             if music_player.is_playing and music_player.paused:
                 if music_player._pause_source == "tts":
                     logger.info("TTS 播放完成，恢复音乐播放")
@@ -136,9 +132,6 @@ class AudioPlugin(Plugin):
             logger.error(f"恢复音乐播放失败: {e}", exc_info=True)
 
     async def shutdown(self) -> None:
-        """
-        关闭音频资源.
-        """
         if self._audio_consumer_task and not self._audio_consumer_task.done():
             self._audio_consumer_task.cancel()
             try:
@@ -148,6 +141,14 @@ class AudioPlugin(Plugin):
 
         if self.codec:
             try:
+                from src.mcp.tools.music.music_player import get_music_player_instance
+
+                try:
+                    music_player = get_music_player_instance()
+                    music_player.set_audio_codec(None)
+                except Exception:
+                    pass
+
                 await self.codec.close()
             except Exception as e:
                 logger.error(f"关闭音频编解码器失败: {e}", exc_info=True)

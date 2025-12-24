@@ -260,18 +260,6 @@ class McpServer:
         system_manager = get_system_tools_manager()
         system_manager.init_tools(self.add_tool, PropertyList, Property, PropertyType)
 
-        # 添加日程管理工具
-        from src.mcp.tools.calendar import get_calendar_manager
-
-        calendar_manager = get_calendar_manager()
-        calendar_manager.init_tools(self.add_tool, PropertyList, Property, PropertyType)
-
-        # 添加倒计时器工具
-        from src.mcp.tools.timer import get_timer_manager
-
-        timer_manager = get_timer_manager()
-        timer_manager.init_tools(self.add_tool, PropertyList, Property, PropertyType)
-
         # 添加音乐播放器工具
         from src.mcp.tools.music import get_music_tools_manager
 
