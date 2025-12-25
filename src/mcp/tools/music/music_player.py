@@ -125,12 +125,14 @@ class MusicPlayer:
         self._init_cache_dirs()
 
         self.config = {
-            "SEARCH_URL": "http://search.kuwo.cn/r.s",
-            "PLAY_URL": "http://api.xiaodaokg.com/kuwo.php",
-            "LYRIC_URL": "https://api.xiaodaokg.com/kw/kwlyric.php",
+            "BASE_URL": "https://music-dl.sayqz.com/api/",
+            "DEFAULT_SOURCE": "kuwo",  # 默认音乐平台：netease, kuwo, qq, kugou 等
+            "DEFAULT_BR": "320k",  # 默认音质：128k, 320k, flac, flac24bit
+            "SEARCH_LIMIT": 20,  # 搜索结果数量
             "HEADERS": {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-                "Accept": "*/*",
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "Accept": "application/json, text/plain, */*",
+                "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
                 "Connection": "keep-alive",
             },
         }
@@ -140,7 +142,10 @@ class MusicPlayer:
         self._local_playlist = None
         self._last_scan_time = 0
 
-        logger.info("音乐播放器初始化完成 (FFmpeg + AudioCodec 模式)")
+        logger.info(
+            f"音乐播放器初始化完成 (FFmpeg + AudioCodec 模式, TuneFree API: {self.config['BASE_URL']})"
+        )
+        logger.info(f"默认音乐平台: {self.config['DEFAULT_SOURCE']}, 默认音质: {self.config['DEFAULT_BR']}")
 
     def set_audio_codec(self, audio_codec: Optional["AudioCodec"]) -> None:
         self._audio_codec = audio_codec
@@ -629,79 +634,91 @@ class MusicPlayer:
 
     # ==================== 内部方法 ====================
 
-    async def _search_song(self, song_name: str) -> Tuple[str, str]:
-        """搜索歌曲获取ID和URL"""
+    async def _search_song(self, song_name: str, source: str = None) -> Tuple[str, str]:
+        """搜索歌曲获取ID和URL
+
+        Args:
+            song_name: 歌曲名称
+            source: 音乐平台 (netease, kuwo, qq 等)，默认使用配置中的平台
+
+        Returns:
+            (song_id, play_url) 元组
+        """
         try:
+            if source is None:
+                source = self.config["DEFAULT_SOURCE"]
+
+            # 1. 搜索歌曲
+            search_url = self.config["BASE_URL"]
             params = {
-                "all": song_name,
-                "ft": "music",
-                "newsearch": "1",
-                "alflac": "1",
-                "itemset": "web_2013",
-                "client": "kt",
-                "cluster": "0",
-                "pn": "0",
-                "rn": "1",
-                "vermerge": "1",
-                "rformat": "json",
-                "encoding": "utf8",
-                "show_copyright_off": "1",
-                "pcmp4": "1",
-                "ver": "mbox",
-                "vipver": "MUSIC_8.7.6.0.BCS31",
-                "plat": "pc",
-                "devid": "0",
+                "type": "search",
+                "source": source,
+                "keyword": song_name,
+                "limit": self.config["SEARCH_LIMIT"],
             }
+
+            logger.info(f"搜索歌曲: {song_name}, 平台: {source}")
 
             response = await asyncio.to_thread(
                 requests.get,
-                self.config["SEARCH_URL"],
+                search_url,
                 params=params,
                 headers=self.config["HEADERS"],
                 timeout=10,
             )
             response.raise_for_status()
 
-            text = response.text.replace("'", '"')
+            data = response.json()
 
-            song_id = self._extract_value(text, '"DC_TARGETID":"', '"')
-            if not song_id:
+            if data.get("code") != 200:
+                logger.error(f"搜索失败: {data.get('message', 'Unknown error')}")
                 return "", ""
 
-            title = self._extract_value(text, '"NAME":"', '"') or song_name
-            artist = self._extract_value(text, '"ARTIST":"', '"')
-            album = self._extract_value(text, '"ALBUM":"', '"')
-            duration_str = self._extract_value(text, '"DURATION":"', '"')
+            results = data.get("data", {}).get("results", [])
+            if not results:
+                logger.warning(f"未找到歌曲: {song_name}")
+                return "", ""
 
-            if duration_str:
-                try:
-                    self.total_duration = int(duration_str)
-                except ValueError:
-                    self.total_duration = 0
+            # 取第一个搜索结果
+            first_result = results[0]
+            song_id = first_result.get("id", "")
+            title = first_result.get("name", song_name)
+            artist = first_result.get("artist", "")
+            album = first_result.get("album", "")
+            platform = first_result.get("platform", source)
 
+            if not song_id:
+                logger.error("搜索结果中没有歌曲ID")
+                return "", ""
+
+            # 构建显示名称
             display_name = title
             if artist:
                 display_name = f"{title} - {artist}"
                 if album:
                     display_name += f" ({album})"
+
             self.current_song = display_name
             self.song_id = song_id
 
-            play_url = f"{self.config['PLAY_URL']}?ID={song_id}"
-            url_response = await asyncio.to_thread(
-                requests.get, play_url, headers=self.config["HEADERS"], timeout=10
+            # 2. 构建播放URL
+            play_url = (
+                f"{self.config['BASE_URL']}"
+                f"?source={platform}&id={song_id}&type=url&br={self.config['DEFAULT_BR']}"
             )
-            url_response.raise_for_status()
 
-            play_url_text = url_response.text.strip()
-            if play_url_text and play_url_text.startswith("http"):
-                await self._fetch_lyrics(song_id)
-                return song_id, play_url_text
+            logger.info(f"找到歌曲: {display_name}, ID: {song_id}, 平台: {platform}")
 
-            return song_id, ""
+            # 3. 获取歌词
+            await self._fetch_lyrics(song_id, platform)
+
+            # 4. 获取详细信息（包括时长）
+            await self._fetch_song_info(song_id, platform)
+
+            return song_id, play_url
 
         except Exception as e:
-            logger.error(f"搜索歌曲失败: {e}")
+            logger.error(f"搜索歌曲失败: {e}", exc_info=True)
             return "", ""
 
     async def _play_url(self, url: str) -> bool:
@@ -870,65 +887,126 @@ class MusicPlayer:
                     pass
             return None
 
-    async def _fetch_lyrics(self, song_id: str):
-        """获取歌词"""
-        try:
-            self.lyrics = []
+    async def _fetch_song_info(self, song_id: str, source: str = None):
+        """获取歌曲详细信息（包括时长）
 
-            lyric_url = self.config.get("LYRIC_URL")
-            lyric_api_url = f"{lyric_url}?id={song_id}"
-            logger.info(f"获取歌词URL: {lyric_api_url}")
+        Args:
+            song_id: 歌曲ID
+            source: 音乐平台
+        """
+        try:
+            if source is None:
+                source = self.config["DEFAULT_SOURCE"]
+
+            info_url = self.config["BASE_URL"]
+            params = {"type": "info", "source": source, "id": song_id}
+
+            logger.debug(f"获取歌曲信息: ID={song_id}, 平台={source}")
 
             response = await asyncio.to_thread(
-                requests.get, lyric_api_url, headers=self.config["HEADERS"], timeout=10
+                requests.get,
+                info_url,
+                params=params,
+                headers=self.config["HEADERS"],
+                timeout=10,
             )
             response.raise_for_status()
 
             data = response.json()
 
-            if (
-                data.get("code") == 200
-                and data.get("data")
-                and data["data"].get("content")
-            ):
-                lrc_content = data["data"]["content"]
+            if data.get("code") == 200 and data.get("data"):
+                song_data = data["data"]
 
-                import re
-
-                lines = lrc_content.split("\n")
-                for line in lines:
-                    line = line.strip()
-                    if not line:
-                        continue
-
-                    time_match = re.match(r"\[(\d{2}):(\d{2})\.(\d{2})\](.+)", line)
-                    if time_match:
-                        minutes = int(time_match.group(1))
-                        seconds = int(time_match.group(2))
-                        centiseconds = int(time_match.group(3))
-                        text = time_match.group(4).strip()
-
-                        time_sec = minutes * 60 + seconds + centiseconds / 100.0
-
-                        if (
-                            text
-                            and not text.startswith("作词")
-                            and not text.startswith("作曲")
-                            and not text.startswith("编曲")
-                            and not text.startswith("ti:")
-                            and not text.startswith("ar:")
-                            and not text.startswith("al:")
-                            and not text.startswith("by:")
-                            and not text.startswith("offset:")
-                        ):
-                            self.lyrics.append((time_sec, text))
-
-                logger.info(f"成功获取歌词，共 {len(self.lyrics)} 行")
-            else:
-                logger.warning(f"未获取到歌词或歌词格式错误: {data.get('msg', '')}")
+                # 尝试从返回数据中提取时长（某些平台可能返回）
+                # TuneFree API 文档中没有明确说明 info 接口返回时长
+                # 但我们可以尝试获取，如果没有就保持为0
+                duration = song_data.get("duration")
+                if duration:
+                    try:
+                        # 时长可能是秒数或毫秒数
+                        if isinstance(duration, (int, float)):
+                            # 如果时长大于10000，可能是毫秒
+                            if duration > 10000:
+                                self.total_duration = duration / 1000
+                            else:
+                                self.total_duration = duration
+                            logger.debug(f"获取到歌曲时长: {self.total_duration}秒")
+                    except (ValueError, TypeError):
+                        pass
 
         except Exception as e:
-            logger.error(f"获取歌词失败: {e}")
+            logger.debug(f"获取歌曲信息失败（不影响播放）: {e}")
+
+    async def _fetch_lyrics(self, song_id: str, source: str = None):
+        """获取歌词
+
+        Args:
+            song_id: 歌曲ID
+            source: 音乐平台
+        """
+        try:
+            self.lyrics = []
+
+            if source is None:
+                source = self.config["DEFAULT_SOURCE"]
+
+            lyric_url = self.config["BASE_URL"]
+            params = {"type": "lrc", "source": source, "id": song_id}
+
+            logger.info(f"获取歌词: ID={song_id}, 平台={source}")
+
+            response = await asyncio.to_thread(
+                requests.get,
+                lyric_url,
+                params=params,
+                headers=self.config["HEADERS"],
+                timeout=10,
+            )
+            response.raise_for_status()
+
+            # TuneFree API 返回的是纯文本 LRC 格式
+            lrc_content = response.text
+
+            if not lrc_content or len(lrc_content) < 10:
+                logger.warning("未获取到歌词或歌词为空")
+                return
+
+            import re
+
+            lines = lrc_content.split("\n")
+            for line in lines:
+                line = line.strip()
+                if not line:
+                    continue
+
+                # 解析 LRC 格式: [mm:ss.xx]歌词文本
+                time_match = re.match(r"\[(\d{2}):(\d{2})\.(\d{2})\](.+)", line)
+                if time_match:
+                    minutes = int(time_match.group(1))
+                    seconds = int(time_match.group(2))
+                    centiseconds = int(time_match.group(3))
+                    text = time_match.group(4).strip()
+
+                    time_sec = minutes * 60 + seconds + centiseconds / 100.0
+
+                    # 过滤元数据标签
+                    if (
+                        text
+                        and not text.startswith("作词")
+                        and not text.startswith("作曲")
+                        and not text.startswith("编曲")
+                        and not text.startswith("ti:")
+                        and not text.startswith("ar:")
+                        and not text.startswith("al:")
+                        and not text.startswith("by:")
+                        and not text.startswith("offset:")
+                    ):
+                        self.lyrics.append((time_sec, text))
+
+            logger.info(f"成功获取歌词，共 {len(self.lyrics)} 行")
+
+        except Exception as e:
+            logger.error(f"获取歌词失败: {e}", exc_info=True)
 
     async def _handle_playback_finished(self):
         """处理播放完成"""
