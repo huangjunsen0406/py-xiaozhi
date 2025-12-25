@@ -54,6 +54,11 @@ class PluginContextAdapter:
     def get_config(self) -> ConfigManager:
         return self._container.config
 
+    @property
+    def event_bus(self):
+        """获取事件总线"""
+        return self._container.event_bus
+
 
 class PluginCommandsAdapter:
     """
@@ -270,7 +275,6 @@ class ServiceContainer:
 
         # 设置插件间依赖
         wake_word_plugin.set_audio_plugin(audio_plugin)
-        shortcuts_plugin.set_ui_plugin(ui_plugin)
 
     def _setup_event_handlers(self) -> None:
         """
@@ -324,6 +328,14 @@ class ServiceContainer:
 
     async def _on_network_error(self, error_message: str = None) -> None:
         self.state.set_keep_listening(False)
+
+        # 发射 UI 状态更新事件，显示未连接状态
+        from src.core.event_bus import Events
+        from src.views.events import UIStatusUpdate
+
+        await self.event_bus.emit(
+            Events.UI_UPDATE_STATUS, UIStatusUpdate(status="未连接", connected=False)
+        )
 
     async def _on_device_state_changed(self, data: dict) -> None:
         new_state = data.get("new_state")

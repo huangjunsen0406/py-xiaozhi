@@ -76,8 +76,9 @@ class PluginShortcutManager:
     全局快捷键管理器.
     """
 
-    def __init__(self, loop: Optional[asyncio.AbstractEventLoop]):
+    def __init__(self, loop: Optional[asyncio.AbstractEventLoop], event_bus=None):
         self._main_loop = loop
+        self._event_bus = event_bus
         self.config = ConfigManager.get_instance()
         self.shortcuts_config = self.config.get_config("SHORTCUTS", {}) or {}
         self.enabled = bool(self.shortcuts_config.get("ENABLED", True))
@@ -91,7 +92,6 @@ class PluginShortcutManager:
         self._last_activity_time = 0.0
 
         self.application = None
-        self.display = None
 
         self.key_mapping = {
             "\x17": "w",
@@ -286,12 +286,18 @@ class PluginShortcutManager:
             self._run_coroutine_threadsafe(self.application.toggle_chat_state())
             return
 
-        if kind == "MODE_TOGGLE" and is_press and self.display:
-            self._run_coroutine_threadsafe(self.display.toggle_mode())
+        if kind == "MODE_TOGGLE" and is_press and self._event_bus:
+            from src.core.event_bus import Events
+
+            self._run_coroutine_threadsafe(self._event_bus.emit(Events.UI_TOGGLE_MODE))
             return
 
-        if kind == "WINDOW_TOGGLE" and is_press and self.display:
-            self._run_coroutine_threadsafe(self.display.toggle_window_visibility())
+        if kind == "WINDOW_TOGGLE" and is_press and self._event_bus:
+            from src.core.event_bus import Events
+
+            self._run_coroutine_threadsafe(
+                self._event_bus.emit(Events.UI_TOGGLE_WINDOW)
+            )
             return
 
     def _run_coroutine_threadsafe(self, coro):
@@ -326,14 +332,7 @@ class ShortcutsPlugin(Plugin):
         await super().setup(ctx, cmd)
         self._adapter = _CmdAdapter(cmd, ctx)
         self._loop = asyncio.get_running_loop()
-        self._manager = PluginShortcutManager(self._loop)
-
-    def set_ui_plugin(self, ui_plugin) -> None:
-        """
-        设置 UIPlugin 引用（由 ServiceContainer 调用）.
-        """
-        if self._manager and ui_plugin:
-            self._manager.display = getattr(ui_plugin, "display", None)
+        self._manager = PluginShortcutManager(self._loop, event_bus=ctx.event_bus)
 
     async def start(self) -> None:
         if not self._manager:

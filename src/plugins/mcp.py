@@ -40,6 +40,16 @@ class McpPlugin(Plugin):
         except Exception:
             pass
 
+        # 为 MusicPlayer 注入 EventBus
+        try:
+            from src.mcp.tools.music.music_player import get_music_player_instance
+
+            music_player = get_music_player_instance()
+            music_player.set_event_bus(ctx.event_bus)
+            logger.info("MusicPlayer EventBus 已注入")
+        except Exception as e:
+            logger.warning(f"设置 MusicPlayer EventBus 失败: {e}")
+
     async def on_incoming_json(self, message) -> None:
         if not isinstance(message, dict):
             return

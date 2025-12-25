@@ -12,6 +12,60 @@ logger = get_logger()
 
 
 class MusicDecoder:
+    @staticmethod
+    async def get_duration(file_path: Path) -> float:
+        """使用 ffprobe 获取音频文件时长.
+
+        Args:
+            file_path: 音频文件路径
+
+        Returns:
+            时长（秒），失败返回 0
+        """
+        try:
+            # 检查 ffprobe 是否可用
+            try:
+                await asyncio.create_subprocess_exec(
+                    "ffprobe",
+                    "-version",
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+            except FileNotFoundError:
+                logger.warning("ffprobe 未安装，无法获取音频时长")
+                return 0
+
+            # 使用 ffprobe 获取时长
+            cmd = [
+                "ffprobe",
+                "-v",
+                "error",  # 只显示错误
+                "-show_entries",
+                "format=duration",  # 只获取时长
+                "-of",
+                "default=noprint_wrappers=1:nokey=1",  # 简洁输出格式
+                str(file_path),
+            ]
+
+            process = await asyncio.create_subprocess_exec(
+                *cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+            )
+
+            stdout, stderr = await process.communicate()
+
+            if process.returncode == 0:
+                duration_str = stdout.decode("utf-8").strip()
+                duration = float(duration_str)
+                logger.debug(f"从音频文件解析时长: {duration:.2f}秒")
+                return duration
+            else:
+                error_msg = stderr.decode("utf-8", errors="ignore")
+                logger.warning(f"ffprobe 获取时长失败: {error_msg}")
+                return 0
+
+        except Exception as e:
+            logger.warning(f"解析音频文件时长失败: {e}")
+            return 0
 
     def __init__(self, sample_rate: int = 24000, channels: int = 1):
         self.sample_rate = sample_rate

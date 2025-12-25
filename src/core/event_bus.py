@@ -37,6 +37,30 @@ class Events:
     # 应用生命周期
     APP_SHUTDOWN = "app_shutdown"
 
+    # 音乐播放器事件
+    MUSIC_STATE_CHANGED = "music_state_changed"  # 播放状态变化
+    MUSIC_LYRICS_UPDATE = "music_lyrics_update"  # 歌词更新
+    MUSIC_PROGRESS_UPDATE = "music_progress_update"  # 进度更新
+
+    # 音乐控制命令（从外部控制 MusicPlayer）
+    MUSIC_PAUSE_REQUEST = "music_pause_request"  # 请求暂停（如 TTS）
+    MUSIC_RESUME_REQUEST = "music_resume_request"  # 请求恢复
+
+    # UI 用户操作事件（View → Plugin）
+    UI_BUTTON_PRESS = "ui_button_press"  # 按钮按下（手动模式）
+    UI_BUTTON_RELEASE = "ui_button_release"  # 按钮释放（手动模式）
+    UI_AUTO_TOGGLE = "ui_auto_toggle"  # 自动模式切换
+    UI_ABORT_REQUEST = "ui_abort_request"  # 中断请求
+    UI_SEND_TEXT = "ui_send_text"  # 发送文本
+    UI_QUIT_REQUEST = "ui_quit_request"  # 退出请求
+
+    # UI 更新事件（Plugin → View）
+    UI_UPDATE_TEXT = "ui_update_text"  # 更新文本显示
+    UI_UPDATE_EMOTION = "ui_update_emotion"  # 更新表情
+    UI_UPDATE_STATUS = "ui_update_status"  # 更新状态
+    UI_TOGGLE_MODE = "ui_toggle_mode"  # 切换对话模式
+    UI_TOGGLE_WINDOW = "ui_toggle_window"  # 切换窗口可见性
+
 
 class EventBus:
     """事件总线.

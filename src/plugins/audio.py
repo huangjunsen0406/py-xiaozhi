@@ -104,32 +104,33 @@ class AudioPlugin(Plugin):
                 await self.codec.clear_audio_queue()
                 logger.debug("TTS 开始，已清空音频队列")
 
+            # 通过事件总线发送暂停请求
             try:
-                from src.mcp.tools.music.music_player import get_music_player_instance
+                from src.core.event_bus import Events
+                from src.mcp.tools.music.events import MusicControlRequest
 
-                music_player = get_music_player_instance()
-                if music_player.is_playing and not music_player.paused:
-                    logger.info("TTS 开始，暂停音乐播放")
-                    await music_player.pause(source="tts")
+                logger.info("TTS 开始，发送音乐暂停请求")
+                await self._ctx.event_bus.emit(
+                    Events.MUSIC_PAUSE_REQUEST, MusicControlRequest(source="tts")
+                )
             except Exception as e:
-                logger.warning(f"暂停音乐失败: {e}")
+                logger.warning(f"发送音乐暂停请求失败: {e}")
         except Exception as e:
             logger.error(f"TTS 开始处理失败: {e}", exc_info=True)
 
     async def _resume_music_after_tts(self):
         """TTS 结束后恢复音乐"""
         try:
-            from src.mcp.tools.music.music_player import get_music_player_instance
+            # 通过事件总线发送恢复请求
+            from src.core.event_bus import Events
+            from src.mcp.tools.music.events import MusicControlRequest
 
-            music_player = get_music_player_instance()
-
-            # 如果音乐因 TTS 暂停，则恢复播放
-            if music_player.is_playing and music_player.paused:
-                if music_player._pause_source == "tts":
-                    logger.info("TTS 播放完成，恢复音乐播放")
-                    await music_player.resume()
+            logger.info("TTS 播放完成，发送音乐恢复请求")
+            await self._ctx.event_bus.emit(
+                Events.MUSIC_RESUME_REQUEST, MusicControlRequest(source="tts")
+            )
         except Exception as e:
-            logger.error(f"恢复音乐播放失败: {e}", exc_info=True)
+            logger.error(f"发送音乐恢复请求失败: {e}", exc_info=True)
 
     async def shutdown(self) -> None:
         if self._audio_consumer_task and not self._audio_consumer_task.done():

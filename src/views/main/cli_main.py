@@ -19,8 +19,9 @@ from src.logging import get_logger
 class CliMain:
     """CLI 主窗口类 - 终端界面实现"""
 
-    def __init__(self):
+    def __init__(self, event_bus=None):
         self.logger = get_logger()
+        self._event_bus = event_bus
         self.running = True
         self._use_ansi = sys.stdout.isatty()
         self._loop = None
@@ -48,12 +49,6 @@ class CliMain:
             "magenta": "\x1b[35m",
         }
 
-        # 回调函数
-        self.auto_callback = None
-        self.abort_callback = None
-        self.send_text_callback = None
-        self.mode_callback = None
-
         # 异步队列用于处理命令
         self.command_queue = asyncio.Queue()
 
@@ -61,22 +56,95 @@ class CliMain:
         self._log_lines: deque[str] = deque(maxlen=6)
         self._install_log_handler()
 
-    async def set_callbacks(
-        self,
-        press_callback: Optional[Callable] = None,
-        release_callback: Optional[Callable] = None,
-        mode_callback: Optional[Callable] = None,
-        auto_callback: Optional[Callable] = None,
-        abort_callback: Optional[Callable] = None,
-        send_text_callback: Optional[Callable] = None,
-    ):
-        """
-        设置回调函数.
-        """
-        self.auto_callback = auto_callback
-        self.abort_callback = abort_callback
-        self.send_text_callback = send_text_callback
-        self.mode_callback = mode_callback
+        # 订阅 UI 更新事件
+        if self._event_bus:
+            self._subscribe_ui_events()
+        else:
+            self.logger.warning("CliMain 初始化时未提供 EventBus，UI 事件功能将不可用")
+
+    def _subscribe_ui_events(self):
+        """订阅来自插件的 UI 更新事件"""
+        from src.core.event_bus import Events
+
+        self._event_bus.on(Events.UI_UPDATE_TEXT, self._on_ui_update_text)
+        self._event_bus.on(Events.UI_UPDATE_EMOTION, self._on_ui_update_emotion)
+        self._event_bus.on(Events.UI_UPDATE_STATUS, self._on_ui_update_status)
+        self._event_bus.on(Events.UI_TOGGLE_MODE, self._on_ui_toggle_mode)
+        self._event_bus.on(Events.UI_TOGGLE_WINDOW, self._on_ui_toggle_window)
+        self.logger.info("CliMain 已订阅 UI 事件")
+
+    # ===== EventBus 事件处理器 =====
+
+    async def _on_ui_update_text(self, data):
+        """处理 UI 文本更新事件"""
+        try:
+            from src.views.events import UITextUpdate
+
+            if isinstance(data, UITextUpdate):
+                text = data.text
+            elif isinstance(data, dict):
+                text = data.get("text", "")
+            elif isinstance(data, str):
+                text = data
+            else:
+                self.logger.warning(f"无效的 UI 文本更新数据: {type(data)}")
+                return
+
+            await self.update_text(text)
+        except Exception as e:
+            self.logger.error(f"处理 UI 文本更新失败: {e}", exc_info=True)
+
+    async def _on_ui_update_emotion(self, data):
+        """处理 UI 表情更新事件"""
+        try:
+            from src.views.events import UIEmotionUpdate
+
+            if isinstance(data, UIEmotionUpdate):
+                emotion = data.emotion
+            elif isinstance(data, dict):
+                emotion = data.get("emotion", "")
+            elif isinstance(data, str):
+                emotion = data
+            else:
+                self.logger.warning(f"无效的 UI 表情更新数据: {type(data)}")
+                return
+
+            await self.update_emotion(emotion)
+        except Exception as e:
+            self.logger.error(f"处理 UI 表情更新失败: {e}", exc_info=True)
+
+    async def _on_ui_update_status(self, data):
+        """处理 UI 状态更新事件"""
+        try:
+            from src.views.events import UIStatusUpdate
+
+            if isinstance(data, UIStatusUpdate):
+                status = data.status
+                connected = data.connected
+            elif isinstance(data, dict):
+                status = data.get("status", "")
+                connected = data.get("connected", True)
+            else:
+                self.logger.warning(f"无效的 UI 状态更新数据: {type(data)}")
+                return
+
+            await self.update_status(status, connected)
+        except Exception as e:
+            self.logger.error(f"处理 UI 状态更新失败: {e}", exc_info=True)
+
+    async def _on_ui_toggle_mode(self, data=None):
+        """处理切换对话模式事件"""
+        try:
+            await self.toggle_mode()
+        except Exception as e:
+            self.logger.error(f"处理模式切换失败: {e}", exc_info=True)
+
+    async def _on_ui_toggle_window(self, data=None):
+        """处理切换窗口可见性事件"""
+        try:
+            await self.toggle_window_visibility()
+        except Exception as e:
+            self.logger.error(f"处理窗口切换失败: {e}", exc_info=True)
 
     async def update_button_status(self, text: str):
         """
@@ -230,25 +298,48 @@ class CliMain:
         """
         处理命令.
         """
+        if not self._event_bus:
+            self.logger.warning("EventBus 未初始化，无法处理命令")
+            return
+
+        from src.core.event_bus import Events
+        from src.views.events import UISendTextRequest
+
         if cmd == "q":
             await self.close()
         elif cmd == "h":
             self._print_help()
         elif cmd == "r":
-            if self.auto_callback:
-                await self.command_queue.put(self.auto_callback)
+            await asyncio.create_task(self._event_bus.emit(Events.UI_AUTO_TOGGLE))
         elif cmd == "x":
-            if self.abort_callback:
-                await self.command_queue.put(self.abort_callback)
+            await asyncio.create_task(self._event_bus.emit(Events.UI_ABORT_REQUEST))
         else:
-            if self.send_text_callback:
-                await self.send_text_callback(cmd)
+            await asyncio.create_task(
+                self._event_bus.emit(Events.UI_SEND_TEXT, UISendTextRequest(text=cmd))
+            )
 
     async def close(self):
         """
         关闭CLI显示.
         """
         self.running = False
+
+        # 取消订阅事件
+        if self._event_bus:
+            try:
+                from src.core.event_bus import Events
+
+                self._event_bus.off(Events.UI_UPDATE_TEXT, self._on_ui_update_text)
+                self._event_bus.off(Events.UI_UPDATE_EMOTION, self._on_ui_update_emotion)
+                self._event_bus.off(Events.UI_UPDATE_STATUS, self._on_ui_update_status)
+                self._event_bus.off(Events.UI_TOGGLE_MODE, self._on_ui_toggle_mode)
+                self._event_bus.off(Events.UI_TOGGLE_WINDOW, self._on_ui_toggle_window)
+                self.logger.info("CliMain 已取消订阅所有事件")
+
+                # 发送退出请求事件
+                await self._event_bus.emit(Events.UI_QUIT_REQUEST)
+            except Exception as e:
+                self.logger.warning(f"取消订阅事件失败: {e}")
 
         # 关闭前恢复标准日志输出
         self._restore_logging()

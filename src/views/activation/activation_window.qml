@@ -9,6 +9,18 @@ Rectangle {
     height: 420
     color: "transparent"
 
+    // 屏幕尺寸模式: "normal", "small", "compact"
+    property string screenMode: "normal"
+
+    // 根据屏幕模式计算尺寸
+    readonly property int baseFontSize: screenMode === "compact" ? 10 : (screenMode === "small" ? 11 : 12)
+    readonly property int titleFontSize: screenMode === "compact" ? 16 : (screenMode === "small" ? 18 : 20)
+    readonly property int cardHeight: screenMode === "compact" ? 60 : (screenMode === "small" ? 70 : 80)
+    readonly property int codeCardHeight: screenMode === "compact" ? 48 : (screenMode === "small" ? 56 : 64)
+    readonly property int buttonHeight: screenMode === "compact" ? 28 : (screenMode === "small" ? 32 : 36)
+    readonly property int margins: screenMode === "compact" ? 12 : (screenMode === "small" ? 16 : 20)
+    readonly property int spacing: screenMode === "compact" ? 12 : (screenMode === "small" ? 16 : 20)
+
     // 信号定义
     signal copyCodeClicked()
     signal retryClicked()
@@ -17,13 +29,12 @@ Rectangle {
     Rectangle {
         id: mainContainer
         anchors.fill: parent
-        anchors.margins: 8  // 为阴影留出空间
+        anchors.margins: 8
         color: "#ffffff"
-        radius: 10  // QML圆角，提供更好的抗锯齿效果
+        radius: 10
         border.width: 0
         antialiasing: true
 
-        // 添加窗口阴影效果
         layer.enabled: true
         layer.effect: DropShadow {
             horizontalOffset: 0
@@ -36,10 +47,10 @@ Rectangle {
 
         ColumnLayout {
             anchors.fill: parent
-            anchors.margins: 20
-            spacing: 20
+            anchors.margins: root.margins
+            spacing: root.spacing
 
-            // ArcoDesign 标题区域
+            // 标题区域
             RowLayout {
                 Layout.fillWidth: true
                 spacing: 16
@@ -47,14 +58,14 @@ Rectangle {
                 Text {
                     text: "设备激活"
                     font.family: "PingFang SC, Microsoft YaHei UI, Helvetica Neue"
-                    font.pixelSize: 20
+                    font.pixelSize: root.titleFontSize
                     font.weight: Font.Medium
                     color: "#1d2129"
                 }
 
                 Item { Layout.fillWidth: true }
 
-                // 激活状态显示区域
+                // 激活状态
                 RowLayout {
                     spacing: 8
 
@@ -62,9 +73,9 @@ Rectangle {
                         width: 6
                         height: 6
                         radius: 3
-                        color: activationModel ? getArcoStatusColor() : "#f53f3f"
+                        color: activationModel ? getStatusColor() : "#f53f3f"
 
-                        function getArcoStatusColor() {
+                        function getStatusColor() {
                             var status = activationModel.activationStatus
                             if (status === "已激活") return "#00b42a"
                             if (status === "激活中...") return "#ff7d00"
@@ -76,7 +87,7 @@ Rectangle {
                     Text {
                         text: activationModel ? activationModel.activationStatus : "未激活"
                         font.family: "PingFang SC, Microsoft YaHei UI"
-                        font.pixelSize: 12
+                        font.pixelSize: root.baseFontSize
                         color: "#4e5969"
                     }
                 }
@@ -84,49 +95,35 @@ Rectangle {
                 // 关闭按钮
                 Button {
                     id: windowCloseBtn
-                    width: 32
-                    height: 32
+                    width: root.buttonHeight
+                    height: root.buttonHeight
 
                     background: Rectangle {
                         color: windowCloseBtn.pressed ? "#f53f3f" :
                                windowCloseBtn.hovered ? "#ff7875" : "transparent"
                         radius: 3
-                        border.width: 0
                         antialiasing: true
 
-                        // 颜色过渡动效
                         Behavior on color {
-                            ColorAnimation {
-                                duration: 200
-                                easing.type: Easing.OutCubic
-                            }
+                            ColorAnimation { duration: 200; easing.type: Easing.OutCubic }
                         }
 
-                        // 缩放动效
                         scale: windowCloseBtn.pressed ? 0.9 : (windowCloseBtn.hovered ? 1.1 : 1.0)
                         Behavior on scale {
-                            NumberAnimation {
-                                duration: 150
-                                easing.type: Easing.OutCubic
-                            }
+                            NumberAnimation { duration: 150; easing.type: Easing.OutCubic }
                         }
                     }
 
                     contentItem: Text {
                         text: "×"
                         color: windowCloseBtn.hovered ? "white" : "#86909c"
-                        font.family: "Arial"
-                        font.pixelSize: 18
+                        font.pixelSize: root.titleFontSize - 2
                         font.weight: Font.Bold
                         horizontalAlignment: Text.AlignHCenter
                         verticalAlignment: Text.AlignVCenter
 
-                        // 文字颜色过渡动效
                         Behavior on color {
-                            ColorAnimation {
-                                duration: 200
-                                easing.type: Easing.OutCubic
-                            }
+                            ColorAnimation { duration: 200; easing.type: Easing.OutCubic }
                         }
                     }
 
@@ -134,25 +131,19 @@ Rectangle {
                 }
             }
 
-            // ArcoDesign 设备信息卡片 - 紧凑显示
+            // 设备信息卡片
             Rectangle {
                 id: deviceInfoCard
                 Layout.fillWidth: true
-                Layout.preferredHeight: 80
+                Layout.preferredHeight: root.cardHeight
                 color: deviceInfoMouseArea.containsMouse ? "#f2f3f5" : "#f7f8fa"
                 radius: 3
-                border.width: 0
                 antialiasing: true
 
-                // 颜色过渡动效
                 Behavior on color {
-                    ColorAnimation {
-                        duration: 200
-                        easing.type: Easing.OutCubic
-                    }
+                    ColorAnimation { duration: 200; easing.type: Easing.OutCubic }
                 }
 
-                // 鼠标悬停检测
                 MouseArea {
                     id: deviceInfoMouseArea
                     anchors.fill: parent
@@ -166,17 +157,16 @@ Rectangle {
                     anchors.rightMargin: 16
                     spacing: 0
 
-                    Item { Layout.fillHeight: true } // Top spacer
+                    Item { Layout.fillHeight: true }
 
-                    // 设备信息区域
                     ColumnLayout {
                         Layout.fillWidth: true
-                        spacing: 8
+                        spacing: 6
 
                         Text {
                             text: "设备信息"
                             font.family: "PingFang SC, Microsoft YaHei UI"
-                            font.pixelSize: 13
+                            font.pixelSize: root.baseFontSize + 1
                             font.weight: Font.Medium
                             color: "#4e5969"
                         }
@@ -185,61 +175,55 @@ Rectangle {
                             Layout.fillWidth: true
                             columns: 2
                             columnSpacing: 48
-                            rowSpacing: 6
+                            rowSpacing: 4
 
                             Text {
                                 text: "设备序列号"
                                 font.family: "PingFang SC, Microsoft YaHei UI"
-                                font.pixelSize: 12
+                                font.pixelSize: root.baseFontSize
                                 color: "#86909c"
                             }
 
                             Text {
                                 text: "MAC地址"
                                 font.family: "PingFang SC, Microsoft YaHei UI"
-                                font.pixelSize: 12
+                                font.pixelSize: root.baseFontSize
                                 color: "#86909c"
                             }
 
                             Text {
-                                text: activationModel ? activationModel.serialNumber : "SN-7B46DAF2-00ff732a9678"
+                                text: activationModel ? activationModel.serialNumber : "--"
                                 font.family: "SF Mono, Consolas, monospace"
-                                font.pixelSize: 12
+                                font.pixelSize: root.baseFontSize
                                 color: "#1d2129"
                             }
 
                             Text {
-                                text: activationModel ? activationModel.macAddress : "00:ff:73:2a:96:78"
+                                text: activationModel ? activationModel.macAddress : "--"
                                 font.family: "SF Mono, Consolas, monospace"
-                                font.pixelSize: 12
+                                font.pixelSize: root.baseFontSize
                                 color: "#1d2129"
                             }
                         }
                     }
 
-                    Item { Layout.fillHeight: true } // Bottom spacer
+                    Item { Layout.fillHeight: true }
                 }
             }
 
-            // ArcoDesign 激活验证码卡片 - 一行显示
+            // 激活验证码卡片
             Rectangle {
                 id: activationCodeCard
                 Layout.fillWidth: true
-                Layout.preferredHeight: 64
+                Layout.preferredHeight: root.codeCardHeight
                 color: activationCodeMouseArea.containsMouse ? "#f2f3f5" : "#f7f8fa"
                 radius: 3
-                border.width: 0
                 antialiasing: true
 
-                // 颜色过渡动效
                 Behavior on color {
-                    ColorAnimation {
-                        duration: 200
-                        easing.type: Easing.OutCubic
-                    }
+                    ColorAnimation { duration: 200; easing.type: Easing.OutCubic }
                 }
 
-                // 鼠标悬停检测
                 MouseArea {
                     id: activationCodeMouseArea
                     anchors.fill: parent
@@ -256,14 +240,14 @@ Rectangle {
                     Text {
                         text: "激活验证码"
                         font.family: "PingFang SC, Microsoft YaHei UI"
-                        font.pixelSize: 13
+                        font.pixelSize: root.baseFontSize + 1
                         font.weight: Font.Medium
                         color: "#4e5969"
                     }
 
                     Rectangle {
                         Layout.fillWidth: true
-                        height: 36
+                        height: root.buttonHeight
                         color: "#ffffff"
                         radius: 3
                         border.color: "#e5e6eb"
@@ -272,9 +256,9 @@ Rectangle {
 
                         Text {
                             anchors.centerIn: parent
-                            text: activationModel ? activationModel.activationCode : "825523"
+                            text: activationModel ? activationModel.activationCode : "------"
                             font.family: "SF Mono, Consolas, monospace"
-                            font.pixelSize: 15
+                            font.pixelSize: root.baseFontSize + 3
                             font.weight: Font.Medium
                             color: "#f53f3f"
                             font.letterSpacing: 2
@@ -284,36 +268,27 @@ Rectangle {
                     Button {
                         id: copyCodeBtn
                         text: "复制"
-                        Layout.preferredWidth: 80
-                        height: 36
+                        Layout.preferredWidth: screenMode === "compact" ? 60 : 80
+                        height: root.buttonHeight
 
                         background: Rectangle {
                             color: copyCodeBtn.pressed ? "#0e42d2" :
                                    copyCodeBtn.hovered ? "#4080ff" : "#165dff"
                             radius: 3
-                            border.width: 0
                             antialiasing: true
 
-                            // 颜色过渡动效
                             Behavior on color {
-                                ColorAnimation {
-                                    duration: 200
-                                    easing.type: Easing.OutCubic
-                                }
+                                ColorAnimation { duration: 200; easing.type: Easing.OutCubic }
                             }
 
-                            // 缩放动效
                             scale: copyCodeBtn.pressed ? 0.95 : (copyCodeBtn.hovered ? 1.05 : 1.0)
                             Behavior on scale {
-                                NumberAnimation {
-                                    duration: 150
-                                    easing.type: Easing.OutCubic
-                                }
+                                NumberAnimation { duration: 150; easing.type: Easing.OutCubic }
                             }
                         }
 
                         font.family: "PingFang SC, Microsoft YaHei UI"
-                        font.pixelSize: 13
+                        font.pixelSize: root.baseFontSize + 1
                         palette.buttonText: "white"
 
                         onClicked: root.copyCodeClicked()
@@ -321,43 +296,33 @@ Rectangle {
                 }
             }
 
-            // ArcoDesign 按钮区域
+            // 按钮区域
             RowLayout {
                 Layout.fillWidth: true
-                Layout.preferredHeight: 40
+                Layout.preferredHeight: root.buttonHeight + 4
                 spacing: 16
 
                 Button {
                     id: retryBtn
                     text: "跳转激活"
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 36
+                    Layout.preferredHeight: root.buttonHeight
 
                     background: Rectangle {
                         color: retryBtn.pressed ? "#0e42d2" :
                                retryBtn.hovered ? "#4080ff" : "#165dff"
                         radius: 3
-                        border.width: 0
                         antialiasing: true
 
-                        // 颜色过渡动效
                         Behavior on color {
-                            ColorAnimation {
-                                duration: 200
-                                easing.type: Easing.OutCubic
-                            }
+                            ColorAnimation { duration: 200; easing.type: Easing.OutCubic }
                         }
 
-                        // 缩放动效
                         scale: retryBtn.pressed ? 0.98 : (retryBtn.hovered ? 1.02 : 1.0)
                         Behavior on scale {
-                            NumberAnimation {
-                                duration: 150
-                                easing.type: Easing.OutCubic
-                            }
+                            NumberAnimation { duration: 150; easing.type: Easing.OutCubic }
                         }
 
-                        // 添加微妙阴影
                         layer.enabled: true
                         layer.effect: DropShadow {
                             horizontalOffset: 0
@@ -369,7 +334,7 @@ Rectangle {
                     }
 
                     font.family: "PingFang SC, Microsoft YaHei UI"
-                    font.pixelSize: 14
+                    font.pixelSize: root.baseFontSize + 2
                     font.weight: Font.Medium
                     palette.buttonText: "white"
 

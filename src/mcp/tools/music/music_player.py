@@ -8,7 +8,7 @@ import shutil
 import tempfile
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, List, Optional, Tuple
+from typing import TYPE_CHECKING, List, Optional, Tuple
 
 import numpy as np
 import requests
@@ -96,10 +96,9 @@ class MusicPlayer:
     def __init__(
         self,
         audio_codec: Optional["AudioCodec"] = None,
-        ui_display: Optional[Any] = None,
     ):
         self._audio_codec = audio_codec
-        self._ui_display = ui_display
+        self._event_bus = None  # EventBus 实例
 
         self.decoder: Optional[MusicDecoder] = None
         self._music_queue = asyncio.Queue(maxsize=100)
@@ -152,10 +151,20 @@ class MusicPlayer:
         if audio_codec:
             logger.info("AudioCodec 已设置到 MusicPlayer")
 
-    def set_ui_display(self, ui_display: Optional[Any]) -> None:
-        self._ui_display = ui_display
-        if ui_display:
-            logger.debug("UI Display 已设置到 MusicPlayer")
+    def set_event_bus(self, event_bus) -> None:
+        """设置事件总线并订阅控制事件.
+
+        Args:
+            event_bus: EventBus 实例
+        """
+        from src.core.event_bus import Events
+
+        self._event_bus = event_bus
+        if event_bus:
+            # 订阅控制事件
+            event_bus.on(Events.MUSIC_PAUSE_REQUEST, self._on_pause_request)
+            event_bus.on(Events.MUSIC_RESUME_REQUEST, self._on_resume_request)
+            logger.info("MusicPlayer 已连接到 EventBus")
 
     def _get_audio_codec(self) -> Optional["AudioCodec"]:
         if self._audio_codec is None:
@@ -358,6 +367,14 @@ class MusicPlayer:
             self.current_url = str(file_path)
             self.lyrics = []
 
+            # 总是使用 ffprobe 获取准确的音频时长
+            duration = await MusicDecoder.get_duration(file_path)
+            if duration > 0:
+                self.total_duration = duration
+                logger.info(f"从音频文件获取准确时长: {duration:.2f}秒")
+            elif self.total_duration == 0:
+                logger.warning("无法获取音频时长")
+
             success = await self._start_playback(file_path)
 
             if success:
@@ -428,7 +445,7 @@ class MusicPlayer:
             self._pause_source = None
             self.current_position = 0
 
-            await self._safe_update_ui(f"已停止: {current_song}")
+            await self._emit_state_change("stopped", current_song)
             logger.info(f"停止播放: {current_song}")
             return {"status": "success", "message": "已停止"}
 
@@ -517,7 +534,7 @@ class MusicPlayer:
             self._pause_source = None
             self.start_play_time = time.time() - self.current_position
 
-            await self._safe_update_ui(f"继续播放: {self.current_song}")
+            await self._emit_state_change("playing", self.current_song)
             return {"status": "success", "message": "已恢复播放"}
 
         except Exception as e:
@@ -736,6 +753,14 @@ class MusicPlayer:
             if not file_path:
                 return False
 
+            # 总是使用 ffprobe 获取准确的音频时长（覆盖歌词推断的时长）
+            duration = await MusicDecoder.get_duration(file_path)
+            if duration > 0:
+                self.total_duration = duration
+                logger.info(f"从音频文件获取准确时长: {duration:.2f}秒")
+            elif self.total_duration == 0:
+                logger.warning("无法获取音频时长，将使用歌词时长或0")
+
             return await self._start_playback(file_path)
 
         except Exception as e:
@@ -775,7 +800,7 @@ class MusicPlayer:
             position_info = f" from {start_position:.1f}s" if start_position > 0 else ""
             logger.info(f"开始播放: {self.current_song}{position_info}")
 
-            await self._safe_update_ui(f"正在播放: {self.current_song}")
+            await self._emit_state_change("playing", self.current_song, start_position)
             asyncio.create_task(self._lyrics_update_task())
 
             return True
@@ -967,6 +992,8 @@ class MusicPlayer:
             # TuneFree API 返回的是纯文本 LRC 格式
             lrc_content = response.text
 
+            logger.debug(f"获取到歌词内容，长度: {len(lrc_content)}, 前200字符: {lrc_content[:200]}")
+
             if not lrc_content or len(lrc_content) < 10:
                 logger.warning("未获取到歌词或歌词为空")
                 return
@@ -974,20 +1001,28 @@ class MusicPlayer:
             import re
 
             lines = lrc_content.split("\n")
+            matched_count = 0
+            filtered_count = 0
+
             for line in lines:
                 line = line.strip()
                 if not line:
                     continue
 
-                # 解析 LRC 格式: [mm:ss.xx]歌词文本
-                time_match = re.match(r"\[(\d{2}):(\d{2})\.(\d{2})\](.+)", line)
+                # 解析 LRC 格式: [mm:ss.xx]歌词文本 或 [mm:ss.xxx]歌词文本
+                time_match = re.match(r"\[(\d{2}):(\d{2})\.(\d{2,3})\](.+)", line)
                 if time_match:
+                    matched_count += 1
                     minutes = int(time_match.group(1))
                     seconds = int(time_match.group(2))
-                    centiseconds = int(time_match.group(3))
+                    milliseconds_str = time_match.group(3)
                     text = time_match.group(4).strip()
 
-                    time_sec = minutes * 60 + seconds + centiseconds / 100.0
+                    # 根据毫秒位数计算时间（支持2位或3位）
+                    if len(milliseconds_str) == 3:
+                        time_sec = minutes * 60 + seconds + int(milliseconds_str) / 1000.0
+                    else:
+                        time_sec = minutes * 60 + seconds + int(milliseconds_str) / 100.0
 
                     # 过滤元数据标签
                     if (
@@ -1002,8 +1037,18 @@ class MusicPlayer:
                         and not text.startswith("offset:")
                     ):
                         self.lyrics.append((time_sec, text))
+                    else:
+                        filtered_count += 1
 
-            logger.info(f"成功获取歌词，共 {len(self.lyrics)} 行")
+            # 如果 API 没有返回时长，从歌词中提取（取最后一句的时间戳）
+            if self.total_duration == 0 and self.lyrics:
+                last_time, _ = self.lyrics[-1]
+                self.total_duration = last_time + 5.0  # 加5秒作为缓冲
+                logger.info(f"从歌词提取歌曲时长: {self.total_duration}秒")
+
+            logger.info(
+                f"成功获取歌词，共 {len(self.lyrics)} 行（匹配 {matched_count} 行，过滤 {filtered_count} 行）"
+            )
 
         except Exception as e:
             logger.error(f"获取歌词失败: {e}", exc_info=True)
@@ -1021,12 +1066,14 @@ class MusicPlayer:
             self.paused = False
             self.current_position = self.total_duration
 
-            dur_str = self._format_time(self.total_duration)
-            await self._safe_update_ui(f"播放完成: {self.current_song} [{dur_str}]")
+            await self._emit_state_change("completed", self.current_song)
 
     async def _lyrics_update_task(self):
         """歌词更新任务"""
+        logger.info(f"歌词更新任务启动，歌词数量: {len(self.lyrics)}")
+
         if not self.lyrics:
+            logger.warning("没有歌词数据，歌词更新任务退出")
             return
 
         try:
@@ -1037,7 +1084,8 @@ class MusicPlayer:
 
                 current_time = time.time() - self.start_play_time
 
-                if current_time >= self.total_duration:
+                # 只有当时长有效时才检查播放完成（避免时长为0时立即完成）
+                if self.total_duration > 0 and current_time >= self.total_duration:
                     await self._handle_playback_finished()
                     break
 
@@ -1076,7 +1124,7 @@ class MusicPlayer:
             duration_str = self._format_time(self.total_duration)
             display_text = f"[{position_str}/{duration_str}] {text}"
 
-            await self._safe_update_ui(display_text)
+            await self._emit_lyrics_update(display_text, time_sec)
             logger.debug(f"显示歌词: {text}")
 
     def _extract_value(self, text: str, start_marker: str, end_marker: str) -> str:
@@ -1099,14 +1147,103 @@ class MusicPlayer:
         seconds = int(seconds) % 60
         return f"{minutes:02d}:{seconds:02d}"
 
-    async def _safe_update_ui(self, message: str):
+    async def _emit_state_change(
+        self, state: str, song_name: str = None, position: float = None
+    ):
+        """发送播放状态变化事件.
+
+        Args:
+            state: 播放状态 ("playing", "paused", "stopped", "completed")
+            song_name: 歌曲名称
+            position: 播放位置（可选）
+        """
+        if not self._event_bus:
+            return
+
         try:
-            if self._ui_display and hasattr(self._ui_display, "update_text"):
-                await self._ui_display.update_text(message)
-            else:
-                logger.debug(f"MusicPlayer UI (无显示): {message}")
+            from src.core.event_bus import Events
+
+            from .events import MusicStateData
+
+            data = MusicStateData(
+                state=state,
+                song=song_name or self.current_song,
+                position=position if position is not None else self.current_position,
+                duration=self.total_duration,
+                pause_source=self._pause_source if state == "paused" else None,
+            )
+            await self._event_bus.emit(Events.MUSIC_STATE_CHANGED, data)
+            logger.debug(f"发送音乐状态变化事件: {state}")
         except Exception as e:
-            logger.debug(f"更新UI失败: {e}, 消息: {message}")
+            logger.debug(f"发送状态事件失败: {e}")
+
+    async def _emit_lyrics_update(self, lyrics_text: str, time_sec: float = 0):
+        """发送歌词更新事件.
+
+        Args:
+            lyrics_text: 歌词文本
+            time_sec: 时间戳
+        """
+        if not self._event_bus:
+            return
+
+        try:
+            from src.core.event_bus import Events
+
+            from .events import MusicLyricsData
+
+            data = MusicLyricsData(
+                text=lyrics_text, time_sec=time_sec, song_id=self.song_id
+            )
+            await self._event_bus.emit(Events.MUSIC_LYRICS_UPDATE, data)
+        except Exception as e:
+            logger.debug(f"发送歌词事件失败: {e}")
+
+    async def _on_pause_request(self, data):
+        """处理暂停请求事件.
+
+        Args:
+            data: MusicControlRequest 数据
+        """
+        try:
+            from .events import MusicControlRequest
+
+            if isinstance(data, MusicControlRequest):
+                source = data.source
+            elif isinstance(data, dict):
+                source = data.get("source", "external")
+            else:
+                source = "external"
+
+            if self.is_playing and not self.paused:
+                logger.info(f"收到暂停请求，来源: {source}")
+                await self.pause(source=source)
+        except Exception as e:
+            logger.error(f"处理暂停请求失败: {e}", exc_info=True)
+
+    async def _on_resume_request(self, data):
+        """处理恢复播放请求事件.
+
+        Args:
+            data: MusicControlRequest 数据
+        """
+        try:
+            from .events import MusicControlRequest
+
+            if isinstance(data, MusicControlRequest):
+                source = data.source
+            elif isinstance(data, dict):
+                source = data.get("source", "external")
+            else:
+                source = None
+
+            if self.is_playing and self.paused:
+                # 只有当暂停来源匹配或未指定来源时才恢复
+                if source is None or self._pause_source == source:
+                    logger.info(f"收到恢复请求，来源: {source}")
+                    await self.resume()
+        except Exception as e:
+            logger.error(f"处理恢复请求失败: {e}", exc_info=True)
 
     def __del__(self):
         """清理资源"""

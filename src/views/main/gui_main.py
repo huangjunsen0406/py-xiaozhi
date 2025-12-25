@@ -7,7 +7,7 @@ import asyncio
 import os
 import signal
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Optional, Set
 
 from PyQt5.QtCore import QObject, Qt, QTimer, QUrl
 from PyQt5.QtGui import QCursor, QFont
@@ -15,37 +15,40 @@ from PyQt5.QtQuickWidgets import QQuickWidget
 from PyQt5.QtWidgets import QApplication, QVBoxLayout, QWidget
 
 from src.logging import get_logger
-from src.utils.resource_finder import get_assets_dir
 
+from .emotion_manager import EmotionManager
 from .gui_main_model import GuiMainModel
+from .tray_manager import TrayManager
 
 
 class GuiMain(QObject):
     """GUI 主窗口类 - 基于 QML 的现代化界面"""
 
     # 常量定义
-    EMOTION_EXTENSIONS = (".gif", ".png", ".jpg", ".jpeg", ".webp")
     DEFAULT_WINDOW_SIZE = (880, 560)
     MINIMUM_WINDOW_SIZE = (480, 360)
     DEFAULT_FONT_SIZE = 12
     QUIT_TIMEOUT_MS = 3000
 
-    def __init__(self):
+    def __init__(self, event_bus=None):
         super().__init__()
         self.logger = get_logger()
+        self._event_bus = event_bus
+
+        # 任务管理
+        self._managed_tasks: Set[asyncio.Task] = set()
 
         # Qt 组件
         self.app = None
         self.root = None
         self.qml_widget = None
-        self.system_tray = None
+
+        # 管理器
+        self.emotion_manager = EmotionManager()
+        self.tray_manager = None  # 将在窗口创建后初始化
 
         # 数据模型
         self.display_model = GuiMainModel()
-
-        # 表情管理
-        self._emotion_cache = {}
-        self._last_emotion_name = None
 
         # 状态管理
         self.auto_mode = False
@@ -57,45 +60,130 @@ class GuiMain(QObject):
         self._dragging = False
         self._drag_position = None
 
-        # 回调函数映射
-        self._callbacks = {
-            "button_press": None,
-            "button_release": None,
-            "mode": None,
-            "auto": None,
-            "abort": None,
-            "send_text": None,
-            "quit": None,  # 退出回调，用于优雅关闭
-        }
+        # 订阅 UI 更新事件
+        if self._event_bus:
+            self._subscribe_ui_events()
+        else:
+            self.logger.warning("GuiMain 初始化时未提供 EventBus，UI 事件功能将不可用")
+
+    def _subscribe_ui_events(self):
+        """订阅来自插件的 UI 更新事件"""
+        from src.core.event_bus import Events
+
+        self._event_bus.on(Events.UI_UPDATE_TEXT, self._on_ui_update_text)
+        self._event_bus.on(Events.UI_UPDATE_EMOTION, self._on_ui_update_emotion)
+        self._event_bus.on(Events.UI_UPDATE_STATUS, self._on_ui_update_status)
+        self._event_bus.on(Events.UI_TOGGLE_MODE, self._on_ui_toggle_mode)
+        self._event_bus.on(Events.UI_TOGGLE_WINDOW, self._on_ui_toggle_window)
+        self.logger.info("GuiMain 已订阅 UI 事件")
+
+    # ===== 任务管理 =====
+
+    def create_task(self, coro, *, name: Optional[str] = None) -> asyncio.Task:
+        """创建并追踪异步任务."""
+        task = asyncio.create_task(coro, name=name)
+        self._managed_tasks.add(task)
+        task.add_done_callback(self._managed_tasks.discard)
+        return task
+
+    def cancel_tasks_sync(self):
+        """同步取消所有任务."""
+        for task in self._managed_tasks.copy():
+            if not task.done():
+                task.cancel()
+
+    async def cancel_all_tasks(self, timeout: float = 2.0):
+        """异步取消所有任务."""
+        if not self._managed_tasks:
+            return
+        for task in self._managed_tasks.copy():
+            if not task.done():
+                task.cancel()
+        try:
+            await asyncio.wait_for(
+                asyncio.gather(*self._managed_tasks, return_exceptions=True),
+                timeout=timeout,
+            )
+        except asyncio.TimeoutError:
+            pass
+        self._managed_tasks.clear()
+
+    # ===== EventBus 事件处理器 =====
+
+    async def _on_ui_update_text(self, data):
+        """处理 UI 文本更新事件"""
+        try:
+            from src.views.events import UITextUpdate
+
+            if isinstance(data, UITextUpdate):
+                text = data.text
+            elif isinstance(data, dict):
+                text = data.get("text", "")
+            elif isinstance(data, str):
+                text = data
+            else:
+                self.logger.warning(f"无效的 UI 文本更新数据: {type(data)}")
+                return
+
+            await self.update_text(text)
+        except Exception as e:
+            self.logger.error(f"处理 UI 文本更新失败: {e}", exc_info=True)
+
+    async def _on_ui_update_emotion(self, data):
+        """处理 UI 表情更新事件"""
+        try:
+            from src.views.events import UIEmotionUpdate
+
+            if isinstance(data, UIEmotionUpdate):
+                emotion = data.emotion
+            elif isinstance(data, dict):
+                emotion = data.get("emotion", "")
+            elif isinstance(data, str):
+                emotion = data
+            else:
+                self.logger.warning(f"无效的 UI 表情更新数据: {type(data)}")
+                return
+
+            await self.update_emotion(emotion)
+        except Exception as e:
+            self.logger.error(f"处理 UI 表情更新失败: {e}", exc_info=True)
+
+    async def _on_ui_update_status(self, data):
+        """处理 UI 状态更新事件"""
+        try:
+            from src.views.events import UIStatusUpdate
+
+            if isinstance(data, UIStatusUpdate):
+                status = data.status
+                connected = data.connected
+            elif isinstance(data, dict):
+                status = data.get("status", "")
+                connected = data.get("connected", True)
+            else:
+                self.logger.warning(f"无效的 UI 状态更新数据: {type(data)}")
+                return
+
+            await self.update_status(status, connected)
+        except Exception as e:
+            self.logger.error(f"处理 UI 状态更新失败: {e}", exc_info=True)
+
+    async def _on_ui_toggle_mode(self, data=None):
+        """处理切换对话模式事件"""
+        try:
+            await self.toggle_mode()
+        except Exception as e:
+            self.logger.error(f"处理模式切换失败: {e}", exc_info=True)
+
+    async def _on_ui_toggle_window(self, data=None):
+        """处理切换窗口可见性事件"""
+        try:
+            await self.toggle_window_visibility()
+        except Exception as e:
+            self.logger.error(f"处理窗口切换失败: {e}", exc_info=True)
 
     # =========================================================================
-    # 公共 API - 回调与更新
+    # 公共 API - 更新方法
     # =========================================================================
-
-    async def set_callbacks(
-        self,
-        press_callback: Optional[Callable] = None,
-        release_callback: Optional[Callable] = None,
-        mode_callback: Optional[Callable] = None,
-        auto_callback: Optional[Callable] = None,
-        abort_callback: Optional[Callable] = None,
-        send_text_callback: Optional[Callable] = None,
-        quit_callback: Optional[Callable] = None,
-    ):
-        """
-        设置回调函数.
-        """
-        self._callbacks.update(
-            {
-                "button_press": press_callback,
-                "button_release": release_callback,
-                "mode": mode_callback,
-                "auto": auto_callback,
-                "abort": abort_callback,
-                "send_text": send_text_callback,
-                "quit": quit_callback,
-            }
-        )
 
     async def update_status(self, status: str, connected: bool):
         """
@@ -113,8 +201,8 @@ class GuiMain(QObject):
             self.is_connected = bool(connected)
 
         # 更新系统托盘
-        if (status_changed or connected_changed) and self.system_tray:
-            self.system_tray.update_status(status, self.is_connected)
+        if (status_changed or connected_changed) and self.tray_manager:
+            self.tray_manager.update_status(status, self.is_connected)
 
     async def update_text(self, text: str):
         """
@@ -126,28 +214,7 @@ class GuiMain(QObject):
         """
         更新表情显示.
         """
-        if emotion_name == self._last_emotion_name:
-            return
-
-        self._last_emotion_name = emotion_name
-        asset_path = self._get_emotion_asset_path(emotion_name)
-
-        # 将本地文件路径转换为 QML 可用的 URL（file:///...），
-        # 非文件（如 emoji 字符）保持原样。
-        def to_qml_url(p: str) -> str:
-            if not p:
-                return ""
-            if p.startswith(("qrc:/", "file:")):
-                return p
-            # 仅当路径存在时才转换为 file URL，避免把 emoji 当作路径
-            try:
-                if os.path.exists(p):
-                    return QUrl.fromLocalFile(p).toString()
-            except Exception:
-                pass
-            return p
-
-        url_or_text = to_qml_url(asset_path)
+        url_or_text = self.emotion_manager.get_emotion_url(emotion_name)
         self.display_model.update_emotion(url_or_text)
 
     async def update_button_status(self, text: str):
@@ -161,9 +228,8 @@ class GuiMain(QObject):
         """
         切换对话模式.
         """
-        if self._callbacks["mode"]:
-            self._on_mode_button_click()
-            self.logger.debug("通过快捷键切换了对话模式")
+        self._on_mode_button_click()
+        self.logger.debug("通过快捷键切换了对话模式")
 
     async def toggle_window_visibility(self):
         """
@@ -184,8 +250,12 @@ class GuiMain(QObject):
         关闭窗口处理.
         """
         self._running = False
-        if self.system_tray:
-            self.system_tray.hide()
+
+        # 取消所有管理的任务
+        await self.cancel_all_tasks(timeout=1.0)
+
+        if self.tray_manager:
+            self.tray_manager.hide()
         if self.root:
             self.root.close()
 
@@ -336,6 +406,7 @@ class GuiMain(QObject):
         else:
             self.root.show()
 
+        # 初始化系统托盘
         self._setup_system_tray()
 
     # =========================================================================
@@ -388,32 +459,78 @@ class GuiMain(QObject):
         """
         手动模式按钮按下.
         """
-        self._dispatch_callback("button_press")
+        if not self._event_bus:
+            return
+        from src.core.event_bus import Events
+
+        try:
+            self.create_task(
+                self._event_bus.emit(Events.UI_BUTTON_PRESS),
+                name="emit_button_press",
+            )
+        except Exception as e:
+            self.logger.error(f"发射 UI_BUTTON_PRESS 事件失败: {e}")
 
     def _on_manual_button_release(self):
         """
         手动模式按钮释放.
         """
-        self._dispatch_callback("button_release")
+        if not self._event_bus:
+            return
+        from src.core.event_bus import Events
+
+        try:
+            self.create_task(
+                self._event_bus.emit(Events.UI_BUTTON_RELEASE),
+                name="emit_button_release",
+            )
+        except Exception as e:
+            self.logger.error(f"发射 UI_BUTTON_RELEASE 事件失败: {e}")
 
     def _on_auto_button_click(self):
         """
         自动模式按钮点击.
         """
-        self._dispatch_callback("auto")
+        if not self._event_bus:
+            return
+        from src.core.event_bus import Events
+
+        try:
+            self.create_task(
+                self._event_bus.emit(Events.UI_AUTO_TOGGLE), name="emit_auto_toggle"
+            )
+        except Exception as e:
+            self.logger.error(f"发射 UI_AUTO_TOGGLE 事件失败: {e}")
 
     def _on_abort_button_click(self):
         """
         中止按钮点击.
         """
-        self._dispatch_callback("abort")
+        if not self._event_bus:
+            return
+        from src.core.event_bus import Events
+
+        try:
+            self.create_task(
+                self._event_bus.emit(Events.UI_ABORT_REQUEST), name="emit_abort_request"
+            )
+        except Exception as e:
+            self.logger.error(f"发射 UI_ABORT_REQUEST 事件失败: {e}")
 
     def _on_mode_button_click(self):
         """
         对话模式切换按钮点击.
         """
-        if self._callbacks["mode"] and not self._callbacks["mode"]():
-            return
+        if self._event_bus:
+            from src.core.event_bus import Events
+
+            try:
+                self.create_task(
+                    self._event_bus.emit(Events.UI_AUTO_TOGGLE),
+                    name="emit_mode_toggle",
+                )
+            except Exception as e:
+                self.logger.error(f"发射 UI_AUTO_TOGGLE 事件失败: {e}")
 
         self.auto_mode = not self.auto_mode
         mode_text = "自动对话" if self.auto_mode else "手动对话"
@@ -425,20 +542,19 @@ class GuiMain(QObject):
         处理发送文本按钮点击.
         """
         text = text.strip()
-        if not text or not self._callbacks["send_text"]:
+        if not text or not self._event_bus:
             return
 
+        from src.core.event_bus import Events
+        from src.views.events import UISendTextRequest
+
         try:
-            task = asyncio.create_task(self._callbacks["send_text"](text))
-            task.add_done_callback(
-                lambda t: t.cancelled()
-                or not t.exception()
-                or self.logger.error(
-                    f"发送文本任务异常: {t.exception()}", exc_info=True
-                )
+            self.create_task(
+                self._event_bus.emit(Events.UI_SEND_TEXT, UISendTextRequest(text=text)),
+                name="emit_send_text",
             )
         except Exception as e:
-            self.logger.error(f"发送文本时出错: {e}")
+            self.logger.error(f"发射 UI_SEND_TEXT 事件失败: {e}")
 
     def _on_settings_button_click(self):
         """
@@ -451,14 +567,6 @@ class GuiMain(QObject):
             settings_window.exec_()
         except Exception as e:
             self.logger.error(f"打开设置窗口失败: {e}", exc_info=True)
-
-    def _dispatch_callback(self, callback_name: str, *args):
-        """
-        通用回调调度器.
-        """
-        callback = self._callbacks.get(callback_name)
-        if callback:
-            callback(*args)
 
     # =========================================================================
     # 窗口拖动
@@ -484,39 +592,6 @@ class GuiMain(QObject):
         """
         self._dragging = False
         self._drag_position = None
-
-    # =========================================================================
-    # 表情管理
-    # =========================================================================
-
-    def _get_emotion_asset_path(self, emotion_name: str) -> str:
-        """
-        获取表情资源文件路径，自动匹配常见后缀.
-        """
-        if emotion_name in self._emotion_cache:
-            return self._emotion_cache[emotion_name]
-
-        assets_dir = get_assets_dir()
-        emotion_dir = assets_dir / "emojis"
-        # 尝试查找表情文件，失败则回退到 neutral
-        path = (
-            str(self._find_emotion_file(emotion_dir, emotion_name))
-            or str(self._find_emotion_file(emotion_dir, "neutral"))
-            or "😊"
-        )
-
-        self._emotion_cache[emotion_name] = path
-        return path
-
-    def _find_emotion_file(self, emotion_dir: Path, name: str) -> Optional[Path]:
-        """
-        在指定目录查找表情文件.
-        """
-        for ext in self.EMOTION_EXTENSIONS:
-            file_path = emotion_dir / f"{name}{ext}"
-            if file_path.exists():
-                return file_path
-        return None
 
     # =========================================================================
     # 系统设置
@@ -560,29 +635,12 @@ class GuiMain(QObject):
         """
         设置系统托盘.
         """
-        if os.getenv("XIAOZHI_DISABLE_TRAY") == "1":
-            self.logger.warning("已通过环境变量禁用系统托盘 (XIAOZHI_DISABLE_TRAY=1)")
-            return
-
-        try:
-            from src.views.components.system_tray import SystemTray
-
-            self.system_tray = SystemTray(self.root)
-
-            # 连接托盘信号（使用 QTimer 确保主线程执行）
-            tray_signals = {
-                "show_window_requested": self._show_main_window,
-                "settings_requested": self._on_settings_button_click,
-                "quit_requested": self._quit_application,
-            }
-
-            for signal_name, handler in tray_signals.items():
-                getattr(self.system_tray, signal_name).connect(
-                    lambda h=handler: QTimer.singleShot(0, h)
-                )
-
-        except Exception as e:
-            self.logger.error(f"初始化系统托盘组件失败: {e}", exc_info=True)
+        self.tray_manager = TrayManager(self.root)
+        self.tray_manager.setup(
+            on_show_window=self._show_main_window,
+            on_settings=self._on_settings_button_click,
+            on_quit=self._quit_application,
+        )
 
     # =========================================================================
     # 窗口控制
@@ -616,14 +674,27 @@ class GuiMain(QObject):
         self.logger.info("开始退出应用程序...")
         self._running = False
 
-        if self.system_tray:
-            self.system_tray.hide()
+        if self.tray_manager:
+            self.tray_manager.hide()
 
-        # 通过回调请求优雅关闭，让 ServiceContainer 完成清理
-        if self._callbacks["quit"]:
-            self._callbacks["quit"]()
+        # 取消所有管理的任务
+        self.cancel_tasks_sync()
+
+        # 通过 EventBus 请求优雅关闭
+        if self._event_bus:
+            from src.core.event_bus import Events
+
+            try:
+                self.create_task(
+                    self._event_bus.emit(Events.UI_QUIT_REQUEST), name="emit_quit"
+                )
+                self.logger.debug("已发射 UI_QUIT_REQUEST 事件")
+            except Exception as e:
+                self.logger.error(f"发射 UI_QUIT_REQUEST 事件失败: {e}")
+                # 失败时直接退出
+                QApplication.quit()
         else:
-            # 没有回调时直接退出（兼容独立运行场景）
+            # 没有 EventBus 时直接退出（兼容独立运行场景）
             QApplication.quit()
 
     def _closeEvent(self, event):
@@ -631,9 +702,8 @@ class GuiMain(QObject):
         处理窗口关闭事件.
         """
         # 如果系统托盘可用，最小化到托盘
-        if self.system_tray and (
-            getattr(self.system_tray, "is_available", lambda: False)()
-            or getattr(self.system_tray, "is_visible", lambda: False)()
+        if self.tray_manager and (
+            self.tray_manager.is_available() or self.tray_manager.is_visible()
         ):
             self.logger.info("关闭窗口：最小化到托盘")
             QTimer.singleShot(0, self.root.hide)
