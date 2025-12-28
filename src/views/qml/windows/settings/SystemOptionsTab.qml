@@ -87,7 +87,7 @@ ScrollView {
                     color: Theme.textSecondary
                     Layout.preferredWidth: 100
                 }
-                Switch {
+                XSwitch {
                     checked: settingsModel ? settingsModel.aecEnabled : false
                     onToggled: if (settingsModel) settingsModel.aecEnabled = checked
                 }
@@ -145,18 +145,12 @@ ScrollView {
                     color: Theme.textSecondary
                     Layout.preferredWidth: 100
                 }
-                TextField {
+                XTextField {
                     id: wsTokenField
                     Layout.fillWidth: true
                     text: settingsModel ? settingsModel.websocketToken : ""
                     onEditingFinished: if (settingsModel) settingsModel.websocketToken = text
-                    echoMode: TextInput.Password
-                    font.pixelSize: Theme.fontSizeSm
-                    background: Rectangle {
-                        radius: Theme.radiusSm
-                        color: Theme.backgroundSecondary
-                        border.color: wsTokenField.activeFocus ? Theme.primary : "transparent"
-                    }
+                    isPassword: true
                 }
 
                 Text {
@@ -305,18 +299,12 @@ ScrollView {
                     color: Theme.textSecondary
                     Layout.preferredWidth: 100
                 }
-                TextField {
+                XTextField {
                     id: mqttPasswordField
                     Layout.fillWidth: true
                     text: settingsModel ? settingsModel.mqttPassword : ""
                     onEditingFinished: if (settingsModel) settingsModel.mqttPassword = text
-                    echoMode: TextInput.Password
-                    font.pixelSize: Theme.fontSizeSm
-                    background: Rectangle {
-                        radius: Theme.radiusSm
-                        color: Theme.backgroundSecondary
-                        border.color: mqttPasswordField.activeFocus ? Theme.primary : "transparent"
-                    }
+                    isPassword: true
                 }
 
                 Text {

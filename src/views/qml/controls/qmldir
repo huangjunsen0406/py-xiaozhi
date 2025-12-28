@@ -4,3 +4,4 @@ XTextField 1.0 XTextField.qml
 XCard 1.0 XCard.qml
 XComboBox 1.0 XComboBox.qml
 XSpinBox 1.0 XSpinBox.qml
+XSwitch 1.0 XSwitch.qml

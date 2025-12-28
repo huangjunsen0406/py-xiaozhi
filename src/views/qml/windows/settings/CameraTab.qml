@@ -17,6 +17,8 @@ ScrollView {
     Component.onCompleted: {
         if (settingsModel) {
             cameraCombo.model = settingsModel.getCameras()
+            // model 设置后重新同步 currentIndex
+            cameraCombo.currentIndex = settingsModel.selectedCameraIndex
         }
     }
 
@@ -25,6 +27,8 @@ ScrollView {
         function onDevicesChanged() {
             if (settingsModel) {
                 cameraCombo.model = settingsModel.getCameras()
+                // model 设置后重新同步 currentIndex
+                cameraCombo.currentIndex = settingsModel.selectedCameraIndex
             }
         }
         function onStatusMessage(message) {
@@ -199,17 +203,23 @@ ScrollView {
                     Layout.preferredWidth: 80
                 }
 
-                XSpinBox {
-                    Layout.preferredWidth: 120
-                    from: 10
-                    to: 60
-                    stepSize: 5
-                    value: settingsModel ? settingsModel.fps : 30
-                    onValueModified: if (settingsModel) settingsModel.fps = value
-                    font.pixelSize: Theme.fontSizeSm
+                RowLayout {
+                    spacing: Theme.spacingSm
 
-                    textFromValue: function(value) { return value + " FPS" }
-                    valueFromText: function(text) { return parseInt(text) }
+                    XSpinBox {
+                        Layout.preferredWidth: 100
+                        from: 10
+                        to: 60
+                        stepSize: 5
+                        value: settingsModel ? settingsModel.fps : 30
+                        onValueModified: if (settingsModel) settingsModel.fps = value
+                    }
+
+                    Text {
+                        text: "FPS"
+                        font.pixelSize: Theme.fontSizeSm
+                        color: Theme.textSecondary
+                    }
                 }
             }
         }
@@ -265,18 +275,12 @@ ScrollView {
                     color: Theme.textSecondary
                     Layout.preferredWidth: 80
                 }
-                TextField {
+                XTextField {
                     id: vlApiKeyField
                     Layout.fillWidth: true
                     text: settingsModel ? settingsModel.vlApiKey : ""
                     onEditingFinished: if (settingsModel) settingsModel.vlApiKey = text
-                    echoMode: TextInput.Password
-                    font.pixelSize: Theme.fontSizeSm
-                    background: Rectangle {
-                        radius: Theme.radiusSm
-                        color: Theme.backgroundSecondary
-                        border.color: vlApiKeyField.activeFocus ? Theme.primary : "transparent"
-                    }
+                    isPassword: true
                 }
 
                 Text {

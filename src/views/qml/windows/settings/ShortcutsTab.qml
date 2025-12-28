@@ -9,17 +9,6 @@ ScrollView {
     id: root
     clip: true
 
-    // 修饰键选项
-    readonly property var modifierOptions: ["ctrl", "alt", "shift", "cmd"]
-    readonly property var modifierLabels: ["Ctrl", "Alt", "Shift", "Cmd"]
-
-    // 辅助函数：获取修饰键索引
-    function getModifierIndex(modifier) {
-        if (!modifier) return 0
-        var idx = modifierOptions.indexOf(modifier.toLowerCase())
-        return idx >= 0 ? idx : 0
-    }
-
     ColumnLayout {
         width: root.availableWidth
         spacing: Theme.spacingLg
@@ -56,7 +45,7 @@ ScrollView {
 
                 Item { Layout.fillWidth: true }
 
-                Switch {
+                XSwitch {
                     checked: settingsModel ? settingsModel.shortcutsEnabled : false
                     onToggled: if (settingsModel) settingsModel.shortcutsEnabled = checked
                 }
@@ -98,13 +87,19 @@ ScrollView {
 
                 XComboBox {
                     id: manualModCombo
-                    Layout.preferredWidth: 80
-                    model: modifierLabels
-                    currentIndex: getModifierIndex(settingsModel ? settingsModel.shortcutManualModifier : "")
-                    onActivated: function(index) {
-                        if (settingsModel) settingsModel.shortcutManualModifier = modifierOptions[index]
+                    Layout.preferredWidth: 100
+                    model: ["Ctrl", "Alt", "Shift", "Cmd"]
+                    currentIndex: {
+                        var mod = settingsModel ? settingsModel.shortcutManualModifier : "ctrl"
+                        if (mod === "alt") return 1
+                        if (mod === "shift") return 2
+                        if (mod === "cmd") return 3
+                        return 0  // ctrl
                     }
-                    font.pixelSize: Theme.fontSizeSm
+                    onActivated: function(index) {
+                        var options = ["ctrl", "alt", "shift", "cmd"]
+                        if (settingsModel) settingsModel.shortcutManualModifier = options[index]
+                    }
                 }
 
                 Text { text: "+"; font.pixelSize: Theme.fontSizeSm; color: Theme.textSecondary }
@@ -148,13 +143,19 @@ ScrollView {
 
                 XComboBox {
                     id: autoModCombo
-                    Layout.preferredWidth: 80
-                    model: modifierLabels
-                    currentIndex: getModifierIndex(settingsModel ? settingsModel.shortcutAutoModifier : "")
-                    onActivated: function(index) {
-                        if (settingsModel) settingsModel.shortcutAutoModifier = modifierOptions[index]
+                    Layout.preferredWidth: 100
+                    model: ["Ctrl", "Alt", "Shift", "Cmd"]
+                    currentIndex: {
+                        var mod = settingsModel ? settingsModel.shortcutAutoModifier : "ctrl"
+                        if (mod === "alt") return 1
+                        if (mod === "shift") return 2
+                        if (mod === "cmd") return 3
+                        return 0
                     }
-                    font.pixelSize: Theme.fontSizeSm
+                    onActivated: function(index) {
+                        var options = ["ctrl", "alt", "shift", "cmd"]
+                        if (settingsModel) settingsModel.shortcutAutoModifier = options[index]
+                    }
                 }
 
                 Text { text: "+"; font.pixelSize: Theme.fontSizeSm; color: Theme.textSecondary }
@@ -198,13 +199,19 @@ ScrollView {
 
                 XComboBox {
                     id: abortModCombo
-                    Layout.preferredWidth: 80
-                    model: modifierLabels
-                    currentIndex: getModifierIndex(settingsModel ? settingsModel.shortcutAbortModifier : "")
-                    onActivated: function(index) {
-                        if (settingsModel) settingsModel.shortcutAbortModifier = modifierOptions[index]
+                    Layout.preferredWidth: 100
+                    model: ["Ctrl", "Alt", "Shift", "Cmd"]
+                    currentIndex: {
+                        var mod = settingsModel ? settingsModel.shortcutAbortModifier : "ctrl"
+                        if (mod === "alt") return 1
+                        if (mod === "shift") return 2
+                        if (mod === "cmd") return 3
+                        return 0
                     }
-                    font.pixelSize: Theme.fontSizeSm
+                    onActivated: function(index) {
+                        var options = ["ctrl", "alt", "shift", "cmd"]
+                        if (settingsModel) settingsModel.shortcutAbortModifier = options[index]
+                    }
                 }
 
                 Text { text: "+"; font.pixelSize: Theme.fontSizeSm; color: Theme.textSecondary }
@@ -248,13 +255,19 @@ ScrollView {
 
                 XComboBox {
                     id: modeModCombo
-                    Layout.preferredWidth: 80
-                    model: modifierLabels
-                    currentIndex: getModifierIndex(settingsModel ? settingsModel.shortcutModeModifier : "")
-                    onActivated: function(index) {
-                        if (settingsModel) settingsModel.shortcutModeModifier = modifierOptions[index]
+                    Layout.preferredWidth: 100
+                    model: ["Ctrl", "Alt", "Shift", "Cmd"]
+                    currentIndex: {
+                        var mod = settingsModel ? settingsModel.shortcutModeModifier : "ctrl"
+                        if (mod === "alt") return 1
+                        if (mod === "shift") return 2
+                        if (mod === "cmd") return 3
+                        return 0
                     }
-                    font.pixelSize: Theme.fontSizeSm
+                    onActivated: function(index) {
+                        var options = ["ctrl", "alt", "shift", "cmd"]
+                        if (settingsModel) settingsModel.shortcutModeModifier = options[index]
+                    }
                 }
 
                 Text { text: "+"; font.pixelSize: Theme.fontSizeSm; color: Theme.textSecondary }
@@ -298,13 +311,19 @@ ScrollView {
 
                 XComboBox {
                     id: windowModCombo
-                    Layout.preferredWidth: 80
-                    model: modifierLabels
-                    currentIndex: getModifierIndex(settingsModel ? settingsModel.shortcutWindowModifier : "")
-                    onActivated: function(index) {
-                        if (settingsModel) settingsModel.shortcutWindowModifier = modifierOptions[index]
+                    Layout.preferredWidth: 100
+                    model: ["Ctrl", "Alt", "Shift", "Cmd"]
+                    currentIndex: {
+                        var mod = settingsModel ? settingsModel.shortcutWindowModifier : "ctrl"
+                        if (mod === "alt") return 1
+                        if (mod === "shift") return 2
+                        if (mod === "cmd") return 3
+                        return 0
                     }
-                    font.pixelSize: Theme.fontSizeSm
+                    onActivated: function(index) {
+                        var options = ["ctrl", "alt", "shift", "cmd"]
+                        if (settingsModel) settingsModel.shortcutWindowModifier = options[index]
+                    }
                 }
 
                 Text { text: "+"; font.pixelSize: Theme.fontSizeSm; color: Theme.textSecondary }

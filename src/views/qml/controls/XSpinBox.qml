@@ -13,14 +13,10 @@ SpinBox {
 
     // 背景
     background: Rectangle {
-        radius: Theme.radiusSm
+        radius: Theme.radiusMd
         color: Theme.background
         border.width: 1
         border.color: root.activeFocus ? Theme.primary : Theme.border
-
-        Behavior on border.color {
-            ColorAnimation { duration: Theme.animationFast }
-        }
     }
 
     // 数值显示
@@ -37,88 +33,55 @@ SpinBox {
         readOnly: !root.editable
         validator: root.validator
         inputMethodHints: Qt.ImhFormattedNumbersOnly
-
-        Rectangle {
-            anchors.fill: parent
-            anchors.margins: 1
-            color: "transparent"
-            z: -1
-        }
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.leftMargin: 36
+        anchors.rightMargin: 36
     }
 
     // 减号按钮
-    down.indicator: Rectangle {
+    down.indicator: Item {
         x: 0
+        width: 36
         height: root.height
-        width: 32
-        radius: Theme.radiusSm
-        color: root.down.pressed ? Theme.backgroundHover : (root.down.hovered ? Theme.backgroundSecondary : "transparent")
 
-        // 左侧圆角遮罩
         Rectangle {
-            anchors.right: parent.right
-            width: Theme.radiusSm
-            height: parent.height
-            color: parent.color
+            anchors.fill: parent
+            anchors.margins: 4
+            anchors.rightMargin: 2
+            radius: Theme.radiusSm
+            color: root.down.pressed ? Theme.backgroundHover : (root.down.hovered ? Theme.backgroundSecondary : "transparent")
         }
 
         Text {
             anchors.centerIn: parent
             text: "−"
-            font.pixelSize: Theme.fontSizeLg
+            font.pixelSize: 16
             font.weight: Font.Medium
             color: root.enabled ? Theme.textSecondary : Theme.textPlaceholder
-        }
-
-        // 右侧分隔线
-        Rectangle {
-            anchors.right: parent.right
-            anchors.verticalCenter: parent.verticalCenter
-            width: 1
-            height: parent.height - 12
-            color: Theme.divider
-        }
-
-        Behavior on color {
-            ColorAnimation { duration: Theme.animationFast }
         }
     }
 
     // 加号按钮
-    up.indicator: Rectangle {
+    up.indicator: Item {
         x: root.width - width
+        width: 36
         height: root.height
-        width: 32
-        radius: Theme.radiusSm
-        color: root.up.pressed ? Theme.backgroundHover : (root.up.hovered ? Theme.backgroundSecondary : "transparent")
 
-        // 右侧圆角遮罩
         Rectangle {
-            anchors.left: parent.left
-            width: Theme.radiusSm
-            height: parent.height
-            color: parent.color
+            anchors.fill: parent
+            anchors.margins: 4
+            anchors.leftMargin: 2
+            radius: Theme.radiusSm
+            color: root.up.pressed ? Theme.backgroundHover : (root.up.hovered ? Theme.backgroundSecondary : "transparent")
         }
 
         Text {
             anchors.centerIn: parent
             text: "+"
-            font.pixelSize: Theme.fontSizeLg
+            font.pixelSize: 16
             font.weight: Font.Medium
             color: root.enabled ? Theme.textSecondary : Theme.textPlaceholder
-        }
-
-        // 左侧分隔线
-        Rectangle {
-            anchors.left: parent.left
-            anchors.verticalCenter: parent.verticalCenter
-            width: 1
-            height: parent.height - 12
-            color: Theme.divider
-        }
-
-        Behavior on color {
-            ColorAnimation { duration: Theme.animationFast }
         }
     }
 }

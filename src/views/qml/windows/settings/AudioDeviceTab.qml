@@ -29,6 +29,9 @@ ScrollView {
         if (settingsModel) {
             inputCombo.model = settingsModel.getInputDevices()
             outputCombo.model = settingsModel.getOutputDevices()
+            // model 设置后重新同步 currentIndex
+            inputCombo.currentIndex = settingsModel.selectedInputIndex
+            outputCombo.currentIndex = settingsModel.selectedOutputIndex
             addLog("设备列表已加载")
         }
     }
@@ -39,6 +42,9 @@ ScrollView {
             if (settingsModel) {
                 inputCombo.model = settingsModel.getInputDevices()
                 outputCombo.model = settingsModel.getOutputDevices()
+                // model 设置后重新同步 currentIndex
+                inputCombo.currentIndex = settingsModel.selectedInputIndex
+                outputCombo.currentIndex = settingsModel.selectedOutputIndex
                 addLog("设备列表已刷新")
             }
         }

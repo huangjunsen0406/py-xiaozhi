@@ -46,7 +46,7 @@ ScrollView {
 
                 Item { Layout.fillWidth: true }
 
-                Switch {
+                XSwitch {
                     checked: settingsModel ? settingsModel.wakeWordEnabled : false
                     onToggled: if (settingsModel) settingsModel.wakeWordEnabled = checked
                 }
@@ -74,7 +74,7 @@ ScrollView {
                     id: wakeWordInput
                     Layout.fillWidth: true
                     text: settingsModel ? settingsModel.wakeWord : ""
-                    onEditingFinished: if (settingsModel) settingsModel.wakeWord = text
+                    onTextChanged: if (settingsModel && text !== settingsModel.wakeWord) settingsModel.wakeWord = text
                     placeholderText: "输入唤醒词，如「小智」或「Hey Jarvis」"
                     font.pixelSize: Theme.fontSizeSm
                     background: Rectangle {

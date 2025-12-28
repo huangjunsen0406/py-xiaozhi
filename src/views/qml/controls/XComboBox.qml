@@ -21,7 +21,7 @@ ComboBox {
         }
     }
 
-    // 显示内容
+    // 显示内容 - 直接使用 displayText
     contentItem: Text {
         leftPadding: Theme.spacingMd
         rightPadding: root.indicator.width + Theme.spacingMd
@@ -57,19 +57,29 @@ ComboBox {
 
         background: Rectangle {
             color: Theme.background
-            radius: Theme.radiusSm
-            border.width: 1
-            border.color: Theme.border
+            radius: Theme.radiusMd
 
-            // 阴影效果
-            layer.enabled: true
-            layer.effect: Item {
-                Rectangle {
-                    anchors.fill: parent
-                    anchors.margins: -4
-                    color: "transparent"
-                    radius: Theme.radiusSm + 4
-                }
+            // 阴影效果 (多层模拟)
+            Rectangle {
+                z: -1
+                anchors.fill: parent
+                anchors.margins: -1
+                radius: parent.radius + 1
+                color: "#08000000"
+            }
+            Rectangle {
+                z: -2
+                anchors.fill: parent
+                anchors.margins: -3
+                radius: parent.radius + 3
+                color: "#06000000"
+            }
+            Rectangle {
+                z: -3
+                anchors.fill: parent
+                anchors.margins: -6
+                radius: parent.radius + 6
+                color: "#04000000"
             }
         }
 
@@ -84,32 +94,27 @@ ComboBox {
 
     // 列表项
     delegate: ItemDelegate {
+        id: delegateItem
+        required property int index
+        required property var modelData
+
         width: root.width - 8
         height: 32
+        hoverEnabled: true
 
         background: Rectangle {
-            radius: Theme.radiusSm - 2
-            color: {
-                if (pressed) return Theme.primaryPressed
-                if (hovered || highlighted) return Theme.backgroundHover
-                return "transparent"
-            }
-
-            Behavior on color {
-                ColorAnimation { duration: Theme.animationFast }
-            }
+            radius: Theme.radiusSm
+            color: delegateItem.hovered ? Theme.backgroundHover : "transparent"
         }
 
         contentItem: Text {
             leftPadding: Theme.spacingSm
-            text: root.textRole ? (modelData[root.textRole] ?? modelData) : modelData
+            text: root.textRole ? (delegateItem.modelData[root.textRole] ?? delegateItem.modelData) : delegateItem.modelData
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSizeSm
-            color: root.currentIndex === index ? Theme.primary : Theme.textPrimary
+            color: root.currentIndex === delegateItem.index ? Theme.primary : Theme.textPrimary
             verticalAlignment: Text.AlignVCenter
             elide: Text.ElideRight
         }
-
-        highlighted: root.highlightedIndex === index
     }
 }
