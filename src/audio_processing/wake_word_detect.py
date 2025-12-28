@@ -305,6 +305,18 @@ class WakeWordDetector:
 
             except asyncio.CancelledError:
                 break
+            except RuntimeError as e:
+                # 检测到事件循环问题，静默退出
+                if "no running event loop" in str(e) or "Event loop is closed" in str(e):
+                    break
+                error_count += 1
+                logger.error(f"检测循环错误 ({error_count}/{MAX_ERRORS}): {e}")
+
+                if error_count >= MAX_ERRORS:
+                    logger.critical("达到最大错误次数，停止检测")
+                    break
+
+                await asyncio.sleep(1)
             except Exception as e:
                 error_count += 1
                 logger.error(f"检测循环错误 ({error_count}/{MAX_ERRORS}): {e}")

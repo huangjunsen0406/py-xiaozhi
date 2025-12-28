@@ -111,14 +111,14 @@ class TaskManager:
             *args: 位置参数
             **kwargs: 关键字参数
         """
-        if not self._loop or self._loop.is_closed():
-            logger.warning("主事件循环未就绪，拒绝调度")
-            return
-
         # 检查是否正在关闭 - 静默拒绝
         if not self._running or (
             self._shutdown_event and self._shutdown_event.is_set()
         ):
+            return
+
+        if not self._loop or self._loop.is_closed():
+            # 关闭时静默跳过，不打印警告
             return
 
         def _runner():

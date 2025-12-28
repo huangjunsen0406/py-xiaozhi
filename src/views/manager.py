@@ -56,6 +56,8 @@ class ViewManager(QObject):
         self._event_bus.on(Events.UI_UPDATE_TEXT, self._on_update_text)
         self._event_bus.on(Events.UI_UPDATE_EMOTION, self._on_update_emotion)
         self._event_bus.on(Events.UI_UPDATE_STATUS, self._on_update_status)
+        self._event_bus.on(Events.UI_TOGGLE_WINDOW, self._on_toggle_window)
+        self._event_bus.on(Events.UI_TOGGLE_MODE, self._on_toggle_mode)
         logger.debug("ViewManager: 已订阅 UI 事件")
 
     def _on_config_saved(self):
@@ -80,6 +82,16 @@ class ViewManager(QObject):
             self._main_model.set_status(data.status, data.connected)
         elif isinstance(data, dict):
             self._main_model.set_status(data.get("status", ""), data.get("connected", True))
+
+    async def _on_toggle_window(self, data=None):
+        """处理窗口切换事件."""
+        logger.debug("ViewManager: 收到窗口切换事件")
+        self.toggle_window()
+
+    async def _on_toggle_mode(self, data=None):
+        """处理模式切换事件."""
+        logger.debug("ViewManager: 收到模式切换事件")
+        self.toggle_mode()
 
     async def start(self, mode: str = "gui"):
         """启动视图.
