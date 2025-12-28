@@ -39,12 +39,22 @@ class WakeWordPlugin(Plugin):
 
             self.detector.on_detected(self._on_detected)
             self.detector.on_error = self._on_error
+
+            # 订阅配置变更事件
+            from src.core.event_bus import Events
+            ctx.event_bus.on(Events.CONFIG_CHANGED, self._on_config_changed)
+
         except ImportError as e:
             logger.error(f"无法导入唤醒词检测器: {e}")
             self.detector = None
         except Exception as e:
             logger.error(f"唤醒词插件初始化失败: {e}", exc_info=True)
             self.detector = None
+
+    async def _on_config_changed(self, data=None):
+        """配置变更时重新加载唤醒词模型."""
+        logger.info("WakeWordPlugin: 收到配置变更事件，重新加载唤醒词模型")
+        await self.reload_model()
 
     def set_audio_plugin(self, audio_plugin) -> None:
         """

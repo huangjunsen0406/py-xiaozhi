@@ -35,6 +35,9 @@ class ViewManager(QObject):
         self._main_model = MainModel()
         self._settings_model = SettingsModel()
 
+        # 监听设置保存信号
+        self._settings_model.configSaved.connect(self._on_config_saved)
+
         # Services
         self._emotion_service = EmotionService()
         self._tray_service: Optional[TrayService] = None
@@ -54,6 +57,11 @@ class ViewManager(QObject):
         self._event_bus.on(Events.UI_UPDATE_EMOTION, self._on_update_emotion)
         self._event_bus.on(Events.UI_UPDATE_STATUS, self._on_update_status)
         logger.debug("ViewManager: 已订阅 UI 事件")
+
+    def _on_config_saved(self):
+        """配置保存后触发热重载事件."""
+        logger.info("ViewManager: 配置已保存，触发热重载事件")
+        asyncio.create_task(self._event_bus.emit(Events.CONFIG_CHANGED))
 
     async def _on_update_text(self, data):
         """处理文本更新."""

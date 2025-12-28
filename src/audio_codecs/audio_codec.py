@@ -282,6 +282,63 @@ class AudioCodec:
                 is_input=False, output_callback=self._output_callback
             )
 
+    async def reload_devices(self):
+        """热重载音频设备配置
+
+        流程：
+        1. 停止当前音频流
+        2. 重新加载设备配置
+        3. 重新配置格式转换器
+        4. 重新创建并启动音频流
+
+        Returns:
+            bool: 是否成功
+        """
+        logger.info("AudioCodec: 开始热重载音频设备...")
+
+        try:
+            # 1. 停止当前流
+            if self.stream_manager:
+                self.stream_manager.stop()
+                logger.debug("AudioCodec: 已停止当前音频流")
+
+            # 2. 重新加载设备配置
+            self.device_manager.config.reload_config()
+            self.device_config = self.device_manager.load_or_detect_devices()
+            logger.info(f"AudioCodec: 新设备配置 - 输入ID: {self.device_config.input_device_id}, 输出ID: {self.device_config.output_device_id}")
+
+            # 3. 重新配置格式转换器
+            self.converter.clear_buffers()
+            self.converter.setup_input_converter(
+                from_rate=self.device_config.input_sample_rate,
+                to_rate=AudioConfig.INPUT_SAMPLE_RATE,
+                from_channels=self.device_config.input_channels,
+                to_channels=1,
+            )
+            self.converter.setup_output_converter(
+                from_rate=AudioConfig.OUTPUT_SAMPLE_RATE,
+                to_rate=self.device_config.output_sample_rate,
+                from_channels=1,
+                to_channels=self.device_config.output_channels,
+            )
+
+            # 4. 重新创建音频流
+            self.stream_manager = AudioStreamManager(self.device_config)
+            self.stream_manager.create_streams(
+                input_callback=self._input_callback,
+                output_callback=self._output_callback,
+            )
+
+            # 5. 启动音频流
+            self.stream_manager.start()
+
+            logger.info("AudioCodec: 音频设备热重载完成")
+            return True
+
+        except Exception as e:
+            logger.error(f"AudioCodec: 热重载音频设备失败: {e}", exc_info=True)
+            return False
+
     async def close(self):
         """关闭音频编解码器"""
         self._is_closing = True

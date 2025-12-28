@@ -39,6 +39,7 @@ class SettingsModel(BaseModel):
     statusMessage = Signal(str)  # 状态消息
     testComplete = Signal(str, bool)  # 测试完成(类型, 成功)
     wakeWordChanged = Signal()  # 唤醒词变更
+    configSaved = Signal()  # 配置已保存（用于触发热重载）
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -114,6 +115,8 @@ class SettingsModel(BaseModel):
                 json.dump(self._config, f, ensure_ascii=False, indent=2)
             logger.info("设置已保存")
             self.statusMessage.emit("配置已保存")
+            # 发送配置保存信号，触发热重载
+            self.configSaved.emit()
         except Exception as e:
             logger.error(f"保存配置失败: {e}")
             self.set_error(f"保存配置失败: {e}")
@@ -504,6 +507,15 @@ class SettingsModel(BaseModel):
     def _get_selectedInputIndex(self) -> int:
         """获取当前选中的输入设备索引."""
         current_id = self._get_value("AUDIO_DEVICES.input_device_id", -1)
+        current_name = self._get_value("AUDIO_DEVICES.input_device_name", "")
+
+        # 优先按设备名称匹配
+        if current_name:
+            for i, d in enumerate(self._input_devices):
+                if d["raw_name"] == current_name:
+                    return i
+
+        # 其次按设备ID匹配
         for i, d in enumerate(self._input_devices):
             if d["index"] == current_id:
                 return i
@@ -524,6 +536,15 @@ class SettingsModel(BaseModel):
     def _get_selectedOutputIndex(self) -> int:
         """获取当前选中的输出设备索引."""
         current_id = self._get_value("AUDIO_DEVICES.output_device_id", -1)
+        current_name = self._get_value("AUDIO_DEVICES.output_device_name", "")
+
+        # 优先按设备名称匹配
+        if current_name:
+            for i, d in enumerate(self._output_devices):
+                if d["raw_name"] == current_name:
+                    return i
+
+        # 其次按设备ID匹配
         for i, d in enumerate(self._output_devices):
             if d["index"] == current_id:
                 return i

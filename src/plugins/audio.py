@@ -46,9 +46,19 @@ class AudioPlugin(Plugin):
             music_player = get_music_player_instance()
             music_player.set_audio_codec(self.codec)
 
+            # 订阅配置变更事件
+            from src.core.event_bus import Events
+            ctx.event_bus.on(Events.CONFIG_CHANGED, self._on_config_changed)
+
         except Exception as e:
             logger.error(f"音频插件初始化失败: {e}", exc_info=True)
             self.codec = None
+
+    async def _on_config_changed(self, data=None):
+        """配置变更时重新加载音频设备."""
+        if self.codec:
+            logger.info("AudioPlugin: 收到配置变更事件，重新加载音频设备")
+            await self.codec.reload_devices()
 
     async def on_device_state_changed(self, state):
         """

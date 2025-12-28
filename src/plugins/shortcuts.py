@@ -327,12 +327,23 @@ class ShortcutsPlugin(Plugin):
         self._manager: Optional[PluginShortcutManager] = None
         self._adapter: Optional[_CmdAdapter] = None
         self._loop: Optional[asyncio.AbstractEventLoop] = None
+        self._event_bus = None
 
     async def setup(self, ctx: "PluginContext", cmd: "PluginCommands") -> None:
         await super().setup(ctx, cmd)
         self._adapter = _CmdAdapter(cmd, ctx)
         self._loop = asyncio.get_running_loop()
+        self._event_bus = ctx.event_bus
         self._manager = PluginShortcutManager(self._loop, event_bus=ctx.event_bus)
+
+        # 订阅配置变更事件
+        from src.core.event_bus import Events
+        ctx.event_bus.on(Events.CONFIG_CHANGED, self._on_config_changed)
+
+    async def _on_config_changed(self, data=None):
+        """配置变更时重新加载."""
+        logger.info("ShortcutsPlugin: 收到配置变更事件，重新加载配置")
+        await self.reload_from_config()
 
     async def start(self) -> None:
         if not self._manager:
