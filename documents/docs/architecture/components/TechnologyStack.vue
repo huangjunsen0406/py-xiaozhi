@@ -15,7 +15,7 @@
 </template>
 
 <script setup>
-import { 
+import {
   CodeBracketIcon,
   WindowIcon,
   DocumentIcon,
@@ -24,14 +24,15 @@ import {
   SignalIcon,
   ArrowPathIcon,
   ArrowsUpDownIcon,
-  MusicalNoteIcon as MusicIcon
+  MusicalNoteIcon as MusicIcon,
+  CommandLineIcon
 } from '@heroicons/vue/24/solid';
 
 // 技术栈
 const techStack = [
   {
     name: 'Python',
-    description: '3.9-3.12',
+    description: '>= 3.10',
     icon: CodeBracketIcon
   },
   {
@@ -40,8 +41,13 @@ const techStack = [
     icon: ArrowPathIcon
   },
   {
-    name: 'PyQt5',
-    description: 'GUI框架',
+    name: 'PySide6',
+    description: 'Qt6 GUI框架',
+    icon: WindowIcon
+  },
+  {
+    name: 'QML/QtQuick',
+    description: '声明式UI',
     icon: WindowIcon
   },
   {
@@ -50,14 +56,14 @@ const techStack = [
     icon: ArrowsUpDownIcon
   },
   {
-    name: 'Sherpa-ONNX',
-    description: '语音识别引擎',
-    icon: DocumentIcon
+    name: 'uv',
+    description: '包管理器',
+    icon: CommandLineIcon
   },
   {
-    name: 'WebRTC AEC',
-    description: 'WebRTC音频处理模块',
-    icon: MusicIcon
+    name: 'Sherpa-ONNX',
+    description: '唤醒词检测',
+    icon: DocumentIcon
   },
   {
     name: 'OpusLib',
@@ -90,19 +96,14 @@ const techStack = [
     icon: PuzzlePieceIcon
   },
   {
-    name: 'Cryptography',
-    description: '加密安全库',
-    icon: DocumentIcon
+    name: 'EventBus',
+    description: '事件驱动架构',
+    icon: ArrowPathIcon
   },
   {
-    name: 'Thing抽象',
-    description: 'IoT设备抽象',
-    icon: SignalIcon
-  },
-  {
-    name: 'JSON-RPC',
-    description: '远程过程调用',
-    icon: DocumentIcon
+    name: 'Quartz',
+    description: 'macOS快捷键',
+    icon: CommandLineIcon
   }
 ];
 
@@ -153,4 +154,4 @@ const techColors = [
   text-align: center;
   margin-top: 4px;
 }
-</style> 
+</style>

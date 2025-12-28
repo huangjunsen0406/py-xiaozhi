@@ -4,38 +4,40 @@ import {
   CubeIcon,
   ArrowsRightLeftIcon,
   BoltIcon,
-  ShareIcon
+  ShareIcon,
+  ArrowPathIcon
 } from '@heroicons/vue/24/solid';
+
 // 架构特点
 const architectureFeatures = [
   {
-    title: '单例模式',
-    description: '应用核心采用线程安全的单例模式，保证全局唯一实例和状态一致性',
-    icon: CubeIcon
+    title: 'EventBus 事件驱动',
+    description: '基于发布-订阅模式的事件总线，解耦模块间通信，支持异步事件处理和热重载',
+    icon: ArrowPathIcon
   },
   {
     title: '异步架构',
-    description: '全面采用asyncio异步编程，支持高并发处理和实时音频流',
+    description: '全面采用 asyncio + qasync 异步编程，支持高并发处理和实时音频流',
     icon: BoltIcon
   },
   {
-    title: '资源管理',
-    description: '中央化资源管理器，智能依赖跟踪和优雅清理机制',
+    title: 'MVVM 视图层',
+    description: 'PySide6 + QML 声明式 UI，Model-View-ViewModel 架构，EventBridge 连接 Python 与 QML',
     icon: ShareIcon
   },
   {
     title: '状态机模式',
-    description: '设备状态管理采用状态机模式，清晰的状态转换和错误恢复',
+    description: '设备状态管理采用状态机模式 (IDLE/LISTENING/SPEAKING)，清晰的状态转换和错误恢复',
     icon: ArrowsRightLeftIcon
   },
   {
     title: '插件化生态',
-    description: 'MCP工具和IoT设备采用插件化设计，支持热插拔和动态扩展',
+    description: 'PluginManager 统一管理插件生命周期，支持 Audio/MCP/UI/Shortcuts/WakeWord 等核心插件',
     icon: PuzzlePieceIcon
   },
   {
     title: '跨平台兼容',
-    description: '支持Windows、macOS、Linux多平台，智能特性检测和优雅降级',
+    description: '支持 Windows/macOS/Linux，快捷键采用 Quartz (macOS) / pynput (其他) 双后端',
     icon: CubeIcon
   }
 ];
@@ -45,7 +47,8 @@ const featureColors = [
   'bg-indigo-500',
   'bg-purple-500',
   'bg-pink-500',
-  'bg-red-500'
+  'bg-red-500',
+  'bg-orange-500'
 ];
 </script>
 
