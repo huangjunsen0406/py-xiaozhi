@@ -3,7 +3,7 @@
 检测唤醒词并触发对话。
 """
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 from src.constants.constants import AbortReason
 from src.logging import get_logger
@@ -30,7 +30,10 @@ class WakeWordPlugin(Plugin):
             from src.audio_processing.wake_word_detect import WakeWordDetector
 
             self.detector = WakeWordDetector()
-            if not getattr(self.detector, "enabled", False):
+
+            # 初始化检测器（加载模型）
+            if not await self.detector.initialize():
+                logger.info("唤醒词检测器未启用或初始化失败")
                 self.detector = None
                 return
 
@@ -70,9 +73,28 @@ class WakeWordPlugin(Plugin):
     async def shutdown(self) -> None:
         if self.detector:
             try:
-                await self.detector.stop()
+                await self.detector.shutdown()
             except Exception as e:
                 logger.warning(f"关闭唤醒词检测器失败: {e}")
+
+    async def reload_model(self, model_path: Optional[str] = None) -> bool:
+        """热重载唤醒词模型.
+
+        Args:
+            model_path: 新模型路径（如 "models/en"）。如果为 None，从配置读取。
+
+        Returns:
+            是否重载成功
+        """
+        if not self.detector:
+            logger.warning("检测器未初始化，无法热重载")
+            return False
+
+        try:
+            return await self.detector.reload(model_path)
+        except Exception as e:
+            logger.error(f"热重载唤醒词模型失败: {e}", exc_info=True)
+            return False
 
     async def _on_detected(self, wake_word, full_text):
         """

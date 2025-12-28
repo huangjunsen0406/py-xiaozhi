@@ -1,9 +1,7 @@
 # -*- coding: utf-8 -*-
-"""
-主窗口模块 - GUI 和 CLI 主界面实现.
-"""
+"""主界面模块."""
 
-from .cli_main import CliMain
-from .gui_main import GuiMain
+from .cli_display import CLIDisplay
+from .cli_view_manager import CLIViewManager
 
-__all__ = ["GuiMain", "CliMain"]
+__all__ = ["CLIDisplay", "CLIViewManager"]

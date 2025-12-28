@@ -115,6 +115,12 @@ class TaskManager:
             logger.warning("主事件循环未就绪，拒绝调度")
             return
 
+        # 检查是否正在关闭 - 静默拒绝
+        if not self._running or (
+            self._shutdown_event and self._shutdown_event.is_set()
+        ):
+            return
+
         def _runner():
             try:
                 result = fn(*args, **kwargs)

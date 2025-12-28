@@ -56,6 +56,7 @@ class AudioCodec:
 
         # 状态标记
         self._is_closing = False
+        self._closed = False
 
     async def initialize(self):
         """初始化所有组件
@@ -304,6 +305,7 @@ class AudioCodec:
                 self._audio_listeners.clear()
 
             logger.info("AudioCodec 已关闭")
+            self._closed = True
 
         except Exception as e:
             logger.error(f"关闭音频编解码器失败: {e}")
@@ -312,7 +314,8 @@ class AudioCodec:
 
     def __del__(self):
         """析构函数 - 执行同步清理"""
-        if self._is_closing:
+        # 如果已正确关闭或正在关闭，跳过
+        if getattr(self, "_closed", False) or getattr(self, "_is_closing", False):
             return
 
         logger.warning("AudioCodec 未正确关闭，执行紧急清理（建议使用 async close()）")

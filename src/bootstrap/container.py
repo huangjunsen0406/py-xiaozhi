@@ -306,7 +306,7 @@ class ServiceContainer:
             # GUI 模式下需要退出 Qt 应用以结束 qasync 事件循环
             if self._mode == "gui":
                 try:
-                    from PyQt5.QtWidgets import QApplication
+                    from PySide6.QtWidgets import QApplication
 
                     if QApplication.instance():
                         logger.debug("退出 Qt 应用")

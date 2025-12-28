@@ -1,4 +1,7 @@
-# 设备激活界面包
-from .activation_window import ActivationWindow
+# -*- coding: utf-8 -*-
+"""激活模块."""
 
-__all__ = ["ActivationWindow"]
+from .cli_activation import CLIActivation
+from .gui_activation import GUIActivation
+
+__all__ = ["CLIActivation", "GUIActivation"]

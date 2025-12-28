@@ -1,0 +1,6 @@
+module settings
+SystemOptionsTab 1.0 SystemOptionsTab.qml
+WakeWordTab 1.0 WakeWordTab.qml
+CameraTab 1.0 CameraTab.qml
+AudioDeviceTab 1.0 AudioDeviceTab.qml
+ShortcutsTab 1.0 ShortcutsTab.qml

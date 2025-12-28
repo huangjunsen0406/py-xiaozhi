@@ -30,34 +30,31 @@ class UIPlugin(Plugin):
     def __init__(self, mode: Optional[str] = None) -> None:
         super().__init__()
         self.mode = (mode or "cli").lower()
-        self.display = None
+        self.view_manager = None
         self._is_gui = False
         self.is_first = True
 
     async def setup(self, ctx: "PluginContext", cmd: "PluginCommands") -> None:
         await super().setup(ctx, cmd)
-        self.display = self._create_display()
+        self._create_view_manager()
 
-    def _create_display(self):
-        """
-        根据模式创建 display 实例，并注入 EventBus.
-        """
+    def _create_view_manager(self):
+        """创建 ViewManager 实例."""
         if self.mode == "gui":
-            from src.views.main import GuiMain
+            from src.views import ViewManager
 
             self._is_gui = True
-            return GuiMain(event_bus=self._ctx.event_bus)
+            self.view_manager = ViewManager(event_bus=self._ctx.event_bus)
         else:
-            from src.views.main import CliMain
+            # CLI 模式使用 CLIViewManager
+            from src.views.main import CLIViewManager
 
             self._is_gui = False
-            return CliMain(event_bus=self._ctx.event_bus)
+            self.view_manager = CLIViewManager(event_bus=self._ctx.event_bus)
+            logger.info("CLI 模式，使用 CLIViewManager")
 
     async def start(self) -> None:
-        if not self.display:
-            return
-
-        # 订阅音乐事件
+        # 订阅事件
         from src.core.event_bus import Events
 
         self._ctx.event_bus.on(Events.MUSIC_STATE_CHANGED, self._on_music_state_changed)
@@ -68,92 +65,94 @@ class UIPlugin(Plugin):
         self._ctx.event_bus.on(Events.UI_BUTTON_PRESS, self._press)
         self._ctx.event_bus.on(Events.UI_BUTTON_RELEASE, self._release)
         self._ctx.event_bus.on(Events.UI_AUTO_TOGGLE, self._auto_toggle)
+        self._ctx.event_bus.on(Events.UI_AUTO_START, self._auto_start)
         self._ctx.event_bus.on(Events.UI_ABORT_REQUEST, self._abort)
         self._ctx.event_bus.on(Events.UI_SEND_TEXT, self._send_text_from_event)
         self._ctx.event_bus.on(Events.UI_QUIT_REQUEST, self._request_shutdown)
         logger.info("UIPlugin 已订阅 UI 用户操作事件")
 
-        self._cmd.spawn(self.display.start(), name=f"ui:{self.mode}:start")
+        # 启动 ViewManager
+        if self.view_manager:
+            self._cmd.spawn(
+                self.view_manager.start(mode=self.mode),
+                name=f"ui:{self.mode}:start",
+            )
 
     async def on_incoming_json(self, message) -> None:
         if not isinstance(message, dict):
             return
 
         from src.core.event_bus import Events
-        from src.views.events import UIEmotionUpdate, UITextUpdate
 
         msg_type = message.get("type")
 
         if msg_type in ("tts", "stt"):
             if text := message.get("text"):
-                await self._ctx.event_bus.emit(Events.UI_UPDATE_TEXT, UITextUpdate(text=text))
+                if self.view_manager:
+                    if self._is_gui:
+                        self.view_manager.main_model.set_tts_text(text)
+                    else:
+                        self.view_manager.set_tts_text(text)
         elif msg_type == "llm":
             if emotion := message.get("emotion"):
-                await self._ctx.event_bus.emit(
-                    Events.UI_UPDATE_EMOTION, UIEmotionUpdate(emotion=emotion)
-                )
+                if self.view_manager:
+                    if self._is_gui:
+                        url = self.view_manager._emotion_service.get_emotion_url(emotion)
+                        self.view_manager.main_model.set_emotion_url(url)
+                    else:
+                        self.view_manager.set_emotion(emotion)
 
     async def on_device_state_changed(self, state) -> None:
         if self.is_first:
             self.is_first = False
             return
 
-        from src.core.event_bus import Events
-        from src.views.events import UIEmotionUpdate, UIStatusUpdate
-
-        # 更新表情为 neutral
-        await self._ctx.event_bus.emit(Events.UI_UPDATE_EMOTION, UIEmotionUpdate(emotion="neutral"))
+        if not self.view_manager:
+            return
 
         # 更新状态文本
         if status_text := self.STATE_TEXT_MAP.get(state):
-            await self._ctx.event_bus.emit(
-                Events.UI_UPDATE_STATUS, UIStatusUpdate(status=status_text, connected=True)
-            )
+            if self._is_gui:
+                # GUI 模式：更新表情为 neutral
+                url = self.view_manager._emotion_service.get_emotion_url("neutral")
+                self.view_manager.main_model.set_emotion_url(url)
+                self.view_manager.main_model.set_status(status_text, connected=True)
+            else:
+                # CLI 模式
+                self.view_manager.set_emotion("neutral")
+                self.view_manager.set_status(status_text, connected=True)
 
     async def shutdown(self) -> None:
-        if self.display:
-            # 取消订阅所有事件
-            try:
-                from src.core.event_bus import Events
+        # 取消订阅所有事件
+        try:
+            from src.core.event_bus import Events
 
-                # 取消订阅音乐事件
-                self._ctx.event_bus.off(
-                    Events.MUSIC_STATE_CHANGED, self._on_music_state_changed
-                )
-                self._ctx.event_bus.off(
-                    Events.MUSIC_LYRICS_UPDATE, self._on_music_lyrics_update
-                )
+            self._ctx.event_bus.off(Events.MUSIC_STATE_CHANGED, self._on_music_state_changed)
+            self._ctx.event_bus.off(Events.MUSIC_LYRICS_UPDATE, self._on_music_lyrics_update)
+            self._ctx.event_bus.off(Events.UI_BUTTON_PRESS, self._press)
+            self._ctx.event_bus.off(Events.UI_BUTTON_RELEASE, self._release)
+            self._ctx.event_bus.off(Events.UI_AUTO_TOGGLE, self._auto_toggle)
+            self._ctx.event_bus.off(Events.UI_AUTO_START, self._auto_start)
+            self._ctx.event_bus.off(Events.UI_ABORT_REQUEST, self._abort)
+            self._ctx.event_bus.off(Events.UI_SEND_TEXT, self._send_text_from_event)
+            self._ctx.event_bus.off(Events.UI_QUIT_REQUEST, self._request_shutdown)
+            logger.info("UIPlugin 已取消订阅所有事件")
+        except Exception as e:
+            logger.warning(f"取消订阅事件失败: {e}")
 
-                # 取消订阅 UI 用户操作事件
-                self._ctx.event_bus.off(Events.UI_BUTTON_PRESS, self._press)
-                self._ctx.event_bus.off(Events.UI_BUTTON_RELEASE, self._release)
-                self._ctx.event_bus.off(Events.UI_AUTO_TOGGLE, self._auto_toggle)
-                self._ctx.event_bus.off(Events.UI_ABORT_REQUEST, self._abort)
-                self._ctx.event_bus.off(Events.UI_SEND_TEXT, self._send_text_from_event)
-                self._ctx.event_bus.off(Events.UI_QUIT_REQUEST, self._request_shutdown)
-
-                logger.info("UIPlugin 已取消订阅所有事件")
-            except Exception as e:
-                logger.warning(f"取消订阅事件失败: {e}")
-
-            await self.display.close()
-            self.display = None
+        if self.view_manager:
+            await self.view_manager.close()
+            self.view_manager = None
 
     # ===== 回调函数 =====
 
     async def _request_shutdown(self):
-        """
-        请求应用关闭.
-        """
+        """请求应用关闭."""
         self._cmd.request_shutdown()
 
     async def _send_text_from_event(self, data):
-        """
-        从事件数据中提取文本并发送.
-        """
-        from src.views.events import UISendTextRequest
-
-        if isinstance(data, UISendTextRequest):
+        """从事件数据中提取文本并发送."""
+        if hasattr(data, "text"):
             text = data.text
         elif isinstance(data, dict):
             text = data.get("text", "")
@@ -166,32 +165,47 @@ class UIPlugin(Plugin):
         await self._send_text(text)
 
     async def _send_text(self, text: str):
-        """
-        发送文本到服务端.
-        """
+        """发送文本到服务端."""
         if self._ctx.is_speaking():
             await self._cmd.abort_speaking(None)
         if await self._cmd.connect_protocol():
             await self._cmd.send_wake_word_detected(text)
 
     async def _press(self):
-        """
-        手动模式：按下开始录音.
-        """
+        """手动模式：按下开始录音."""
         await self._cmd.connect_protocol()
         from src.constants.constants import ListeningMode
 
         await self._cmd.start_listening(ListeningMode.MANUAL)
 
     async def _release(self):
-        """
-        手动模式：释放停止录音.
-        """
+        """手动模式：释放停止录音."""
         await self._cmd.stop_listening()
 
     async def _auto_toggle(self):
+        """自动模式切换.
+
+        只切换模式状态，不自动开始监听。
+        用户需要再次点击"开始对话"按钮才会开始监听。
         """
-        自动模式切换.
+        if not self.view_manager:
+            return
+
+        # 只切换模式状态，不开始监听
+        if self._is_gui:
+            current_auto = self.view_manager.main_model._auto_mode
+            new_auto = not current_auto
+            self.view_manager.main_model.set_auto_mode(new_auto)
+        else:
+            # CLI 模式：调用 toggle_auto_mode
+            self.view_manager.toggle_auto_mode()
+            new_auto = self.view_manager._auto_mode
+        logger.debug(f"模式切换: {'自动' if new_auto else '手动'}")
+
+    async def _auto_start(self):
+        """自动模式开始监听.
+
+        在自动模式下，用户点击"开始对话"按钮时调用。
         """
         await self._cmd.connect_protocol()
         from src.constants.constants import ListeningMode
@@ -202,25 +216,18 @@ class UIPlugin(Plugin):
             else ListeningMode.AUTO_STOP
         )
         await self._cmd.start_listening(mode)
+        logger.debug("自动模式开始监听")
 
     async def _abort(self):
-        """
-        中断对话.
-        """
+        """中断对话."""
         await self._cmd.abort_speaking(AbortReason.USER_INTERRUPTION)
 
     # ===== 音乐事件处理器 =====
 
     async def _on_music_state_changed(self, data):
-        """处理音乐状态变化事件.
-
-        Args:
-            data: MusicStateData 实例
-        """
+        """处理音乐状态变化事件."""
         try:
-            from src.core.event_bus import Events
             from src.mcp.tools.music.events import MusicStateData
-            from src.views.events import UITextUpdate
 
             if not isinstance(data, MusicStateData):
                 logger.warning(f"收到非法的音乐状态数据: {type(data)}")
@@ -234,26 +241,28 @@ class UIPlugin(Plugin):
             }
 
             if text := state_text_map.get(data.state):
-                await self._ctx.event_bus.emit(Events.UI_UPDATE_TEXT, UITextUpdate(text=text))
+                if self.view_manager:
+                    if self._is_gui:
+                        self.view_manager.main_model.set_tts_text(text)
+                    else:
+                        self.view_manager.set_tts_text(text)
                 logger.debug(f"UI 更新音乐状态: {data.state}")
         except Exception as e:
             logger.error(f"处理音乐状态变化失败: {e}", exc_info=True)
 
     async def _on_music_lyrics_update(self, data):
-        """处理歌词更新事件.
-
-        Args:
-            data: MusicLyricsData 实例
-        """
+        """处理歌词更新事件."""
         try:
-            from src.core.event_bus import Events
             from src.mcp.tools.music.events import MusicLyricsData
-            from src.views.events import UITextUpdate
 
             if not isinstance(data, MusicLyricsData):
                 logger.warning(f"收到非法的歌词数据: {type(data)}")
                 return
 
-            await self._ctx.event_bus.emit(Events.UI_UPDATE_TEXT, UITextUpdate(text=data.text))
+            if self.view_manager:
+                if self._is_gui:
+                    self.view_manager.main_model.set_tts_text(data.text)
+                else:
+                    self.view_manager.set_tts_text(data.text)
         except Exception as e:
             logger.error(f"处理歌词更新失败: {e}", exc_info=True)

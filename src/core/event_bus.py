@@ -50,9 +50,11 @@ class Events:
     UI_BUTTON_PRESS = "ui_button_press"  # 按钮按下（手动模式）
     UI_BUTTON_RELEASE = "ui_button_release"  # 按钮释放（手动模式）
     UI_AUTO_TOGGLE = "ui_auto_toggle"  # 自动模式切换
+    UI_AUTO_START = "ui_auto_start"  # 自动模式开始监听
     UI_ABORT_REQUEST = "ui_abort_request"  # 中断请求
     UI_SEND_TEXT = "ui_send_text"  # 发送文本
     UI_QUIT_REQUEST = "ui_quit_request"  # 退出请求
+    UI_OPEN_SETTINGS = "ui_open_settings"  # 打开设置窗口
 
     # UI 更新事件（Plugin → View）
     UI_UPDATE_TEXT = "ui_update_text"  # 更新文本显示

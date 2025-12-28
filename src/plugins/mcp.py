@@ -65,6 +65,17 @@ class McpPlugin(Plugin):
             pass
 
     async def shutdown(self) -> None:
+        # 停止音乐播放器
+        try:
+            from src.mcp.tools.music.music_player import get_music_player_instance
+
+            music_player = get_music_player_instance()
+            if music_player.is_playing:
+                await music_player.stop()
+                logger.debug("MCP shutdown: 已停止音乐播放器")
+        except Exception as e:
+            logger.debug(f"停止音乐播放器失败: {e}")
+
         try:
             if self._server:
                 self._server.set_send_callback(None)
