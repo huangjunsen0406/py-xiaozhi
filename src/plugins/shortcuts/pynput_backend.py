@@ -5,7 +5,7 @@
 
 import asyncio
 import time
-from typing import Callable, Dict, Optional, Set
+from typing import Callable, Optional, Set
 
 from src.logging import get_logger
 

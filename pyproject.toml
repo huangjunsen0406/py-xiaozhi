@@ -1,11 +1,151 @@
+[project]
+name = "py-xiaozhi"
+version = "1.0.0"
+description = "小智 AI 客户端 - 跨平台语音助手"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Junsen", email = "junsen@example.com" }]
+keywords = ["ai", "voice-assistant", "xiaozhi"]
+
+dependencies = [
+    # GUI 框架
+    "PySide6>=6.6.0",
+    "qasync>=0.27.1",
+
+    # 音频处理
+    "numpy>=1.26.0",
+    "sounddevice>=0.4.4",
+    "soxr>=0.5.0",
+    "opuslib>=3.0.1",
+
+    # 网络通信
+    "aiohttp>=3.9.0",
+    "websockets>=11.0.3",
+    "paho-mqtt>=2.1.0",
+    "requests>=2.31.0",
+
+    # AI/ML
+    "openai>=1.0.0",
+    "sherpa-onnx>=1.12.8",
+    "onnxruntime==1.17.1",
+
+    # 图像处理
+    "opencv-python-headless>=4.9.0",
+    "pillow>=10.0.0",
+
+    # 加密
+    "cryptography>=42.0.0",
+
+    # 工具库
+    "psutil>=5.9.0",
+    "pendulum>=3.0.0",
+    "py-machineid>=0.6.0",
+
+    # 音乐/媒体
+    "mutagen>=1.47.0",
+
+    # 中文处理
+    "pypinyin>=0.51.0",
+    "lunar_python>=1.3.0",
+
+    # 剪贴板
+    "pyperclip>=1.8.0",
+
+    # 快捷键 (跨平台基础)
+    "pynput>=1.7.6",
+]
+
+[project.optional-dependencies]
+# macOS 特定依赖
+macos = [
+    "applescript>=2021.2.9",
+    "pyobjc-framework-Quartz>=10.0",
+    "pyobjc-framework-Cocoa>=10.0",
+]
+
+# Windows 特定依赖
+windows = [
+    "comtypes>=1.4.0",
+    "pycaw>=20230407",
+    "pywin32>=306",
+]
+
+# 开发依赖
+dev = [
+    "pyinstaller>=6.0.0",
+    "ruff>=0.4.0",
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+]
+
+[project.scripts]
+xiaozhi = "main:main"
+
+[project.urls]
+Homepage = "https://github.com/huangjunsen0406/py-xiaozhi"
+Repository = "https://github.com/huangjunsen0406/py-xiaozhi"
+
+# ============================================================
+# 依赖组 (uv/pip 通用)
+# ============================================================
+[dependency-groups]
+dev = [
+    "pyinstaller>=6.0.0",
+    "ruff>=0.4.0",
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+]
+
+# ============================================================
+# Ruff 配置 (替代 black + isort + flake8)
+# ============================================================
+[tool.ruff]
+target-version = "py310"
+line-length = 88
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # Pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "UP",  # pyupgrade
+]
+ignore = [
+    "E501",  # line too long (handled by formatter)
+    "B008",  # function call in default argument
+    "C901",  # too complex
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["src"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+
+# ============================================================
+# pytest 配置
+# ============================================================
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+
+# ============================================================
+# 保留旧工具配置（向后兼容）
+# ============================================================
 [tool.black]
 line-length = 88
-target-version = ['py39']
+target-version = ['py310']
 include = '\.pyi?$'
-# 确保复杂表达式会被适当换行
 extend-exclude = '''
 /(
-  # directories
   \.eggs
   | \.git
   | \.hg
@@ -25,5 +165,15 @@ include_trailing_comma = true
 force_grid_wrap = 0
 use_parentheses = true
 ensure_newline_before_comments = true
-known_first_party = ["src", "py_xiaozhi"]
+known_first_party = ["src"]
 sections = ["FUTURE", "STDLIB", "THIRDPARTY", "FIRSTPARTY", "LOCALFOLDER"]
+
+# ============================================================
+# 构建系统
+# ============================================================
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
