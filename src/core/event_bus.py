@@ -49,6 +49,7 @@ class Events:
     # UI 用户操作事件（View → Plugin）
     UI_BUTTON_PRESS = "ui_button_press"  # 按钮按下（手动模式）
     UI_BUTTON_RELEASE = "ui_button_release"  # 按钮释放（手动模式）
+    UI_MANUAL_TOGGLE = "ui_manual_toggle"  # 手动录音切换（点击开始/停止）
     UI_AUTO_TOGGLE = "ui_auto_toggle"  # 自动模式切换
     UI_AUTO_START = "ui_auto_start"  # 自动模式开始监听
     UI_ABORT_REQUEST = "ui_abort_request"  # 中断请求

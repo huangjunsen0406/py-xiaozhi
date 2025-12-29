@@ -76,6 +76,12 @@ class EventBridge(QObject):
         self._emit_event(Events.UI_BUTTON_RELEASE)
 
     @Slot()
+    def onManualToggle(self):
+        """手动模式录音切换（点击开始/停止）."""
+        logger.debug("EventBridge: 手动录音切换")
+        self._emit_event(Events.UI_MANUAL_TOGGLE)
+
+    @Slot()
     def onAutoToggle(self):
         """自动模式切换."""
         logger.debug("EventBridge: 自动模式切换")

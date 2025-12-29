@@ -33,6 +33,7 @@ class UIPlugin(Plugin):
         self.view_manager = None
         self._is_gui = False
         self.is_first = True
+        self._manual_recording = False  # 手动录音状态
 
     async def setup(self, ctx: "PluginContext", cmd: "PluginCommands") -> None:
         await super().setup(ctx, cmd)
@@ -64,6 +65,7 @@ class UIPlugin(Plugin):
         # 订阅用户操作事件（从 View 发出）
         self._ctx.event_bus.on(Events.UI_BUTTON_PRESS, self._press)
         self._ctx.event_bus.on(Events.UI_BUTTON_RELEASE, self._release)
+        self._ctx.event_bus.on(Events.UI_MANUAL_TOGGLE, self._manual_toggle)  # 新增 toggle 事件
         self._ctx.event_bus.on(Events.UI_AUTO_TOGGLE, self._auto_toggle)
         self._ctx.event_bus.on(Events.UI_AUTO_START, self._auto_start)
         self._ctx.event_bus.on(Events.UI_ABORT_REQUEST, self._abort)
@@ -81,8 +83,6 @@ class UIPlugin(Plugin):
     async def on_incoming_json(self, message) -> None:
         if not isinstance(message, dict):
             return
-
-        from src.core.event_bus import Events
 
         msg_type = message.get("type")
 
@@ -110,6 +110,12 @@ class UIPlugin(Plugin):
         if not self.view_manager:
             return
 
+        # 如果状态不是 LISTENING，重置手动录音标志
+        if state != DeviceState.LISTENING and self._manual_recording:
+            self._manual_recording = False
+            if self._is_gui:
+                self.view_manager.main_model.set_button_text("按住后说话")
+
         # 更新状态文本
         if status_text := self.STATE_TEXT_MAP.get(state):
             if self._is_gui:
@@ -131,6 +137,7 @@ class UIPlugin(Plugin):
             self._ctx.event_bus.off(Events.MUSIC_LYRICS_UPDATE, self._on_music_lyrics_update)
             self._ctx.event_bus.off(Events.UI_BUTTON_PRESS, self._press)
             self._ctx.event_bus.off(Events.UI_BUTTON_RELEASE, self._release)
+            self._ctx.event_bus.off(Events.UI_MANUAL_TOGGLE, self._manual_toggle)
             self._ctx.event_bus.off(Events.UI_AUTO_TOGGLE, self._auto_toggle)
             self._ctx.event_bus.off(Events.UI_AUTO_START, self._auto_start)
             self._ctx.event_bus.off(Events.UI_ABORT_REQUEST, self._abort)
@@ -181,6 +188,32 @@ class UIPlugin(Plugin):
     async def _release(self):
         """手动模式：释放停止录音."""
         await self._cmd.stop_listening()
+
+    async def _manual_toggle(self):
+        """手动模式：切换录音状态（点击开始/停止）."""
+
+        if not self._manual_recording:
+            # 开始录音
+            self._manual_recording = True
+            logger.debug("手动模式：开始录音")
+
+            # 更新按钮文本
+            if self.view_manager and self._is_gui:
+                self.view_manager.main_model.set_button_text("发送")
+
+            await self._cmd.connect_protocol()
+            from src.constants.constants import ListeningMode
+            await self._cmd.start_listening(ListeningMode.MANUAL)
+        else:
+            # 停止录音并发送
+            self._manual_recording = False
+            logger.debug("手动模式：停止录音并发送")
+
+            # 更新按钮文本
+            if self.view_manager and self._is_gui:
+                self.view_manager.main_model.set_button_text("按住后说话")
+
+            await self._cmd.stop_listening()
 
     async def _auto_toggle(self):
         """自动模式切换.

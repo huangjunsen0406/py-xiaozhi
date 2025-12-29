@@ -193,14 +193,14 @@ AppWindow {
                     anchors.bottomMargin: 10
                     spacing: Theme.spacingSm
 
-                    // 手动模式按钮（按住说话）
+                    // 手动模式按钮（点击切换录音）
                     Button {
                         id: manualBtn
                         Layout.preferredWidth: 100
                         Layout.fillWidth: true
                         Layout.maximumWidth: 140
                         Layout.preferredHeight: 38
-                        text: "按住后说话"
+                        text: (mainModel && mainModel.buttonText) ? mainModel.buttonText : "按住后说话"
                         visible: !(mainModel && mainModel.autoMode)
 
                         background: Rectangle {
@@ -216,8 +216,7 @@ AppWindow {
                             verticalAlignment: Text.AlignVCenter
                         }
 
-                        onPressed: { manualBtn.text = "松开以停止"; if (eventBridge) eventBridge.onButtonPress() }
-                        onReleased: { manualBtn.text = "按住后说话"; if (eventBridge) eventBridge.onButtonRelease() }
+                        onClicked: if (eventBridge) eventBridge.onManualToggle()
                     }
 
                     // 自动模式按钮
