@@ -1585,6 +1585,8 @@ version = "1.0.0"
 source = { editable = "." }
 dependencies = [
     { name = "aiohttp" },
+    { name = "applescript", marker = "sys_platform == 'darwin'" },
+    { name = "comtypes", marker = "sys_platform == 'win32'" },
     { name = "cryptography" },
     { name = "lunar-python" },
     { name = "mutagen" },
@@ -1599,12 +1601,20 @@ dependencies = [
     { name = "pillow" },
     { name = "psutil" },
     { name = "py-machineid" },
+    { name = "pycaw", marker = "sys_platform == 'win32'" },
+    { name = "pyinstaller" },
     { name = "pynput" },
+    { name = "pyobjc-framework-cocoa", marker = "sys_platform == 'darwin'" },
+    { name = "pyobjc-framework-quartz", marker = "sys_platform == 'darwin'" },
     { name = "pyperclip" },
     { name = "pypinyin" },
     { name = "pyside6" },
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "pywin32", marker = "sys_platform == 'win32'" },
     { name = "qasync" },
     { name = "requests" },
+    { name = "ruff" },
     { name = "sherpa-onnx" },
     { name = "sounddevice" },
     { name = "soxr" },
@@ -1612,12 +1622,6 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
-dev = [
-    { name = "pyinstaller" },
-    { name = "pytest" },
-    { name = "pytest-asyncio" },
-    { name = "ruff" },
-]
 macos = [
     { name = "applescript" },
     { name = "pyobjc-framework-cocoa" },
@@ -1640,7 +1644,9 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "aiohttp", specifier = ">=3.9.0" },
+    { name = "applescript", marker = "sys_platform == 'darwin'", specifier = ">=2021.2.9" },
     { name = "applescript", marker = "extra == 'macos'", specifier = ">=2021.2.9" },
+    { name = "comtypes", marker = "sys_platform == 'win32'", specifier = ">=1.4.0" },
     { name = "comtypes", marker = "extra == 'windows'", specifier = ">=1.4.0" },
     { name = "cryptography", specifier = ">=42.0.0" },
     { name = "lunar-python", specifier = ">=1.3.0" },
@@ -1655,26 +1661,30 @@ requires-dist = [
     { name = "pillow", specifier = ">=10.0.0" },
     { name = "psutil", specifier = ">=5.9.0" },
     { name = "py-machineid", specifier = ">=0.6.0" },
+    { name = "pycaw", marker = "sys_platform == 'win32'", specifier = ">=20230407" },
     { name = "pycaw", marker = "extra == 'windows'", specifier = ">=20230407" },
-    { name = "pyinstaller", marker = "extra == 'dev'", specifier = ">=6.0.0" },
+    { name = "pyinstaller", specifier = ">=6.0.0" },
     { name = "pynput", specifier = ">=1.7.6" },
+    { name = "pyobjc-framework-cocoa", marker = "sys_platform == 'darwin'", specifier = ">=10.0" },
     { name = "pyobjc-framework-cocoa", marker = "extra == 'macos'", specifier = ">=10.0" },
+    { name = "pyobjc-framework-quartz", marker = "sys_platform == 'darwin'", specifier = ">=10.0" },
     { name = "pyobjc-framework-quartz", marker = "extra == 'macos'", specifier = ">=10.0" },
     { name = "pyperclip", specifier = ">=1.8.0" },
     { name = "pypinyin", specifier = ">=0.51.0" },
     { name = "pyside6", specifier = ">=6.6.0" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },
-    { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.23.0" },
+    { name = "pytest", specifier = ">=8.0.0" },
+    { name = "pytest-asyncio", specifier = ">=0.23.0" },
+    { name = "pywin32", marker = "sys_platform == 'win32'", specifier = ">=306" },
     { name = "pywin32", marker = "extra == 'windows'", specifier = ">=306" },
     { name = "qasync", specifier = ">=0.27.1" },
     { name = "requests", specifier = ">=2.31.0" },
-    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.4.0" },
+    { name = "ruff", specifier = ">=0.4.0" },
     { name = "sherpa-onnx", specifier = ">=1.12.8" },
     { name = "sounddevice", specifier = ">=0.4.4" },
     { name = "soxr", specifier = ">=0.5.0" },
     { name = "websockets", specifier = ">=11.0.3" },
 ]
-provides-extras = ["macos", "windows", "dev"]
+provides-extras = ["macos", "windows"]
 
 [package.metadata.requires-dev]
 dev = [

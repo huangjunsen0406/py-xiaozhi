@@ -54,29 +54,40 @@ dependencies = [
 
     # 快捷键 (跨平台基础)
     "pynput>=1.7.6",
+
+    # ============================================================
+    # 平台特定依赖 (根据系统自动安装)
+    # ============================================================
+    # macOS 依赖
+    "applescript>=2021.2.9; sys_platform == 'darwin'",
+    "pyobjc-framework-Quartz>=10.0; sys_platform == 'darwin'",
+    "pyobjc-framework-Cocoa>=10.0; sys_platform == 'darwin'",
+
+    # Windows 依赖
+    "comtypes>=1.4.0; sys_platform == 'win32'",
+    "pycaw>=20230407; sys_platform == 'win32'",
+    "pywin32>=306; sys_platform == 'win32'",
+
+    # 开发
+    "pyinstaller>=6.0.0",
+    "ruff>=0.4.0",
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
 ]
 
 [project.optional-dependencies]
-# macOS 特定依赖
+# macOS 特定依赖 (已通过环境标记自动安装，保留用于显式安装)
 macos = [
     "applescript>=2021.2.9",
     "pyobjc-framework-Quartz>=10.0",
     "pyobjc-framework-Cocoa>=10.0",
 ]
 
-# Windows 特定依赖
+# Windows 特定依赖 (已通过环境标记自动安装，保留用于显式安装)
 windows = [
     "comtypes>=1.4.0",
     "pycaw>=20230407",
     "pywin32>=306",
-]
-
-# 开发依赖
-dev = [
-    "pyinstaller>=6.0.0",
-    "ruff>=0.4.0",
-    "pytest>=8.0.0",
-    "pytest-asyncio>=0.23.0",
 ]
 
 [project.scripts]
