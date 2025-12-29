@@ -403,21 +403,15 @@ class CLIDisplay:
         sys.stdout.flush()
 
     async def _handle_command(self, cmd: str):
-        """处理命令."""
+        """处理命令 - 全部转发给 ViewManager."""
         if not cmd:
             return
 
-        cmd_lower = cmd.lower()
-
-        if cmd_lower == "q":
-            await self.close()
-        elif cmd_lower == "h":
-            self._show_help()
-        elif self._on_command:
-            # 同步回调，直接调用
+        if self._on_command:
+            # 所有命令都转发，不拦截
             self._on_command(cmd)
 
-    def _show_help(self):
+    def show_help(self):
         """显示帮助."""
         self._dash_text = "命令: r=开始/停止 | x=打断 | q=退出 | h=帮助 | 其他=发送文本"
         self._schedule_render()

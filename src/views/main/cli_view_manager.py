@@ -106,27 +106,21 @@ class CLIViewManager:
         logger.info("CLIViewManager: 已关闭")
 
     def _handle_command(self, cmd: str):
-        """处理用户命令."""
+        """处理用户命令 - 统一入口."""
         cmd_lower = cmd.lower()
 
         if cmd_lower == "r":
             # 开始/停止对话
-            if self._auto_mode:
-                self._safe_emit(Events.UI_AUTO_START)
-            else:
-                # 手动模式：模拟按下/释放
-                self._safe_create_task(self._toggle_manual())
+            self._safe_emit(Events.UI_MANUAL_TOGGLE)
         elif cmd_lower == "x":
             # 中断
             self._safe_emit(Events.UI_ABORT_REQUEST)
-        elif cmd_lower == "m":
-            # 切换模式
-            self._auto_mode = not self._auto_mode
-            self._display.update_auto_mode(self._auto_mode)
-            self._safe_emit(Events.UI_AUTO_TOGGLE)
         elif cmd_lower == "q":
             # 退出
             self._safe_emit(Events.UI_QUIT_REQUEST)
+        elif cmd_lower == "h":
+            # 显示帮助
+            self._display.show_help()
         else:
             # 发送文本
             self._safe_emit(Events.UI_SEND_TEXT, {"text": cmd})
@@ -142,19 +136,6 @@ class CLIViewManager:
                 self._loop.call_soon_threadsafe(
                     lambda e=event, d=data: asyncio.create_task(self._event_bus.emit(e, d))
                 )
-
-    def _safe_create_task(self, coro):
-        """安全地创建任务."""
-        if self._loop and self._loop.is_running():
-            self._loop.call_soon_threadsafe(
-                lambda: asyncio.create_task(coro)
-            )
-
-    async def _toggle_manual(self):
-        """手动模式切换."""
-        await self._event_bus.emit(Events.UI_BUTTON_PRESS)
-        await asyncio.sleep(0.1)
-        await self._event_bus.emit(Events.UI_BUTTON_RELEASE)
 
     # ========== 公共 API ==========
 
