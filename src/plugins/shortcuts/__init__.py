@@ -72,21 +72,6 @@ class _CmdAdapter:
         self._cmd = cmd
         self._ctx = ctx
 
-    async def start_listening(self):
-        try:
-            await self._cmd.connect_protocol()
-            from src.constants.constants import ListeningMode
-
-            await self._cmd.start_listening(ListeningMode.MANUAL)
-        except Exception as e:
-            logger.error(f"开始监听失败: {e}")
-
-    async def stop_listening(self):
-        try:
-            await self._cmd.stop_listening()
-        except Exception as e:
-            logger.error(f"停止监听失败: {e}")
-
     async def toggle_chat_state(self):
         try:
             await self._cmd.connect_protocol()
@@ -130,7 +115,6 @@ class ShortcutsPlugin(Plugin):
         self._config = ConfigManager.get_instance()
         self._shortcuts_config: Dict = {}
         self._enabled = True
-        self._manual_press_active = False
 
     async def setup(self, ctx: "PluginContext", cmd: "PluginCommands") -> None:
         await super().setup(ctx, cmd)
@@ -211,20 +195,15 @@ class ShortcutsPlugin(Plugin):
             self._backend.register(name, config, handler)
 
     def _handle_manual_press(self) -> None:
-        """处理手动按键快捷键."""
-        if not self._adapter or not self._loop:
+        """处理手动按键快捷键 - 使用 UI_MANUAL_TOGGLE 事件."""
+        if not self._event_bus or not self._loop:
             return
 
-        if not self._manual_press_active:
-            self._manual_press_active = True
-            asyncio.run_coroutine_threadsafe(
-                self._adapter.start_listening(), self._loop
-            )
-        else:
-            self._manual_press_active = False
-            asyncio.run_coroutine_threadsafe(
-                self._adapter.stop_listening(), self._loop
-            )
+        from src.core.event_bus import Events
+
+        asyncio.run_coroutine_threadsafe(
+            self._event_bus.emit(Events.UI_MANUAL_TOGGLE), self._loop
+        )
 
     def _handle_auto_toggle(self) -> None:
         """处理自动对话切换快捷键."""
