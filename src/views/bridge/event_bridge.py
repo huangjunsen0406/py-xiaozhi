@@ -4,8 +4,8 @@
 import asyncio
 from typing import Callable, Optional
 
-from PySide6.QtCore import QObject, Signal, Slot, QTimer
-from PySide6.QtGui import QClipboard, QGuiApplication
+from PySide6.QtCore import QObject, QTimer, Signal, Slot
+from PySide6.QtGui import QGuiApplication
 
 from src.core.event_bus import EventBus, Events
 from src.logging import get_logger
