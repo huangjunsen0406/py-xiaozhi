@@ -76,6 +76,8 @@ class ConfigManager:
             "output_sample_rate": None,
             "input_channels": None,
             "output_channels": None,
+            "opus_output_sample_rate": 24000,  # Opus 解码采样率：24000(官方) 或 16000(第三方)
+            "frame_duration": 20,  # 音频帧长度(ms)：20(低延迟) / 40(平衡) / 60(低CPU)
         },
         "LOGGING": {
             "LEVEL": "INFO",  # DEBUG, INFO, WARNING, ERROR, CRITICAL

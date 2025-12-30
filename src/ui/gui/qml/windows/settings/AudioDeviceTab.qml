@@ -253,6 +253,119 @@ ScrollView {
             color: Theme.divider
         }
 
+        // Opus 输出采样率
+        ColumnLayout {
+            Layout.fillWidth: true
+            spacing: Theme.spacingMd
+
+            Text {
+                text: "Opus 输出采样率"
+                font.pixelSize: Theme.fontSizeMd
+                font.weight: Font.Medium
+                color: Theme.textSecondary
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: Theme.spacingMd
+
+                XComboBox {
+                    id: sampleRateCombo
+                    Layout.fillWidth: true
+                    model: ["24000 Hz (官方服务器)", "16000 Hz (第三方服务器)"]
+                    currentIndex: settingsModel ? (settingsModel.opusOutputSampleRate === 24000 ? 0 : 1) : 0
+                    onActivated: function(index) {
+                        if (settingsModel) {
+                            settingsModel.opusOutputSampleRate = (index === 0) ? 24000 : 16000
+                            addLog("Opus 输出采样率已设置为 " + (index === 0 ? "24000" : "16000") + " Hz")
+                        }
+                    }
+                    font.pixelSize: Theme.fontSizeSm
+                }
+            }
+
+            // 提示
+            Rectangle {
+                Layout.fillWidth: true
+                height: 36
+                color: Theme.backgroundSecondary
+                radius: Theme.radiusSm
+
+                Text {
+                    anchors.left: parent.left
+                    anchors.leftMargin: Theme.spacingMd
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: "官方服务器使用 24kHz，第三方服务器通常使用 16kHz"
+                    font.pixelSize: Theme.fontSizeXs
+                    color: Theme.textPlaceholder
+                }
+            }
+        }
+
+        // 分隔线
+        Rectangle {
+            Layout.fillWidth: true
+            height: 1
+            color: Theme.divider
+        }
+
+        // 音频帧长度
+        ColumnLayout {
+            Layout.fillWidth: true
+            spacing: Theme.spacingMd
+
+            Text {
+                text: "音频帧长度"
+                font.pixelSize: Theme.fontSizeMd
+                font.weight: Font.Medium
+                color: Theme.textSecondary
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: Theme.spacingMd
+
+                XComboBox {
+                    id: frameDurationCombo
+                    Layout.fillWidth: true
+                    model: ["20 ms (低延迟)", "40 ms (平衡)", "60 ms (低CPU)"]
+                    currentIndex: {
+                        if (!settingsModel) return 0
+                        var duration = settingsModel.frameDuration
+                        if (duration === 20) return 0
+                        if (duration === 40) return 1
+                        if (duration === 60) return 2
+                        return 0
+                    }
+                    onActivated: function(index) {
+                        if (settingsModel) {
+                            var durations = [20, 40, 60]
+                            settingsModel.frameDuration = durations[index]
+                            addLog("音频帧长度已设置为 " + durations[index] + " ms")
+                        }
+                    }
+                    font.pixelSize: Theme.fontSizeSm
+                }
+            }
+
+            // 提示
+            Rectangle {
+                Layout.fillWidth: true
+                height: 36
+                color: Theme.backgroundSecondary
+                radius: Theme.radiusSm
+
+                Text {
+                    anchors.left: parent.left
+                    anchors.leftMargin: Theme.spacingMd
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: "20ms 低延迟高CPU，60ms 高延迟低CPU（适合树莓派）"
+                    font.pixelSize: Theme.fontSizeXs
+                    color: Theme.textPlaceholder
+                }
+            }
+        }
+
         // 提示信息
         Text {
             Layout.fillWidth: true

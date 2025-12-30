@@ -46,31 +46,21 @@ class EventType:
     AUDIO_OUTPUT_READY_EVENT = "audio_output_ready_event"
 
 
-def is_official_server(ws_addr: str) -> bool:
-    """判断是否为小智官方的服务器地址.
-
-    Args:
-        ws_addr (str): WebSocket 地址
-
-    Returns:
-        bool: 是否为小智官方的服务器地址
-    """
-    return "api.tenclass.net" in ws_addr
-
-
 def get_frame_duration() -> int:
     """获取设备的帧长度.
 
+    优先从配置读取，无配置时根据设备架构自动检测。
+
     返回:
-        int: 帧长度(毫秒)
+        int: 帧长度(毫秒)，支持 20/40/60
     """
     try:
-        # 检查是否为官方服务器
-        ota_url = config.get_config("SYSTEM_OPTIONS.NETWORK.OTA_VERSION_URL")
-        if not is_official_server(ota_url):
-            return 60
+        # 优先从配置读取
+        configured = config.get_config("AUDIO_DEVICES.frame_duration")
+        if configured in [20, 40, 60]:
+            return configured
 
-        # 检测ARM架构设备（如树莓派）
+        # 无配置时自动检测（保持向后兼容）
         machine = platform.machine().lower()
         arm_archs = ["arm", "aarch64", "armv7l", "armv6l"]
         is_arm_device = any(arch in machine for arch in arm_archs)
@@ -94,9 +84,8 @@ class AudioConfig:
 
     # 固定配置
     INPUT_SAMPLE_RATE = 16000  # 输入采样率16kHz
-    # 输出采样率：官方服务器使用24kHz，其他使用16kHz
-    _ota_url = config.get_config("SYSTEM_OPTIONS.NETWORK.OTA_VERSION_URL")
-    OUTPUT_SAMPLE_RATE = 24000 if is_official_server(_ota_url) else 16000
+    # 输出采样率：从配置读取，默认24kHz（官方服务器推荐值）
+    OUTPUT_SAMPLE_RATE = config.get_config("AUDIO_DEVICES.opus_output_sample_rate", 24000)
     CHANNELS = 1  # 服务端协议要求：单声道
 
     # 设备声道限制（避免多声道设备性能浪费）

@@ -581,6 +581,25 @@ class SettingsModel(BaseModel):
 
     outputDeviceInfo = Property(str, _get_outputDeviceInfo, notify=settingsChanged)
 
+    # Opus 输出采样率
+    def _get_opusOutputSampleRate(self) -> int:
+        return self._get_value("AUDIO_DEVICES.opus_output_sample_rate", 24000)
+
+    def _set_opusOutputSampleRate(self, value: int):
+        self._set_value("AUDIO_DEVICES.opus_output_sample_rate", value)
+
+    opusOutputSampleRate = Property(int, _get_opusOutputSampleRate, _set_opusOutputSampleRate, notify=settingsChanged)
+
+    # 音频帧长度
+    def _get_frameDuration(self) -> int:
+        return self._get_value("AUDIO_DEVICES.frame_duration", 20)
+
+    def _set_frameDuration(self, value: int):
+        if value in [20, 40, 60]:
+            self._set_value("AUDIO_DEVICES.frame_duration", value)
+
+    frameDuration = Property(int, _get_frameDuration, _set_frameDuration, notify=settingsChanged)
+
     # 音频测试
     @Slot()
     def testInputDevice(self):
