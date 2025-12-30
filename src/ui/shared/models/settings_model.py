@@ -4,24 +4,17 @@
 完整支持所有配置项，参照旧 PyQt5 实现。
 """
 
-import asyncio
 import json
-import re
 import threading
 import time
 from pathlib import Path
-from typing import Any, List, Optional
+from typing import Any, List
 
 import numpy as np
 import sounddevice as sd
-from PySide6.QtCore import Property, QObject, Signal, Slot
+from PySide6.QtCore import Property, Signal, Slot
 
-from src.audio_processing.keyword_converters import (
-    PinyinConverter,
-    BpeConverter,
-    detect_language,
-    convert_wake_word,
-)
+from src.audio_processing.keyword_converters import convert_wake_word
 from src.logging import get_logger
 from src.utils.config_manager import ConfigManager
 
@@ -318,7 +311,7 @@ class SettingsModel(BaseModel):
             return
 
         try:
-            keyword_line, lang, model_path = convert_wake_word(self._wake_word)
+            keyword_line, lang, _ = convert_wake_word(self._wake_word)
             self._wake_word_preview = keyword_line
             self._wake_word_lang = lang
         except Exception as e:
@@ -641,7 +634,6 @@ class SettingsModel(BaseModel):
 
             # 分析录音
             max_amplitude = np.max(np.abs(recording))
-            rms = np.sqrt(np.mean(recording ** 2))
 
             if max_amplitude < 0.001:
                 self.statusMessage.emit("[失败] 未检测到音频信号")
