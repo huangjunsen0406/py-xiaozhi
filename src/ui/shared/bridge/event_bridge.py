@@ -104,7 +104,7 @@ class EventBridge(QObject):
         """发送文本."""
         if text.strip():
             logger.debug(f"EventBridge: 发送文本: {text[:20]}...")
-            from src.views.models.main_model import UISendTextData
+            from src.ui.shared.models.main_model import UISendTextData
             self._emit_event(Events.UI_SEND_TEXT, UISendTextData(text=text))
 
     @Slot()

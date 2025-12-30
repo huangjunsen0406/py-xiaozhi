@@ -192,7 +192,7 @@ py-xiaozhi/
 │   │   └── tools/             # Various tool modules
 │   ├── protocols/              # Communication protocols
 │   ├── utils/                  # Utility functions
-│   └── views/                  # UI view components
+│   └── ui/                     # UI view components
 ├── libs/                       # Third-party native libraries
 │   ├── libopus/               # Opus audio codec library
 │   ├── webrtc_apm/            # WebRTC audio processing module

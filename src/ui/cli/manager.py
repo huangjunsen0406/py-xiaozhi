@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Optional
 from src.core.event_bus import EventBus, Events
 from src.logging import get_logger
 
-from .cli_display import CLIDisplay
+from .display import CLIDisplay
 
 if TYPE_CHECKING:
     pass

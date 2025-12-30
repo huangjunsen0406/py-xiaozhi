@@ -133,7 +133,7 @@ const modules = [
     ]
   },
   {
-    name: 'src/views/',
+    name: 'src/ui/',
     icon: ComputerDesktopIcon,
     features: [
       'PySide6 + QML 声明式 UI',

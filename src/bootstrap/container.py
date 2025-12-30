@@ -331,7 +331,7 @@ class ServiceContainer:
 
         # 发射 UI 状态更新事件，显示未连接状态
         from src.core.event_bus import Events
-        from src.views.events import UIStatusUpdate
+        from src.ui.shared.events import UIStatusUpdate
 
         await self.event_bus.emit(
             Events.UI_UPDATE_STATUS, UIStatusUpdate(status="未连接", connected=False)

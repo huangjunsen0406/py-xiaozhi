@@ -89,7 +89,7 @@ async def handle_activation(mode: str) -> bool:
 
 async def _run_gui_activation(activation_service) -> bool:
     """运行 GUI 激活流程."""
-    from src.views.activation import GUIActivation
+    from src.ui.gui import GUIActivation
 
     gui_activation = GUIActivation(activation_service)
     return await gui_activation.run()
@@ -97,7 +97,7 @@ async def _run_gui_activation(activation_service) -> bool:
 
 async def _run_cli_activation(activation_service) -> bool:
     """运行 CLI 激活流程."""
-    from src.views.activation import CLIActivation
+    from src.ui.cli import CLIActivation
 
     cli_activation = CLIActivation(activation_service)
     return await cli_activation.run_activation_process()

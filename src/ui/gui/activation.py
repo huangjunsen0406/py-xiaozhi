@@ -11,7 +11,7 @@ from PySide6.QtQml import QQmlApplicationEngine
 
 from src.activation import ActivationService
 from src.logging import get_logger
-from src.views.models import ActivationModel
+from src.ui.shared.models import ActivationModel
 
 logger = get_logger()
 
@@ -71,7 +71,7 @@ class GUIActivation(QObject):
         ctx.setContextProperty("activationController", self)
 
         # 加载 QML
-        qml_dir = Path(__file__).parent.parent / "qml"
+        qml_dir = Path(__file__).parent / "qml"
         self._engine.addImportPath(str(qml_dir))
 
         qml_file = qml_dir / "windows" / "ActivationWindow.qml"

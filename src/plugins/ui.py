@@ -42,13 +42,13 @@ class UIPlugin(Plugin):
     def _create_view_manager(self):
         """创建 ViewManager 实例."""
         if self.mode == "gui":
-            from src.views import ViewManager
+            from src.ui import ViewManager
 
             self._is_gui = True
             self.view_manager = ViewManager(event_bus=self._ctx.event_bus)
         else:
             # CLI 模式使用 CLIViewManager
-            from src.views.main import CLIViewManager
+            from src.ui.cli import CLIViewManager
 
             self._is_gui = False
             self.view_manager = CLIViewManager(event_bus=self._ctx.event_bus)

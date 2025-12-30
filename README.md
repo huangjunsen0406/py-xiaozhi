@@ -191,7 +191,7 @@ py-xiaozhi/
 │   │   └── tools/             # 各种工具模块
 │   ├── protocols/              # 通信协议
 │   ├── utils/                  # 工具函数
-│   └── views/                  # UI视图组件
+│   └── ui/                     # UI视图组件
 ├── libs/                       # 第三方原生库
 │   ├── libopus/               # Opus音频编解码库
 │   ├── webrtc_apm/            # WebRTC音频处理模块

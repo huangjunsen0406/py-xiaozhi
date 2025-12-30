@@ -11,9 +11,9 @@ from PySide6.QtQml import QQmlApplicationEngine
 from src.core.event_bus import EventBus, Events
 from src.logging import get_logger
 
-from .bridge import EventBridge
-from .models import ActivationModel, MainModel, SettingsModel
-from .services import EmotionService, TrayService
+from src.ui.shared.bridge import EventBridge
+from src.ui.shared.models import ActivationModel, MainModel, SettingsModel
+from src.ui.gui.services import EmotionService, TrayService
 
 logger = get_logger()
 
