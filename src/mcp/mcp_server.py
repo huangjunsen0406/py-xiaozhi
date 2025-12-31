@@ -278,6 +278,12 @@ class McpServer:
         music_manager = get_music_tools_manager()
         music_manager.init_tools(self.add_tool, PropertyList, Property, PropertyType)
 
+        # 添加人脸情绪分析工具
+        from src.mcp.tools.emotion import get_emotion_manager
+
+        emotion_manager = get_emotion_manager()
+        emotion_manager.init_tools(self.add_tool, PropertyList, Property, PropertyType)
+
         # 添加摄像头工具
         from src.mcp.tools.camera import take_photo
 
