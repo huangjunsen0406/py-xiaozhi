@@ -12,7 +12,9 @@ os.environ["QT_QUICK_CONTROLS_STYLE"] = "Basic"
 
 def parse_args():
     """解析命令行参数."""
-    parser = argparse.ArgumentParser(description="小智Ai客户端")
+    from src.constants.system import SystemConstants
+
+    parser = argparse.ArgumentParser(description=SystemConstants.APP_DISPLAY_NAME)
     parser.add_argument(
         "--mode",
         choices=["gui", "cli"],
@@ -36,13 +38,14 @@ def parse_args():
 # 先解析参数，再初始化日志
 _args = parse_args()
 
-from src.logging import setup_logging
+from src.logging import setup_logging  # noqa: E402
 
 # CLI 模式禁用控制台日志输出（由 CLIDisplay 接管）
 setup_logging(enable_console=(_args.mode != "cli"))
 
-from src.bootstrap.container import ServiceContainer
-from src.logging import get_logger
+from src.bootstrap.container import ServiceContainer  # noqa: E402
+from src.constants.system import SystemConstants  # noqa: E402
+from src.logging import get_logger  # noqa: E402
 
 logger = get_logger()
 
@@ -106,7 +109,7 @@ async def _run_cli_activation(activation_service) -> bool:
 async def start_app(mode: str, protocol: str, skip_activation: bool) -> int:
     """启动应用的统一入口."""
     global _container  # 用于 SIGINT 处理
-    logger.info("启动小智AI客户端")
+    logger.info(f"启动{SystemConstants.APP_DISPLAY_NAME}")
 
     # 处理激活流程
     if not skip_activation:

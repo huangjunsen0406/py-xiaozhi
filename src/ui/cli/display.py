@@ -15,6 +15,7 @@ import sys
 from collections import deque
 from typing import Callable, Optional
 
+from src.constants.system import SystemConstants
 from src.logging import get_logger
 
 logger = get_logger()
@@ -218,7 +219,7 @@ class CLIDisplay:
             prefix = "".join(self._ansi.get(n, "") for n in names)
             return f"{prefix}{s}{self._ansi['reset']}"
 
-        title = style(" 小智 AI 终端 ", "bold", "cyan")
+        title = style(f" {SystemConstants.APP_DISPLAY_NAME} ", "bold", "cyan")
 
         # 框架
         top_bar = "┌" + ("─" * (max(2, cols - 2))) + "┐"

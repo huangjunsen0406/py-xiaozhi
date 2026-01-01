@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import Optional
 
 from src.activation import ActivationService
+from src.constants.system import SystemConstants
 from src.logging import get_logger
 
 logger = get_logger()
@@ -87,7 +88,7 @@ class CLIActivation:
     def _print_header(self):
         """打印头部信息."""
         print("\n" + "=" * 60)
-        print("小智AI客户端 - 设备激活")
+        print(f"{SystemConstants.APP_DISPLAY_NAME} - 设备激活")
         print("=" * 60)
 
     def _print_device_info(self):
@@ -136,7 +137,7 @@ class CLIActivation:
         print("设备激活成功!")
         print("=" * 60)
         print("设备已成功添加到您的账户")
-        print("正在启动小智AI客户端...")
+        print(f"正在启动{SystemConstants.APP_DISPLAY_NAME}...")
         print("=" * 60 + "\n")
 
     def _print_failure(self):
