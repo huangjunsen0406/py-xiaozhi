@@ -17,12 +17,17 @@ logger = get_logger()
 
 class WakeWordPlugin(Plugin):
     name = "wake_word"
-    priority = 30  # 依赖 AudioPlugin
+    priority = 30
+    requires = ["audio"]  # 声明依赖 AudioPlugin
 
     def __init__(self) -> None:
         super().__init__()
         self.detector = None
-        self._audio_plugin = None  # 引用 AudioPlugin 获取 codec
+
+    @property
+    def _audio_plugin(self):
+        """通过依赖注入获取 AudioPlugin."""
+        return self.get_dep("audio")
 
     async def setup(self, ctx: "PluginContext", cmd: "PluginCommands") -> None:
         await super().setup(ctx, cmd)
@@ -55,12 +60,6 @@ class WakeWordPlugin(Plugin):
         """配置变更时重新加载唤醒词模型."""
         logger.info("WakeWordPlugin: 收到配置变更事件，重新加载唤醒词模型")
         await self.reload_model()
-
-    def set_audio_plugin(self, audio_plugin) -> None:
-        """
-        设置 AudioPlugin 引用（由 ServiceContainer 调用）.
-        """
-        self._audio_plugin = audio_plugin
 
     async def start(self) -> None:
         if not self.detector:

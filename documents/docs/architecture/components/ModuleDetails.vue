@@ -29,13 +29,11 @@ import {
   DocumentIcon,
   SpeakerXMarkIcon,
   ComputerDesktopIcon,
-  ServerIcon,
   LightBulbIcon,
   WrenchIcon,
   CheckCircleIcon,
   CpuChipIcon,
   MapIcon,
-  CommandLineIcon,
   BoltIcon
 } from '@heroicons/vue/24/solid';
 import { useData } from 'vitepress';
@@ -48,110 +46,90 @@ const modules = [
     name: 'src/bootstrap/',
     icon: CogIcon,
     features: [
-      'ServiceContainer 服务容器，管理全局状态',
-      '异步事件驱动架构，基于 asyncio + qasync',
-      '设备状态机 (IDLE/LISTENING/SPEAKING)',
-      '统一生命周期管理 (start/stop/shutdown)',
-      '协议工厂，动态创建 WebSocket/MQTT 连接'
+      'ServiceContainer 聚合核心服务，统一管理生命周期',
+      'PluginContext/PluginCommands 适配器暴露受控 API',
+      '按依赖拓扑排序加载 Audio/WakeWord/UI/Shortcuts/MCP 插件'
     ]
   },
   {
     name: 'src/core/',
     icon: BoltIcon,
     features: [
-      'EventBus 事件总线，解耦模块通信',
-      'TaskManager 异步任务池管理',
-      'ProtocolManager 协议管理器',
-      'StateManager 设备状态管理',
-      '支持热重载配置变更'
+      'EventBus 实现组件间解耦通信，支持异步事件处理',
+      'StateManager 维护 DeviceState/ListeningMode 状态机',
+      'ProtocolManager 封装协议连接与消息发送'
     ]
   },
   {
     name: 'src/plugins/',
     icon: CpuChipIcon,
     features: [
-      'PluginManager 按优先级注册插件',
-      '统一生命周期 (setup/start/stop/shutdown)',
-      '事件广播机制 (协议、音频、UI)',
-      'Audio/MCP/UI/WakeWord/Shortcuts 核心插件',
-      '插件隔离，错误不传播'
-    ]
-  },
-  {
-    name: 'src/plugins/shortcuts/',
-    icon: CommandLineIcon,
-    features: [
-      'macOS: Quartz Event Tap (系统级热键)',
-      'Linux/Windows: pynput 后端',
-      '平台自动检测，工厂模式创建',
-      '健康检查与自动重启机制',
-      '支持 Ctrl/Alt/Cmd + 任意键组合'
-    ]
-  },
-  {
-    name: 'src/mcp/',
-    icon: WrenchIcon,
-    features: [
-      '基于 MCP 协议的工具服务器',
-      '丰富工具生态 (系统/音乐/相机/八字)',
-      'Property/Method 抽象，支持异步调用',
-      '类型安全参数验证',
-      '工具分类管理 (camera/music/bazi 等)'
+      'PluginManager 拓扑排序依赖，统一 setup/start/stop/shutdown',
+      'AudioPlugin 管理音频编解码与音乐播放控制',
+      'UIPlugin 支持 GUI/CLI 双模式，ShortcutsPlugin 处理快捷键'
     ]
   },
   {
     name: 'src/protocols/',
     icon: ArrowsRightLeftIcon,
     features: [
-      '抽象 Protocol 基类，统一接口',
-      'WebSocket 和 MQTT 双协议实现',
-      'WSS/TLS 加密传输，自动重连',
-      '支持文本/音频/IoT/MCP 消息类型',
-      '连接状态管理和错误回调'
+      'Protocol 抽象定义音频/文本/控制消息接口',
+      'WebSocket/MQTT 双实现，支持实时音频通道',
+      '广播 AUDIO_CHANNEL_* 事件驱动状态变更'
     ]
   },
   {
     name: 'src/audio_codecs/',
     icon: DocumentIcon,
     features: [
-      'Opus 编解码 (16kHz 编码 / 24kHz 解码)',
-      'SoXR 实时重采样 (任意采样率)',
-      '智能声道转换 (下混/上混)',
-      '低延迟流式缓冲 (5ms 处理)',
-      '观察者模式解耦音频监听'
+      'AudioCodec 组合设备管理、Opus编解码、重采样模块',
+      '输入流重采样到 16kHz 单声道 Opus 编码',
+      '支持热重载音频设备与低延迟播放缓冲'
     ]
   },
   {
     name: 'src/audio_processing/',
     icon: SpeakerXMarkIcon,
     features: [
-      'Sherpa-ONNX 唤醒词检测',
-      '支持多唤醒词和拼音匹配',
-      '实时音频流处理',
-      '异步事件通知机制',
-      '热重载模型支持'
+      'WakeWordDetector 基于 sherpa-onnx 关键词检测',
+      '重用 AudioCodec PCM 流，异步队列检测循环',
+      '检测结果触发 start_listening/abort_speaking'
+    ]
+  },
+  {
+    name: 'src/mcp/',
+    icon: WrenchIcon,
+    features: [
+      'McpServer 实现 MCP 规范与 JSON-RPC 2.0',
+      '装饰器模式自动发现并注册工具函数',
+      '音乐播放器通过 EventBus 广播状态与歌词'
     ]
   },
   {
     name: 'src/ui/',
     icon: ComputerDesktopIcon,
     features: [
-      'PySide6 + QML 声明式 UI',
-      'MVVM 架构 (Model/Bridge/QML)',
-      '系统托盘和全局快捷键',
-      '设置/激活/主窗口组件',
-      'EventBridge 连接 Python 与 QML'
+      'PySide6/QML 实现 GUI，CLIViewManager 实现命令行界面',
+      'EventBridge 连接 Python 与 QML 的双向通信',
+      '系统托盘、情绪表情、设置窗口均由 EventBus 驱动'
+    ]
+  },
+  {
+    name: 'src/activation/',
+    icon: LightBulbIcon,
+    features: [
+      'ActivationService 处理设备激活与 OTA 信息',
+      'efuse.json 缓存序列号/HMAC 等设备指纹',
+      '提供激活状态 API 给 UI 显示'
     ]
   },
   {
     name: 'src/utils/',
     icon: MapIcon,
     features: [
-      'ConfigManager 分层配置管理',
-      '点记法访问 (AUDIO_DEVICES.input_device_id)',
-      '音频设备枚举和选择',
-      'Opus 动态库加载器',
-      '跨平台音量控制'
+      'ConfigManager 管理配置文件，支持点记法访问',
+      'ResourceFinder 解析资源路径，AudioDeviceManager 探测设备',
+      '封装跨平台音量、剪贴板等工具函数'
     ]
   }
 ];

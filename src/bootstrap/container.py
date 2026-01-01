@@ -270,11 +270,11 @@ class ServiceContainer:
             shortcuts_plugin,
         )
 
-        # 初始化所有插件
+        # 初始化所有插件（PluginManager 会自动拓扑排序并注入依赖）
         await self.plugins.setup_all(ctx, cmd)
 
-        # 设置插件间依赖
-        wake_word_plugin.set_audio_plugin(audio_plugin)
+        # 设置音频直连通道（TTS 音频不经过 EventBus，减少延迟）
+        self.protocol.set_audio_handler(audio_plugin.on_incoming_audio)
 
     def _setup_event_handlers(self) -> None:
         """
@@ -283,7 +283,7 @@ class ServiceContainer:
         self.event_bus.on(Events.AUDIO_CHANNEL_OPENED, self._on_audio_channel_opened)
         self.event_bus.on(Events.AUDIO_CHANNEL_CLOSED, self._on_audio_channel_closed)
         self.event_bus.on(Events.INCOMING_JSON, self._on_incoming_json)
-        self.event_bus.on(Events.INCOMING_AUDIO, self._on_incoming_audio)
+        # 注意：INCOMING_AUDIO 走直连通道，不再通过 EventBus
         self.event_bus.on(Events.NETWORK_ERROR, self._on_network_error)
         self.event_bus.on(Events.DEVICE_STATE_CHANGED, self._on_device_state_changed)
 
@@ -322,9 +322,6 @@ class ServiceContainer:
 
     async def _on_audio_channel_closed(self, _=None) -> None:
         await self.state.set_device_state(DeviceState.IDLE)
-
-    async def _on_incoming_audio(self, data: bytes) -> None:
-        await self.plugins.notify_incoming_audio(data)
 
     async def _on_network_error(self, error_message: str = None) -> None:
         self.state.set_keep_listening(False)

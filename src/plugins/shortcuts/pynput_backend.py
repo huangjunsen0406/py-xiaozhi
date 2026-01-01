@@ -77,9 +77,11 @@ class PynputShortcutBackend(ShortcutBackend):
         # 停止健康检查
         if self._health_check_task:
             self._health_check_task.cancel()
+            # concurrent.futures.Future 不能直接 await，需要特殊处理
             try:
-                await self._health_check_task
-            except asyncio.CancelledError:
+                # 等待 Future 完成（忽略取消异常）
+                self._health_check_task.result(timeout=1.0)
+            except Exception:
                 pass
             self._health_check_task = None
 
