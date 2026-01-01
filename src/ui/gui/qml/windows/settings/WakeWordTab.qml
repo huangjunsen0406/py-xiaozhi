@@ -90,7 +90,7 @@ ScrollView {
                     width: langLabel.width + 16
                     height: 24
                     radius: Theme.radiusSm
-                    color: settingsModel && settingsModel.wakeWordLang === "zh" ? "#e8f3ff" : "#e8fff0"
+                    color: settingsModel && settingsModel.wakeWordLang === "zh" ? Theme.primaryLight : Theme.successLight
 
                     Text {
                         id: langLabel
@@ -156,7 +156,7 @@ ScrollView {
 
                     background: Rectangle {
                         radius: Theme.radiusSm
-                        color: parent.enabled ? (parent.pressed ? "#0e42d2" : (parent.hovered ? "#4080ff" : Theme.primary)) : Theme.textPlaceholder
+                        color: parent.enabled ? (parent.pressed ? Theme.primaryPressed : (parent.hovered ? Theme.primaryHover : Theme.primary)) : Theme.textPlaceholder
                     }
 
                     enabled: settingsModel && settingsModel.wakeWord && settingsModel.wakeWord.length > 0

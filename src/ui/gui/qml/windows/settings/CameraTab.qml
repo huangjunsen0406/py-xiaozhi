@@ -91,7 +91,7 @@ ScrollView {
                     Layout.preferredHeight: 32
 
                     background: Rectangle {
-                        color: parent.enabled ? (parent.pressed ? "#0e42d2" : (parent.hovered ? "#4080ff" : Theme.primary)) : Theme.textPlaceholder
+                        color: parent.enabled ? (parent.pressed ? Theme.primaryPressed : (parent.hovered ? Theme.primaryHover : Theme.primary)) : Theme.textPlaceholder
                         radius: Theme.radiusSm
                     }
 
@@ -316,12 +316,12 @@ ScrollView {
         Rectangle {
             Layout.fillWidth: true
             height: 48
-            color: root.testResult.startsWith("[成功]") ? "#f6ffed" :
-                   root.testResult.startsWith("[失败]") ? "#fff2f0" :
-                   root.testResult.startsWith("[错误]") ? "#fff2f0" : Theme.backgroundSecondary
-            border.color: root.testResult.startsWith("[成功]") ? "#b7eb8f" :
-                          root.testResult.startsWith("[失败]") ? "#ffccc7" :
-                          root.testResult.startsWith("[错误]") ? "#ffccc7" : Theme.divider
+            color: root.testResult.startsWith("[成功]") ? Theme.successLight :
+                   root.testResult.startsWith("[失败]") ? Theme.errorLight :
+                   root.testResult.startsWith("[错误]") ? Theme.errorLight : Theme.backgroundSecondary
+            border.color: root.testResult.startsWith("[成功]") ? Theme.successBorder :
+                          root.testResult.startsWith("[失败]") ? Theme.errorBorder :
+                          root.testResult.startsWith("[错误]") ? Theme.errorBorder : Theme.divider
             radius: Theme.radiusMd
             visible: root.testResult.length > 0 || root.cameraTesting
 

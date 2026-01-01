@@ -65,21 +65,21 @@ ComboBox {
                 anchors.fill: parent
                 anchors.margins: -1
                 radius: parent.radius + 1
-                color: "#08000000"
+                color: Theme.shadowLight
             }
             Rectangle {
                 z: -2
                 anchors.fill: parent
                 anchors.margins: -3
                 radius: parent.radius + 3
-                color: "#06000000"
+                color: Theme.shadowMedium
             }
             Rectangle {
                 z: -3
                 anchors.fill: parent
                 anchors.margins: -6
                 radius: parent.radius + 6
-                color: "#04000000"
+                color: Theme.shadowSubtle
             }
         }
 

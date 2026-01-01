@@ -13,9 +13,9 @@ Rectangle {
     radius: 12
     color: {
         switch (status) {
-            case "online": return "#E8FFEA"
-            case "warning": return "#FFF7E8"
-            default: return "#FFECE8"
+            case "online": return Theme.successLight
+            case "warning": return Theme.warningLight
+            default: return Theme.errorLight
         }
     }
 

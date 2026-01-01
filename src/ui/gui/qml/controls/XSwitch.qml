@@ -63,7 +63,7 @@ Switch {
                 width: parent.width + 2
                 height: parent.height + 2
                 radius: width / 2
-                color: "#15000000"
+                color: Theme.shadowColor
             }
         }
     }

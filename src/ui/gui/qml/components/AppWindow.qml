@@ -1,6 +1,7 @@
 // 无边框可调整大小的窗口基类
 import QtQuick
 import QtQuick.Window
+import Qt5Compat.GraphicalEffects
 import "../theme"
 
 Window {
@@ -34,6 +35,16 @@ Window {
         antialiasing: true
         border.width: root.isMaximized ? 0 : 1
         border.color: Theme.border
+
+        // 使用 layer 实现圆角裁剪
+        layer.enabled: !root.isMaximized
+        layer.effect: OpacityMask {
+            maskSource: Rectangle {
+                width: container.width
+                height: container.height
+                radius: container.radius
+            }
+        }
 
         // 内容区域
         Item {

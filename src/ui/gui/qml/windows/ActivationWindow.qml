@@ -100,7 +100,7 @@ AppWindow {
             XIconButton {
                 icon: "×"
                 flat: true
-                hoverColor: "#FF7875"
+                hoverColor: Theme.errorHover
                 pressedColor: Theme.error
                 iconHoverColor: "white"
                 onClicked: root.close()

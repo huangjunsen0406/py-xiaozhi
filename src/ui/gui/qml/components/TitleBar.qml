@@ -100,7 +100,7 @@ Rectangle {
             width: 32
             height: 32
             radius: Theme.radiusSm
-            color: closeArea.containsMouse ? (closeArea.pressed ? Theme.error : "#FF7875") : "transparent"
+            color: closeArea.containsMouse ? (closeArea.pressed ? Theme.error : Theme.errorHover) : "transparent"
 
             Text {
                 anchors.centerIn: parent

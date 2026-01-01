@@ -25,15 +25,10 @@ AppWindow {
         { name: "快捷键", component: "ShortcutsTab.qml" }
     ]
 
-    Rectangle {
-        id: mainContent
+    // 直接使用 ColumnLayout，不需要额外的 Rectangle 层
+    ColumnLayout {
         anchors.fill: parent
-        anchors.margins: root.isMaximized ? 0 : 1
-        color: Theme.background
-
-        ColumnLayout {
-            anchors.fill: parent
-            spacing: 0
+        spacing: 0
 
             // 自定义标题栏
             Rectangle {
@@ -119,7 +114,7 @@ AppWindow {
                     // 关闭按钮
                     Rectangle {
                         width: 28; height: 28; radius: Theme.radiusSm
-                        color: btnCloseMouse.pressed ? Theme.error : (btnCloseMouse.containsMouse ? "#ff7875" : "transparent")
+                        color: btnCloseMouse.pressed ? Theme.error : (btnCloseMouse.containsMouse ? Theme.errorHover : "transparent")
 
                         Text {
                             anchors.centerIn: parent
@@ -167,7 +162,7 @@ AppWindow {
                                     Layout.fillWidth: true
                                     Layout.preferredHeight: 40
                                     radius: Theme.radiusMd
-                                    color: tabBar.currentIndex === index ? "#e8f3ff" : (navMouse.containsMouse ? Theme.backgroundHover : "transparent")
+                                    color: tabBar.currentIndex === index ? Theme.primaryLight : (navMouse.containsMouse ? Theme.backgroundHover : "transparent")
 
                                     RowLayout {
                                         anchors.fill: parent
@@ -296,7 +291,7 @@ AppWindow {
                         text: "重置"
 
                         background: Rectangle {
-                            color: resetBtn.pressed ? "#ffe4e1" : (resetBtn.hovered ? "#fff0f0" : "transparent")
+                            color: resetBtn.pressed ? Theme.errorLight : (resetBtn.hovered ? Theme.errorLight : "transparent")
                             border.color: Theme.error
                             border.width: 1
                             radius: Theme.radiusSm
@@ -365,7 +360,6 @@ AppWindow {
                             root.close()
                         }
                     }
-                }
             }
         }
     }

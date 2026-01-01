@@ -132,7 +132,7 @@ ScrollView {
                     Layout.preferredHeight: 32
 
                     background: Rectangle {
-                        color: parent.enabled ? (parent.pressed ? "#0e42d2" : (parent.hovered ? "#4080ff" : Theme.primary)) : Theme.textPlaceholder
+                        color: parent.enabled ? (parent.pressed ? Theme.primaryPressed : (parent.hovered ? Theme.primaryHover : Theme.primary)) : Theme.textPlaceholder
                         radius: Theme.radiusSm
                     }
 
@@ -209,7 +209,7 @@ ScrollView {
                     Layout.preferredHeight: 32
 
                     background: Rectangle {
-                        color: parent.enabled ? (parent.pressed ? "#0e42d2" : (parent.hovered ? "#4080ff" : Theme.primary)) : Theme.textPlaceholder
+                        color: parent.enabled ? (parent.pressed ? Theme.primaryPressed : (parent.hovered ? Theme.primaryHover : Theme.primary)) : Theme.textPlaceholder
                         radius: Theme.radiusSm
                     }
 

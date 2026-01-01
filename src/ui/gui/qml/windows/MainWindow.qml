@@ -15,15 +15,11 @@ AppWindow {
     title: "小智助手"
     visible: true
 
-    Rectangle {
-        id: mainContent
+    // 直接使用 ColumnLayout，不需要额外的 Rectangle 层
+    // AppWindow 已经提供了带圆角的容器
+    ColumnLayout {
         anchors.fill: parent
-        anchors.margins: root.isMaximized ? 0 : 1  // 最大化时无边距
-        color: Theme.background
-
-        ColumnLayout {
-            anchors.fill: parent
-            spacing: 0
+        spacing: 0
 
             // 自定义标题栏
             Rectangle {
@@ -93,7 +89,7 @@ AppWindow {
                     // 关闭
                     Rectangle {
                         width: 24; height: 24; radius: Theme.radiusSm
-                        color: btnCloseMouse.pressed ? Theme.error : (btnCloseMouse.containsMouse ? "#ff7875" : "transparent")
+                        color: btnCloseMouse.pressed ? Theme.error : (btnCloseMouse.containsMouse ? Theme.errorHover : "transparent")
                         Text { anchors.centerIn: parent; text: "×"; font.pixelSize: Theme.fontSizeMd; color: btnCloseMouse.containsMouse ? "white" : Theme.textPlaceholder }
                         MouseArea {
                             id: btnCloseMouse
@@ -122,7 +118,7 @@ AppWindow {
                     Rectangle {
                         Layout.fillWidth: true
                         Layout.preferredHeight: 40
-                        color: "#E3F2FD"
+                        color: Theme.primaryLight
                         radius: Theme.radiusMd
 
                         Text {
@@ -130,7 +126,7 @@ AppWindow {
                             text: (mainModel && mainModel.statusText) ? mainModel.statusText : "待命"
                             font.pixelSize: Theme.fontSizeMd
                             font.weight: Font.Bold
-                            color: "#2196F3"
+                            color: Theme.primaryText
                         }
                     }
 
@@ -388,7 +384,6 @@ AppWindow {
 
                         onClicked: if (eventBridge) eventBridge.onOpenSettings()
                     }
-                }
             }
         }
     }
