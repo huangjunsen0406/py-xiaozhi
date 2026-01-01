@@ -86,6 +86,17 @@ def get_user_cache_dir() -> Path:
     return p
 
 
+def get_log_dir() -> Path:
+    """日志目录（用户数据目录下，打包后可写）.
+
+    Returns:
+        日志目录路径
+    """
+    p = get_user_data_dir() / "logs"
+    p.mkdir(parents=True, exist_ok=True)
+    return p
+
+
 @lru_cache(maxsize=1)
 def get_platform_info() -> tuple[str, str]:
     """获取平台和架构信息.

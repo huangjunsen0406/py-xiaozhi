@@ -192,11 +192,11 @@ class LoggingConfigManager:
         """
         获取默认日志目录.
         """
-        # 尝试从项目根目录获取
+        # 使用用户数据目录，确保打包后可写
         try:
-            from src.utils.resource_finder import get_app_root
+            from src.utils.resource_finder import get_log_dir
 
-            return get_app_root() / "logs"
+            return get_log_dir()
         except ImportError:
             return Path.cwd() / "logs"
 
