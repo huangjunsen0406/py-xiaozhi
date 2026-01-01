@@ -31,13 +31,15 @@ class ConfigManager:
         },
         "WAKE_WORD_OPTIONS": {
             "USE_WAKE_WORD": True,
-            "MODEL_PATH": "models",
-            "NUM_THREADS": 4,
+            "MODEL_PATH": "models/zh",
+            "NUM_THREADS": 5,
             "PROVIDER": "cpu",
             "MAX_ACTIVE_PATHS": 2,
             "KEYWORDS_SCORE": 1.8,
             "KEYWORDS_THRESHOLD": 0.2,
             "NUM_TRAILING_BLANKS": 1,
+            "WAKE_WORD": "你好小智",
+            "WAKE_WORD_LANG": "zh"
         },
         "CAMERA": {
             "camera_index": 0,

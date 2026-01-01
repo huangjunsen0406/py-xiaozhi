@@ -1,327 +1,345 @@
 # 系统工具 (System Tools)
 
-系统工具是一个综合性的 MCP 系统管理工具集，提供了系统状态监控、音量控制、设备管理等功能。
+系统工具面向桌面端的音量控制与应用管理场景，封装了 MCP 可调用的音量设置/查询能力，以及跨平台的应用扫描、启动、列出与关闭流程。
 
 ### 常见使用场景
 
-**系统状态查询:**
-- "查看系统状态"
-- "现在系统运行怎么样"
-- "检查设备状态"
-- "系统有什么问题吗"
+**音量调节与查询:**
 
-**音量控制:**
-- "把音量调到50"
-- "音量调大一点"
-- "设置音量为80"
-- "现在音量是多少"
+- "把音量调成 40"
+- "静音一下"
+- "现在的音量是多少"
+- "扬声器可用吗"
 
-**设备管理:**
-- "有多少个IoT设备连接"
-- "设备连接状态如何"
-- "查看设备列表"
-- "设备工作正常吗"
+**应用启动:**
 
-**应用状态:**
-- "应用现在是什么状态"
-- "系统在忙吗"
-- "当前工作模式是什么"
-- "应用运行正常吗"
+- "打开微信"
+- "启动记事本"
+- "帮我开一下浏览器"
+- "运行 VS Code"
+
+**应用发现与列表:**
+
+- "系统里有什么应用"
+- "列一下正在运行的程序"
+- "有哪些播放器可以用"
+- "判断 QQ 是否正在运行"
+
+**应用关闭:**
+
+- "退出 QQ 音乐"
+- "强制关闭 Chrome"
+- "把播放器关掉"
+- "结束所有叫 XXX 的进程"
 
 ### 使用提示
 
-1. **系统监控**: 定期查看系统状态了解设备健康状况
-2. **音量调节**: 可以精确设置音量数值或使用相对调节
-3. **设备检查**: 关注IoT设备的连接状态和数量
-4. **状态理解**: 了解不同设备状态的含义
+1. **音量值范围**: 所有音量调整以 0-100 的整数为单位，0 代表静音
+2. **跨平台能力**: 应用管理工具会自动识别 Windows/macOS/Linux，并调用对应实现
+3. **名称匹配**: 建议使用 `self.application.scan_installed` 提供的 `name` 字段去启动或关闭应用以减少模糊匹配误差
+4. **结果解析**: `get_volume_status`、`scan_installed`、`list_running` 均返回 JSON 字符串，使用方需自行 `json.loads`
 
-AI 助手会根据您的需求自动调用系统工具，为您提供系统管理和监控服务。
+AI 助手会根据需求自动选择合适的系统工具，以便在语音 / 文本会话中完成音量与应用相关操作。
 
 ## 功能概览
 
-### 系统状态监控
-- **完整状态**: 获取系统的完整运行状态
-- **音频状态**: 监控音频设备和音量状态
-- **应用状态**: 查看应用程序运行状态
-- **设备统计**: 统计IoT设备连接情况
+### 音量与音频控制
 
-### 音量控制功能
-- **音量设置**: 精确设置系统音量
-- **音量查询**: 获取当前音量级别
-- **静音检测**: 检测系统是否处于静音状态
-- **音频设备**: 检查音频设备可用性
+- **绝对音量设置**: 直接把扬声器音量设置到目标值
+- **音量查询**: 获取当前音量百分比
+- **状态诊断**: 查询静音标记、依赖可用性等状态、用于排查音频能力
 
-### 设备管理功能
-- **设备状态**: 监控设备运行状态
-- **IoT设备**: 管理IoT设备连接
-- **设备计数**: 统计连接设备数量
-- **状态切换**: 跟踪设备状态变化
+### 应用管理
 
-### 应用监控功能
-- **应用状态**: 监控应用程序状态
-- **工作模式**: 识别当前工作模式
-- **资源使用**: 监控资源使用情况
-- **错误处理**: 检测和报告系统错误
+- **启动应用**: 通过统一入口打开桌面应用、工具或游戏
+- **扫描应用**: 获取可启动的应用清单，支持中英文名称
+- **列出运行中应用**: 查看实时运行进程，支持名称过滤
+- **关闭应用**: 正常退出或强制结束指定应用
+
+### 状态透明
+
+- **结构化响应**: 所有查询类工具都以结构化 JSON 返回，包含 `success`、`message` 等字段
+- **线程隔离**: 实际操作（扫描/启动/关闭）在后台线程或子进程执行，不阻塞 MCP 主循环
 
 ## 工具列表
 
-### 1. 系统状态工具
+### 1. 音量与音频工具
 
-#### get_system_status - 获取系统状态
-获取完整的系统运行状态信息。
+#### self.audio_speaker.set_volume - 设置系统音量
+
+把系统扬声器音量设为绝对值，内部直接调用 `VolumeController`。
+
+**参数:**
+
+- `volume` (必需): 0-100 的整数，0 表示静音
+
+**使用场景:**
+
+- 精确调节音量
+- 执行静音/解除静音
+- 用户指定“调大/调小到具体数值”
+
+**返回:**
+
+- `True/False` 布尔值表示操作是否成功
+
+#### self.audio_speaker.get_volume - 查询当前音量
+
+返回当前扬声器音量 (0-100)。当依赖缺失时返回默认值。
 
 **参数:**
 无
 
 **使用场景:**
-- 系统健康检查
-- 故障诊断
-- 状态监控
-- 性能评估
 
-**返回信息:**
-- 音频设备状态
-- 应用程序状态
-- IoT设备统计
-- 系统错误信息
+- 回答“当前音量是多少”
+- 在调节前先读出旧值
+- 检查是否处于静音
 
-### 2. 音量控制工具
+**返回:**
 
-#### set_volume - 设置音量
-设置系统音量到指定级别。
+- 整型音量值，依赖不可用时为 `VolumeController.DEFAULT_VOLUME`
+
+#### self.audio_speaker.get_volume_status - 获取音量状态
+
+提供包含音量、静音标记、依赖可用性的详细 JSON。
 
 **参数:**
-- `volume` (必需): 音量级别，范围0-100
+无
 
 **使用场景:**
-- 音量调节
-- 音频控制
-- 环境适应
-- 用户偏好设置
 
-**特性:**
-- 音量范围验证
-- 依赖检查
-- 异步执行
-- 错误处理
+- 排查音量控制依赖是否齐全
+- 判断音频是否静音
+- 在 UI 中展示更丰富的状态
+
+**返回:**
+
+- JSON 字符串，字段包括 `volume`、`muted`、`available`、`reason/error`
+
+### 2. 应用生命周期工具
+
+#### self.application.launch - 启动应用
+
+跨平台启动应用：支持桌面软件、系统工具、浏览器、游戏等。
+
+**参数:**
+
+- `app_name` (必需): 应用名称/路径，可为中英混合
+
+**使用场景:**
+
+- 打开 QQ、微信、浏览器、VS Code 等
+- 调用系统自带应用（计算器、记事本等）
+- 启动安装在 PATH 或已扫描到的程序
+
+#### self.application.scan_installed - 扫描已安装应用
+
+列出可启动的应用清单，并提供匹配所需的 `name`、`display_name`、`path`、`type` 等字段。
+
+**参数:**
+
+- `force_refresh` (可选): 是否强制重新扫描，默认 `false`
+
+**使用场景:**
+
+- 不确定应用名称时先查询
+- 提示用户当前系统可用的软件
+- 调用 `self.application.launch` 失败时排查名称
+
+**返回:**
+
+- JSON 字符串，包含 `success`、`total_count`、`applications[]`
+
+#### self.application.list_running - 列出正在运行的应用
+
+实时列出当前运行中的应用进程，可按名称过滤。
+
+**参数:**
+
+- `filter_name` (可选): 字符串包含匹配，默认空
+
+**使用场景:**
+
+- 回答“哪些程序正在运行”
+- 在关闭应用前确认是否在运行
+- 排查占用资源的进程
+
+**返回:**
+
+- JSON 字符串，字段含 `success`、`total_count`、`applications[]`
+
+#### self.application.kill - 关闭/强制结束应用
+
+根据名称关闭一个或多个匹配的运行程序，Windows 下支持分组关闭和强制 kill。
+
+**参数:**
+
+- `app_name` (必需): 需要关闭的应用名
+- `force` (可选): `true` 时启用强制 kill，默认 `false`
+
+**使用场景:**
+
+- 用户要求退出/关闭某应用
+- 程序卡死需要强制结束
+- 批量清理同名程序实例
+
+**返回:**
+
+- `True/False` 布尔值表示是否至少成功关闭一个匹配进程
+
+> 建议配合 `self.application.list_running` 获取 PID/名称，再调用 `self.application.kill` 以避免误杀。
 
 ## 使用示例
-
-### 系统状态查询示例
-
-```python
-# 获取完整系统状态
-result = await mcp_server.call_tool("get_system_status", {})
-```
 
 ### 音量控制示例
 
 ```python
-# 设置音量到50
-result = await mcp_server.call_tool("set_volume", {
-    "volume": 50
-})
+# 把音量设置为 50
+await mcp_server.call_tool("self.audio_speaker.set_volume", {"volume": 50})
 
-# 设置音量到最大
-result = await mcp_server.call_tool("set_volume", {
-    "volume": 100
-})
+# 查询当前音量
+current_volume = await mcp_server.call_tool("self.audio_speaker.get_volume", {})
 
-# 设置音量到最小（静音）
-result = await mcp_server.call_tool("set_volume", {
-    "volume": 0
+# 获取详细音量状态（JSON 字符串需自行解析）
+import json
+status_json = await mcp_server.call_tool("self.audio_speaker.get_volume_status", {})
+status = json.loads(status_json)
+```
+
+### 应用管理示例
+
+```python
+import json
+
+# 扫描已安装应用
+scan_raw = await mcp_server.call_tool("self.application.scan_installed", {"force_refresh": False})
+scan_result = json.loads(scan_raw)
+
+# 启动第一个扫描结果
+first_app = scan_result["applications"][0]["name"]
+await mcp_server.call_tool("self.application.launch", {"app_name": first_app})
+
+# 列出运行中的应用
+running_raw = await mcp_server.call_tool("self.application.list_running", {"filter_name": "QQ"})
+running = json.loads(running_raw)
+
+# 关闭所有名称里包含 QQ 的应用
+await mcp_server.call_tool("self.application.kill", {
+    "app_name": "QQ",
+    "force": False
 })
 ```
+
+## 技术架构
+
+### 音量控制
+
+- **VolumeController**: 抽象所有平台的音量设置/查询行为，同时提供依赖检测
+- **异步封装**: 通过 `asyncio.to_thread` 把阻塞调用移到线程池
+- **容错策略**: 依赖缺失时返回默认音量并在状态接口中标记 `available=False`
+
+### 应用管理
+
+- **模块化实现**: `app_management` 目录下按系统拆分 `windows/mac/linux`
+- **应用扫描**: `scanner` 通过系统目录、注册表或 `.app`/`.desktop` 等入口构建应用索引
+- **统一匹配**: `utils.AppMatcher` 负责模糊匹配（中文、英文、大小写、别名）
+- **启动/关闭**: `launcher` 与 `killer` 根据平台选择最合适的命令（如 `open`, `start`, `wmic`, `osascript`）
+- **冗余策略**: Windows 启动支持 UWP、快捷方式、可执行文件多种路径，关闭支持分组 kill
 
 ## 数据结构
 
-### 系统状态 (SystemStatus)
-```python
-{
-    "audio_speaker": {
-        "volume": 75,
-        "muted": false,
-        "available": true
-    },
-    "application": {
-        "device_state": "IDLE",
-        "iot_devices": 3
-    },
-    "cpu_usage": 25.5,
-    "memory_usage": 60.2,
-    "disk_usage": 45.8,
-    "network_status": "connected",
-    "timestamp": "2024-01-15T10:30:00Z"
-}
-```
+### 音量状态
 
-### 音频状态 (AudioStatus)
 ```python
 {
-    "volume": 75,
+    "volume": 42,
     "muted": false,
-    "available": true,
-    "device_name": "默认扬声器",
-    "sample_rate": 44100,
-    "channels": 2
+    "available": true
 }
 ```
 
-### 应用状态 (ApplicationStatus)
+### 已安装应用扫描结果
+
 ```python
 {
-    "device_state": "IDLE",
-    "iot_devices": 3,
-    "uptime": "2小时30分钟",
-    "last_activity": "2024-01-15T10:28:00Z",
-    "active_tasks": 2
+    "success": true,
+    "total_count": 128,
+    "applications": [
+        {
+            "name": "QQ",
+            "display_name": "QQ 音乐",
+            "path": "C:/Program Files/QQMusic/QQMusic.exe",
+            "type": "exe"
+        },
+        {
+            "name": "WeChat",
+            "display_name": "微信",
+            "path": "/Applications/WeChat.app",
+            "type": "app"
+        }
+    ],
+    "message": "成功扫描到 128 个已安装应用程序"
 }
 ```
 
-### 错误状态 (ErrorStatus)
+### 正在运行的应用列表
+
 ```python
 {
-    "error": "音量控制依赖不完整",
-    "audio_speaker": {
-        "volume": 50,
-        "muted": false,
-        "available": false,
-        "reason": "Dependencies not available"
-    },
-    "application": {
-        "device_state": "unknown",
-        "iot_devices": 0
-    }
+    "success": true,
+    "total_count": 2,
+    "applications": [
+        {
+            "pid": 1234,
+            "name": "WeChat",
+            "display_name": "微信",
+            "command": "/Applications/WeChat.app/Contents/MacOS/WeChat"
+        },
+        {
+            "pid": 4321,
+            "name": "QQMusic",
+            "display_name": "QQ 音乐",
+            "command": "C:/Program Files/QQMusic/QQMusic.exe"
+        }
+    ],
+    "message": "找到 2 个正在运行的应用程序"
 }
 ```
-
-## 设备状态说明
-
-### 应用状态类型
-- **IDLE**: 空闲状态，等待用户输入
-- **LISTENING**: 正在监听语音输入
-- **SPEAKING**: 正在播放语音输出
-- **CONNECTING**: 正在连接服务
-- **PROCESSING**: 正在处理请求
-- **ERROR**: 出现错误状态
-
-### 音频设备状态
-- **available**: 音频设备可用
-- **volume**: 当前音量级别 (0-100)
-- **muted**: 是否处于静音状态
-- **device_name**: 音频设备名称
-
-### IoT设备状态
-- **connected**: 已连接的设备数量
-- **device_types**: 设备类型统计
-- **last_update**: 最后更新时间
-- **health_status**: 设备健康状态
-
-## 系统监控指标
-
-### 性能指标
-- **CPU使用率**: 系统CPU占用百分比
-- **内存使用率**: 系统内存占用百分比
-- **磁盘使用率**: 磁盘空间占用百分比
-- **网络状态**: 网络连接状态
-
-### 应用指标
-- **运行时间**: 应用程序运行时长
-- **活跃任务**: 当前活跃任务数量
-- **最后活动**: 最后一次活动时间
-- **错误计数**: 错误发生次数
-
-### 设备指标
-- **连接设备**: 已连接IoT设备数量
-- **设备类型**: 不同类型设备统计
-- **设备健康**: 设备健康状态评估
-- **连接质量**: 设备连接质量评估
-
-## 音量控制机制
-
-### 音量设置流程
-1. **参数验证**: 验证音量值范围 (0-100)
-2. **依赖检查**: 检查音量控制依赖是否可用
-3. **异步执行**: 在线程池中执行音量设置
-4. **状态更新**: 更新系统音量状态
-5. **结果返回**: 返回设置结果
-
-### 跨平台支持
-- **Windows**: 使用WASAPI接口
-- **macOS**: 使用CoreAudio框架
-- **Linux**: 使用ALSA/PulseAudio
-- **依赖管理**: 自动检测和加载平台依赖
-
-### 错误处理
-- **依赖缺失**: 检测并报告缺失的依赖
-- **权限问题**: 处理权限不足的情况
-- **设备不可用**: 处理音频设备不可用的情况
-- **参数错误**: 验证和处理参数错误
 
 ## 最佳实践
 
-### 1. 系统监控
-- 定期检查系统状态
-- 关注性能指标变化
-- 及时处理错误状态
-- 监控设备连接状态
+### 音量管理
 
-### 2. 音量管理
-- 设置合适的音量级别
-- 考虑使用环境和时间
-- 定期检查音频设备状态
-- 处理音频设备故障
+- 先调用 `get_volume` 获取旧值，再据此给出“从 X 调到 Y”的语句
+- 静音可直接设置为 0，取消静音时把音量恢复到上次记录值
+- 依赖缺失时提示用户安装/授予音频控制权限
 
-### 3. 设备管理
-- 监控IoT设备连接
-- 定期检查设备健康状态
-- 处理设备连接问题
-- 优化设备性能
+### 应用管理
 
-### 4. 错误处理
-- 及时响应错误状态
-- 分析错误原因
-- 实施恢复措施
-- 记录错误日志
+- 在启动/关闭前先用 `scan_installed` 或 `list_running` 核实名称，减少误操作
+- 需要强制关闭（`force=true`）前先尝试正常关闭，避免数据损坏
+- 对于多实例程序，可以先列出运行列表并按 PID 告知用户
 
 ## 故障排除
 
-### 常见问题
-1. **音量设置失败**: 检查音频设备和依赖
-2. **系统状态异常**: 检查应用程序状态
-3. **设备连接问题**: 检查IoT设备连接
-4. **权限不足**: 检查系统权限设置
-
-### 调试方法
-1. 查看系统状态获取详细信息
-2. 检查错误日志和错误信息
-3. 验证依赖和权限设置
-4. 测试音频设备功能
-
-### 性能优化
-1. 定期清理系统缓存
-2. 优化IoT设备连接
-3. 监控资源使用情况
-4. 调整系统参数设置
+1. **音量设置失败**: 检查 `get_volume_status` 中的 `available`/`reason`
+2. **启动应用失败**: 确认扫描结果中存在该应用，或提供完整路径
+3. **关闭应用失败**: 使用 `list_running` 验证是否真的在运行，必要时开启 `force`
+4. **扫描超时**: 大量应用时耗时较长，可提示稍候或限制扫描范围
 
 ## 安全考虑
 
-### 权限管理
-- 音量控制需要适当权限
-- 系统状态访问权限控制
-- 设备管理权限验证
-- 用户操作权限检查
+### 权限与访问控制
+
+- 音量控制依赖系统级权限，首次调用可能需要用户授权
+- 启动、关闭应用等操作应在用户明确指令后执行，避免敏感程序被误操作
+- `force` 关闭会直接杀死进程，调用前需告知用户可能导致数据丢失
 
 ### 数据保护
-- 系统状态信息敏感性
-- 设备信息隐私保护
-- 操作日志安全存储
-- 错误信息脱敏处理
 
-### 访问控制
-- 限制系统功能访问
-- 验证用户身份
-- 控制操作权限
-- 审计操作记录
+- 扫描/运行列表可能包含用户安装的软件名称，应谨慎对外展示
+- 需要持久化日志时建议脱敏处理，只保留必要字段
+- 不记录或上报具体命令行参数，保护隐私
 
-通过系统工具，您可以有效地监控和管理系统状态，确保设备正常运行和最佳性能。
+通过这些系统工具，AI 助手可以在多平台环境下安全地调整音量、启动或管理桌面应用，为终端用户提供自然语言驱动的系统控制体验。
