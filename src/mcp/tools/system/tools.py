@@ -72,30 +72,37 @@ async def get_volume(args: Dict[str, Any]) -> int:
         return VolumeController.DEFAULT_VOLUME
 
 
-async def _get_audio_status() -> Dict[str, Any]:
+async def get_volume_status(args: Dict[str, Any]) -> str:
     """
-    获取音频状态.
+    获取音频状态（音量/静音/可用性）.
     """
     try:
         from src.utils.volume_controller import VolumeController
 
         if VolumeController.check_dependencies():
             volume_controller = VolumeController()
-            # 使用线程池获取音量，避免阻塞
             current_volume = await asyncio.to_thread(volume_controller.get_volume)
-            return {
+            status = {
                 "volume": current_volume,
                 "muted": current_volume == 0,
                 "available": True,
             }
         else:
-            return {
+            status = {
                 "volume": 50,
                 "muted": False,
                 "available": False,
                 "reason": "Dependencies not available",
             }
-
     except Exception as e:
-        logger.warning(f"[SystemTools] 获取音频状态失败: {e}")
-        return {"volume": 50, "muted": False, "available": False, "error": str(e)}
+        logger.warning(f"[SystemTools] 获取音量状态失败: {e}")
+        status = {
+            "volume": 50,
+            "muted": False,
+            "available": False,
+            "error": str(e),
+        }
+
+    import json
+
+    return json.dumps(status, ensure_ascii=False)
