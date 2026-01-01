@@ -17,11 +17,12 @@ export default defineConfig({
           { text: "系统依赖安装", link: "/guide/系统依赖安装" },
           { text: "配置说明", link: "/guide/配置说明" },
           { text: "语音交互模式说明", link: "/guide/语音交互模式说明" },
-          { text: "快捷键说明", link: "/guide/快捷键说明.md" },
+          { text: "快捷键说明", link: "/guide/快捷键说明" },
           { text: "回声消除", link: "/guide/回声消除" },
           { text: "语音唤醒", link: "/guide/语音唤醒" },
           { text: "设备激活流程", link: "/guide/设备激活流程" },
           { text: "打包教程", link: "/guide/打包教程" },
+          { text: "开发指南", link: "/guide/开发指南" },
           { text: "异常汇总", link: "/guide/异常汇总" },
           { text: "旧版文档", link: "/guide/old_docs/使用文档" },
         ],
@@ -45,35 +46,6 @@ export default defineConfig({
     ],
 
     sidebar: {
-      "/ecosystem/": [
-        {
-          text: "生态系统概览",
-          link: "/ecosystem/",
-        },
-        {
-          text: "相关项目",
-          collapsed: false,
-          items: [
-            {
-              text: "小智手机端",
-              link: "/ecosystem/projects/xiaozhi-android-client/",
-            },
-            {
-              text: "xiaozhi-esp32-server",
-              link: "/ecosystem/projects/xiaozhi-esp32-server/",
-            },
-            {
-              text: "XiaoZhiAI_server32_Unity",
-              link: "/ecosystem/projects/xiaozhi-unity/",
-            },
-            {
-              text: "IntelliConnect",
-              link: "/ecosystem/projects/intelliconnect/",
-            },
-            { text: "open-xiaoai", link: "/ecosystem/projects/open-xiaoai/" },
-          ],
-        },
-      ],
       "/about/": [],
       // MCP 页面不显示侧边栏
       "/mcp/": [],

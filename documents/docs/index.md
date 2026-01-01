@@ -12,6 +12,9 @@ hero:
     - theme: alt
       text: 查看源码
       link: https://github.com/huangjunsen0406/py-xiaozhi
+    - theme: alt
+      text: 开发指南
+      link: /guide/开发指南
 
 features:
   - title: AI语音交互
