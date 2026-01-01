@@ -21,7 +21,6 @@ requests>=2.31.0
 # AI/ML
 openai>=1.0.0
 sherpa-onnx>=1.12.8
-onnxruntime==1.17.1
 
 # 图像处理
 opencv-python-headless>=4.9.0
@@ -34,6 +33,7 @@ cryptography>=42.0.0
 psutil>=5.9.0
 pendulum>=3.0.0
 py-machineid>=0.6.0
+platformdirs>=4.0.0
 
 # 音乐/媒体
 mutagen>=1.47.0
