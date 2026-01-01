@@ -1,9 +1,74 @@
 import asyncio
+import os
 import re
+import sys
 from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
 import sounddevice as sd
+
+
+class ALSAErrorSuppressor:
+    """
+    ALSA 错误输出抑制器。
+
+    在 Linux 系统上，ALSA 库会输出大量警告和错误信息到 stderr，
+    这些信息会干扰终端输出。此上下文管理器可临时抑制这些输出。
+
+    用法:
+        with ALSAErrorSuppressor():
+            # 执行 PyAudio 初始化等操作
+            audio = pyaudio.PyAudio()
+
+    注意:
+        - 仅在 Linux 系统上生效
+        - 在 Windows/macOS 上无操作
+        - 退出上下文时会恢复 stderr
+    """
+
+    def __init__(self):
+        self._old_stderr = None
+        self._devnull = None
+        self._is_linux = sys.platform.startswith("linux")
+
+    def __enter__(self):
+        if not self._is_linux:
+            return self
+
+        try:
+            self._old_stderr = os.dup(2)
+            self._devnull = os.open("/dev/null", os.O_WRONLY)
+            os.dup2(self._devnull, 2)
+        except OSError:
+            # 如果无法操作文件描述符，静默失败
+            self._old_stderr = None
+            self._devnull = None
+
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if not self._is_linux:
+            return False
+
+        if self._old_stderr is not None:
+            try:
+                os.dup2(self._old_stderr, 2)
+                os.close(self._old_stderr)
+            except OSError:
+                pass
+
+        if self._devnull is not None:
+            try:
+                os.close(self._devnull)
+            except OSError:
+                pass
+
+        return False  # 不抑制异常
+
+
+def suppress_alsa_errors():
+    """返回 ALSA 错误抑制器上下文管理器."""
+    return ALSAErrorSuppressor()
 
 # 可选：屏蔽常见虚拟/聚合设备（默认不选它们）
 _VIRTUAL_PATTERNS = [

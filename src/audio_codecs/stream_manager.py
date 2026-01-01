@@ -10,6 +10,7 @@ import sounddevice as sd
 
 from src.logging import get_logger
 from src.utils.audio_device import DeviceConfig
+from src.utils.audio_utils import ALSAErrorSuppressor
 
 logger = get_logger()
 
@@ -43,27 +44,29 @@ class AudioStreamManager:
             Exception: 创建流失败
         """
         try:
-            # 输入流
-            self.input_stream = sd.InputStream(
-                device=self.device_config.input_device_id,
-                samplerate=self.device_config.input_sample_rate,
-                channels=self.device_config.input_channels,
-                dtype=np.float32,  # 统一 float32
-                blocksize=self.device_config.input_frame_size,
-                callback=input_callback,
-                latency="low",
-            )
+            # 使用 ALSAErrorSuppressor 抑制 Linux 上的 ALSA 警告
+            with ALSAErrorSuppressor():
+                # 输入流
+                self.input_stream = sd.InputStream(
+                    device=self.device_config.input_device_id,
+                    samplerate=self.device_config.input_sample_rate,
+                    channels=self.device_config.input_channels,
+                    dtype=np.float32,  # 统一 float32
+                    blocksize=self.device_config.input_frame_size,
+                    callback=input_callback,
+                    latency="low",
+                )
 
-            # 输出流
-            self.output_stream = sd.OutputStream(
-                device=self.device_config.output_device_id,
-                samplerate=self.device_config.output_sample_rate,
-                channels=self.device_config.output_channels,
-                dtype=np.float32,  # 统一 float32
-                blocksize=self.device_config.output_frame_size,
-                callback=output_callback,
-                latency="low",
-            )
+                # 输出流
+                self.output_stream = sd.OutputStream(
+                    device=self.device_config.output_device_id,
+                    samplerate=self.device_config.output_sample_rate,
+                    channels=self.device_config.output_channels,
+                    dtype=np.float32,  # 统一 float32
+                    blocksize=self.device_config.output_frame_size,
+                    callback=output_callback,
+                    latency="low",
+                )
 
             logger.info(
                 f"音频流已创建 | "
@@ -126,43 +129,45 @@ class AudioStreamManager:
             bool: 是否成功
         """
         try:
-            if is_input and input_callback:
-                # 重建输入流
-                if self.input_stream:
-                    self.input_stream.stop()
-                    self.input_stream.close()
+            # 使用 ALSAErrorSuppressor 抑制 Linux 上的 ALSA 警告
+            with ALSAErrorSuppressor():
+                if is_input and input_callback:
+                    # 重建输入流
+                    if self.input_stream:
+                        self.input_stream.stop()
+                        self.input_stream.close()
 
-                self.input_stream = sd.InputStream(
-                    device=self.device_config.input_device_id,
-                    samplerate=self.device_config.input_sample_rate,
-                    channels=self.device_config.input_channels,
-                    dtype=np.float32,
-                    blocksize=self.device_config.input_frame_size,
-                    callback=input_callback,
-                    latency="low",
-                )
-                self.input_stream.start()
-                logger.info("输入流重新初始化成功")
-                return True
+                    self.input_stream = sd.InputStream(
+                        device=self.device_config.input_device_id,
+                        samplerate=self.device_config.input_sample_rate,
+                        channels=self.device_config.input_channels,
+                        dtype=np.float32,
+                        blocksize=self.device_config.input_frame_size,
+                        callback=input_callback,
+                        latency="low",
+                    )
+                    self.input_stream.start()
+                    logger.info("输入流重新初始化成功")
+                    return True
 
-            elif not is_input and output_callback:
-                # 重建输出流
-                if self.output_stream:
-                    self.output_stream.stop()
-                    self.output_stream.close()
+                elif not is_input and output_callback:
+                    # 重建输出流
+                    if self.output_stream:
+                        self.output_stream.stop()
+                        self.output_stream.close()
 
-                self.output_stream = sd.OutputStream(
-                    device=self.device_config.output_device_id,
-                    samplerate=self.device_config.output_sample_rate,
-                    channels=self.device_config.output_channels,
-                    dtype=np.float32,
-                    blocksize=self.device_config.output_frame_size,
-                    callback=output_callback,
-                    latency="low",
-                )
-                self.output_stream.start()
-                logger.info("输出流重新初始化成功")
-                return True
+                    self.output_stream = sd.OutputStream(
+                        device=self.device_config.output_device_id,
+                        samplerate=self.device_config.output_sample_rate,
+                        channels=self.device_config.output_channels,
+                        dtype=np.float32,
+                        blocksize=self.device_config.output_frame_size,
+                        callback=output_callback,
+                        latency="low",
+                    )
+                    self.output_stream.start()
+                    logger.info("输出流重新初始化成功")
+                    return True
 
             return False
 

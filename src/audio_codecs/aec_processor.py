@@ -165,16 +165,18 @@ class AECProcessor:
                 self.reference_sample_rate * webrtc_frame_duration
             )
 
-            self.reference_stream = sd.InputStream(
-                device=self.reference_device_id,
-                samplerate=self.reference_sample_rate,
-                channels=AudioConfig.CHANNELS,
-                dtype=np.int16,
-                blocksize=reference_frame_size,
-                callback=self._reference_callback,
-                finished_callback=self._reference_finished_callback,
-                latency="low",
-            )
+            # 使用 ALSAErrorSuppressor 抑制 Linux 上的 ALSA 警告
+            with ALSAErrorSuppressor():
+                self.reference_stream = sd.InputStream(
+                    device=self.reference_device_id,
+                    samplerate=self.reference_sample_rate,
+                    channels=AudioConfig.CHANNELS,
+                    dtype=np.int16,
+                    blocksize=reference_frame_size,
+                    callback=self._reference_callback,
+                    finished_callback=self._reference_finished_callback,
+                    latency="low",
+                )
 
             self.reference_stream.start()
 
