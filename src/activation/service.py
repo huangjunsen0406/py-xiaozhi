@@ -20,7 +20,7 @@ import psutil
 from src.constants.system import SystemConstants
 from src.logging import get_logger
 from src.utils.config_manager import ConfigManager
-from src.utils.resource_finder import get_config_dir
+from src.utils.resource_finder import get_user_data_dir
 
 logger = get_logger()
 
@@ -277,7 +277,7 @@ class ActivationService:
         """
         初始化文件路径.
         """
-        config_dir = get_config_dir()
+        config_dir = get_user_data_dir() / "config"
         config_dir.mkdir(parents=True, exist_ok=True)
         self._efuse_file = config_dir / "efuse.json"
         self.logger.debug(f"efuse文件路径: {self._efuse_file}")

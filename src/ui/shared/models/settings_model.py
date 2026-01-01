@@ -7,7 +7,6 @@
 import json
 import threading
 import time
-from pathlib import Path
 from typing import Any, List
 
 import numpy as np
@@ -17,6 +16,7 @@ from PySide6.QtCore import Property, Signal, Slot
 from src.audio_processing.keyword_converters import convert_wake_word
 from src.logging import get_logger
 from src.utils.config_manager import ConfigManager
+from src.utils.resource_finder import get_user_data_dir
 
 from .base_model import BaseModel
 
@@ -37,7 +37,7 @@ class SettingsModel(BaseModel):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._config_manager = ConfigManager.get_instance()
-        self._config_path = Path("config/config.json")
+        self._config_path = get_user_data_dir() / "config" / "config.json"
         self._config: dict = {}
 
         # 音频设备
@@ -359,9 +359,11 @@ class SettingsModel(BaseModel):
             self._set_value("WAKE_WORD_OPTIONS.WAKE_WORD_LANG", lang)
             self._set_value("WAKE_WORD_OPTIONS.MODEL_PATH", model_path)
 
-            # 写入 keywords.txt
-            from src.utils.resource_finder import get_app_root
-            keywords_path = get_app_root() / model_path / "keywords.txt"
+            # 写入 keywords.txt 到用户数据目录
+            from src.utils.resource_finder import get_user_data_dir
+            keywords_dir = get_user_data_dir() / "keywords"
+            keywords_dir.mkdir(parents=True, exist_ok=True)
+            keywords_path = keywords_dir / f"{lang}_keywords.txt"
 
             with open(keywords_path, "w", encoding="utf-8") as f:
                 f.write(keyword_line + "\n")
@@ -494,6 +496,12 @@ class SettingsModel(BaseModel):
     @Slot()
     def refreshDevices(self):
         """刷新设备列表."""
+        # 强制 sounddevice 重新扫描设备
+        try:
+            sd._terminate()
+            sd._initialize()
+        except Exception:
+            pass
         self._load_audio_devices()
         self.statusMessage.emit("设备列表已刷新")
 

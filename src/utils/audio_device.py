@@ -83,9 +83,9 @@ class AudioDeviceManager:
             if not output_info:
                 raise RuntimeError("无法找到可用的输出设备")
 
-        # 3. 限制声道数
-        input_channels = min(input_info["channels"], AudioConfig.MAX_INPUT_CHANNELS)
-        output_channels = min(output_info["channels"], AudioConfig.MAX_OUTPUT_CHANNELS)
+        # 3. 使用设备报告的声道数（不再限制，避免 9997 错误）
+        input_channels = input_info["channels"]
+        output_channels = output_info["channels"]
 
         device_input_sample_rate = input_info["sample_rate"]
         device_output_sample_rate = output_info["sample_rate"]

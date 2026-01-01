@@ -1,9 +1,14 @@
 import json
+import shutil
 import uuid
 from typing import Any, Dict
 
 from src.logging import get_logger
-from src.utils.resource_finder import get_app_root, get_config_dir
+from src.utils.resource_finder import (
+    get_config_dir,
+    get_user_cache_dir,
+    get_user_data_dir,
+)
 
 logger = get_logger()
 
@@ -132,16 +137,25 @@ class ConfigManager:
     def _init_config_paths(self):
         """
         初始化配置文件路径.
+
+        配置文件存储到用户数据目录，打包后可写。
+        首次运行时从安装目录迁移默认配置。
         """
-        # 使用resource_finder查找或创建配置目录
-        self.config_dir = get_config_dir()
-        if not self.config_dir.exists():
-            # 如果找不到配置目录，在项目根目录下创建
-            self.config_dir = get_app_root() / "config"
-            self.config_dir.mkdir(parents=True, exist_ok=True)
-            logger.info(f"创建配置目录: {self.config_dir.absolute()}")
+        # 用户数据目录下的 config 子目录
+        self.config_dir = get_user_data_dir() / "config"
+        self.config_dir.mkdir(parents=True, exist_ok=True)
 
         self.config_file = self.config_dir / "config.json"
+
+        # 如果用户目录没有配置文件，尝试从安装目录迁移
+        if not self.config_file.exists():
+            install_config = get_config_dir() / "config.json"
+            if install_config.exists():
+                try:
+                    shutil.copy2(install_config, self.config_file)
+                    logger.info(f"已从安装目录迁移配置: {install_config} -> {self.config_file}")
+                except Exception as e:
+                    logger.warning(f"迁移配置文件失败: {e}，将使用默认配置")
 
         # 记录配置文件路径
         logger.info(f"配置目录: {self.config_dir.absolute()}")
@@ -151,19 +165,10 @@ class ConfigManager:
         """
         确保必要的目录存在.
         """
-        project_root = get_app_root()
-
-        # 创建 models 目录
-        models_dir = project_root / "models"
-        if not models_dir.exists():
-            models_dir.mkdir(parents=True, exist_ok=True)
-            logger.info(f"创建模型目录: {models_dir.absolute()}")
-
-        # 创建 cache 目录
-        cache_dir = project_root / "cache"
-        if not cache_dir.exists():
-            cache_dir.mkdir(parents=True, exist_ok=True)
-            logger.info(f"创建缓存目录: {cache_dir.absolute()}")
+        # models 目录保留在安装目录（只读）
+        # cache 目录使用用户缓存目录（可写）
+        cache_dir = get_user_cache_dir()
+        logger.debug(f"缓存目录: {cache_dir.absolute()}")
 
     def _load_config(self) -> Dict[str, Any]:
         """

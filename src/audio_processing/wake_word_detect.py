@@ -8,7 +8,7 @@ import numpy as np
 from src.constants.constants import AudioConfig
 from src.logging import get_logger
 from src.utils.config_manager import ConfigManager
-from src.utils.resource_finder import get_app_root
+from src.utils.resource_finder import get_app_root, get_user_keywords_path
 
 logger = get_logger()
 
@@ -113,12 +113,15 @@ class WakeWordDetector:
         try:
             import sherpa_onnx
 
-            # Check required files
+        # Check required files
             encoder_path = self._model_dir / "encoder.onnx"
             decoder_path = self._model_dir / "decoder.onnx"
             joiner_path = self._model_dir / "joiner.onnx"
             tokens_path = self._model_dir / "tokens.txt"
-            keywords_path = self._model_dir / "keywords.txt"
+
+            # keywords.txt 优先使用用户目录下的自定义文件
+            lang = ConfigManager.get_instance().get_config("WAKE_WORD_OPTIONS.WAKE_WORD_LANG", "zh")
+            keywords_path = get_user_keywords_path(lang)
 
             required_files = [encoder_path, decoder_path, joiner_path, tokens_path, keywords_path]
             for file_path in required_files:
