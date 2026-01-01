@@ -1,4 +1,4 @@
-// 自定义标题栏
+// 自定义标题栏 - 平台自适应
 import QtQuick
 import QtQuick.Layouts
 import "../theme"
@@ -7,20 +7,24 @@ Rectangle {
     id: root
 
     height: Theme.titleBarHeight
-    color: "transparent"
+    color: Theme.backgroundSecondary  // 添加背景色
 
     property string title: ""
     property bool showMinimize: true
+    property bool showMaximize: false  // 默认不显示最大化
     property bool showClose: true
 
     signal minimizeClicked()
+    signal maximizeClicked()
     signal closeClicked()
 
     // 拖拽区域
     MouseArea {
         id: dragArea
         anchors.fill: parent
-        anchors.rightMargin: buttonRow.width + Theme.spacingMd
+        // macOS: 左边留空给按钮，Windows: 右边留空给按钮
+        anchors.leftMargin: Theme.titleButtonsOnLeft ? (macButtons.width + Theme.spacingLg) : 0
+        anchors.rightMargin: Theme.titleButtonsOnLeft ? 0 : (winButtons.width + Theme.spacingMd)
 
         property point startPos
 
@@ -42,20 +46,54 @@ Rectangle {
         onDoubleClicked: {
             let win = Window.window
             if (win) {
-                if (win.visibility === Window.Maximized) {
-                    win.showNormal()
+                // macOS: 双击进入全屏，Windows: 双击最大化
+                if (Theme.titleButtonsOnLeft) {
+                    if (win.visibility === Window.FullScreen) {
+                        win.showNormal()
+                    } else {
+                        win.showFullScreen()
+                    }
                 } else {
-                    win.showMaximized()
+                    if (win.visibility === Window.Maximized) {
+                        win.showNormal()
+                    } else {
+                        win.showMaximized()
+                    }
                 }
             }
         }
     }
 
-    // 标题文字
-    Text {
+    // ========== macOS 风格按钮 (左侧) ==========
+    MacTitleBarButtons {
+        id: macButtons
+        visible: Theme.titleButtonsOnLeft
         anchors.left: parent.left
-        anchors.leftMargin: Theme.spacingLg
+        anchors.leftMargin: Theme.spacingMd
         anchors.verticalCenter: parent.verticalCenter
+        showMaximize: root.showMaximize
+
+        onCloseClicked: root.closeClicked()
+        onMinimizeClicked: root.minimizeClicked()
+        onMaximizeClicked: {
+            // macOS: 绿色按钮进入全屏模式
+            let win = Window.window
+            if (win) {
+                if (win.visibility === Window.FullScreen) {
+                    win.showNormal()
+                } else {
+                    win.showFullScreen()
+                }
+            }
+        }
+    }
+
+    // 标题文字 - macOS 时居中，Windows 时左对齐
+    Text {
+        anchors.centerIn: Theme.titleButtonsOnLeft ? parent : undefined
+        anchors.left: Theme.titleButtonsOnLeft ? undefined : parent.left
+        anchors.leftMargin: Theme.titleButtonsOnLeft ? 0 : Theme.spacingLg
+        anchors.verticalCenter: Theme.titleButtonsOnLeft ? undefined : parent.verticalCenter
         text: root.title
         font.family: Theme.fontFamily
         font.pixelSize: Theme.fontSizeMd
@@ -63,9 +101,10 @@ Rectangle {
         color: Theme.textPrimary
     }
 
-    // 按钮区域
+    // ========== Windows/Linux 风格按钮 (右侧) ==========
     Row {
-        id: buttonRow
+        id: winButtons
+        visible: !Theme.titleButtonsOnLeft
         anchors.right: parent.right
         anchors.rightMargin: Theme.spacingSm
         anchors.verticalCenter: parent.verticalCenter
@@ -91,6 +130,29 @@ Rectangle {
                 anchors.fill: parent
                 hoverEnabled: true
                 onClicked: root.minimizeClicked()
+            }
+        }
+
+        // 最大化按钮
+        Rectangle {
+            visible: root.showMaximize
+            width: 32
+            height: 32
+            radius: Theme.radiusSm
+            color: maximizeArea.containsMouse ? Theme.backgroundHover : "transparent"
+
+            Text {
+                anchors.centerIn: parent
+                text: "□"
+                font.pixelSize: Theme.fontSizeMd
+                color: Theme.textSecondary
+            }
+
+            MouseArea {
+                id: maximizeArea
+                anchors.fill: parent
+                hoverEnabled: true
+                onClicked: root.maximizeClicked()
             }
         }
 

@@ -18,92 +18,50 @@ AppWindow {
     // 信号
     signal activationCompleted(bool success)
 
-    // 标题栏拖拽区域（避开右侧按钮区域）
-    MouseArea {
-        id: titleBarDragArea
+    // 使用平台自适应标题栏
+    TitleBar {
+        id: titleBar
         anchors.top: parent.top
         anchors.left: parent.left
         anchors.right: parent.right
-        anchors.rightMargin: 100  // 避开右侧按钮区域
-        height: 50  // 标题栏高度
-
-        property point startPos
-
-        onPressed: (mouse) => {
-            startPos = Qt.point(mouse.x, mouse.y)
-        }
-
-        onPositionChanged: (mouse) => {
-            if (pressed) {
-                let delta = Qt.point(mouse.x - startPos.x, mouse.y - startPos.y)
-                root.x += delta.x
-                root.y += delta.y
-            }
-        }
+        title: "设备激活"
+        showMaximize: false
+        onMinimizeClicked: root.showMinimized()
+        onCloseClicked: root.close()
     }
 
     ColumnLayout {
         anchors.fill: parent
+        anchors.topMargin: titleBar.height
         anchors.margins: Theme.spacingXl
         spacing: Theme.spacingLg
 
-        // 标题栏
+        // 状态指示器 - 独立放在内容区顶部
         RowLayout {
             Layout.fillWidth: true
-            spacing: Theme.spacingLg
+            Layout.alignment: Qt.AlignRight
+            spacing: Theme.spacingSm
+
+            Rectangle {
+                width: 8
+                height: 8
+                radius: 4
+                color: activationModel ? activationModel.statusColor : Theme.textPlaceholder
+
+                // 激活中时闪烁动画
+                SequentialAnimation on opacity {
+                    running: activationModel ? activationModel.isActivating : false
+                    loops: Animation.Infinite
+                    NumberAnimation { to: 0.3; duration: 500 }
+                    NumberAnimation { to: 1.0; duration: 500 }
+                }
+            }
 
             Text {
-                text: "设备激活"
+                text: activationModel ? activationModel.activationStatus : ""
                 font.family: Theme.fontFamily
-                font.pixelSize: Theme.fontSizeXl
-                font.weight: Font.Medium
-                color: Theme.textPrimary
-            }
-
-            Item { Layout.fillWidth: true }
-
-            // 状态指示器
-            RowLayout {
-                spacing: Theme.spacingSm
-
-                Rectangle {
-                    width: 8
-                    height: 8
-                    radius: 4
-                    color: activationModel.statusColor
-
-                    // 激活中时闪烁动画
-                    SequentialAnimation on opacity {
-                        running: activationModel.isActivating
-                        loops: Animation.Infinite
-                        NumberAnimation { to: 0.3; duration: 500 }
-                        NumberAnimation { to: 1.0; duration: 500 }
-                    }
-                }
-
-                Text {
-                    text: activationModel.activationStatus
-                    font.family: Theme.fontFamily
-                    font.pixelSize: Theme.fontSizeSm
-                    color: Theme.textSecondary
-                }
-            }
-
-            // 最小化按钮
-            XIconButton {
-                icon: "−"
-                flat: true
-                onClicked: root.showMinimized()
-            }
-
-            // 关闭按钮
-            XIconButton {
-                icon: "×"
-                flat: true
-                hoverColor: Theme.errorHover
-                pressedColor: Theme.error
-                iconHoverColor: "white"
-                onClicked: root.close()
+                font.pixelSize: Theme.fontSizeSm
+                color: Theme.textSecondary
             }
         }
 
@@ -147,7 +105,7 @@ AppWindow {
                     }
 
                     Text {
-                        text: activationModel.serialNumber
+                        text: activationModel ? activationModel.serialNumber : ""
                         font.family: Theme.fontFamilyMono
                         font.pixelSize: Theme.fontSizeSm
                         color: Theme.textPrimary
@@ -156,7 +114,7 @@ AppWindow {
                     }
 
                     Text {
-                        text: activationModel.macAddress
+                        text: activationModel ? activationModel.macAddress : ""
                         font.family: Theme.fontFamilyMono
                         font.pixelSize: Theme.fontSizeSm
                         color: Theme.textPrimary
@@ -194,19 +152,19 @@ AppWindow {
 
                     Text {
                         anchors.centerIn: parent
-                        text: activationModel.activationCode
+                        text: activationModel ? activationModel.activationCode : "------"
                         font.family: Theme.fontFamilyMono
                         font.pixelSize: Theme.fontSizeLg
                         font.weight: Font.Bold
                         font.letterSpacing: 4
-                        color: activationModel.activationCode !== "------" ? Theme.error : Theme.textPlaceholder
+                        color: (activationModel && activationModel.activationCode !== "------") ? Theme.error : Theme.textPlaceholder
                     }
                 }
 
                 // 复制按钮
                 XButton {
                     text: "复制"
-                    enabled: activationModel.activationCode !== "------"
+                    enabled: activationModel ? activationModel.activationCode !== "------" : false
                     onClicked: {
                         if (typeof activationController !== 'undefined') {
                             activationController.copyActivationCode()
@@ -226,7 +184,7 @@ AppWindow {
                 Layout.fillWidth: true
                 Layout.preferredHeight: 40
                 text: "打开激活页面"
-                enabled: !activationModel.isActivated
+                enabled: activationModel ? !activationModel.isActivated : true
                 onClicked: {
                     if (typeof activationController !== 'undefined') {
                         activationController.openActivationUrl()
@@ -238,7 +196,7 @@ AppWindow {
         // 提示信息
         Text {
             Layout.fillWidth: true
-            text: activationModel.isActivated
+            text: (activationModel && activationModel.isActivated)
                 ? "设备已激活，窗口即将关闭..."
                 : "请在激活页面输入验证码完成设备激活"
             font.family: Theme.fontFamily

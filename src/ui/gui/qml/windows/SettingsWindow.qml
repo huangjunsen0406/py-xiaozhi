@@ -30,107 +30,20 @@ AppWindow {
         anchors.fill: parent
         spacing: 0
 
-            // 自定义标题栏
-            Rectangle {
-                id: titleBar
+            // 自定义标题栏 - 平台自适应
+            TitleBar {
                 Layout.fillWidth: true
-                Layout.preferredHeight: 44
-                color: Theme.backgroundSecondary
-
-                MouseArea {
-                    anchors.fill: parent
-                    property point startPos
-
-                    onPressed: (mouse) => { startPos = Qt.point(mouse.x, mouse.y) }
-                    onPositionChanged: (mouse) => {
-                        if (pressed) {
-                            root.x += mouse.x - startPos.x
-                            root.y += mouse.y - startPos.y
-                        }
+                title: "参数设置"
+                showMaximize: true
+                onMinimizeClicked: root.showMinimized()
+                onMaximizeClicked: {
+                    if (root.visibility === Window.FullScreen || root.visibility === Window.Maximized) {
+                        root.showNormal()
+                    } else {
+                        root.showMaximized()
                     }
                 }
-
-                RowLayout {
-                    anchors.fill: parent
-                    anchors.leftMargin: Theme.spacingLg
-                    anchors.rightMargin: Theme.spacingMd
-                    spacing: Theme.spacingSm
-
-                    Text {
-                        text: "参数设置"
-                        font.pixelSize: Theme.fontSizeLg
-                        font.weight: Font.Bold
-                        color: Theme.textPrimary
-                    }
-
-                    Item { Layout.fillWidth: true }
-
-                    // 最小化按钮
-                    Rectangle {
-                        width: 28; height: 28; radius: Theme.radiusSm
-                        color: btnMinMouse.pressed ? Theme.divider : (btnMinMouse.containsMouse ? Theme.backgroundHover : "transparent")
-
-                        Text {
-                            anchors.centerIn: parent
-                            text: "–"
-                            font.pixelSize: Theme.fontSizeLg
-                            color: Theme.textSecondary
-                        }
-
-                        MouseArea {
-                            id: btnMinMouse
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            onClicked: root.showMinimized()
-                        }
-                    }
-
-                    // 最大化/还原按钮
-                    Rectangle {
-                        width: 28; height: 28; radius: Theme.radiusSm
-                        color: btnMaxMouse.pressed ? Theme.divider : (btnMaxMouse.containsMouse ? Theme.backgroundHover : "transparent")
-
-                        Text {
-                            anchors.centerIn: parent
-                            text: root.isMaximized ? "❐" : "□"
-                            font.pixelSize: 14
-                            color: Theme.textSecondary
-                        }
-
-                        MouseArea {
-                            id: btnMaxMouse
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            onClicked: {
-                                if (root.visibility === Window.FullScreen) {
-                                    root.showNormal()
-                                } else {
-                                    root.showFullScreen()
-                                }
-                            }
-                        }
-                    }
-
-                    // 关闭按钮
-                    Rectangle {
-                        width: 28; height: 28; radius: Theme.radiusSm
-                        color: btnCloseMouse.pressed ? Theme.error : (btnCloseMouse.containsMouse ? Theme.errorHover : "transparent")
-
-                        Text {
-                            anchors.centerIn: parent
-                            text: "×"
-                            font.pixelSize: Theme.fontSizeLg
-                            color: btnCloseMouse.containsMouse ? "white" : Theme.textPlaceholder
-                        }
-
-                        MouseArea {
-                            id: btnCloseMouse
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            onClicked: root.close()
-                        }
-                    }
-                }
+                onCloseClicked: root.close()
             }
 
             // 内容区域

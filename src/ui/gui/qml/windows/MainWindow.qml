@@ -12,7 +12,7 @@ AppWindow {
     height: 520
     minimumWidth: 360
     minimumHeight: 420
-    title: "小智助手"
+    title: ""
     visible: true
 
     // 直接使用 ColumnLayout，不需要额外的 Rectangle 层
@@ -21,85 +21,20 @@ AppWindow {
         anchors.fill: parent
         spacing: 0
 
-            // 自定义标题栏
-            Rectangle {
-                id: titleBar
+            // 自定义标题栏 - 平台自适应
+            TitleBar {
                 Layout.fillWidth: true
-                Layout.preferredHeight: 36
-                color: Theme.backgroundSecondary
-
-                MouseArea {
-                    anchors.fill: parent
-                    property point startPos
-
-                    onPressed: (mouse) => { startPos = Qt.point(mouse.x, mouse.y) }
-                    onPositionChanged: (mouse) => {
-                        if (pressed) {
-                            root.x += mouse.x - startPos.x
-                            root.y += mouse.y - startPos.y
-                        }
+                showMaximize: true
+                onMinimizeClicked: root.showMinimized()
+                onMaximizeClicked: {
+                    if (root.visibility === Window.FullScreen || root.visibility === Window.Maximized) {
+                        root.showNormal()
+                    } else {
+                        root.showMaximized()
                     }
                 }
-
-                RowLayout {
-                    anchors.fill: parent
-                    anchors.leftMargin: 10
-                    anchors.rightMargin: 8
-                    spacing: Theme.spacingSm
-
-                    Item { Layout.fillWidth: true }
-
-                    // 最小化
-                    Rectangle {
-                        width: 24; height: 24; radius: Theme.radiusSm
-                        color: btnMinMouse.pressed ? Theme.divider : (btnMinMouse.containsMouse ? Theme.backgroundHover : "transparent")
-                        Text { anchors.centerIn: parent; text: "–"; font.pixelSize: Theme.fontSizeMd; color: Theme.textSecondary }
-                        MouseArea {
-                            id: btnMinMouse
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            onClicked: root.showMinimized()
-                        }
-                    }
-
-                    // 最大化/还原
-                    Rectangle {
-                        width: 24; height: 24; radius: Theme.radiusSm
-                        color: btnMaxMouse.pressed ? Theme.divider : (btnMaxMouse.containsMouse ? Theme.backgroundHover : "transparent")
-                        Text {
-                            anchors.centerIn: parent
-                            text: root.isMaximized ? "❐" : "□"
-                            font.pixelSize: 12
-                            color: Theme.textSecondary
-                        }
-                        MouseArea {
-                            id: btnMaxMouse
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            onClicked: {
-                                if (root.visibility === Window.FullScreen) {
-                                    root.showNormal()
-                                } else {
-                                    root.showFullScreen()
-                                }
-                            }
-                        }
-                    }
-
-                    // 关闭
-                    Rectangle {
-                        width: 24; height: 24; radius: Theme.radiusSm
-                        color: btnCloseMouse.pressed ? Theme.error : (btnCloseMouse.containsMouse ? Theme.errorHover : "transparent")
-                        Text { anchors.centerIn: parent; text: "×"; font.pixelSize: Theme.fontSizeMd; color: btnCloseMouse.containsMouse ? "white" : Theme.textPlaceholder }
-                        MouseArea {
-                            id: btnCloseMouse
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            onClicked: {
-                                if (eventBridge) eventBridge.onQuitRequest()
-                            }
-                        }
-                    }
+                onCloseClicked: {
+                    if (eventBridge) eventBridge.onQuitRequest()
                 }
             }
 
