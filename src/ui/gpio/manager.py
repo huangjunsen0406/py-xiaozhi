@@ -139,9 +139,9 @@ class GPIOViewManager:
 
     def _on_key3(self):
         """KEY3: 切换自动/手动模式."""
-        self._auto_mode = not self._auto_mode
         self._safe_emit(Events.UI_AUTO_TOGGLE)
-        mode_text = "自动" if self._auto_mode else "手动"
+        new_mode = not self._auto_mode
+        mode_text = "自动" if new_mode else "手动"
         logger.info(f"[KEY3] 切换到{mode_text}模式")
 
     def _on_key4(self):
