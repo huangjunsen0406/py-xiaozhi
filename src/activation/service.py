@@ -725,17 +725,21 @@ class ActivationService:
         self.logger.info(f"激活提示: {message}")
         self.logger.info(f"验证码: {code}")
 
-        # 播放语音
+        # 复制验证码到剪贴板
         try:
-            from src.utils.common_utils import (
-                handle_verification_code,
-                play_audio_nonblocking,
-            )
+            from src.utils.common_utils import handle_verification_code
 
             handle_verification_code(text)
-            play_audio_nonblocking(text)
         except Exception as e:
-            self.logger.debug(f"语音播放失败: {e}")
+            self.logger.debug(f"复制验证码失败: {e}")
+
+        # 播报验证码
+        try:
+            from src.utils.activation_announcer import announce_activation_code
+
+            announce_activation_code(code, locale="zh-CN")
+        except Exception as e:
+            self.logger.debug(f"验证码播报失败: {e}")
 
     async def _do_activate(self, challenge: str, code: str) -> bool:
         """
@@ -789,10 +793,11 @@ class ActivationService:
                     # 重试时重新播放验证码
                     if attempt > 0:
                         try:
-                            from src.utils.common_utils import play_audio_nonblocking
+                            from src.utils.activation_announcer import (
+                                announce_activation_code,
+                            )
 
-                            text = f".请登录到控制面板添加设备，输入验证码：{' '.join(code)}..."
-                            play_audio_nonblocking(text)
+                            announce_activation_code(code, locale="zh-CN")
                         except Exception:
                             pass
 
@@ -821,5 +826,7 @@ class ActivationService:
                     self.logger.warning(f"激活请求失败: {e}，重试中...")
                     await asyncio.sleep(retry_interval)
 
+        self.logger.error(f"激活失败，达到最大重试次数 ({max_retries})")
+        return False
         self.logger.error(f"激活失败，达到最大重试次数 ({max_retries})")
         return False
