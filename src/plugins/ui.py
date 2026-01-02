@@ -46,6 +46,13 @@ class UIPlugin(Plugin):
 
             self._is_gui = True
             self.view_manager = ViewManager(event_bus=self._ctx.event_bus)
+        elif self.mode == "gpio":
+            # GPIO 模式：仅支持 Linux（树莓派）
+            from src.ui.gpio import GPIOViewManager
+
+            self._is_gui = False
+            self.view_manager = GPIOViewManager(event_bus=self._ctx.event_bus)
+            logger.info("GPIO 模式，使用 GPIOViewManager")
         else:
             # CLI 模式使用 CLIViewManager
             from src.ui.cli import CLIViewManager

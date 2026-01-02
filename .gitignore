@@ -11,8 +11,6 @@ venv/
 cache/
 
 
-/models
-
 # 打包相关
 /build
 /dist
@@ -32,3 +30,6 @@ xiaozhi.spec
 /installer
 
 .unifypy
+xiaozhi-desktop/
+chakra-qml/
+py-xiaozhi/

@@ -15,11 +15,15 @@ def parse_args():
     from src.constants.system import SystemConstants
 
     parser = argparse.ArgumentParser(description=SystemConstants.APP_DISPLAY_NAME)
+    # 运行模式选择
+    # - gui: 图形界面模式，使用 PySide6 + QML
+    # - cli: 命令行模式，使用终端交互
+    # - gpio: GPIO 按键模式，仅支持 Linux（树莓派），通过物理按键控制
     parser.add_argument(
         "--mode",
-        choices=["gui", "cli"],
+        choices=["gui", "cli", "gpio"],
         default="gui",
-        help="运行模式：gui(图形界面) 或 cli(命令行)",
+        help="运行模式：gui(图形界面)、cli(命令行) 或 gpio(GPIO按键，仅Linux)",
     )
     parser.add_argument(
         "--protocol",
@@ -82,6 +86,8 @@ async def handle_activation(mode: str) -> bool:
         # 需要激活，根据模式启动激活界面
         if mode == "gui":
             return await _run_gui_activation(activation_service)
+        elif mode == "gpio":
+            return await _run_gpio_activation(activation_service)
         else:
             return await _run_cli_activation(activation_service)
 
@@ -104,6 +110,15 @@ async def _run_cli_activation(activation_service) -> bool:
 
     cli_activation = CLIActivation(activation_service)
     return await cli_activation.run_activation_process()
+
+
+async def _run_gpio_activation(activation_service) -> bool:
+    """运行 GPIO 激活流程（复用 CLI 激活）."""
+    from src.ui.gpio import GPIOActivation
+
+    gpio_activation = GPIOActivation(activation_service)
+    return await gpio_activation.run_activation_process()
+
 
 
 async def start_app(mode: str, protocol: str, skip_activation: bool) -> int:
@@ -208,7 +223,7 @@ if __name__ == "__main__":
                 else:
                     raise
         else:
-            # CLI 模式：标准 asyncio
+            # CLI / GPIO 模式：标准 asyncio
             exit_code = asyncio.run(
                 start_app(args.mode, args.protocol, args.skip_activation)
             )
