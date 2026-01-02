@@ -68,6 +68,10 @@ dependencies = [
     "pycaw>=20230407; sys_platform == 'win32'",
     "pywin32>=306; sys_platform == 'win32'",
 
+    # Linux 依赖 (GPIO 模式)
+    "gpiozero>=2.0.1; sys_platform == 'linux'",
+    "lgpio>=0.2.2.0; sys_platform == 'linux'",
+
     # 开发
     "pyinstaller>=6.0.0",
     "ruff>=0.4.0",
@@ -88,6 +92,12 @@ windows = [
     "comtypes>=1.4.0",
     "pycaw>=20230407",
     "pywin32>=306",
+]
+
+# Linux 特定依赖 (GPIO 模式)
+linux = [
+    "gpiozero>=2.0.1",
+    "lgpio>=0.2.2.0",
 ]
 
 [project.scripts]

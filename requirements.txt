@@ -61,3 +61,7 @@ pywin32>=306; sys_platform == "win32"
 applescript>=2021.2.9; sys_platform == "darwin"
 pyobjc-framework-Quartz>=10.0; sys_platform == "darwin"
 pyobjc-framework-Cocoa>=10.0; sys_platform == "darwin"
+
+# Linux (GPIO 模式)
+gpiozero>=2.0.1; sys_platform == "linux"
+lgpio>=0.2.2.0; sys_platform == "linux"

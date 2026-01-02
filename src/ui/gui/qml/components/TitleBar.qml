@@ -22,31 +22,22 @@ Rectangle {
     MouseArea {
         id: dragArea
         anchors.fill: parent
-        // macOS: 左边留空给按钮，Windows: 右边留空给按钮
+        // macOS: 左边留空给按钮，Windows/Linux: 右边留空给按钮
         anchors.leftMargin: Theme.titleButtonsOnLeft ? (macButtons.width + Theme.spacingLg) : 0
         anchors.rightMargin: Theme.titleButtonsOnLeft ? 0 : (winButtons.width + Theme.spacingMd)
 
-        property point startPos
-
-        onPressed: (mouse) => {
-            startPos = Qt.point(mouse.x, mouse.y)
-        }
-
-        onPositionChanged: (mouse) => {
-            if (pressed) {
-                let delta = Qt.point(mouse.x - startPos.x, mouse.y - startPos.y)
-                let win = Window.window
-                if (win) {
-                    win.x += delta.x
-                    win.y += delta.y
-                }
+        onPressed: {
+            // 使用系统原生拖拽 API，兼容所有平台（包括 Linux Wayland）
+            let win = Window.window
+            if (win) {
+                win.startSystemMove()
             }
         }
 
         onDoubleClicked: {
             let win = Window.window
             if (win) {
-                // macOS: 双击进入全屏，Windows: 双击最大化
+                // macOS: 双击进入全屏，Windows/Linux: 双击最大化
                 if (Theme.titleButtonsOnLeft) {
                     if (win.visibility === Window.FullScreen) {
                         win.showNormal()

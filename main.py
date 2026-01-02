@@ -120,7 +120,6 @@ async def _run_gpio_activation(activation_service) -> bool:
     return await gpio_activation.run_activation_process()
 
 
-
 async def start_app(mode: str, protocol: str, skip_activation: bool) -> int:
     """启动应用的统一入口."""
     global _container  # 用于 SIGINT 处理
