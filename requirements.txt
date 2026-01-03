@@ -22,7 +22,6 @@ requests>=2.31.0
 openai>=1.0.0
 sherpa-onnx>=1.12.8
 sherpa-onnx-core>=1.12.8
-sherpa-onnx-bin>=1.12.8
 
 # 图像处理
 opencv-python-headless>=4.9.0
