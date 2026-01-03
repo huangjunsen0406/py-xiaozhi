@@ -21,6 +21,7 @@ requests>=2.31.0
 # AI/ML
 openai>=1.0.0
 sherpa-onnx>=1.12.8
+onnxruntime==1.17.1
 
 # 图像处理
 opencv-python-headless>=4.9.0
