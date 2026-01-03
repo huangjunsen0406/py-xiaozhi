@@ -1,4 +1,5 @@
 import asyncio
+import threading
 import time
 from pathlib import Path
 from typing import Callable, Optional
@@ -33,6 +34,10 @@ class WakeWordDetector:
         self._model_dir: Optional[Path] = None
         self._keyword_spotter = None
         self._stream = None
+
+        # 添加锁保护 sherpa-onnx 对象的访问
+        self._onnx_lock = threading.Lock()
+        self._stopping = False  # 标记是否正在停止
 
         self._sample_rate = AudioConfig.INPUT_SAMPLE_RATE
         self._num_threads = 4
@@ -159,20 +164,25 @@ class WakeWordDetector:
             return False
 
     def _release_model(self):
-        try:
-            if self._stream is not None:
-                del self._stream
+        with self._onnx_lock:
+            try:
+                # 先置空引用，再删除，避免竞态
+                stream = self._stream
+                spotter = self._keyword_spotter
                 self._stream = None
-
-            if self._keyword_spotter is not None:
-                del self._keyword_spotter
                 self._keyword_spotter = None
 
-            self._model_loaded = False
-            logger.debug("模型资源已释放")
+                if stream is not None:
+                    del stream
 
-        except Exception as e:
-            logger.debug(f"释放模型资源时出错: {e}")
+                if spotter is not None:
+                    del spotter
+
+                self._model_loaded = False
+                logger.debug("模型资源已释放")
+
+            except Exception as e:
+                logger.debug(f"释放模型资源时出错: {e}")
 
     def on_detected(self, callback: Callable):
         self.on_detected_callback = callback
@@ -229,6 +239,8 @@ class WakeWordDetector:
             return False
 
     async def stop(self):
+        # 标记正在停止，让检测循环安全退出
+        self._stopping = True
         self._running = False
 
         # Remove audio listener
@@ -236,7 +248,6 @@ class WakeWordDetector:
             self.audio_codec.remove_audio_listener(self)
             self.audio_codec = None
 
-        # Cancel detection task
         if self._detection_task:
             self._detection_task.cancel()
             try:
@@ -244,6 +255,9 @@ class WakeWordDetector:
             except asyncio.CancelledError:
                 pass
             self._detection_task = None
+
+        # 等待一小段时间确保检测循环完全退出
+        await asyncio.sleep(0.05)
 
         # Clear queue
         if self._audio_queue:
@@ -254,11 +268,13 @@ class WakeWordDetector:
                     break
             self._audio_queue = None
 
-        # Release stream (but keep model)
-        if self._stream is not None:
-            del self._stream
-            self._stream = None
+        with self._onnx_lock:
+            if self._stream is not None:
+                _stream = self._stream  # noqa: F841
+                self._stream = None
+                del _stream
 
+        self._stopping = False
         logger.info("唤醒词检测器已停止")
 
     async def reload(self, model_path: Optional[str] = None) -> bool:
@@ -296,9 +312,9 @@ class WakeWordDetector:
         error_count = 0
         MAX_ERRORS = 5
 
-        while self._running:
+        while self._running and not self._stopping:
             try:
-                if self._paused:
+                if self._paused or self._stopping:
                     await asyncio.sleep(0.1)
                     continue
 
@@ -340,7 +356,11 @@ class WakeWordDetector:
                 await asyncio.sleep(1)
 
     async def _process_audio(self):
-        if not self._stream or not self._audio_queue:
+        # 检查是否正在停止
+        if self._stopping:
+            return
+
+        if not self._audio_queue:
             return
 
         try:
@@ -351,17 +371,30 @@ class WakeWordDetector:
         if audio_data is None or len(audio_data) == 0:
             return
 
-        # Feed audio to KeywordSpotter
-        self._stream.accept_waveform(sample_rate=self._sample_rate, waveform=audio_data)
+        detected_result = None
 
-        # Check for detection
-        if self._keyword_spotter.is_ready(self._stream):
-            self._keyword_spotter.decode_stream(self._stream)
-            result = self._keyword_spotter.get_result(self._stream)
+        # 使用锁保护 sherpa-onnx 对象的访问
+        with self._onnx_lock:
+            # 再次检查对象是否有效（可能在等待锁时被释放）
+            if self._stopping or self._stream is None or self._keyword_spotter is None:
+                return
 
-            if result:
-                await self._handle_detection(result)
-                self._keyword_spotter.reset_stream(self._stream)
+            try:
+                self._stream.accept_waveform(sample_rate=self._sample_rate, waveform=audio_data)
+
+                if self._keyword_spotter.is_ready(self._stream):
+                    self._keyword_spotter.decode_stream(self._stream)
+                    result = self._keyword_spotter.get_result(self._stream)
+
+                    if result:
+                        detected_result = result
+                        self._keyword_spotter.reset_stream(self._stream)
+            except Exception as e:
+                logger.debug(f"处理音频时出错: {e}")
+
+        # 在锁外处理回调，避免死锁
+        if detected_result is not None:
+            await self._handle_detection(detected_result)
 
     async def _handle_detection(self, result):        # Anti-repeat check
         current_time = time.time()
