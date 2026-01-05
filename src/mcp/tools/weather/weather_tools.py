@@ -1,18 +1,29 @@
 """
 天气工具 MCP 示例
 
-一个简洁的 MCP Tools 实现示例，展示如何创建工具供 AI 调用。
+一个简洁的 MCP Tools 实现示例，展示如何使用装饰器创建工具供 AI 调用。
 """
 
 import json
 from typing import Any, Dict
 
 from src.logging import get_logger
+from src.mcp.decorators import Prop, PropType, mcp_tool
 
 logger = get_logger()
 
 
-async def get_weather(args: Dict[str, Any]) -> str:
+@mcp_tool(
+    name="get_weather",
+    description=(
+        "获取指定城市的当前天气。"
+        "参数: city - 城市名称（如：北京、上海、广州）"
+    ),
+    props=[
+        Prop("city", PropType.STR, default="北京"),
+    ],
+)
+def get_weather(args: Dict[str, Any]) -> str:
     """获取当前天气。
 
     Args:
@@ -37,7 +48,18 @@ async def get_weather(args: Dict[str, Any]) -> str:
     return json.dumps(weather_data, ensure_ascii=False)
 
 
-async def get_forecast(args: Dict[str, Any]) -> str:
+@mcp_tool(
+    name="get_forecast",
+    description=(
+        "获取指定城市的天气预报。"
+        "参数: city - 城市名称, days - 预报天数(1-7天)"
+    ),
+    props=[
+        Prop("city", PropType.STR, default="北京"),
+        Prop("days", PropType.INT, default=3, min_val=1, max_val=7),
+    ],
+)
+def get_forecast(args: Dict[str, Any]) -> str:
     """获取天气预报。
 
     Args:
