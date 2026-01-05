@@ -70,6 +70,32 @@ class McpServer:
         for decorated_tool in iter_registered_mcp_tools():
             self.add_tool(decorated_tool)
 
+        # 添加天气工具
+        from src.mcp.tools.weather import get_forecast, get_weather
+
+        weather_props = PropertyList([Property("city", PropertyType.STRING)])
+        self.add_tool(
+            McpTool(
+                "get_weather",
+                "获取指定城市的当前天气。用户询问天气时调用。参数: city-城市名称",
+                weather_props,
+                get_weather,
+            )
+        )
+
+        forecast_props = PropertyList([
+            Property("city", PropertyType.STRING),
+            Property("days", PropertyType.INTEGER, default_value=3, min_value=1, max_value=7),
+        ])
+        self.add_tool(
+            McpTool(
+                "get_forecast",
+                "获取天气预报。参数: city-城市, days-天数(1-7)",
+                forecast_props,
+                get_forecast,
+            )
+        )
+
         # 恢复原有工具
         self.tools.extend(original_tools)
 
