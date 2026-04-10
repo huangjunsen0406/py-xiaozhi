@@ -1,41 +1,23 @@
 {
-  "active_plan": "/Users/alxy/Desktop/2AREA/VIBE/py-xiaozhi/.sisyphus/plans/xiaozhi-i18n-fix.md",
-  "started_at": "2026-04-10T20:45:43.121Z",
+  "active_plan": "/Users/alxy/Desktop/2AREA/VIBE/py-xiaozhi/.sisyphus/plans/ui-translate-revert.md",
+  "started_at": "2026-04-10T21:47:21.829Z",
   "session_ids": [
     "ses_28752d1faffe5Km0usIq1VF5fN"
   ],
   "session_origins": {
     "ses_28752d1faffe5Km0usIq1VF5fN": "direct"
   },
-  "plan_name": "xiaozhi-i18n-fix",
+  "plan_name": "ui-translate-revert",
   "agent": "atlas",
   "task_sessions": {
     "todo:1": {
       "task_key": "todo:1",
       "task_label": "1",
-      "task_title": "**Добавить .qml файлы в xiaozhi.pro**",
-      "session_id": "ses_286d52bc9ffecnbzMElvGVlBuh",
+      "task_title": "**Revert settings_window.ui** — заменить все `<string>QCoreApplication.translate(...)` на plain Chinese текст",
+      "session_id": "ses_2869f6245ffeCwMxM85WC2LiCH",
       "agent": "Sisyphus-Junior",
-      "category": "unspecified-high",
-      "updated_at": "2026-04-10T20:54:29.308Z"
-    },
-    "todo:8": {
-      "task_key": "todo:8",
-      "task_label": "8",
-      "task_title": "**Добавить English переводы для .ui файлов**",
-      "session_id": "ses_286d171a6ffelajnWhv3dNPg72",
-      "agent": "Sisyphus-Junior",
-      "category": "unspecified-high",
-      "updated_at": "2026-04-10T21:05:08.151Z"
-    },
-    "todo:10": {
-      "task_key": "todo:10",
-      "task_label": "10",
-      "task_title": "**Финальная проверка перевода**",
-      "session_id": "ses_286c7a0e6fferEAL0UG6Oq5snL",
-      "agent": "Sisyphus-Junior",
-      "category": "unspecified-high",
-      "updated_at": "2026-04-10T21:08:50.762Z"
+      "category": "quick",
+      "updated_at": "2026-04-10T21:53:00.354Z"
     }
   }
 }

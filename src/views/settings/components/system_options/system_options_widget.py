@@ -45,7 +45,8 @@ class SystemOptionsWidget(QWidget):
             from PyQt5 import uic
 
             ui_path = Path(__file__).parent / "system_options_widget.ui"
-            uic.loadUi(str(ui_path), self)
+            ui = uic.loadUi(str(ui_path), self)
+            ui.retranslateUi(self)
 
             # 获取UI控件引用
             self._get_ui_controls()
