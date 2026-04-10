@@ -763,21 +763,6 @@
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
-        <source>参数配置</source>
-        <translation type="obsolete">Настройки</translation>
-    </message>
-    <message>
-        <location filename="../../src/display/gui_display.qml" line="401"/>
-        <source>客户端ID:</source>
-        <translation type="obsolete">ID клиента:</translation>
-    </message>
-    <message>
-        <location filename="../../src/display/gui_display.qml" line="401"/>
-        <source>设备ID:</source>
-        <translation type="obsolete">ID устройства:</translation>
-    </message>
-    <message>
-        <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>OTA版本URL:</source>
         <translation type="obsolete">URL версии OTA:</translation>
     </message>
@@ -999,11 +984,6 @@
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
-        <source>客户端ID:</source>
-        <translation type="obsolete">ID клиента:</translation>
-    </message>
-    <message>
-        <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>设备ID:</source>
         <translation type="obsolete">ID устройства:</translation>
     </message>
@@ -1168,11 +1148,6 @@
         <location filename="../../src/views/settings/components/wake_word/wake_word_widget.py" line="418"/>
         <source>保存关键词失败: {error}</source>
         <translation>Не удалось сохранить ключевые слова: {error}</translation>
-    </message>
-    <message>
-        <location filename="../../src/display/gui_display.qml" line="401"/>
-        <source>唤醒词</source>
-        <translation type="obsolete">Слово пробуждения</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>

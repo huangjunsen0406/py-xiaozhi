@@ -763,21 +763,6 @@ Click to refresh preview or change camera index</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
-        <source>参数配置</source>
-        <translation type="obsolete">Settings</translation>
-    </message>
-    <message>
-        <location filename="../../src/display/gui_display.qml" line="401"/>
-        <source>客户端ID:</source>
-        <translation type="obsolete">Client ID:</translation>
-    </message>
-    <message>
-        <location filename="../../src/display/gui_display.qml" line="401"/>
-        <source>设备ID:</source>
-        <translation type="obsolete">Device ID:</translation>
-    </message>
-    <message>
-        <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>OTA版本URL:</source>
         <translation type="obsolete">OTA Version URL:</translation>
     </message>
@@ -999,11 +984,6 @@ Click to refresh preview or change camera index</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
-        <source>客户端ID:</source>
-        <translation type="obsolete">Client ID:</translation>
-    </message>
-    <message>
-        <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>设备ID:</source>
         <translation type="obsolete">Device ID:</translation>
     </message>
@@ -1168,11 +1148,6 @@ Automatically converted to pinyin format</translation>
         <location filename="../../src/views/settings/components/wake_word/wake_word_widget.py" line="418"/>
         <source>保存关键词失败: {error}</source>
         <translation>Failed to save keywords: {error}</translation>
-    </message>
-    <message>
-        <location filename="../../src/display/gui_display.qml" line="401"/>
-        <source>唤醒词</source>
-        <translation type="obsolete">Wake Word</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
