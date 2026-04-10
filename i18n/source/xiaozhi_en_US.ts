@@ -211,11 +211,7 @@
 </context>
 <context>
     <name>AudioWidget</name>
-    <message>
-        <location filename="../../src/display/gui_display.qml" line="401"/>
-        <source>音频设备</source>
-        <translation type="obsolete">Audio Device</translation>
-    </message>
+
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>音频输入设备 (麦克风)</source>
@@ -532,11 +528,7 @@ Click Start Preview to view camera feed</translation>
 </context>
 <context>
     <name>CameraWidget</name>
-    <message>
-        <location filename="../../src/display/gui_display.qml" line="401"/>
-        <source>摄像头</source>
-        <translation type="obsolete">Camera</translation>
-    </message>
+
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>摄像头基本配置</source>
