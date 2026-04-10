@@ -1024,11 +1024,11 @@
     </message>
     <message>
         <source>唤醒词</source>
-        <translation>唤醒词</translation>
+        <translation>Слово пробуждения</translation>
     </message>
     <message>
         <source>启用唤醒词:</source>
-        <translation>Включить唤醒词:</translation>
+        <translation>Включить обнаружение по слову пробуждения:</translation>
     </message>
     <message>
         <source>模型路径:</source>
@@ -1040,15 +1040,15 @@
     </message>
     <message>
         <source>唤醒词列表:</source>
-        <translation>Список唤醒词:</translation>
+        <translation>Список слов пробуждения:</translation>
     </message>
     <message>
         <source>每行一个唤醒词</source>
-        <translation>Один唤醒词в строке</translation>
+        <translation>Одно слово пробуждения в строке</translation>
     </message>
     <message>
         <source>提示: 每行输入一个唤醒词，如"小智"、"小美"</source>
-        <translation>Подсказка: Введите один唤醒词в строке, например "小智", "小美"</translation>
+        <translation>Подсказка: Введите одно слово пробуждения в строке, например "小智", "小美"</translation>
     </message>
     <message>
         <source>摄像头</source>
@@ -1182,7 +1182,7 @@
     <name>WakeWord</name>
     <message>
         <source>唤醒词</source>
-        <translation>唤醒词</translation>
+        <translation>Слово пробуждения</translation>
     </message>
     <message>
         <source>启用唤醒词检测</source>
@@ -1202,17 +1202,17 @@
     </message>
     <message>
         <source>唤醒词配置</source>
-        <translation>唤醒词 настройка</translation>
+        <translation>Настройка слов пробуждения</translation>
     </message>
     <message>
         <source>请输入中文唤醒词，保存时会自动转换为拼音格式
 例如：小米小米（将自动转换为：x iǎo m ǐ x iǎo m ǐ @小米小米）</source>
-        <translation>Введите китайские唤醒词, при сохранении они автоматически преобразуются в пиньинь
+        <translation>Введите ключевые слова на китайском, при сохранении они автоматически преобразуются в пиньинь
 Например: 小米小米 (будет преобразовано в: x iǎo m ǐ x iǎo m ǐ @小米小米)</translation>
     </message>
     <message>
         <source>请输入中文唤醒词，每行一个（如：小米小米）</source>
-        <translation>Введите唤醒词 на китайском, по одному в строке (например: 小米小米)</translation>
+        <translation>Введите ключевые слова на китайском, по одному в строке (например: 小米小米)</translation>
     </message>
 </context>
 </TS>
