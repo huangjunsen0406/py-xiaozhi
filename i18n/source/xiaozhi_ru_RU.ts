@@ -569,6 +569,11 @@
         <translation>Ошибка при сбросе настроек: {str(e)}</translation>
     </message>
     <message>
+        <location filename="../../src/views/settings/settings_window.py" line="257"/>
+        <source>确定要重置所有配置为默认值吗？\n这将清除当前的所有设置。</source>
+        <translation>Вы уверены, что хотите сбросить все настройки до значений по умолчанию?\nЭто сотрёт все текущие настройки.</translation>
+    </message>
+    <message>
         <location filename="../../src/views/settings/settings_window.py" line="314"/>
         <source>重启失败</source>
         <translation>Не удалось перезапустить</translation>

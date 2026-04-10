@@ -569,6 +569,11 @@ Click Start Preview to view camera feed</translation>
         <translation>Error resetting configuration: {str(e)}</translation>
     </message>
     <message>
+        <location filename="../../src/views/settings/settings_window.py" line="257"/>
+        <source>确定要重置所有配置为默认值吗？\n这将清除当前的所有设置。</source>
+        <translation>Are you sure you want to reset all settings to defaults?\nThis will erase all current settings.</translation>
+    </message>
+    <message>
         <location filename="../../src/views/settings/settings_window.py" line="314"/>
         <source>重启失败</source>
         <translation>Restart Failed</translation>
