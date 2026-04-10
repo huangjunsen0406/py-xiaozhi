@@ -50,8 +50,7 @@ class SettingsWindow(QDialog):
             from PyQt5 import uic
 
             ui_path = Path(__file__).parent / "settings_window.ui"
-            ui = uic.loadUi(str(ui_path), self)
-            ui.retranslateUi(self)
+            uic.loadUi(str(ui_path), self)
 
             # 获取UI控件的引用
             self._get_ui_controls()

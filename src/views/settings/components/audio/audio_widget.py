@@ -67,8 +67,7 @@ class AudioWidget(QWidget):
             from PyQt5 import uic
 
             ui_path = Path(__file__).parent / "audio_widget.ui"
-            ui = uic.loadUi(str(ui_path), self)
-            ui.retranslateUi(self)
+            uic.loadUi(str(ui_path), self)
 
             # 获取UI控件引用
             self._get_ui_controls()

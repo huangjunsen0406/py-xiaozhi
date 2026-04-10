@@ -4,19 +4,16 @@
 <context>
     <name>Audio</name>
     <message>
-        <location filename="../../src/views/settings/components/audio/audio_widget.py" line="149"/>
-        <location filename="../../src/views/settings/components/audio/audio_widget.py" line="173"/>
+        <location filename="../../src/views/settings/components/audio/audio_widget.py" line="174"/>
         <source>采样率: {rate}Hz, 通道: {channels}</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../src/views/settings/components/audio/audio_widget.py" line="158"/>
         <location filename="../../src/views/settings/components/audio/audio_widget.py" line="182"/>
         <source>设备信息获取失败</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../src/views/settings/components/audio/audio_widget.py" line="162"/>
         <location filename="../../src/views/settings/components/audio/audio_widget.py" line="186"/>
         <source>未选择设备</source>
         <translation type="unfinished"></translation>
@@ -27,7 +24,6 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../src/views/settings/components/audio/audio_widget.py" line="217"/>
         <location filename="../../src/views/settings/components/audio/audio_widget.py" line="234"/>
         <source> (默认)</source>
         <translation type="unfinished"></translation>
@@ -43,19 +39,17 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../src/views/settings/components/audio/audio_widget.py" line="327"/>
-        <location filename="../../src/views/settings/components/audio/audio_widget.py" line="344"/>
+        <location filename="../../src/views/settings/components/audio/audio_widget.py" line="345"/>
         <source>默认</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../src/views/settings/components/audio/audio_widget.py" line="368"/>
-        <location filename="../../src/views/settings/components/audio/audio_widget.py" line="540"/>
+        <location filename="../../src/views/settings/components/audio/audio_widget.py" line="539"/>
         <source>提示</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../src/views/settings/components/audio/audio_widget.py" line="369"/>
+        <location filename="../../src/views/settings/components/audio/audio_widget.py" line="367"/>
         <source>请先选择输入设备</source>
         <translation type="unfinished"></translation>
     </message>
@@ -70,7 +64,6 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../src/views/settings/components/audio/audio_widget.py" line="406"/>
         <location filename="../../src/views/settings/components/audio/audio_widget.py" line="574"/>
         <source>错误: 无法获取设备信息</source>
         <translation type="unfinished"></translation>
@@ -136,11 +129,6 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../src/views/settings/components/audio/audio_widget.py" line="498"/>
-        <source>音质数据: 最大音量={max}, 平均音量={avg}, 活跃度={activity}</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
         <location filename="../../src/views/settings/components/audio/audio_widget.py" line="508"/>
         <source>麦克风工作正常</source>
         <translation type="unfinished"></translation>
@@ -156,7 +144,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../src/views/settings/components/audio/audio_widget.py" line="541"/>
+        <location filename="../../src/views/settings/components/audio/audio_widget.py" line="539"/>
         <source>请先选择输出设备</source>
         <translation type="unfinished"></translation>
     </message>
@@ -216,7 +204,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../src/views/settings/components/audio/audio_widget.py" line="812"/>
+        <location filename="../../src/views/settings/components/audio/audio_widget.py" line="813"/>
         <source>已重置为默认设置</source>
         <translation type="unfinished"></translation>
     </message>
@@ -224,7 +212,7 @@
 <context>
     <name>CLIActivation</name>
     <message>
-        <location filename="../../src/views/activation/cli_activation.py" line="92"/>
+        <location filename="../../src/views/activation/cli_activation.py" line="91"/>
         <source>小智AI客户端 - 设备激活流程</source>
         <translation type="unfinished"></translation>
     </message>
@@ -239,12 +227,12 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../src/views/activation/cli_activation.py" line="126"/>
+        <location filename="../../src/views/activation/cli_activation.py" line="125"/>
         <source>   序列号: </source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../src/views/activation/cli_activation.py" line="130"/>
+        <location filename="../../src/views/activation/cli_activation.py" line="129"/>
         <source>   MAC地址: </source>
         <translation type="unfinished"></translation>
     </message>
@@ -259,27 +247,27 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../src/views/activation/cli_activation.py" line="146"/>
+        <location filename="../../src/views/activation/cli_activation.py" line="145"/>
         <source>已激活</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../src/views/activation/cli_activation.py" line="148"/>
+        <location filename="../../src/views/activation/cli_activation.py" line="145"/>
         <source>未激活</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../src/views/activation/cli_activation.py" line="152"/>
+        <location filename="../../src/views/activation/cli_activation.py" line="151"/>
         <source>   激活状态: </source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../src/views/activation/cli_activation.py" line="166"/>
+        <location filename="../../src/views/activation/cli_activation.py" line="165"/>
         <source>错误: 未获取到激活数据，请检查网络连接</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../src/views/activation/cli_activation.py" line="184"/>
+        <location filename="../../src/views/activation/cli_activation.py" line="183"/>
         <source>正在连接激活服务器，请保持网络连接...</source>
         <translation type="unfinished"></translation>
     </message>
@@ -299,7 +287,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../src/views/activation/cli_activation.py" line="224"/>
+        <location filename="../../src/views/activation/cli_activation.py" line="223"/>
         <source>
 验证码（请在网站输入）: </source>
         <translation type="unfinished"></translation>
@@ -311,7 +299,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../src/views/activation/cli_activation.py" line="229"/>
+        <location filename="../../src/views/activation/cli_activation.py" line="228"/>
         <source>1. 打开浏览器访问 xiaozhi.me</source>
         <translation type="unfinished"></translation>
     </message>
@@ -326,7 +314,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../src/views/activation/cli_activation.py" line="234"/>
+        <location filename="../../src/views/activation/cli_activation.py" line="233"/>
         <source>4. 输入验证码: </source>
         <translation type="unfinished"></translation>
     </message>
@@ -336,7 +324,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../src/views/activation/cli_activation.py" line="239"/>
+        <location filename="../../src/views/activation/cli_activation.py" line="238"/>
         <source>
 等待激活确认中，请在网站完成操作...</source>
         <translation type="unfinished"></translation>
@@ -411,46 +399,27 @@
 <context>
     <name>Camera</name>
     <message>
-        <location filename="../../src/views/settings/components/camera/camera_widget.py" line="193"/>
+        <location filename="../../src/views/settings/components/camera/camera_widget.py" line="192"/>
         <source>扫描结果</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../src/views/settings/components/camera/camera_widget.py" line="194"/>
-        <source>未检测到可用的摄像头设备。
-请确保摄像头已连接并且没有被其他程序占用。</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../../src/views/settings/components/camera/camera_widget.py" line="207"/>
-        <location filename="../../src/views/settings/components/camera/camera_widget.py" line="220"/>
+        <location filename="../../src/views/settings/components/camera/camera_widget.py" line="219"/>
         <source>设置完成</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../src/views/settings/components/camera/camera_widget.py" line="208"/>
-        <source>检测到1个摄像头，已自动设置:
-索引: {index}, 分辨率: {width}x{height}</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../../src/views/settings/components/camera/camera_widget.py" line="221"/>
-        <source>已设置摄像头:
-索引: {index}, 分辨率: {width}x{height}</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../../src/views/settings/components/camera/camera_widget.py" line="239"/>
+        <location filename="../../src/views/settings/components/camera/camera_widget.py" line="238"/>
         <source>错误</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../src/views/settings/components/camera/camera_widget.py" line="240"/>
+        <location filename="../../src/views/settings/components/camera/camera_widget.py" line="238"/>
         <source>扫描摄像头时发生错误: {error}</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../src/views/settings/components/camera/camera_widget.py" line="285"/>
+        <location filename="../../src/views/settings/components/camera/camera_widget.py" line="286"/>
         <source>选择摄像头</source>
         <translation type="unfinished"></translation>
     </message>
@@ -460,7 +429,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../src/views/settings/components/camera/camera_widget.py" line="302"/>
+        <location filename="../../src/views/settings/components/camera/camera_widget.py" line="303"/>
         <source>索引 {idx}: 分辨率 {width}x{height}</source>
         <translation type="unfinished"></translation>
     </message>
@@ -485,7 +454,6 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../src/display/cli_display.py" line="312"/>
         <location filename="../../src/display/cli_display.py" line="446"/>
         <source>输入: </source>
         <translation type="unfinished"></translation>
@@ -494,12 +462,12 @@
 <context>
     <name>GuiDisplay</name>
     <message>
-        <location filename="../../src/display/gui_display.py" line="422"/>
+        <location filename="../../src/display/gui_display.py" line="421"/>
         <source>自动对话</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../src/display/gui_display.py" line="424"/>
+        <location filename="../../src/display/gui_display.py" line="421"/>
         <source>手动对话</source>
         <translation type="unfinished"></translation>
     </message>
@@ -522,7 +490,6 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../src/display/gui_display_model.py" line="43"/>
         <location filename="../../src/display/gui_display_model.py" line="157"/>
         <source>手动对话</source>
         <translation type="unfinished"></translation>
@@ -541,12 +508,12 @@
 <context>
     <name>SettingsWindow</name>
     <message>
-        <location filename="../../src/views/settings/settings_window.py" line="83"/>
+        <location filename="../../src/views/settings/settings_window.py" line="82"/>
         <source>系统选项</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../src/views/settings/settings_window.py" line="91"/>
+        <location filename="../../src/views/settings/settings_window.py" line="90"/>
         <source>唤醒词</source>
         <translation type="unfinished"></translation>
     </message>
@@ -561,63 +528,47 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../src/views/settings/settings_window.py" line="113"/>
+        <location filename="../../src/views/settings/settings_window.py" line="112"/>
         <source>快捷键</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../src/views/settings/settings_window.py" line="170"/>
+        <location filename="../../src/views/settings/settings_window.py" line="169"/>
         <source>配置保存成功</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../src/views/settings/settings_window.py" line="171"/>
-        <source>配置已保存成功！
-
-为了使配置生效，建议重启软件。
-是否现在重启？</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../../src/views/settings/settings_window.py" line="186"/>
-        <location filename="../../src/views/settings/settings_window.py" line="196"/>
-        <location filename="../../src/views/settings/settings_window.py" line="293"/>
+        <location filename="../../src/views/settings/settings_window.py" line="292"/>
         <source>错误</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../src/views/settings/settings_window.py" line="187"/>
+        <location filename="../../src/views/settings/settings_window.py" line="185"/>
         <source>配置保存失败，请检查输入的值。</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../src/views/settings/settings_window.py" line="197"/>
+        <location filename="../../src/views/settings/settings_window.py" line="195"/>
         <source>保存配置时发生错误: {str(e)}</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../src/views/settings/settings_window.py" line="254"/>
+        <location filename="../../src/views/settings/settings_window.py" line="253"/>
         <source>确认重置</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../src/views/settings/settings_window.py" line="255"/>
-        <source>确定要重置所有配置为默认值吗？
-这将清除当前的所有设置。</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../../src/views/settings/settings_window.py" line="294"/>
+        <location filename="../../src/views/settings/settings_window.py" line="292"/>
         <source>重置配置时发生错误: {str(e)}</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../src/views/settings/settings_window.py" line="316"/>
+        <location filename="../../src/views/settings/settings_window.py" line="315"/>
         <source>重启失败</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../src/views/settings/settings_window.py" line="317"/>
+        <location filename="../../src/views/settings/settings_window.py" line="315"/>
         <source>自动重启失败，请手动重启软件以使配置生效。</source>
         <translation type="unfinished"></translation>
     </message>
@@ -625,42 +576,42 @@
 <context>
     <name>Shortcuts</name>
     <message>
-        <location filename="../../src/views/settings/components/shortcuts_settings.py" line="41"/>
+        <location filename="../../src/views/settings/components/shortcuts_settings.py" line="40"/>
         <source>启用全局快捷键</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../src/views/settings/components/shortcuts_settings.py" line="49"/>
+        <location filename="../../src/views/settings/components/shortcuts_settings.py" line="48"/>
         <source>快捷键配置</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../src/views/settings/components/shortcuts_settings.py" line="58"/>
+        <location filename="../../src/views/settings/components/shortcuts_settings.py" line="57"/>
         <source>按住说话</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../src/views/settings/components/shortcuts_settings.py" line="65"/>
+        <location filename="../../src/views/settings/components/shortcuts_settings.py" line="64"/>
         <source>自动对话</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../src/views/settings/components/shortcuts_settings.py" line="72"/>
+        <location filename="../../src/views/settings/components/shortcuts_settings.py" line="71"/>
         <source>中断对话</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../src/views/settings/components/shortcuts_settings.py" line="79"/>
+        <location filename="../../src/views/settings/components/shortcuts_settings.py" line="78"/>
         <source>模式切换</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../src/views/settings/components/shortcuts_settings.py" line="86"/>
+        <location filename="../../src/views/settings/components/shortcuts_settings.py" line="85"/>
         <source>窗口显示/隐藏</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../src/views/settings/components/shortcuts_settings.py" line="97"/>
+        <location filename="../../src/views/settings/components/shortcuts_settings.py" line="96"/>
         <source>恢复默认</source>
         <translation type="unfinished"></translation>
     </message>
@@ -673,20 +624,17 @@
 <context>
     <name>SystemOptions</name>
     <message>
-        <location filename="../../src/views/settings/components/system_options/system_options_widget.py" line="172"/>
-        <location filename="../../src/views/settings/components/system_options/system_options_widget.py" line="321"/>
+        <location filename="../../src/views/settings/components/system_options/system_options_widget.py" line="327"/>
         <source>默认</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../src/views/settings/components/system_options/system_options_widget.py" line="173"/>
-        <location filename="../../src/views/settings/components/system_options/system_options_widget.py" line="322"/>
+        <location filename="../../src/views/settings/components/system_options/system_options_widget.py" line="328"/>
         <source>75%</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../src/views/settings/components/system_options/system_options_widget.py" line="174"/>
-        <location filename="../../src/views/settings/components/system_options/system_options_widget.py" line="323"/>
+        <location filename="../../src/views/settings/components/system_options/system_options_widget.py" line="329"/>
         <source>100%</source>
         <translation type="unfinished"></translation>
     </message>
@@ -694,23 +642,22 @@
 <context>
     <name>SystemTray</name>
     <message>
-        <location filename="../../src/views/components/system_tray.py" line="83"/>
-        <location filename="../../src/views/components/system_tray.py" line="88"/>
+        <location filename="../../src/views/components/system_tray.py" line="87"/>
         <source>待命</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../src/views/components/system_tray.py" line="106"/>
+        <location filename="../../src/views/components/system_tray.py" line="105"/>
         <source>显示主窗口</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../src/views/components/system_tray.py" line="116"/>
+        <location filename="../../src/views/components/system_tray.py" line="115"/>
         <source>参数配置</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../src/views/components/system_tray.py" line="126"/>
+        <location filename="../../src/views/components/system_tray.py" line="125"/>
         <source>退出程序</source>
         <translation type="unfinished"></translation>
     </message>
@@ -723,54 +670,45 @@
 <context>
     <name>WakeWord</name>
     <message>
-        <location filename="../../src/views/settings/components/wake_word/wake_word_widget.py" line="189"/>
+        <location filename="../../src/views/settings/components/wake_word/wake_word_widget.py" line="188"/>
         <source>选择模型目录</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../src/views/settings/components/wake_word/wake_word_widget.py" line="205"/>
-        <location filename="../../src/views/settings/components/wake_word/wake_word_widget.py" line="372"/>
-        <location filename="../../src/views/settings/components/wake_word/wake_word_widget.py" line="414"/>
+        <location filename="../../src/views/settings/components/wake_word/wake_word_widget.py" line="418"/>
         <source>错误</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../src/views/settings/components/wake_word/wake_word_widget.py" line="206"/>
+        <location filename="../../src/views/settings/components/wake_word/wake_word_widget.py" line="204"/>
         <source>浏览模型路径时发生错误: {error}</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../src/views/settings/components/wake_word/wake_word_widget.py" line="352"/>
+        <location filename="../../src/views/settings/components/wake_word/wake_word_widget.py" line="351"/>
         <source>缺少依赖</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../src/views/settings/components/wake_word/wake_word_widget.py" line="353"/>
-        <source>自动拼音转换功能需要安装 pypinyin 库
-
-请运行: pip install pypinyin</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../../src/views/settings/components/wake_word/wake_word_widget.py" line="373"/>
+        <location filename="../../src/views/settings/components/wake_word/wake_word_widget.py" line="371"/>
         <source>模型目录不存在: {path}
 请先配置正确的模型路径。</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../src/views/settings/components/wake_word/wake_word_widget.py" line="399"/>
+        <location filename="../../src/views/settings/components/wake_word/wake_word_widget.py" line="405"/>
         <source>保存成功</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../src/views/settings/components/wake_word/wake_word_widget.py" line="400"/>
+        <location filename="../../src/views/settings/components/wake_word/wake_word_widget.py" line="398"/>
         <source>成功保存 {count} 个唤醒词
 
 已自动转换为拼音格式</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../src/views/settings/components/wake_word/wake_word_widget.py" line="415"/>
+        <location filename="../../src/views/settings/components/wake_word/wake_word_widget.py" line="418"/>
         <source>保存关键词失败: {error}</source>
         <translation type="unfinished"></translation>
     </message>

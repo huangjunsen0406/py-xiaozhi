@@ -18,6 +18,15 @@
       "agent": "Sisyphus-Junior",
       "category": "quick",
       "updated_at": "2026-04-10T21:53:00.354Z"
+    },
+    "todo:6": {
+      "task_key": "todo:6",
+      "task_label": "6",
+      "task_title": "**Добавить retranslateUi() вызовы** во все 5 компонентов после uic.loadUi()",
+      "session_id": "ses_2869c69e5ffecxpvoHQVLh4BaK",
+      "agent": "Sisyphus-Junior",
+      "category": "quick",
+      "updated_at": "2026-04-10T21:55:16.531Z"
     }
   }
 }
