@@ -281,6 +281,11 @@
         <source>设备信息和测试状态将显示在这里...</source>
         <translation type="obsolete">Device info and test status will be shown here...</translation>
     </message>
+    <message>
+        <location filename="../../src/views/settings/components/audio/audio_widget.ui" line="14"/>
+        <source>音频设备</source>
+        <translation>Audio Device</translation>
+    </message>
 </context>
 <context>
     <name>CLIActivation</name>
@@ -619,6 +624,11 @@ Click to refresh preview or change camera index</translation>
         <source>停止预览</source>
         <translation type="obsolete">Stop Preview</translation>
     </message>
+    <message>
+        <location filename="../../src/views/settings/components/camera/camera_widget.ui" line="14"/>
+        <source>摄像头</source>
+        <translation>Camera</translation>
+    </message>
 </context>
 <context>
     <name>CliDisplay</name>
@@ -901,6 +911,21 @@ Click to refresh preview or change camera index</translation>
         <source>取消</source>
         <translation type="obsolete">Cancel</translation>
     </message>
+    <message>
+        <location filename="../../src/views/settings/settings_window.ui" line="20"/>
+        <source>参数配置</source>
+        <translation>Settings</translation>
+    </message>
+    <message>
+        <location filename="../../src/views/settings/settings_window.ui" line="60"/>
+        <source>客户端ID:</source>
+        <translation>Client ID:</translation>
+    </message>
+    <message>
+        <location filename="../../src/views/settings/settings_window.ui" line="77"/>
+        <source>设备ID:</source>
+        <translation>Device ID:</translation>
+    </message>
 </context>
 <context>
     <name>Shortcuts</name>
@@ -1062,6 +1087,11 @@ Click to refresh preview or change camera index</translation>
         <source>订阅主题:</source>
         <translation type="obsolete">Subscribe Topic:</translation>
     </message>
+    <message>
+        <location filename="../../src/views/settings/components/system_options/system_options_widget.ui" line="32"/>
+        <source>客户端ID:</source>
+        <translation>Client ID:</translation>
+    </message>
 </context>
 <context>
     <name>SystemTray</name>
@@ -1180,6 +1210,11 @@ For example: 小米小米 (will be converted to: x iǎo m ǐ x iǎo m ǐ @小米
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>请输入中文唤醒词，每行一个（如：小米小米）</source>
         <translation type="obsolete">Enter Chinese wake words, one per line (e.g., 小米小米)</translation>
+    </message>
+    <message>
+        <location filename="../../src/views/settings/components/wake_word/wake_word_widget.ui" line="14"/>
+        <source>唤醒词</source>
+        <translation>Wake Word</translation>
     </message>
 </context>
 <context>
