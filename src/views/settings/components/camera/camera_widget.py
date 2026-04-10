@@ -1,7 +1,7 @@
 from pathlib import Path
 
 import cv2
-from PyQt5.QtCore import Qt, QTimer, pyqtSignal
+from PyQt5.QtCore import QCoreApplication, Qt, QTimer, pyqtSignal
 from PyQt5.QtGui import QImage, QPixmap
 from PyQt5.QtWidgets import (
     QDialog,
@@ -190,9 +190,11 @@ class CameraWidget(QWidget):
             if not available_cameras:
                 QMessageBox.information(
                     self,
-                    "扫描结果",
-                    "未检测到可用的摄像头设备。\n"
-                    "请确保摄像头已连接并且没有被其他程序占用。",
+                    QCoreApplication.translate("Camera", "扫描结果"),
+                    QCoreApplication.translate(
+                        "Camera",
+                        "未检测到可用的摄像头设备。\n请确保摄像头已连接并且没有被其他程序占用。",
+                    ),
                 )
                 return
 
@@ -202,9 +204,11 @@ class CameraWidget(QWidget):
                 self._apply_camera_settings(camera)
                 QMessageBox.information(
                     self,
-                    "设置完成",
-                    f"检测到1个摄像头，已自动设置:\n"
-                    f"索引: {camera[0]}, 分辨率: {camera[1]}x{camera[2]}",
+                    QCoreApplication.translate("Camera", "设置完成"),
+                    QCoreApplication.translate(
+                        "Camera",
+                        "检测到1个摄像头，已自动设置:\n索引: {index}, 分辨率: {width}x{height}",
+                    ).format(index=camera[0], width=camera[1], height=camera[2]),
                 )
             else:
                 # 多个摄像头时显示选择对话框
@@ -213,9 +217,15 @@ class CameraWidget(QWidget):
                     self._apply_camera_settings(selected_camera)
                     QMessageBox.information(
                         self,
-                        "设置完成",
-                        f"已设置摄像头:\n"
-                        f"索引: {selected_camera[0]}, 分辨率: {selected_camera[1]}x{selected_camera[2]}",
+                        QCoreApplication.translate("Camera", "设置完成"),
+                        QCoreApplication.translate(
+                            "Camera",
+                            "已设置摄像头:\n索引: {index}, 分辨率: {width}x{height}",
+                        ).format(
+                            index=selected_camera[0],
+                            width=selected_camera[1],
+                            height=selected_camera[2],
+                        ),
                     )
 
             # 恢复预览状态
@@ -224,7 +234,13 @@ class CameraWidget(QWidget):
 
         except Exception as e:
             self.logger.error(f"扫描摄像头失败: {e}", exc_info=True)
-            QMessageBox.warning(self, "错误", f"扫描摄像头时发生错误: {str(e)}")
+            QMessageBox.warning(
+                self,
+                QCoreApplication.translate("Camera", "错误"),
+                QCoreApplication.translate(
+                    "Camera", "扫描摄像头时发生错误: {error}"
+                ).format(error=str(e)),
+            )
 
     def _scan_available_cameras(self, max_devices: int = 5):
         """
@@ -266,14 +282,16 @@ class CameraWidget(QWidget):
         """
         try:
             dialog = QDialog(self)
-            dialog.setWindowTitle("选择摄像头")
+            dialog.setWindowTitle(QCoreApplication.translate("Camera", "选择摄像头"))
             dialog.setFixedSize(400, 300)
 
             layout = QVBoxLayout(dialog)
 
             # 标题标签
             title_label = QLabel(
-                f"检测到 {len(available_cameras)} 个可用摄像头，请选择一个:"
+                QCoreApplication.translate(
+                    "Camera", "检测到 {count} 个可用摄像头，请选择一个:"
+                ).format(count=len(available_cameras))
             )
             title_label.setStyleSheet("font-weight: bold; margin-bottom: 10px;")
             layout.addWidget(title_label)
@@ -281,7 +299,9 @@ class CameraWidget(QWidget):
             # 摄像头列表
             camera_list = QListWidget()
             for idx, width, height in available_cameras:
-                item_text = f"索引 {idx}: 分辨率 {width}x{height}"
+                item_text = QCoreApplication.translate(
+                    "Camera", "索引 {idx}: 分辨率 {width}x{height}"
+                ).format(idx=idx, width=width, height=height)
                 item = QListWidgetItem(item_text)
                 item.setData(Qt.UserRole, (idx, width, height))  # 存储摄像头数据
                 camera_list.addItem(item)
@@ -467,7 +487,9 @@ class CameraWidget(QWidget):
             # 清空预览显示
             if self.ui_controls["preview_label"]:
                 self.ui_controls["preview_label"].setText(
-                    "摄像头预览区域\n点击开始预览查看摄像头画面"
+                    QCoreApplication.translate(
+                        "Camera", "摄像头预览区域\n点击开始预览查看摄像头画面"
+                    )
                 )
                 self.ui_controls["preview_label"].setPixmap(QPixmap())
 
@@ -548,7 +570,11 @@ class CameraWidget(QWidget):
         """
         try:
             if self.ui_controls["preview_label"]:
-                self.ui_controls["preview_label"].setText(f"预览错误:\n{message}")
+                self.ui_controls["preview_label"].setText(
+                    QCoreApplication.translate("Camera", "预览错误:\n{message}").format(
+                        message=message
+                    )
+                )
                 self.ui_controls["preview_label"].setPixmap(QPixmap())
         except Exception as e:
             self.logger.error(f"显示预览错误失败: {e}", exc_info=True)

@@ -45,7 +45,7 @@ Rectangle {
                 spacing: 16
 
                 Text {
-                    text: "设备激活"
+                    text: qsTr("设备激活")
                     font.family: "PingFang SC, Microsoft YaHei UI, Helvetica Neue"
                     font.pixelSize: 20
                     font.weight: Font.Medium
@@ -74,7 +74,7 @@ Rectangle {
                     }
 
                     Text {
-                        text: activationModel ? activationModel.activationStatus : "未激活"
+                        text: activationModel ? activationModel.activationStatus : qsTr("未激活")
                         font.family: "PingFang SC, Microsoft YaHei UI"
                         font.pixelSize: 12
                         color: "#4e5969"
@@ -174,7 +174,7 @@ Rectangle {
                         spacing: 8
 
                         Text {
-                            text: "设备信息"
+                            text: qsTr("设备信息")
                             font.family: "PingFang SC, Microsoft YaHei UI"
                             font.pixelSize: 13
                             font.weight: Font.Medium
@@ -188,14 +188,14 @@ Rectangle {
                             rowSpacing: 6
 
                             Text {
-                                text: "设备序列号"
+                                text: qsTr("设备序列号")
                                 font.family: "PingFang SC, Microsoft YaHei UI"
                                 font.pixelSize: 12
                                 color: "#86909c"
                             }
 
                             Text {
-                                text: "MAC地址"
+                                text: qsTr("MAC地址")
                                 font.family: "PingFang SC, Microsoft YaHei UI"
                                 font.pixelSize: 12
                                 color: "#86909c"
@@ -254,7 +254,7 @@ Rectangle {
                     spacing: 16
 
                     Text {
-                        text: "激活验证码"
+                        text: qsTr("激活验证码")
                         font.family: "PingFang SC, Microsoft YaHei UI"
                         font.pixelSize: 13
                         font.weight: Font.Medium
@@ -283,7 +283,7 @@ Rectangle {
 
                     Button {
                         id: copyCodeBtn
-                        text: "复制"
+                        text: qsTr("复制")
                         Layout.preferredWidth: 80
                         height: 36
 
@@ -329,7 +329,7 @@ Rectangle {
 
                 Button {
                     id: retryBtn
-                    text: "跳转激活"
+                    text: qsTr("跳转激活")
                     Layout.fillWidth: true
                     Layout.preferredHeight: 36
 

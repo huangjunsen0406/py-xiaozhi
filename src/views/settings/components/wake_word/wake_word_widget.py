@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from PyQt5.QtCore import pyqtSignal
+from PyQt5.QtCore import QCoreApplication, pyqtSignal
 from PyQt5.QtWidgets import (
     QCheckBox,
     QFileDialog,
@@ -185,7 +185,9 @@ class WakeWordWidget(QWidget):
                     current_path = str(project_root / "models")
 
             selected_path = QFileDialog.getExistingDirectory(
-                self, "选择模型目录", current_path
+                self,
+                QCoreApplication.translate("WakeWord", "选择模型目录"),
+                current_path,
             )
 
             if selected_path:
@@ -198,7 +200,13 @@ class WakeWordWidget(QWidget):
 
         except Exception as e:
             self.logger.error(f"浏览模型路径失败: {e}", exc_info=True)
-            QMessageBox.warning(self, "错误", f"浏览模型路径时发生错误: {str(e)}")
+            QMessageBox.warning(
+                self,
+                QCoreApplication.translate("WakeWord", "错误"),
+                QCoreApplication.translate(
+                    "WakeWord", "浏览模型路径时发生错误: {error}"
+                ).format(error=str(e)),
+            )
 
     def _convert_to_relative_path(self, model_path: str) -> str:
         """
@@ -341,9 +349,11 @@ class WakeWordWidget(QWidget):
             if not PYPINYIN_AVAILABLE:
                 QMessageBox.warning(
                     self,
-                    "缺少依赖",
-                    "自动拼音转换功能需要安装 pypinyin 库\n\n"
-                    "请运行: pip install pypinyin",
+                    QCoreApplication.translate("WakeWord", "缺少依赖"),
+                    QCoreApplication.translate(
+                        "WakeWord",
+                        "自动拼音转换功能需要安装 pypinyin 库\n\n请运行: pip install pypinyin",
+                    ),
                 )
                 return
 
@@ -359,8 +369,10 @@ class WakeWordWidget(QWidget):
                 self.logger.error(f"模型目录不存在: {model_path}")
                 QMessageBox.warning(
                     self,
-                    "错误",
-                    f"模型目录不存在: {model_path}\n请先配置正确的模型路径。",
+                    QCoreApplication.translate("WakeWord", "错误"),
+                    QCoreApplication.translate(
+                        "WakeWord", "模型目录不存在: {path}\n请先配置正确的模型路径。"
+                    ).format(path=model_path),
                 )
                 return
 
@@ -384,13 +396,31 @@ class WakeWordWidget(QWidget):
             )
             QMessageBox.information(
                 self,
-                "保存成功",
-                f"成功保存 {len(processed_lines)} 个唤醒词\n\n" f"已自动转换为拼音格式",
+                QCoreApplication.translate("WakeWord", "保存成功"),
+                QCoreApplication.translate(
+                    "WakeWord", "成功保存 {count} 个唤醒词\n\n已自动转换为拼音格式"
+                ).format(count=len(processed_lines)),
+            )
+            QMessageBox.information(
+                self,
+                QCoreApplication.translate("WakeWord", "保存成功"),
+                QCoreApplication.translate(
+                    "WakeWord",
+                    "成功保存 "
+                    + str(len(processed_lines))
+                    + " 个唤醒词\n\n已自动转换为拼音格式",
+                ),
             )
 
         except Exception as e:
             self.logger.error(f"保存关键词文件失败: {e}")
-            QMessageBox.warning(self, "错误", f"保存关键词失败: {str(e)}")
+            QMessageBox.warning(
+                self,
+                QCoreApplication.translate("WakeWord", "错误"),
+                QCoreApplication.translate(
+                    "WakeWord", "保存关键词失败: {error}"
+                ).format(error=str(e)),
+            )
 
     def get_config_data(self) -> dict:
         """

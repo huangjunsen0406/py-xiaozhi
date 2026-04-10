@@ -1,0 +1,37 @@
+Task 5: pylupdate5 String Extraction Evidence
+==============================================
+Date: 2026-04-10
+
+PYLUPDATE5 EXECUTION:
+- Command: pylupdate5 i18n/xiaozhi.pro
+- Exit code: 0 (success)
+- Environment: .venv-i18n with PyQt5 installed
+
+GENERATED FILES:
+-rw-r--r--  78 Apr 10 22:03 i18n/source/xiaozhi_zh_CN.ts
+-rw-r--r--  78 Apr 10 22:03 i18n/source/xiaozhi_en_US.ts
+-rw-r--r--  78 Apr 10 22:03 i18n/source/xiaozhi_ru_RU.ts
+
+FILE FORMAT VERIFICATION:
+All .ts files use Qt Linguist XML format with UTF-8 encoding:
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE TS>
+<TS version="2.1">
+</TS>
+
+STRING COUNT (using grep -c "<message>"):
+- xiaozhi_zh_CN.ts: 0 strings
+- xiaozhi_en_US.ts: 0 strings
+- xiaozhi_ru_RU.ts: 0 strings
+
+TOTAL STRINGS EXTRACTED: 0
+
+STATUS: pylupdate5 executed successfully but extracted 0 strings.
+This is expected because no strings have been marked with qsTr() or translate() in the codebase yet.
+Tasks 6-13 (string marking) must be completed first to populate the .ts files.
+
+NOTES:
+- pylupdate5 successfully parsed 96 Python source files listed in xiaozhi.pro
+- No Python source files had translation markers (qsTr, translate)
+- The .ts files are properly formatted but empty
+- Source language (zh_CN) was included per task requirements

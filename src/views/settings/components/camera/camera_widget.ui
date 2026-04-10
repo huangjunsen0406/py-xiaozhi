@@ -10,9 +10,9 @@
     <height>400</height>
    </rect>
   </property>
-  <property name="windowTitle">
-   <string>摄像头</string>
-  </property>
+   <property name="windowTitle">
+    <string>QCoreApplication.translate("CameraWidget", "摄像头")</string>
+   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
    <item>
     <widget class="QScrollArea" name="scrollArea">
@@ -31,15 +31,15 @@
       <layout class="QVBoxLayout" name="contentLayout">
        <item>
         <widget class="QGroupBox" name="camera_basic_group">
-         <property name="title">
-          <string>摄像头基本配置</string>
-         </property>
+          <property name="title">
+           <string>QCoreApplication.translate("CameraWidget", "摄像头基本配置")</string>
+          </property>
          <layout class="QFormLayout" name="basic_layout">
           <item row="0" column="0">
            <widget class="QLabel" name="label_camera_index">
-            <property name="text">
-             <string>摄像头索引:</string>
-            </property>
+             <property name="text">
+              <string>QCoreApplication.translate("CameraWidget", "摄像头索引:")</string>
+             </property>
            </widget>
           </item>
           <item row="0" column="1">
@@ -56,9 +56,9 @@
             </item>
             <item>
              <widget class="QPushButton" name="scan_camera_btn">
-              <property name="text">
-               <string>扫描摄像头</string>
-              </property>
+               <property name="text">
+                <string>QCoreApplication.translate("CameraWidget", "扫描摄像头")</string>
+               </property>
              </widget>
             </item>
             <item>
@@ -78,9 +78,9 @@
           </item>
           <item row="1" column="0">
            <widget class="QLabel" name="label_frame_width">
-            <property name="text">
-             <string>帧宽度:</string>
-            </property>
+             <property name="text">
+              <string>QCoreApplication.translate("CameraWidget", "帧宽度:")</string>
+             </property>
            </widget>
           </item>
           <item row="1" column="1">
@@ -101,9 +101,9 @@
           </item>
           <item row="2" column="0">
            <widget class="QLabel" name="label_frame_height">
-            <property name="text">
-             <string>帧高度:</string>
-            </property>
+             <property name="text">
+              <string>QCoreApplication.translate("CameraWidget", "帧高度:")</string>
+             </property>
            </widget>
           </item>
           <item row="2" column="1">
@@ -124,9 +124,9 @@
           </item>
           <item row="3" column="0">
            <widget class="QLabel" name="label_fps">
-            <property name="text">
-             <string>帧率(FPS):</string>
-            </property>
+             <property name="text">
+              <string>QCoreApplication.translate("CameraWidget", "帧率(FPS):")</string>
+             </property>
            </widget>
           </item>
           <item row="3" column="1">
@@ -147,29 +147,29 @@
        </item>
        <item>
         <widget class="QGroupBox" name="vl_group">
-         <property name="title">
-          <string>视觉语言模型配置</string>
-         </property>
+          <property name="title">
+           <string>QCoreApplication.translate("CameraWidget", "视觉语言模型配置")</string>
+          </property>
          <layout class="QFormLayout" name="vl_layout">
           <item row="0" column="0">
            <widget class="QLabel" name="label_local_vl_url">
-            <property name="text">
-             <string>本地VL URL:</string>
-            </property>
+             <property name="text">
+              <string>QCoreApplication.translate("CameraWidget", "本地VL URL:")</string>
+             </property>
            </widget>
           </item>
           <item row="0" column="1">
            <widget class="QLineEdit" name="local_vl_url_edit">
-            <property name="placeholderText">
-             <string>例如: https://open.bigmodel.cn/api/paas/v4/</string>
-            </property>
+             <property name="placeholderText">
+              <string>QCoreApplication.translate("CameraWidget", "例如: https://open.bigmodel.cn/api/paas/v4/")</string>
+             </property>
            </widget>
           </item>
           <item row="1" column="0">
            <widget class="QLabel" name="label_vl_api_key">
-            <property name="text">
-             <string>VL API Key:</string>
-            </property>
+             <property name="text">
+              <string>QCoreApplication.translate("CameraWidget", "VL API Key:")</string>
+             </property>
            </widget>
           </item>
           <item row="1" column="1">
@@ -177,23 +177,23 @@
             <property name="echoMode">
              <enum>QLineEdit::Password</enum>
             </property>
-            <property name="placeholderText">
-             <string>请输入您的API密钥</string>
-            </property>
+             <property name="placeholderText">
+              <string>QCoreApplication.translate("CameraWidget", "请输入您的API密钥")</string>
+             </property>
            </widget>
           </item>
           <item row="2" column="0">
            <widget class="QLabel" name="label_models">
-            <property name="text">
-             <string>模型名称:</string>
-            </property>
+             <property name="text">
+              <string>QCoreApplication.translate("CameraWidget", "模型名称:")</string>
+             </property>
            </widget>
           </item>
           <item row="2" column="1">
            <widget class="QLineEdit" name="models_edit">
-            <property name="placeholderText">
-             <string>例如: glm-4v-plus</string>
-            </property>
+             <property name="placeholderText">
+              <string>QCoreApplication.translate("CameraWidget", "例如: glm-4v-plus")</string>
+             </property>
            </widget>
           </item>
          </layout>
@@ -201,9 +201,9 @@
        </item>
        <item>
         <widget class="QGroupBox" name="preview_group">
-         <property name="title">
-          <string>摄像头预览</string>
-         </property>
+          <property name="title">
+           <string>QCoreApplication.translate("CameraWidget", "摄像头预览")</string>
+          </property>
          <layout class="QVBoxLayout" name="preview_layout">
           <item>
            <widget class="QLabel" name="preview_label">
@@ -222,10 +222,10 @@
             <property name="styleSheet">
              <string>border: 2px solid #ccc; background-color: #000;</string>
             </property>
-            <property name="text">
-             <string>摄像头预览区域
-点击刷新预览或更改摄像头索引</string>
-            </property>
+             <property name="text">
+              <string>QCoreApplication.translate("CameraWidget", "摄像头预览区域
+点击刷新预览或更改摄像头索引")</string>
+             </property>
             <property name="alignment">
              <set>Qt::AlignCenter</set>
             </property>
@@ -235,16 +235,16 @@
            <layout class="QHBoxLayout" name="preview_controls_layout">
             <item>
              <widget class="QPushButton" name="start_preview_btn">
-              <property name="text">
-               <string>开始预览</string>
-              </property>
+               <property name="text">
+                <string>QCoreApplication.translate("CameraWidget", "开始预览")</string>
+               </property>
              </widget>
             </item>
             <item>
              <widget class="QPushButton" name="stop_preview_btn">
-              <property name="text">
-               <string>停止预览</string>
-              </property>
+               <property name="text">
+                <string>QCoreApplication.translate("CameraWidget", "停止预览")</string>
+               </property>
               <property name="enabled">
                <bool>false</bool>
               </property>

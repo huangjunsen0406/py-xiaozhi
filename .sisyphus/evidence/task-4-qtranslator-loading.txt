@@ -1,0 +1,52 @@
+Task 4 Evidence: QTranslator loading with --lang CLI argument support
+===================================================================
+
+File Modified: main.py
+
+Changes Made:
+-------------
+
+1. Added imports at top of file:
+   - from PyQt5.QtCore import QLocale, QTranslator
+
+2. Added --lang argument to parse_args():
+   - type: str, default: None
+   - When None, uses system locale via QLocale.system().name()
+   - help: "语言设置：如 en_US, ru_RU, zh_CN。不指定则使用系统语言，失败时回退到 zh_CN"
+
+3. Added QTranslator loading before app.run():
+   - Fallback chain: target_lang → en_US → zh_CN
+   - Loads i18n/translations/xiaozhi_{lang}.qm
+   - Installs translator to qt_app if found
+   - Logs warning if no translation file found
+
+4. Added language preference persistence:
+   - Saves to config: SYSTEM_OPTIONS.LANGUAGE
+   - Uses ConfigManager.get_instance()
+
+Key Code Block:
+--------------
+    target_lang = args.lang
+    if not target_lang:
+        target_lang = QLocale.system().name()
+    translator = QTranslator()
+    translations_loaded = False
+    for lang in [target_lang, "en_US", "zh_CN"]:
+        qm_path = f"i18n/translations/xiaozhi_{lang}.qm"
+        if translator.load(qm_path):
+            qt_app.installTranslator(translator)
+            translations_loaded = True
+            logger.info(f"已加载翻译文件: {qm_path}")
+            break
+    if not translations_loaded:
+        logger.warning("未找到翻译文件，使用默认语言")
+
+Behavior:
+---------
+- python main.py --lang en_US → loads xiaozhi_en_US.qm
+- python main.py --lang ru_RU → loads xiaozhi_ru_RU.qm  
+- python main.py (no --lang) → uses system locale via QLocale.system().name()
+- If system locale fails → tries en_US → tries zh_CN (default for Chinese users)
+
+Chinese users (zh_CN default): NOT AFFECTED
+- Existing behavior preserved since zh_CN is the final fallback

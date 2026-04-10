@@ -1,10 +1,19 @@
 from pathlib import Path
 
-from PyQt5.QtCore import pyqtSignal
+from PyQt5.QtCore import QCoreApplication, pyqtSignal
 from PyQt5.QtWidgets import QCheckBox, QComboBox, QLineEdit, QWidget
 
 from src.utils.config_manager import ConfigManager
 from src.utils.logging_config import get_logger
+
+# Language mapping: display text -> locale code
+LANGUAGE_MAP = {
+    "简体中文": "zh_CN",
+    "English": "en_US",
+    "Русский": "ru_RU",
+}
+# Reverse mapping for loading saved locale
+LOCALE_TO_LANGUAGE = {v: k for k, v in LANGUAGE_MAP.items()}
 
 
 class SystemOptionsWidget(QWidget):
@@ -92,6 +101,14 @@ class SystemOptionsWidget(QWidget):
             }
         )
 
+        # 系统选项补充控件
+        self.ui_controls.update(
+            {
+                "window_size_combo": self.findChild(QComboBox, "window_size_combo"),
+                "language_combo": self.findChild(QComboBox, "language_combo"),
+            }
+        )
+
     def _connect_events(self):
         """
         连接事件处理.
@@ -152,12 +169,25 @@ class SystemOptionsWidget(QWidget):
             if self.ui_controls["window_size_combo"]:
                 # 映射配置值到显示文本（默认 = 50%）
                 mode_to_text = {
-                    "default": "默认",
-                    "screen_75": "75%",
-                    "screen_100": "100%",
+                    "default": QCoreApplication.translate("SystemOptions", "默认"),
+                    "screen_75": QCoreApplication.translate("SystemOptions", "75%"),
+                    "screen_100": QCoreApplication.translate("SystemOptions", "100%"),
                 }
                 combo = self.ui_controls["window_size_combo"]
-                combo.setCurrentText(mode_to_text.get(window_size_mode, "默认"))
+                combo.setCurrentText(
+                    mode_to_text.get(
+                        window_size_mode,
+                        QCoreApplication.translate("SystemOptions", "默认"),
+                    )
+                )
+
+            # 语言设置
+            saved_language = self.config_manager.get_config("APP_LANGUAGE", "zh_CN")
+            if self.ui_controls["language_combo"]:
+                combo = self.ui_controls["language_combo"]
+                combo.setCurrentText(LOCALE_TO_LANGUAGE.get(saved_language, "en_US"))
+                # 连接语言变更信号
+                combo.currentTextChanged.connect(self._on_language_changed)
 
             # MQTT配置
             mqtt_info = self.config_manager.get_config(
@@ -224,6 +254,25 @@ class SystemOptionsWidget(QWidget):
             return control.isChecked()
         return False
 
+    def _on_language_changed(self, text: str):
+        """
+        处理语言变更.
+        """
+        locale = LANGUAGE_MAP.get(text)
+        if locale:
+            self.config_manager.update_config("APP_LANGUAGE", locale)
+            self._reload_language(locale)
+
+    def _reload_language(self, locale: str):
+        try:
+            from src.utils.language_manager import LanguageManager
+
+            LanguageManager().set_language(locale)
+        except ImportError:
+            self.logger.debug(
+                f"LanguageManager not available yet, language preference saved: {locale}"
+            )
+
     def get_config_data(self) -> dict:
         """
         获取当前配置数据.
@@ -274,13 +323,18 @@ class SystemOptionsWidget(QWidget):
             if self.ui_controls["window_size_combo"]:
                 # 映射显示文本到配置值（默认 = 50%）
                 text_to_mode = {
-                    "默认": "default",
-                    "75%": "screen_75",
-                    "100%": "screen_100",
+                    QCoreApplication.translate("SystemOptions", "默认"): "default",
+                    QCoreApplication.translate("SystemOptions", "75%"): "screen_75",
+                    QCoreApplication.translate("SystemOptions", "100%"): "screen_100",
                 }
                 window_size_text = self.ui_controls["window_size_combo"].currentText()
                 window_size_mode = text_to_mode.get(window_size_text, "default")
                 config_data["SYSTEM_OPTIONS.WINDOW_SIZE_MODE"] = window_size_mode
+
+            # 语言设置
+            if self.ui_controls["language_combo"]:
+                language_text = self.ui_controls["language_combo"].currentText()
+                config_data["APP_LANGUAGE"] = LANGUAGE_MAP.get(language_text, "zh_CN")
 
             # MQTT配置
             mqtt_config = {}

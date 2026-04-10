@@ -8,6 +8,8 @@ import tty
 from collections import deque
 from typing import Callable, Optional
 
+from PyQt5.QtCore import QCoreApplication
+
 from src.display.base_display import BaseDisplay
 
 
@@ -219,13 +221,15 @@ class CliDisplay(BaseDisplay):
         关闭CLI显示.
         """
         self.running = False
-        print("\n正在关闭应用...\n")
+        print(f"\n{QCoreApplication.translate('CliDisplay', '正在关闭应用...')}\n")
 
     def _print_help(self):
         """
         将帮助信息写入顶部内容显示区，而非直接打印。
         """
-        help_text = "r: 开始/停止 | x: 打断 | q: 退出 | h: 帮助 | 其他: 发送文本"
+        help_text = QCoreApplication.translate(
+            "CliDisplay", "r: 开始/停止 | x: 打断 | q: 退出 | h: 帮助 | 其他: 发送文本"
+        )
         self._dash_text = help_text
 
     async def _init_screen(self):
@@ -242,7 +246,7 @@ class CliDisplay(BaseDisplay):
         await self._render_input_area()
 
     def _goto(self, row: int, col: int = 1):
-        sys.stdout.write(f"\x1b[{max(1,row)};{max(1,col)}H")
+        sys.stdout.write(f"\x1b[{max(1, row)};{max(1, col)}H")
 
     def _term_size(self):
         try:
@@ -305,12 +309,17 @@ class CliDisplay(BaseDisplay):
         cols, rows = self._term_size()
         separator_row = max(1, rows - self._input_area_lines + 1)
         first_input_row = min(rows, separator_row + 1)
-        prompt = "输入: " if not self._use_ansi else "\x1b[1m\x1b[36m输入:\x1b[0m "
+        _prompt_label = QCoreApplication.translate("CliDisplay", "输入: ")
+        prompt = (
+            _prompt_label
+            if not self._use_ansi
+            else f"\x1b[1m\x1b[36m{_prompt_label}\x1b[0m "
+        )
         self._goto(first_input_row, 1)
         sys.stdout.write("\x1b[2K")
         visible = content
         # 避免超过一行导致折行
-        max_len = max(1, cols - len("输入: ") - 1)
+        max_len = max(1, cols - len(_prompt_label) - 1)
         if len(visible) > max_len:
             visible = visible[-max_len:]
         sys.stdout.write(f"{prompt}{visible}")
@@ -326,10 +335,10 @@ class CliDisplay(BaseDisplay):
             return s if len(s) <= limit else s[: limit - 1] + "…"
 
         lines = [
-            f"状态: {trunc(self._dash_status)}",
-            f"连接: {'已连接' if self._dash_connected else '未连接'}",
-            f"表情: {trunc(self._dash_emotion)}",
-            f"文本: {trunc(self._dash_text)}",
+            f"{QCoreApplication.translate('CliDisplay', '状态: ')}{trunc(self._dash_status)}",
+            f"{QCoreApplication.translate('CliDisplay', '连接: ')}{QCoreApplication.translate('CliDisplay', '已连接') if self._dash_connected else QCoreApplication.translate('CliDisplay', '未连接')}",
+            f"{QCoreApplication.translate('CliDisplay', '表情: ')}{trunc(self._dash_emotion)}",
+            f"{QCoreApplication.translate('CliDisplay', '文本: ')}{trunc(self._dash_text)}",
         ]
 
         if not self._use_ansi:
@@ -349,7 +358,11 @@ class CliDisplay(BaseDisplay):
             prefix = "".join(self._ansi.get(n, "") for n in names)
             return f"{prefix}{s}{self._ansi['reset']}"
 
-        title = style(" 小智 AI 终端 ", "bold", "cyan")
+        title = style(
+            f" {QCoreApplication.translate('CliDisplay', '小智 AI 终端')} ",
+            "bold",
+            "cyan",
+        )
         # 头部框和底部框
         top_bar = "┌" + ("─" * (max(2, cols - 2))) + "┐"
         title_line = "│" + title.center(max(2, cols - 2)) + "│"
@@ -430,7 +443,12 @@ class CliDisplay(BaseDisplay):
         # 输入提示行（清空并写提示）
         self._goto(first_input_row, 1)
         sys.stdout.write("\x1b[2K")
-        prompt = "输入: " if not self._use_ansi else "\x1b[1m\x1b[36m输入:\x1b[0m "
+        _prompt_label = QCoreApplication.translate("CliDisplay", "输入: ")
+        prompt = (
+            _prompt_label
+            if not self._use_ansi
+            else f"\x1b[1m\x1b[36m{_prompt_label}\x1b[0m "
+        )
         sys.stdout.write(prompt)
 
         # 预留一行做溢出清理

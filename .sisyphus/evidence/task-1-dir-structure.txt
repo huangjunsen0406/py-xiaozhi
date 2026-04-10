@@ -1,0 +1,19 @@
+total 8
+drwxr-xr-x@  6 alxy  staff   192 Apr 10 21:53 .
+drwxr-xr-x@ 35 alxy  staff  1120 Apr 10 21:53 ..
+-rw-r--r--@  1 alxy  staff   990 Apr 10 21:53 README.md
+drwxr-xr-x@  2 alxy  staff    64 Apr 10 21:53 build
+drwxr-xr-x@  2 alxy  staff    64 Apr 10 21:53 source
+drwxr-xr-x@  2 alxy  staff    64 Apr 10 21:53 translations
+---
+total 0
+drwxr-xr-x@ 2 alxy  staff   64 Apr 10 21:53 .
+drwxr-xr-x@ 6 alxy  staff  192 Apr 10 21:53 ..
+---
+total 0
+drwxr-xr-x@ 2 alxy  staff   64 Apr 10 21:53 .
+drwxr-xr-x@ 6 alxy  staff  192 Apr 10 21:53 ..
+---
+total 0
+drwxr-xr-x@ 2 alxy  staff   64 Apr 10 21:53 .
+drwxr-xr-x@ 6 alxy  staff  192 Apr 10 21:53 ..

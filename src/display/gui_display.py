@@ -10,7 +10,7 @@ from abc import ABCMeta
 from pathlib import Path
 from typing import Callable, Optional
 
-from PyQt5.QtCore import QObject, Qt, QTimer, QUrl
+from PyQt5.QtCore import QCoreApplication, QObject, Qt, QTimer, QUrl
 from PyQt5.QtGui import QCursor, QFont
 from PyQt5.QtQuickWidgets import QQuickWidget
 from PyQt5.QtWidgets import QApplication, QVBoxLayout, QWidget
@@ -418,7 +418,11 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
             return
 
         self.auto_mode = not self.auto_mode
-        mode_text = "自动对话" if self.auto_mode else "手动对话"
+        mode_text = (
+            QCoreApplication.translate("GuiDisplay", "自动对话")
+            if self.auto_mode
+            else QCoreApplication.translate("GuiDisplay", "手动对话")
+        )
         self.display_model.update_mode_text(mode_text)
         self.display_model.set_auto_mode(self.auto_mode)
 
@@ -433,10 +437,12 @@ class GuiDisplay(BaseDisplay, QObject, metaclass=CombinedMeta):
         try:
             task = asyncio.create_task(self._callbacks["send_text"](text))
             task.add_done_callback(
-                lambda t: t.cancelled()
-                or not t.exception()
-                or self.logger.error(
-                    f"发送文本任务异常: {t.exception()}", exc_info=True
+                lambda t: (
+                    t.cancelled()
+                    or not t.exception()
+                    or self.logger.error(
+                        f"发送文本任务异常: {t.exception()}", exc_info=True
+                    )
                 )
             )
         except Exception as e:

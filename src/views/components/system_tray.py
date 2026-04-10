@@ -4,7 +4,7 @@
 
 from typing import Optional
 
-from PyQt5.QtCore import QObject, pyqtSignal
+from PyQt5.QtCore import QCoreApplication, QObject, pyqtSignal
 from PyQt5.QtGui import QBrush, QColor, QIcon, QPainter, QPixmap
 from PyQt5.QtWidgets import QAction, QMenu, QSystemTrayIcon, QWidget
 
@@ -77,9 +77,16 @@ class SystemTray(QObject):
             try:
                 from PyQt5.QtCore import QTimer
 
-                QTimer.singleShot(0, lambda: self.update_status("待命", connected=True))
+                QTimer.singleShot(
+                    0,
+                    lambda: self.update_status(
+                        QCoreApplication.translate("SystemTray", "待命"), connected=True
+                    ),
+                )
             except Exception:
-                self.update_status("待命", connected=True)
+                self.update_status(
+                    QCoreApplication.translate("SystemTray", "待命"), connected=True
+                )
 
             # 显示系统托盘图标
             self.tray_icon.show()
@@ -95,7 +102,9 @@ class SystemTray(QObject):
         self.tray_menu = QMenu()
 
         # 添加显示主窗口菜单项
-        show_action = QAction("显示主窗口", self.parent_widget)
+        show_action = QAction(
+            QCoreApplication.translate("SystemTray", "显示主窗口"), self.parent_widget
+        )
         show_action.triggered.connect(self._on_show_window)
         self.tray_menu.addAction(show_action)
 
@@ -103,7 +112,9 @@ class SystemTray(QObject):
         self.tray_menu.addSeparator()
 
         # 添加设置菜单项
-        settings_action = QAction("参数配置", self.parent_widget)
+        settings_action = QAction(
+            QCoreApplication.translate("SystemTray", "参数配置"), self.parent_widget
+        )
         settings_action.triggered.connect(self._on_settings)
         self.tray_menu.addAction(settings_action)
 
@@ -111,7 +122,9 @@ class SystemTray(QObject):
         self.tray_menu.addSeparator()
 
         # 添加退出菜单项
-        quit_action = QAction("退出程序", self.parent_widget)
+        quit_action = QAction(
+            QCoreApplication.translate("SystemTray", "退出程序"), self.parent_widget
+        )
         quit_action.triggered.connect(self._on_quit)
         self.tray_menu.addAction(quit_action)
 
@@ -171,7 +184,7 @@ class SystemTray(QObject):
             self.tray_icon.setIcon(QIcon(pixmap))
 
             # 设置提示文本
-            tooltip = f"小智AI助手 - {status}"
+            tooltip = QCoreApplication.translate("SystemTray", "小智AI助手 - ") + status
             self.tray_icon.setToolTip(tooltip)
 
         except Exception as e:

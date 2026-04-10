@@ -3,7 +3,7 @@
 GUI 显示窗口数据模型 - 用于 QML 数据绑定.
 """
 
-from PyQt5.QtCore import QObject, pyqtProperty, pyqtSignal
+from PyQt5.QtCore import QCoreApplication, QObject, pyqtProperty, pyqtSignal
 
 
 class GuiDisplayModel(QObject):
@@ -32,11 +32,17 @@ class GuiDisplayModel(QObject):
         super().__init__(parent)
 
         # 私有属性
-        self._status_text = "状态: 未连接"
+        self._status_text = QCoreApplication.translate(
+            "GuiDisplayModel", "状态: 未连接"
+        )
         self._emotion_path = ""  # 表情资源路径（GIF/图片）或 emoji 字符
-        self._tts_text = "待命"
-        self._button_text = "开始对话"  # 自动模式按钮文本
-        self._mode_text = "手动对话"  # 模式切换按钮文本
+        self._tts_text = QCoreApplication.translate("GuiDisplayModel", "待命")
+        self._button_text = QCoreApplication.translate(
+            "GuiDisplayModel", "开始对话"
+        )  # 自动模式按钮文本
+        self._mode_text = QCoreApplication.translate(
+            "GuiDisplayModel", "手动对话"
+        )  # 模式切换按钮文本
         self._auto_mode = False  # 是否自动模式
         self._is_connected = False
 
@@ -111,7 +117,9 @@ class GuiDisplayModel(QObject):
         """
         更新状态文本和连接状态.
         """
-        self.statusText = f"状态: {status}"
+        self.statusText = QCoreApplication.translate(
+            "GuiDisplayModel", f"状态: {status}"
+        )
         self._is_connected = connected
 
     def update_text(self, text: str):
@@ -144,6 +152,6 @@ class GuiDisplayModel(QObject):
         """
         self.autoMode = is_auto
         if is_auto:
-            self.modeText = "自动对话"
+            self.modeText = QCoreApplication.translate("GuiDisplayModel", "自动对话")
         else:
-            self.modeText = "手动对话"
+            self.modeText = QCoreApplication.translate("GuiDisplayModel", "手动对话")

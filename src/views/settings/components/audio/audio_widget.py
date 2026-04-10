@@ -4,7 +4,7 @@ from pathlib import Path
 
 import numpy as np
 import sounddevice as sd
-from PyQt5.QtCore import pyqtSignal
+from PyQt5.QtCore import QCoreApplication, pyqtSignal
 from PyQt5.QtWidgets import (
     QComboBox,
     QLabel,
@@ -146,12 +146,21 @@ class AudioWidget(QWidget):
                     (d for d in self.input_devices if d["id"] == input_device_id), None
                 )
                 if input_device:
-                    info_text = f"采样率: {int(input_device['sample_rate'])}Hz, 通道: {input_device['channels']}"
+                    info_text = QCoreApplication.translate(
+                        "Audio", "采样率: {rate}Hz, 通道: {channels}"
+                    ).format(
+                        rate=int(input_device["sample_rate"]),
+                        channels=input_device["channels"],
+                    )
                     self.ui_controls["input_info_label"].setText(info_text)
                 else:
-                    self.ui_controls["input_info_label"].setText("设备信息获取失败")
+                    self.ui_controls["input_info_label"].setText(
+                        QCoreApplication.translate("Audio", "设备信息获取失败")
+                    )
             else:
-                self.ui_controls["input_info_label"].setText("未选择设备")
+                self.ui_controls["input_info_label"].setText(
+                    QCoreApplication.translate("Audio", "未选择设备")
+                )
 
             # 更新输出设备信息
             output_device_id = self.ui_controls["output_device_combo"].currentData()
@@ -161,12 +170,21 @@ class AudioWidget(QWidget):
                     None,
                 )
                 if output_device:
-                    info_text = f"采样率: {int(output_device['sample_rate'])}Hz, 通道: {output_device['channels']}"
+                    info_text = QCoreApplication.translate(
+                        "Audio", "采样率: {rate}Hz, 通道: {channels}"
+                    ).format(
+                        rate=int(output_device["sample_rate"]),
+                        channels=output_device["channels"],
+                    )
                     self.ui_controls["output_info_label"].setText(info_text)
                 else:
-                    self.ui_controls["output_info_label"].setText("设备信息获取失败")
+                    self.ui_controls["output_info_label"].setText(
+                        QCoreApplication.translate("Audio", "设备信息获取失败")
+                    )
             else:
-                self.ui_controls["output_info_label"].setText("未选择设备")
+                self.ui_controls["output_info_label"].setText(
+                    QCoreApplication.translate("Audio", "未选择设备")
+                )
 
         except Exception as e:
             self.logger.error(f"更新设备信息失败: {e}", exc_info=True)
@@ -176,7 +194,9 @@ class AudioWidget(QWidget):
         扫描音频设备.
         """
         try:
-            self._append_status("正在扫描音频设备...")
+            self._append_status(
+                QCoreApplication.translate("Audio", "正在扫描音频设备...")
+            )
 
             # 清空现有设备列表
             self.input_devices.clear()
@@ -193,7 +213,11 @@ class AudioWidget(QWidget):
 
                 # 添加输入设备
                 if dev_info["max_input_channels"] > 0:
-                    default_mark = " (默认)" if i == default_input else ""
+                    default_mark = (
+                        QCoreApplication.translate("Audio", " (默认)")
+                        if i == default_input
+                        else ""
+                    )
                     self.input_devices.append(
                         {
                             "id": i,
@@ -206,7 +230,11 @@ class AudioWidget(QWidget):
 
                 # 添加输出设备
                 if dev_info["max_output_channels"] > 0:
-                    default_mark = " (默认)" if i == default_output else ""
+                    default_mark = (
+                        QCoreApplication.translate("Audio", " (默认)")
+                        if i == default_output
+                        else ""
+                    )
                     self.output_devices.append(
                         {
                             "id": i,
@@ -224,12 +252,18 @@ class AudioWidget(QWidget):
             self._select_default_devices()
 
             self._append_status(
-                f"扫描完成: 找到 {len(self.input_devices)} 个输入设备, {len(self.output_devices)} 个输出设备"
+                QCoreApplication.translate(
+                    "Audio", "扫描完成: 找到 {input} 个输入设备, {output} 个输出设备"
+                ).format(input=len(self.input_devices), output=len(self.output_devices))
             )
 
         except Exception as e:
             self.logger.error(f"扫描音频设备失败: {e}", exc_info=True)
-            self._append_status(f"扫描设备失败: {str(e)}")
+            self._append_status(
+                QCoreApplication.translate("Audio", "扫描设备失败: {error}").format(
+                    error=str(e)
+                )
+            )
 
     def _update_device_combos(self):
         """
@@ -290,7 +324,9 @@ class AudioWidget(QWidget):
             else:
                 # 自动选择默认输入设备（带"默认"标记的）
                 for i in range(self.ui_controls["input_device_combo"].count()):
-                    if "默认" in self.ui_controls["input_device_combo"].itemText(i):
+                    if QCoreApplication.translate("Audio", "默认") in self.ui_controls[
+                        "input_device_combo"
+                    ].itemText(i):
                         self.ui_controls["input_device_combo"].setCurrentIndex(i)
                         break
 
@@ -305,7 +341,9 @@ class AudioWidget(QWidget):
             else:
                 # 自动选择默认输出设备（带"默认"标记的）
                 for i in range(self.ui_controls["output_device_combo"].count()):
-                    if "默认" in self.ui_controls["output_device_combo"].itemText(i):
+                    if QCoreApplication.translate("Audio", "默认") in self.ui_controls[
+                        "output_device_combo"
+                    ].itemText(i):
                         self.ui_controls["output_device_combo"].setCurrentIndex(i)
                         break
 
@@ -325,12 +363,18 @@ class AudioWidget(QWidget):
         try:
             device_id = self.ui_controls["input_device_combo"].currentData()
             if device_id is None:
-                QMessageBox.warning(self, "提示", "请先选择输入设备")
+                QMessageBox.warning(
+                    self,
+                    QCoreApplication.translate("Audio", "提示"),
+                    QCoreApplication.translate("Audio", "请先选择输入设备"),
+                )
                 return
 
             self.testing_input = True
             self.ui_controls["test_input_btn"].setEnabled(False)
-            self.ui_controls["test_input_btn"].setText("录音中...")
+            self.ui_controls["test_input_btn"].setText(
+                QCoreApplication.translate("Audio", "录音中...")
+            )
 
             # 在线程中执行测试
             test_thread = threading.Thread(
@@ -341,7 +385,11 @@ class AudioWidget(QWidget):
 
         except Exception as e:
             self.logger.error(f"测试输入设备失败: {e}", exc_info=True)
-            self._append_status(f"输入设备测试失败: {str(e)}")
+            self._append_status(
+                QCoreApplication.translate("Audio", "输入设备测试失败: {error}").format(
+                    error=str(e)
+                )
+            )
             self._reset_input_test_ui()
 
     def _do_input_test(self, device_id):
@@ -354,23 +402,37 @@ class AudioWidget(QWidget):
                 (d for d in self.input_devices if d["id"] == device_id), None
             )
             if not input_device:
-                self._append_status_threadsafe("错误: 无法获取设备信息")
+                self._append_status_threadsafe(
+                    QCoreApplication.translate("Audio", "错误: 无法获取设备信息")
+                )
                 return
 
             sample_rate = int(input_device["sample_rate"])
             duration = 3  # 录音时长3秒
 
             self._append_status_threadsafe(
-                f"开始录音测试 (设备: {device_id}, 采样率: {sample_rate}Hz)"
+                QCoreApplication.translate(
+                    "Audio", "开始录音测试 (设备: {device}, 采样率: {rate}Hz)"
+                ).format(device=device_id, rate=sample_rate)
             )
-            self._append_status_threadsafe("请对着麦克风说话，比如数数字: 1、2、3...")
+            self._append_status_threadsafe(
+                QCoreApplication.translate(
+                    "Audio", "请对着麦克风说话，比如数数字: 1、2、3..."
+                )
+            )
 
             # 倒计时提示
             for i in range(3, 0, -1):
-                self._append_status_threadsafe(f"{i}秒后开始录音...")
+                self._append_status_threadsafe(
+                    QCoreApplication.translate(
+                        "Audio", "{count}秒后开始录音..."
+                    ).format(count=i)
+                )
                 time.sleep(1)
 
-            self._append_status_threadsafe("正在录音，请说话... (3秒)")
+            self._append_status_threadsafe(
+                QCoreApplication.translate("Audio", "正在录音，请说话... (3秒)")
+            )
 
             # 录音
             recording = sd.rec(
@@ -382,7 +444,9 @@ class AudioWidget(QWidget):
             )
             sd.wait()
 
-            self._append_status_threadsafe("录音完成，正在分析...")
+            self._append_status_threadsafe(
+                QCoreApplication.translate("Audio", "录音完成，正在分析...")
+            )
 
             # 分析录音质量
             max_amplitude = np.max(np.abs(recording))
@@ -400,31 +464,62 @@ class AudioWidget(QWidget):
 
             # 测试结果分析
             if max_amplitude < 0.001:
-                self._append_status_threadsafe("[失败] 未检测到音频信号")
                 self._append_status_threadsafe(
-                    "请检查: 1) 麦克风连接 2) 系统音量 3) 麦克风权限"
+                    QCoreApplication.translate("Audio", "[失败] 未检测到音频信号")
+                )
+                self._append_status_threadsafe(
+                    QCoreApplication.translate(
+                        "Audio", "请检查: 1) 麦克风连接 2) 系统音量 3) 麦克风权限"
+                    )
                 )
             elif max_amplitude > 0.8:
-                self._append_status_threadsafe("[警告] 音频信号过载")
-                self._append_status_threadsafe("建议降低麦克风增益或音量设置")
-            elif activity_ratio < 0.1:
-                self._append_status_threadsafe("[警告] 检测到音频但语音活动较少")
                 self._append_status_threadsafe(
-                    "请确保对着麦克风说话，或检查麦克风灵敏度"
+                    QCoreApplication.translate("Audio", "[警告] 音频信号过载")
+                )
+                self._append_status_threadsafe(
+                    QCoreApplication.translate("Audio", "建议降低麦克风增益或音量设置")
+                )
+            elif activity_ratio < 0.1:
+                self._append_status_threadsafe(
+                    QCoreApplication.translate(
+                        "Audio", "[警告] 检测到音频但语音活动较少"
+                    )
+                )
+                self._append_status_threadsafe(
+                    QCoreApplication.translate(
+                        "Audio", "请确保对着麦克风说话，或检查麦克风灵敏度"
+                    )
                 )
             else:
-                self._append_status_threadsafe("[成功] 录音测试通过")
                 self._append_status_threadsafe(
-                    f"音质数据: 最大音量={max_amplitude:.1%}, 平均音量={rms:.1%}, 活跃度={activity_ratio:.1%}"
+                    QCoreApplication.translate("Audio", "[成功] 录音测试通过")
                 )
-                self._append_status_threadsafe("麦克风工作正常")
+                self._append_status_threadsafe(
+                    QCoreApplication.translate(
+                        "Audio",
+                        "音质数据: 最大音量={max}, 平均音量={avg}, 活跃度={activity}",
+                    ).format(
+                        max=f"{max_amplitude:.1%}",
+                        avg=f"{rms:.1%}",
+                        activity=f"{activity_ratio:.1%}",
+                    )
+                )
+                self._append_status_threadsafe(
+                    QCoreApplication.translate("Audio", "麦克风工作正常")
+                )
 
         except Exception as e:
             self.logger.error(f"录音测试失败: {e}", exc_info=True)
-            self._append_status_threadsafe(f"[错误] 录音测试失败: {str(e)}")
+            self._append_status_threadsafe(
+                QCoreApplication.translate(
+                    "Audio", "[错误] 录音测试失败: {error}"
+                ).format(error=str(e))
+            )
             if "Permission denied" in str(e) or "access" in str(e).lower():
                 self._append_status_threadsafe(
-                    "可能是权限问题，请检查系统麦克风权限设置"
+                    QCoreApplication.translate(
+                        "Audio", "可能是权限问题，请检查系统麦克风权限设置"
+                    )
                 )
         finally:
             # 重置UI状态（切回主线程）
@@ -440,12 +535,18 @@ class AudioWidget(QWidget):
         try:
             device_id = self.ui_controls["output_device_combo"].currentData()
             if device_id is None:
-                QMessageBox.warning(self, "提示", "请先选择输出设备")
+                QMessageBox.warning(
+                    self,
+                    QCoreApplication.translate("Audio", "提示"),
+                    QCoreApplication.translate("Audio", "请先选择输出设备"),
+                )
                 return
 
             self.testing_output = True
             self.ui_controls["test_output_btn"].setEnabled(False)
-            self.ui_controls["test_output_btn"].setText("播放中...")
+            self.ui_controls["test_output_btn"].setText(
+                QCoreApplication.translate("Audio", "播放中...")
+            )
 
             # 在线程中执行测试
             test_thread = threading.Thread(
@@ -469,7 +570,9 @@ class AudioWidget(QWidget):
                 (d for d in self.output_devices if d["id"] == device_id), None
             )
             if not output_device:
-                self._append_status_threadsafe("错误: 无法获取设备信息")
+                self._append_status_threadsafe(
+                    QCoreApplication.translate("Audio", "错误: 无法获取设备信息")
+                )
                 return
 
             sample_rate = int(output_device["sample_rate"])
@@ -477,17 +580,29 @@ class AudioWidget(QWidget):
             frequency = 440  # 440Hz A音
 
             self._append_status_threadsafe(
-                f"开始播放测试 (设备: {device_id}, 采样率: {sample_rate}Hz)"
+                QCoreApplication.translate(
+                    "Audio", "开始播放测试 (设备: {device}, 采样率: {rate}Hz)"
+                ).format(device=device_id, rate=sample_rate)
             )
-            self._append_status_threadsafe("请准备好耳机/扬声器，即将播放测试音...")
+            self._append_status_threadsafe(
+                QCoreApplication.translate(
+                    "Audio", "请准备好耳机/扬声器，即将播放测试音..."
+                )
+            )
 
             # 倒计时提示
             for i in range(3, 0, -1):
-                self._append_status_threadsafe(f"{i}秒后开始播放...")
+                self._append_status_threadsafe(
+                    QCoreApplication.translate(
+                        "Audio", "{count}秒后开始播放..."
+                    ).format(count=i)
+                )
                 time.sleep(1)
 
             self._append_status_threadsafe(
-                f"正在播放 {frequency}Hz 测试音 ({duration}秒)..."
+                QCoreApplication.translate(
+                    "Audio", "正在播放 {freq}Hz 测试音 ({dur}秒)..."
+                ).format(freq=frequency, dur=duration)
             )
 
             # 生成测试音频 (正弦波)
@@ -504,17 +619,27 @@ class AudioWidget(QWidget):
             sd.play(audio, samplerate=sample_rate, device=device_id)
             sd.wait()
 
-            self._append_status_threadsafe("播放完成")
             self._append_status_threadsafe(
-                "测试说明: 如果听到清晰的测试音，说明扬声器/耳机工作正常"
+                QCoreApplication.translate("Audio", "播放完成")
             )
             self._append_status_threadsafe(
-                "如果没听到声音，请检查音量设置或选择其他输出设备"
+                QCoreApplication.translate(
+                    "Audio", "测试说明: 如果听到清晰的测试音，说明扬声器/耳机工作正常"
+                )
+            )
+            self._append_status_threadsafe(
+                QCoreApplication.translate(
+                    "Audio", "如果没听到声音，请检查音量设置或选择其他输出设备"
+                )
             )
 
         except Exception as e:
             self.logger.error(f"播放测试失败: {e}", exc_info=True)
-            self._append_status_threadsafe(f"[错误] 播放测试失败: {str(e)}")
+            self._append_status_threadsafe(
+                QCoreApplication.translate(
+                    "Audio", "[错误] 播放测试失败: {error}"
+                ).format(error=str(e))
+            )
         finally:
             # 重置UI状态（切回主线程）
             self._reset_output_ui_threadsafe()
@@ -525,7 +650,9 @@ class AudioWidget(QWidget):
         """
         self.testing_input = False
         self.ui_controls["test_input_btn"].setEnabled(True)
-        self.ui_controls["test_input_btn"].setText("测试录音")
+        self.ui_controls["test_input_btn"].setText(
+            QCoreApplication.translate("Audio", "测试录音")
+        )
 
     def _reset_input_ui_threadsafe(self):
         try:
@@ -539,7 +666,9 @@ class AudioWidget(QWidget):
         """
         self.testing_output = False
         self.ui_controls["test_output_btn"].setEnabled(True)
-        self.ui_controls["test_output_btn"].setText("测试播放")
+        self.ui_controls["test_output_btn"].setText(
+            QCoreApplication.translate("Audio", "测试播放")
+        )
 
     def _reset_output_ui_threadsafe(self):
         try:
@@ -680,7 +809,7 @@ class AudioWidget(QWidget):
             if self.ui_controls["status_text"]:
                 self.ui_controls["status_text"].clear()
 
-            self._append_status("已重置为默认设置")
+            self._append_status(QCoreApplication.translate("Audio", "已重置为默认设置"))
             self.logger.info("音频设备配置已重置为默认值")
 
         except Exception as e:

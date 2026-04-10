@@ -10,9 +10,9 @@
     <height>500</height>
    </rect>
   </property>
-  <property name="windowTitle">
-   <string>唤醒词</string>
-  </property>
+   <property name="windowTitle">
+    <string>QCoreApplication.translate("WakeWord", "唤醒词")</string>
+   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
    <item>
     <widget class="QScrollArea" name="scrollArea">
@@ -31,22 +31,22 @@
       <layout class="QVBoxLayout" name="contentLayout">
        <item>
         <widget class="QCheckBox" name="use_wake_word_check">
-         <property name="text">
-          <string>启用唤醒词检测</string>
-         </property>
+          <property name="text">
+           <string>QCoreApplication.translate("WakeWord", "启用唤醒词检测")</string>
+          </property>
         </widget>
        </item>
        <item>
         <widget class="QGroupBox" name="model_group">
-         <property name="title">
-          <string>模型配置</string>
-         </property>
+          <property name="title">
+           <string>QCoreApplication.translate("WakeWord", "模型配置")</string>
+          </property>
          <layout class="QFormLayout" name="modelLayout">
           <item row="0" column="0">
            <widget class="QLabel" name="label_model_path">
-            <property name="text">
-             <string>模型路径:</string>
-            </property>
+             <property name="text">
+              <string>QCoreApplication.translate("WakeWord", "模型路径:")</string>
+             </property>
            </widget>
           </item>
           <item row="0" column="1">
@@ -56,9 +56,9 @@
             </item>
             <item>
              <widget class="QPushButton" name="model_path_btn">
-              <property name="text">
-               <string>浏览...</string>
-              </property>
+               <property name="text">
+                <string>QCoreApplication.translate("WakeWord", "浏览...")</string>
+               </property>
              </widget>
             </item>
            </layout>
@@ -68,16 +68,16 @@
        </item>
        <item>
         <widget class="QGroupBox" name="keywords_group">
-         <property name="title">
-          <string>唤醒词配置</string>
-         </property>
+          <property name="title">
+           <string>QCoreApplication.translate("WakeWord", "唤醒词配置")</string>
+          </property>
          <layout class="QVBoxLayout" name="keywords_layout">
           <item>
            <widget class="QLabel" name="keywords_help">
-            <property name="text">
-             <string>请输入中文唤醒词，保存时会自动转换为拼音格式
-例如：小米小米（将自动转换为：x iǎo m ǐ x iǎo m ǐ @小米小米）</string>
-            </property>
+             <property name="text">
+              <string>QCoreApplication.translate("WakeWord", "请输入中文唤醒词，保存时会自动转换为拼音格式
+例如：小米小米（将自动转换为：x iǎo m ǐ x iǎo m ǐ @小米小米）")</string>
+             </property>
             <property name="styleSheet">
              <string>color: #666666; font-size: 11px;</string>
             </property>
@@ -91,9 +91,9 @@
               <height>200</height>
              </size>
             </property>
-            <property name="placeholderText">
-             <string>请输入中文唤醒词，每行一个（如：小米小米）</string>
-            </property>
+             <property name="placeholderText">
+              <string>QCoreApplication.translate("WakeWord", "请输入中文唤醒词，每行一个（如：小米小米）")</string>
+             </property>
            </widget>
           </item>
          </layout>

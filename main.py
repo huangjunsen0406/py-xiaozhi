@@ -1,8 +1,10 @@
 import argparse
 import asyncio
+import os
 import signal
 import sys
 
+from PyQt5.QtCore import QLocale
 from src.application import Application
 from src.utils.logging_config import get_logger, setup_logging
 
@@ -30,6 +32,12 @@ def parse_args():
         "--skip-activation",
         action="store_true",
         help="跳过激活流程，直接启动应用（仅用于调试）",
+    )
+    parser.add_argument(
+        "--lang",
+        type=str,
+        default=None,
+        help="语言设置：如 en_US, ru_RU, zh_CN。不指定则使用系统语言，失败时回退到 zh_CN",
     )
     return parser.parse_args()
 
@@ -86,7 +94,6 @@ if __name__ == "__main__":
         setup_logging()
 
         # 检测Wayland环境并设置Qt平台插件配置
-        import os
 
         is_wayland = (
             os.environ.get("WAYLAND_DISPLAY")
@@ -128,6 +135,16 @@ if __name__ == "__main__":
                 sys.exit(1)
 
             qt_app = QApplication.instance() or QApplication(sys.argv)
+
+            # 使用 LanguageManager 加载翻译
+            from src.utils.language_manager import LanguageManager
+
+            target_lang = args.lang if args.lang else QLocale.system().name()
+            lang_mgr = LanguageManager.get_instance()
+            if lang_mgr.set_language(target_lang):
+                logger.info(f"语言设置成功: {target_lang}")
+            else:
+                logger.warning(f"语言设置失败，使用默认语言: {target_lang}")
 
             loop = qasync.QEventLoop(qt_app)
             asyncio.set_event_loop(loop)
