@@ -11,7 +11,7 @@
    </rect>
   </property>
    <property name="windowTitle">
-    <string>QCoreApplication.translate("SystemOptions", "系统选项")</string>
+    <string>系统选项</string>
    </property>
   <layout class="QVBoxLayout" name="verticalLayout">
    <item>
@@ -38,7 +38,7 @@
        <item row="0" column="0">
         <widget class="QLabel" name="label_client_id">
           <property name="text">
-           <string>QCoreApplication.translate("SystemOptions", "客户端ID:")</string>
+           <string>客户端ID:</string>
           </property>
         </widget>
        </item>
@@ -48,7 +48,7 @@
        <item row="1" column="0">
         <widget class="QLabel" name="label_device_id">
           <property name="text">
-           <string>QCoreApplication.translate("SystemOptions", "设备ID:")</string>
+           <string>设备ID:</string>
           </property>
         </widget>
        </item>
@@ -58,7 +58,7 @@
        <item row="2" column="0">
         <widget class="QLabel" name="label_ota_url">
           <property name="text">
-           <string>QCoreApplication.translate("SystemOptions", "OTA版本URL:")</string>
+           <string>OTA版本URL:</string>
           </property>
         </widget>
        </item>
@@ -68,7 +68,7 @@
        <item row="3" column="0">
         <widget class="QLabel" name="label_websocket_url">
           <property name="text">
-           <string>QCoreApplication.translate("SystemOptions", "WebSocket URL:")</string>
+           <string>WebSocket URL:</string>
           </property>
         </widget>
        </item>
@@ -78,7 +78,7 @@
        <item row="4" column="0">
         <widget class="QLabel" name="label_websocket_token">
           <property name="text">
-           <string>QCoreApplication.translate("SystemOptions", "WebSocket Token:")</string>
+           <string>WebSocket Token:</string>
           </property>
         </widget>
        </item>
@@ -92,7 +92,7 @@
        <item row="5" column="0">
         <widget class="QLabel" name="label_authorization_url">
           <property name="text">
-           <string>QCoreApplication.translate("SystemOptions", "授权URL:")</string>
+           <string>授权URL:</string>
           </property>
         </widget>
        </item>
@@ -102,7 +102,7 @@
        <item row="6" column="0">
         <widget class="QLabel" name="label_activation_version">
           <property name="text">
-           <string>QCoreApplication.translate("SystemOptions", "激活版本:")</string>
+           <string>激活版本:</string>
           </property>
         </widget>
        </item>
@@ -123,21 +123,21 @@
        <item row="7" column="0">
         <widget class="QLabel" name="label_aec_enabled">
           <property name="text">
-           <string>QCoreApplication.translate("SystemOptions", "启用AEC回声消除:")</string>
+           <string>启用AEC回声消除:</string>
           </property>
         </widget>
        </item>
        <item row="7" column="1">
         <widget class="QCheckBox" name="aec_enabled_check">
           <property name="text">
-           <string>QCoreApplication.translate("SystemOptions", "启用")</string>
+           <string>启用</string>
           </property>
         </widget>
        </item>
        <item row="8" column="0">
         <widget class="QLabel" name="label_window_size">
           <property name="text">
-           <string>QCoreApplication.translate("SystemOptions", "主界面宽高:")</string>
+           <string>主界面宽高:</string>
           </property>
         </widget>
        </item>
@@ -145,7 +145,7 @@
         <widget class="QComboBox" name="window_size_combo">
          <item>
           <property name="text">
-           <string>QCoreApplication.translate("SystemOptions", "默认")</string>
+           <string>默认</string>
           </property>
          </item>
          <item>
@@ -163,7 +163,7 @@
         <item row="9" column="0">
          <widget class="QLabel" name="label_language">
           <property name="text">
-           <string>QCoreApplication.translate("SystemOptions", "语言:")</string>
+           <string>语言:</string>
           </property>
          </widget>
         </item>
@@ -171,7 +171,7 @@
          <widget class="QComboBox" name="language_combo">
            <item>
             <property name="text">
-             <string>QCoreApplication.translate("SystemOptions", "简体中文")</string>
+             <string>简体中文</string>
             </property>
            </item>
           <item>
@@ -189,13 +189,13 @@
         <item row="10" column="0" colspan="2">
          <widget class="QGroupBox" name="mqtt_group">
           <property name="title">
-           <string>QCoreApplication.translate("SystemOptions", "MQTT配置")</string>
+           <string>MQTT配置</string>
           </property>
          <layout class="QFormLayout" name="mqtt_form">
           <item row="0" column="0">
            <widget class="QLabel" name="label_mqtt_endpoint">
              <property name="text">
-              <string>QCoreApplication.translate("SystemOptions", "端点:")</string>
+              <string>端点:</string>
              </property>
            </widget>
           </item>
@@ -205,7 +205,7 @@
           <item row="1" column="0">
            <widget class="QLabel" name="label_mqtt_client_id">
              <property name="text">
-              <string>QCoreApplication.translate("SystemOptions", "客户端ID:")</string>
+              <string>客户端ID:</string>
              </property>
            </widget>
           </item>
@@ -215,7 +215,7 @@
           <item row="2" column="0">
            <widget class="QLabel" name="label_mqtt_username">
              <property name="text">
-              <string>QCoreApplication.translate("SystemOptions", "用户名:")</string>
+              <string>用户名:</string>
              </property>
            </widget>
           </item>
@@ -225,7 +225,7 @@
           <item row="3" column="0">
            <widget class="QLabel" name="label_mqtt_password">
              <property name="text">
-              <string>QCoreApplication.translate("SystemOptions", "密码:")</string>
+              <string>密码:</string>
              </property>
            </widget>
           </item>
@@ -239,7 +239,7 @@
           <item row="4" column="0">
            <widget class="QLabel" name="label_mqtt_publish_topic">
              <property name="text">
-              <string>QCoreApplication.translate("SystemOptions", "发布主题:")</string>
+              <string>发布主题:</string>
              </property>
            </widget>
           </item>
@@ -249,7 +249,7 @@
           <item row="5" column="0">
            <widget class="QLabel" name="label_mqtt_subscribe_topic">
              <property name="text">
-              <string>QCoreApplication.translate("SystemOptions", "订阅主题:")</string>
+              <string>订阅主题:</string>
              </property>
            </widget>
           </item>

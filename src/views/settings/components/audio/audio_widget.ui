@@ -11,7 +11,7 @@
    </rect>
   </property>
    <property name="windowTitle">
-    <string>QCoreApplication.translate("AudioWidget", "音频设备")</string>
+    <string>音频设备</string>
    </property>
   <layout class="QVBoxLayout" name="verticalLayout">
    <item>
@@ -32,13 +32,13 @@
        <item>
         <widget class="QGroupBox" name="input_device_group">
            <property name="title">
-            <string>QCoreApplication.translate("AudioWidget", "音频输入设备 (麦克风)")</string>
+            <string>音频输入设备 (麦克风)</string>
            </property>
          <layout class="QFormLayout" name="input_layout">
           <item row="0" column="0">
            <widget class="QLabel" name="label_input_device">
              <property name="text">
-              <string>QCoreApplication.translate("AudioWidget", "输入设备:")</string>
+              <string>输入设备:</string>
              </property>
            </widget>
           </item>
@@ -47,14 +47,14 @@
             <item>
              <widget class="QComboBox" name="input_device_combo">
                <property name="placeholderText">
-                <string>QCoreApplication.translate("AudioWidget", "请选择麦克风设备...")</string>
+                <string>请选择麦克风设备...</string>
                </property>
              </widget>
             </item>
             <item>
              <widget class="QPushButton" name="test_input_btn">
                <property name="text">
-                <string>QCoreApplication.translate("AudioWidget", "测试录音")</string>
+                <string>测试录音</string>
                </property>
              </widget>
             </item>
@@ -63,14 +63,14 @@
            <item row="1" column="0">
             <widget class="QLabel" name="label_input_info">
              <property name="text">
-              <string>QCoreApplication.translate("AudioWidget", "设备信息:")</string>
+              <string>设备信息:</string>
              </property>
             </widget>
            </item>
            <item row="1" column="1">
             <widget class="QLabel" name="input_info_label">
              <property name="text">
-              <string>QCoreApplication.translate("AudioWidget", "未选择设备")</string>
+              <string>未选择设备</string>
              </property>
             <property name="styleSheet">
              <string>color: #666;</string>
@@ -83,13 +83,13 @@
        <item>
         <widget class="QGroupBox" name="output_device_group">
            <property name="title">
-            <string>QCoreApplication.translate("AudioWidget", "音频输出设备 (扬声器)")</string>
+            <string>音频输出设备 (扬声器)</string>
            </property>
          <layout class="QFormLayout" name="output_layout">
           <item row="0" column="0">
            <widget class="QLabel" name="label_output_device">
              <property name="text">
-              <string>QCoreApplication.translate("AudioWidget", "输出设备:")</string>
+              <string>输出设备:</string>
              </property>
            </widget>
           </item>
@@ -98,14 +98,14 @@
             <item>
              <widget class="QComboBox" name="output_device_combo">
                <property name="placeholderText">
-                <string>QCoreApplication.translate("AudioWidget", "请选择扬声器设备...")</string>
+                <string>请选择扬声器设备...</string>
                </property>
              </widget>
             </item>
             <item>
              <widget class="QPushButton" name="test_output_btn">
                <property name="text">
-                <string>QCoreApplication.translate("AudioWidget", "测试播放")</string>
+                <string>测试播放</string>
                </property>
              </widget>
             </item>
@@ -114,14 +114,14 @@
            <item row="1" column="0">
             <widget class="QLabel" name="label_output_info">
              <property name="text">
-              <string>QCoreApplication.translate("AudioWidget", "设备信息:")</string>
+              <string>设备信息:</string>
              </property>
             </widget>
            </item>
            <item row="1" column="1">
             <widget class="QLabel" name="output_info_label">
              <property name="text">
-              <string>QCoreApplication.translate("AudioWidget", "未选择设备")</string>
+              <string>未选择设备</string>
              </property>
             <property name="styleSheet">
              <string>color: #666;</string>
@@ -136,7 +136,7 @@
          <item>
           <widget class="QPushButton" name="scan_devices_btn">
                <property name="text">
-                <string>QCoreApplication.translate("AudioWidget", "扫描设备")</string>
+                <string>扫描设备</string>
                </property>
           </widget>
          </item>
@@ -158,7 +158,7 @@
        <item>
         <widget class="QGroupBox" name="status_group">
            <property name="title">
-            <string>QCoreApplication.translate("AudioWidget", "设备信息")</string>
+            <string>设备信息</string>
            </property>
          <layout class="QVBoxLayout" name="status_layout">
           <item>
@@ -173,7 +173,7 @@
              <bool>true</bool>
             </property>
              <property name="placeholderText">
-              <string>QCoreApplication.translate("AudioWidget", "设备信息和测试状态将显示在这里...")</string>
+              <string>设备信息和测试状态将显示在这里...</string>
              </property>
            </widget>
           </item>
