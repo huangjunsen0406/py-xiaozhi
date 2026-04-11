@@ -168,7 +168,10 @@ class SystemOptionsWidget(QWidget):
         连接事件处理.
         """
         # 为所有输入控件连接变更信号
+        # Note: language_combo is handled separately below
         for control in self.ui_controls.values():
+            if control == self.ui_controls.get("language_combo"):
+                continue  # Skip language_combo - handled separately
             if isinstance(control, QLineEdit):
                 control.textChanged.connect(self.settings_changed.emit)
             elif isinstance(control, QComboBox):
