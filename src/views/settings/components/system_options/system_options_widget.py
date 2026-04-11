@@ -1,10 +1,80 @@
 from pathlib import Path
 
 from PyQt5.QtCore import pyqtSignal
-from PyQt5.QtWidgets import QCheckBox, QComboBox, QLineEdit, QWidget
+from PyQt5.QtWidgets import QCheckBox, QComboBox, QGroupBox, QLabel, QLineEdit, QWidget
 
 from src.utils.config_manager import ConfigManager
+from src.utils.language_manager import LanguageManager
 from src.utils.logging_config import get_logger
+
+
+# Translation dictionary for UI strings
+UI_TRANSLATIONS = {
+    "zh_CN": {
+        "client_id": "客户端ID:",
+        "device_id": "设备ID:",
+        "ota_url": "OTA版本URL:",
+        "websocket_url": "WebSocket URL:",
+        "websocket_token": "WebSocket Token:",
+        "authorization_url": "授权URL:",
+        "activation_version": "激活版本:",
+        "aec_enabled": "启用AEC回声消除:",
+        "aec_enable": "启用",
+        "window_size": "主界面宽高:",
+        "window_default": "默认",
+        "language": "语言:",
+        "mqtt_config": "MQTT配置",
+        "mqtt_endpoint": "端点:",
+        "mqtt_client_id": "客户端ID:",
+        "mqtt_username": "用户名:",
+        "mqtt_password": "密码:",
+        "mqtt_publish_topic": "发布主题:",
+        "mqtt_subscribe_topic": "订阅主题:",
+    },
+    "en_US": {
+        "client_id": "Client ID:",
+        "device_id": "Device ID:",
+        "ota_url": "OTA Version URL:",
+        "websocket_url": "WebSocket URL:",
+        "websocket_token": "WebSocket Token:",
+        "authorization_url": "Authorization URL:",
+        "activation_version": "Activation Version:",
+        "aec_enabled": "Enable AEC Echo Cancellation:",
+        "aec_enable": "Enable",
+        "window_size": "Main Window Size:",
+        "window_default": "Default",
+        "language": "Language:",
+        "mqtt_config": "MQTT Configuration",
+        "mqtt_endpoint": "Endpoint:",
+        "mqtt_client_id": "Client ID:",
+        "mqtt_username": "Username:",
+        "mqtt_password": "Password:",
+        "mqtt_publish_topic": "Publish Topic:",
+        "mqtt_subscribe_topic": "Subscribe Topic:",
+    },
+    "ru_RU": {
+        "client_id": "ID клиента:",
+        "device_id": "ID устройства:",
+        "ota_url": "URL версии OTA:",
+        "websocket_url": "URL WebSocket:",
+        "websocket_token": "Токен WebSocket:",
+        "authorization_url": "URL авторизации:",
+        "activation_version": "Версия активации:",
+        "aec_enabled": "Включить AEC (подавление эха):",
+        "aec_enable": "Включить",
+        "window_size": "Размер окна:",
+        "window_default": "По умолчанию",
+        "language": "Язык:",
+        "mqtt_config": "Настройки MQTT",
+        "mqtt_endpoint": "Конечная точка:",
+        "mqtt_client_id": "ID клиента:",
+        "mqtt_username": "Имя пользователя:",
+        "mqtt_password": "Пароль:",
+        "mqtt_publish_topic": "Тема публикации:",
+        "mqtt_subscribe_topic": "Тема подписки:",
+    },
+}
+
 
 
 class SystemOptionsWidget(QWidget):
@@ -66,6 +136,7 @@ class SystemOptionsWidget(QWidget):
                     QComboBox, "activation_version_combo"
                 ),
                 "window_size_combo": self.findChild(QComboBox, "window_size_combo"),
+                "language_combo": self.findChild(QComboBox, "language_combo"),
             }
         )
 
@@ -104,6 +175,10 @@ class SystemOptionsWidget(QWidget):
                 control.currentTextChanged.connect(self.settings_changed.emit)
             elif isinstance(control, QCheckBox):
                 control.stateChanged.connect(self.settings_changed.emit)
+        
+        # Language combo needs special handling to actually change language
+        if self.ui_controls["language_combo"]:
+            self.ui_controls["language_combo"].currentTextChanged.connect(self._on_language_changed)
 
     def _load_config_values(self):
         """
@@ -159,6 +234,12 @@ class SystemOptionsWidget(QWidget):
                 combo = self.ui_controls["window_size_combo"]
                 combo.setCurrentText(mode_to_text.get(window_size_mode, "默认"))
 
+            # 语言设置
+            language = self.config_manager.get_config("SYSTEM_OPTIONS.LANGUAGE", "zh_CN")
+            if self.ui_controls["language_combo"]:
+                lang_map = {"zh_CN": "简体中文", "en_US": "English", "ru_RU": "Русский"}
+                self.ui_controls["language_combo"].setCurrentText(lang_map.get(language, "简体中文"))
+
             # MQTT配置
             mqtt_info = self.config_manager.get_config(
                 "SYSTEM_OPTIONS.NETWORK.MQTT_INFO", {}
@@ -189,6 +270,56 @@ class SystemOptionsWidget(QWidget):
 
         except Exception as e:
             self.logger.error(f"加载系统选项配置值失败: {e}", exc_info=True)
+
+    def _on_language_changed(self, display_text: str):
+        """Handle language combo change - actually switch language."""
+        text_to_lang = {"简体中文": "zh_CN", "English": "en_US", "Русский": "ru_RU"}
+        lang_code = text_to_lang.get(display_text, "zh_CN")
+        
+        # Actually change the language
+        lang_manager = LanguageManager.get_instance()
+        lang_manager.set_language(lang_code)
+        
+        # Manually retranslate all UI strings
+        self._retranslate_ui(lang_code)
+        
+        self.logger.info(f"Language changed to: {lang_code}")
+
+    def _retranslate_ui(self, lang_code: str):
+        """Manually retranslate all UI strings."""
+        if lang_code not in UI_TRANSLATIONS:
+            lang_code = "zh_CN"
+        
+        translations = UI_TRANSLATIONS[lang_code]
+        
+        # Update all label texts
+        self.findChild(QLabel, "label_client_id").setText(translations["client_id"])
+        self.findChild(QLabel, "label_device_id").setText(translations["device_id"])
+        self.findChild(QLabel, "label_ota_url").setText(translations["ota_url"])
+        self.findChild(QLabel, "label_websocket_url").setText(translations["websocket_url"])
+        self.findChild(QLabel, "label_websocket_token").setText(translations["websocket_token"])
+        self.findChild(QLabel, "label_authorization_url").setText(translations["authorization_url"])
+        self.findChild(QLabel, "label_activation_version").setText(translations["activation_version"])
+        self.findChild(QLabel, "label_aec_enabled").setText(translations["aec_enabled"])
+        self.findChild(QCheckBox, "aec_enabled_check").setText(translations["aec_enable"])
+        self.findChild(QLabel, "label_window_size").setText(translations["window_size"])
+        self.findChild(QLabel, "label_language").setText(translations["language"])
+        
+        # Update MQTT group title and labels
+        self.findChild(QGroupBox, "mqtt_group").setTitle(translations["mqtt_config"])
+        self.findChild(QLabel, "label_mqtt_endpoint").setText(translations["mqtt_endpoint"])
+        self.findChild(QLabel, "label_mqtt_client_id").setText(translations["mqtt_client_id"])
+        self.findChild(QLabel, "label_mqtt_username").setText(translations["mqtt_username"])
+        self.findChild(QLabel, "label_mqtt_password").setText(translations["mqtt_password"])
+        self.findChild(QLabel, "label_mqtt_publish_topic").setText(translations["mqtt_publish_topic"])
+        self.findChild(QLabel, "label_mqtt_subscribe_topic").setText(translations["mqtt_subscribe_topic"])
+        
+        # Update window size combo items
+        window_size_combo = self.findChild(QComboBox, "window_size_combo")
+        if window_size_combo:
+            window_size_combo.setItemText(0, translations["window_default"])
+            window_size_combo.setItemText(1, "75%")
+            window_size_combo.setItemText(2, "100%")
 
     def _set_text_value(self, control_name: str, value: str):
         """
@@ -281,6 +412,12 @@ class SystemOptionsWidget(QWidget):
                 window_size_text = self.ui_controls["window_size_combo"].currentText()
                 window_size_mode = text_to_mode.get(window_size_text, "default")
                 config_data["SYSTEM_OPTIONS.WINDOW_SIZE_MODE"] = window_size_mode
+
+            # 语言设置
+            if self.ui_controls["language_combo"]:
+                text_to_lang = {"简体中文": "zh_CN", "English": "en_US", "Русский": "ru_RU"}
+                lang_text = self.ui_controls["language_combo"].currentText()
+                config_data["SYSTEM_OPTIONS.LANGUAGE"] = text_to_lang.get(lang_text, "zh_CN")
 
             # MQTT配置
             mqtt_config = {}

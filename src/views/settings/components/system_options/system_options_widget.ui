@@ -160,7 +160,33 @@
          </item>
         </widget>
        </item>
-       <item row="9" column="0" colspan="2">
+       <item row="10" column="0">
+        <widget class="QLabel" name="label_language">
+         <property name="text">
+          <string>语言:</string>
+         </property>
+        </widget>
+       </item>
+       <item row="10" column="1">
+        <widget class="QComboBox" name="language_combo">
+         <item>
+          <property name="text">
+           <string>简体中文</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>English</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>Русский</string>
+          </property>
+         </item>
+        </widget>
+       </item>
+       <item row="11" column="0" colspan="2">
         <widget class="QGroupBox" name="mqtt_group">
          <property name="title">
           <string>MQTT配置</string>

@@ -93,6 +93,9 @@ class Application:
         try:
             self.running = True
             self._main_loop = asyncio.get_running_loop()
+            from src.utils.language_manager import LanguageManager
+
+            LanguageManager.get_instance()
             self._initialize_async_objects()
             self._set_protocol(protocol)
             self._setup_protocol_callbacks()
