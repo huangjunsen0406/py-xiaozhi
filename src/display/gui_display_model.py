@@ -117,9 +117,11 @@ class GuiDisplayModel(QObject):
         """
         更新状态文本和连接状态.
         """
-        self.statusText = QCoreApplication.translate(
-            "GuiDisplayModel", f"状态: {status}"
+        translated_status = QCoreApplication.translate("GuiDisplayModel", status)
+        status_template = QCoreApplication.translate(
+            "GuiDisplayModel", "状态: {status}"
         )
+        self.statusText = status_template.format(status=translated_status)
         self._is_connected = connected
 
     def update_text(self, text: str):

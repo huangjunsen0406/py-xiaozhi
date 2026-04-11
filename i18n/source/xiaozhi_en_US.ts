@@ -2,7 +2,7 @@
 <!DOCTYPE TS>
 <TS version="2.1">
 <context>
-    <name>Audio</name>
+    <name>AudioWidget</name>
     <message>
         <location filename="../../src/views/settings/components/audio/audio_widget.py" line="174"/>
         <source>采样率: {rate}Hz, 通道: {channels}</source>
@@ -215,72 +215,187 @@
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>音频输入设备 (麦克风)</source>
-        <translation type="obsolete">Audio Input (Microphone)</translation>
+        <translation>Audio Input (Microphone)</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>输入设备:</source>
-        <translation type="obsolete">Input Device:</translation>
+        <translation>Input Device:</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>请选择麦克风设备...</source>
-        <translation type="obsolete">Select a microphone...</translation>
+        <translation>Select a microphone...</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>测试录音</source>
-        <translation type="obsolete">Test Recording</translation>
+        <translation>Test Recording</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>设备信息:</source>
-        <translation type="obsolete">Device Info:</translation>
+        <translation>Device Info:</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>未选择设备</source>
-        <translation type="obsolete">No device selected</translation>
+        <translation>No device selected</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>音频输出设备 (扬声器)</source>
-        <translation type="obsolete">Audio Output (Speaker)</translation>
+        <translation>Audio Output (Speaker)</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>输出设备:</source>
-        <translation type="obsolete">Output Device:</translation>
+        <translation>Output Device:</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>请选择扬声器设备...</source>
-        <translation type="obsolete">Select a speaker...</translation>
+        <translation>Select a speaker...</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>测试播放</source>
-        <translation type="obsolete">Test Playback</translation>
+        <translation>Test Playback</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>扫描设备</source>
-        <translation type="obsolete">Scan Devices</translation>
+        <translation>Scan Devices</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>设备信息</source>
-        <translation type="obsolete">Device Info</translation>
+        <translation>Device Info</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>设备信息和测试状态将显示在这里...</source>
-        <translation type="obsolete">Device info and test status will be shown here...</translation>
+        <translation>Device info and test status will be shown here...</translation>
     </message>
     <message>
         <location filename="../../src/views/settings/components/audio/audio_widget.ui" line="14"/>
         <source>音频设备</source>
         <translation>Audio Device</translation>
+    </message>
+</context>
+<context>
+    <name>Audio</name>
+    <message>
+        <source>正在扫描音频设备...</source>
+        <translation>Scanning audio devices...</translation>
+    </message>
+    <message>
+        <source>扫描完成: 找到 {input} 个输入设备, {output} 个输出设备</source>
+        <translation>Scan complete: Found {input} input device(s), {output} output device(s)</translation>
+    </message>
+    <message>
+        <source>采样率: {rate}Hz, 通道: {channels}</source>
+        <translation>Sampling rate: {rate}Hz, Channels: {channels}</translation>
+    </message>
+    <message>
+        <source>开始录音测试 (设备: {device}, 采样率: {rate}Hz)</source>
+        <translation>Start recording test (device: {device}, rate: {rate}Hz)</translation>
+    </message>
+    <message>
+        <source>开始播放测试 (设备: {device}, 采样率: {rate}Hz)</source>
+        <translation>Start playback test (device: {device}, rate: {rate}Hz)</translation>
+    </message>
+    <message>
+        <source>设备信息获取失败</source>
+        <translation>Failed to get device info</translation>
+    </message>
+    <message>
+        <source>未选择设备</source>
+        <translation>No device selected</translation>
+    </message>
+    <message>
+        <source> (默认)</source>
+        <translation> (default)</translation>
+    </message>
+    <message>
+        <source>扫描设备失败: {error}</source>
+        <translation>Device scan failed: {error}</translation>
+    </message>
+    <message>
+        <source>默认</source>
+        <translation>Default</translation>
+    </message>
+    <message>
+        <source>提示</source>
+        <translation>Hint</translation>
+    </message>
+    <message>
+        <source>请先选择输入设备</source>
+        <translation>Please select an input device first</translation>
+    </message>
+    <message>
+        <source>录音中...</source>
+        <translation>Recording...</translation>
+    </message>
+    <message>
+        <source>输入设备测试失败: {error}</source>
+        <translation>Input device test failed: {error}</translation>
+    </message>
+    <message>
+        <source>错误: 无法获取设备信息</source>
+        <translation>Error: Cannot get device info</translation>
+    </message>
+    <message>
+        <source>正在录音，请说话... (3秒)</source>
+        <translation>Recording, please speak... (3 seconds)</translation>
+    </message>
+    <message>
+        <source>录音完成，正在分析...</source>
+        <translation>Recording complete, analyzing...</translation>
+    </message>
+    <message>
+        <source>[失败] 未检测到音频信号</source>
+        <translation>[Failed] No audio signal detected</translation>
+    </message>
+    <message>
+        <source>[警告] 音频信号过载</source>
+        <translation>[Warning] Audio signal overloaded</translation>
+    </message>
+    <message>
+        <source>建议降低麦克风增益或音量设置</source>
+        <translation>Recommend lowering microphone gain or volume</translation>
+    </message>
+    <message>
+        <source>[成功] 录音测试通过</source>
+        <translation>[Success] Recording test passed</translation>
+    </message>
+    <message>
+        <source>麦克风工作正常</source>
+        <translation>Microphone working normally</translation>
+    </message>
+    <message>
+        <source>请先选择输出设备</source>
+        <translation>Please select an output device first</translation>
+    </message>
+    <message>
+        <source>播放中...</source>
+        <translation>Playing...</translation>
+    </message>
+    <message>
+        <source>播放完成</source>
+        <translation>Playback complete</translation>
+    </message>
+    <message>
+        <source>测试录音</source>
+        <translation>Test Recording</translation>
+    </message>
+    <message>
+        <source>测试播放</source>
+        <translation>Test Playback</translation>
+    </message>
+    <message>
+        <source>已重置为默认设置</source>
+        <translation>Reset to default settings</translation>
     </message>
 </context>
 <context>
@@ -475,7 +590,7 @@ Solutions:</translation>
     </message>
 </context>
 <context>
-    <name>Camera</name>
+    <name>CameraWidget</name>
     <message>
         <location filename="../../src/views/settings/components/camera/camera_widget.py" line="192"/>
         <source>扫描结果</source>
@@ -532,89 +647,89 @@ Click Start Preview to view camera feed</translation>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>摄像头基本配置</source>
-        <translation type="obsolete">Camera Basic Config</translation>
+        <translation>Camera Basic Config</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>摄像头索引:</source>
-        <translation type="obsolete">Camera Index:</translation>
+        <translation>Camera Index:</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>扫描摄像头</source>
-        <translation type="obsolete">Scan Cameras</translation>
+        <translation>Scan Cameras</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>帧宽度:</source>
-        <translation type="obsolete">Frame Width:</translation>
+        <translation>Frame Width:</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>帧高度:</source>
-        <translation type="obsolete">Frame Height:</translation>
+        <translation>Frame Height:</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>帧率(FPS):</source>
-        <translation type="obsolete">Frame Rate (FPS):</translation>
+        <translation>Frame Rate (FPS):</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>视觉语言模型配置</source>
-        <translation type="obsolete">Vision Model Config</translation>
+        <translation>Vision Model Config</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>本地VL URL:</source>
-        <translation type="obsolete">Local VL URL:</translation>
+        <translation>Local VL URL:</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>例如: https://open.bigmodel.cn/api/paas/v4/</source>
-        <translation type="obsolete">For example: https://open.bigmodel.cn/api/paas/v4/</translation>
+        <translation>For example: https://open.bigmodel.cn/api/paas/v4/</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>VL API Key:</source>
-        <translation type="obsolete">VL API Key:</translation>
+        <translation>VL API Key:</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>请输入您的API密钥</source>
-        <translation type="obsolete">Please enter your API key</translation>
+        <translation>Please enter your API key</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>模型名称:</source>
-        <translation type="obsolete">Model Name:</translation>
+        <translation>Model Name:</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>例如: glm-4v-plus</source>
-        <translation type="obsolete">For example: glm-4v-plus</translation>
+        <translation>For example: glm-4v-plus</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>摄像头预览</source>
-        <translation type="obsolete">Camera Preview</translation>
+        <translation>Camera Preview</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>摄像头预览区域
 点击刷新预览或更改摄像头索引</source>
-        <translation type="obsolete">Camera Preview Area
+        <translation>Camera Preview Area
 Click to refresh preview or change camera index</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>开始预览</source>
-        <translation type="obsolete">Start Preview</translation>
+        <translation>Start Preview</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>停止预览</source>
-        <translation type="obsolete">Stop Preview</translation>
+        <translation>Stop Preview</translation>
     </message>
     <message>
         <location filename="../../src/views/settings/components/camera/camera_widget.ui" line="14"/>
@@ -676,6 +791,38 @@ Click to refresh preview or change camera index</translation>
         <translation>Status: {status}</translation>
     </message>
     <message>
+        <source>未连接</source>
+        <translation>Not Connected</translation>
+    </message>
+    <message>
+        <source>连接中...</source>
+        <translation>Connecting...</translation>
+    </message>
+    <message>
+        <source>已连接</source>
+        <translation>Connected</translation>
+    </message>
+    <message>
+        <source>连接成功</source>
+        <translation>Connected</translation>
+    </message>
+    <message>
+        <source>重连成功</source>
+        <translation>Reconnected</translation>
+    </message>
+    <message>
+        <source>待命</source>
+        <translation>Standby</translation>
+    </message>
+    <message>
+        <source>聆听中...</source>
+        <translation>Listening...</translation>
+    </message>
+    <message>
+        <source>说话中...</source>
+        <translation>Speaking...</translation>
+    </message>
+    <message>
         <location filename="../../src/display/gui_display_model.py" line="155"/>
         <source>自动对话</source>
         <translation>Auto</translation>
@@ -714,6 +861,16 @@ Click to refresh preview or change camera index</translation>
         <translation>Settings Saved</translation>
     </message>
     <message>
+        <location filename="../../src/views/settings/settings_window.py" line="169"/>
+        <source>配置已保存成功！
+
+为了使配置生效，建议重启软件。
+是否现在重启？</source>
+        <translation>Configuration saved successfully!
+
+It is recommended to restart the application for the changes to take effect. Restart now?</translation>
+    </message>
+    <message>
         <location filename="../../src/views/settings/settings_window.py" line="292"/>
         <source>错误</source>
         <translation>Error</translation>
@@ -741,7 +898,7 @@ Click to refresh preview or change camera index</translation>
     <message>
         <location filename="../../src/views/settings/settings_window.py" line="257"/>
         <source>确定要重置所有配置为默认值吗？\n这将清除当前的所有设置。</source>
-        <translation type="obsolete">Are you sure you want to reset all settings to defaults?\nThis will erase all current settings.</translation>
+        <translation>Are you sure you want to reset all settings to defaults?\nThis will erase all current settings.</translation>
     </message>
     <message>
         <location filename="../../src/views/settings/settings_window.py" line="315"/>
@@ -756,137 +913,137 @@ Click to refresh preview or change camera index</translation>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>OTA版本URL:</source>
-        <translation type="obsolete">OTA Version URL:</translation>
+        <translation>OTA Version URL:</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>WebSocket URL:</source>
-        <translation type="obsolete">WebSocket URL:</translation>
+        <translation>WebSocket URL:</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>WebSocket Token:</source>
-        <translation type="obsolete">WebSocket Token:</translation>
+        <translation>WebSocket Token:</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>授权URL:</source>
-        <translation type="obsolete">Authorization URL:</translation>
+        <translation>Authorization URL:</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>激活版本:</source>
-        <translation type="obsolete">Activation Version:</translation>
+        <translation>Activation Version:</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>MQTT配置</source>
-        <translation type="obsolete">MQTT Config</translation>
+        <translation>MQTT Config</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>端点:</source>
-        <translation type="obsolete">Endpoint:</translation>
+        <translation>Endpoint:</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>用户名:</source>
-        <translation type="obsolete">Username:</translation>
+        <translation>Username:</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>密码:</source>
-        <translation type="obsolete">Password:</translation>
+        <translation>Password:</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>发布主题:</source>
-        <translation type="obsolete">Publish Topic:</translation>
+        <translation>Publish Topic:</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>订阅主题:</source>
-        <translation type="obsolete">Subscribe Topic:</translation>
+        <translation>Subscribe Topic:</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>启用唤醒词:</source>
-        <translation type="obsolete">Enable Wake Word:</translation>
+        <translation>Enable Wake Word:</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>模型路径:</source>
-        <translation type="obsolete">Model Path:</translation>
+        <translation>Model Path:</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>浏览</source>
-        <translation type="obsolete">Browse</translation>
+        <translation>Browse</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>唤醒词列表:</source>
-        <translation type="obsolete">Wake Word List:</translation>
+        <translation>Wake Word List:</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>每行一个唤醒词</source>
-        <translation type="obsolete">One wake word per line</translation>
+        <translation>One wake word per line</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>提示: 每行输入一个唤醒词，如&quot;小智&quot;、&quot;小美&quot;</source>
-        <translation type="obsolete">Tip: Enter one wake word per line, like &quot;小智&quot;, &quot;小美&quot;</translation>
+        <translation>Tip: Enter one wake word per line, like &quot;小智&quot;, &quot;小美&quot;</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>摄像头索引:</source>
-        <translation type="obsolete">Camera Index:</translation>
+        <translation>Camera Index:</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>画面宽度:</source>
-        <translation type="obsolete">Frame Width:</translation>
+        <translation>Frame Width:</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>画面高度:</source>
-        <translation type="obsolete">Frame Height:</translation>
+        <translation>Frame Height:</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>帧率:</source>
-        <translation type="obsolete">Frame Rate:</translation>
+        <translation>Frame Rate:</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>本地VL URL:</source>
-        <translation type="obsolete">Local VL URL:</translation>
+        <translation>Local VL URL:</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>VL API Key:</source>
-        <translation type="obsolete">VL API Key:</translation>
+        <translation>VL API Key:</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>模型:</source>
-        <translation type="obsolete">Model:</translation>
+        <translation>Model:</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>重置</source>
-        <translation type="obsolete">Reset</translation>
+        <translation>Reset</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>保存</source>
-        <translation type="obsolete">Save</translation>
+        <translation>Save</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>取消</source>
-        <translation type="obsolete">Cancel</translation>
+        <translation>Cancel</translation>
     </message>
     <message>
         <location filename="../../src/views/settings/settings_window.ui" line="20"/>
@@ -953,7 +1110,7 @@ Click to refresh preview or change camera index</translation>
     </message>
 </context>
 <context>
-    <name>SystemOptions</name>
+    <name>SystemOptionsWidget</name>
     <message>
         <location filename="../../src/views/settings/components/system_options/system_options_widget.py" line="327"/>
         <source>默认</source>
@@ -972,92 +1129,92 @@ Click to refresh preview or change camera index</translation>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>系统选项</source>
-        <translation type="obsolete">System Options</translation>
+        <translation>System Options</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>设备ID:</source>
-        <translation type="obsolete">Device ID:</translation>
+        <translation>Device ID:</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>OTA版本URL:</source>
-        <translation type="obsolete">OTA Version URL:</translation>
+        <translation>OTA Version URL:</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>WebSocket URL:</source>
-        <translation type="obsolete">WebSocket URL:</translation>
+        <translation>WebSocket URL:</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>WebSocket Token:</source>
-        <translation type="obsolete">WebSocket Token:</translation>
+        <translation>WebSocket Token:</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>授权URL:</source>
-        <translation type="obsolete">Authorization URL:</translation>
+        <translation>Authorization URL:</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>激活版本:</source>
-        <translation type="obsolete">Activation Version:</translation>
+        <translation>Activation Version:</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>启用AEC回声消除:</source>
-        <translation type="obsolete">Enable AEC Echo Cancellation:</translation>
+        <translation>Enable AEC Echo Cancellation:</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>启用</source>
-        <translation type="obsolete">Enable</translation>
+        <translation>Enable</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>主界面宽高:</source>
-        <translation type="obsolete">Main Window Size:</translation>
+        <translation>Main Window Size:</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>语言:</source>
-        <translation type="obsolete">Language:</translation>
+        <translation>Language:</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>简体中文</source>
-        <translation type="obsolete">Chinese (Simplified)</translation>
+        <translation>Chinese (Simplified)</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>MQTT配置</source>
-        <translation type="obsolete">MQTT Config</translation>
+        <translation>MQTT Config</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>端点:</source>
-        <translation type="obsolete">Endpoint:</translation>
+        <translation>Endpoint:</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>用户名:</source>
-        <translation type="obsolete">Username:</translation>
+        <translation>Username:</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>密码:</source>
-        <translation type="obsolete">Password:</translation>
+        <translation>Password:</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>发布主题:</source>
-        <translation type="obsolete">Publish Topic:</translation>
+        <translation>Publish Topic:</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>订阅主题:</source>
-        <translation type="obsolete">Subscribe Topic:</translation>
+        <translation>Subscribe Topic:</translation>
     </message>
     <message>
         <location filename="../../src/views/settings/components/system_options/system_options_widget.ui" line="32"/>
@@ -1094,7 +1251,7 @@ Click to refresh preview or change camera index</translation>
     </message>
 </context>
 <context>
-    <name>WakeWord</name>
+    <name>WakeWordWidget</name>
     <message>
         <location filename="../../src/views/settings/components/wake_word/wake_word_widget.py" line="188"/>
         <source>选择模型目录</source>
@@ -1144,39 +1301,39 @@ Automatically converted to pinyin format</translation>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>启用唤醒词检测</source>
-        <translation type="obsolete">Enable Wake Word Detection</translation>
+        <translation>Enable Wake Word Detection</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>模型配置</source>
-        <translation type="obsolete">Model Config</translation>
+        <translation>Model Config</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>模型路径:</source>
-        <translation type="obsolete">Model Path:</translation>
+        <translation>Model Path:</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>浏览...</source>
-        <translation type="obsolete">Browse...</translation>
+        <translation>Browse...</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>唤醒词配置</source>
-        <translation type="obsolete">Wake Word Config</translation>
+        <translation>Wake Word Config</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>请输入中文唤醒词，保存时会自动转换为拼音格式
 例如：小米小米（将自动转换为：x iǎo m ǐ x iǎo m ǐ @小米小米）</source>
-        <translation type="obsolete">Enter Chinese wake words, they will be automatically converted to pinyin format when saving
+        <translation>Enter Chinese wake words, they will be automatically converted to pinyin format when saving
 For example: 小米小米 (will be converted to: x iǎo m ǐ x iǎo m ǐ @小米小米)</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>请输入中文唤醒词，每行一个（如：小米小米）</source>
-        <translation type="obsolete">Enter Chinese wake words, one per line (e.g., 小米小米)</translation>
+        <translation>Enter Chinese wake words, one per line (e.g., 小米小米)</translation>
     </message>
     <message>
         <location filename="../../src/views/settings/components/wake_word/wake_word_widget.ui" line="14"/>
@@ -1189,42 +1346,42 @@ For example: 小米小米 (will be converted to: x iǎo m ǐ x iǎo m ǐ @小米
     <message>
         <location filename="../../src/views/activation/activation_window.qml" line="48"/>
         <source>设备激活</source>
-        <translation type="obsolete">Device Activation</translation>
+        <translation>Device Activation</translation>
     </message>
     <message>
         <location filename="../../src/views/activation/activation_window.qml" line="77"/>
         <source>未激活</source>
-        <translation type="obsolete">Not Activated</translation>
+        <translation>Not Activated</translation>
     </message>
     <message>
         <location filename="../../src/views/activation/activation_window.qml" line="177"/>
         <source>设备信息</source>
-        <translation type="obsolete">Device Information</translation>
+        <translation>Device Information</translation>
     </message>
     <message>
         <location filename="../../src/views/activation/activation_window.qml" line="191"/>
         <source>设备序列号</source>
-        <translation type="obsolete">Device Serial Number</translation>
+        <translation>Device Serial Number</translation>
     </message>
     <message>
         <location filename="../../src/views/activation/activation_window.qml" line="198"/>
         <source>MAC地址</source>
-        <translation type="obsolete">MAC Address</translation>
+        <translation>MAC Address</translation>
     </message>
     <message>
         <location filename="../../src/views/activation/activation_window.qml" line="257"/>
         <source>激活验证码</source>
-        <translation type="obsolete">Activation Code</translation>
+        <translation>Activation Code</translation>
     </message>
     <message>
         <location filename="../../src/views/activation/activation_window.qml" line="286"/>
         <source>复制</source>
-        <translation type="obsolete">Copy</translation>
+        <translation>Copy</translation>
     </message>
     <message>
         <location filename="../../src/views/activation/activation_window.qml" line="332"/>
         <source>跳转激活</source>
-        <translation type="obsolete">Go to Activation</translation>
+        <translation>Go to Activation</translation>
     </message>
 </context>
 <context>
@@ -1232,52 +1389,52 @@ For example: 小米小米 (will be converted to: x iǎo m ǐ x iǎo m ǐ @小米
     <message>
         <location filename="../../src/display/gui_display.qml" line="121"/>
         <source>状态: 未连接</source>
-        <translation type="obsolete">Status: Not Connected</translation>
+        <translation>Status: Not Connected</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="214"/>
         <source>待命</source>
-        <translation type="obsolete">Standby</translation>
+        <translation>Standby</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="267"/>
         <source>按住后说话</source>
-        <translation type="obsolete">Press and hold to speak</translation>
+        <translation>Press and hold to speak</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="266"/>
         <source>松开以停止</source>
-        <translation type="obsolete">Release to stop</translation>
+        <translation>Release to stop</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="277"/>
         <source>开始对话</source>
-        <translation type="obsolete">Start</translation>
+        <translation>Start</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="305"/>
         <source>打断对话</source>
-        <translation type="obsolete">Interrupt</translation>
+        <translation>Interrupt</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="348"/>
         <source>输入文字...</source>
-        <translation type="obsolete">Type text...</translation>
+        <translation>Type text...</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="359"/>
         <source>发送</source>
-        <translation type="obsolete">Send</translation>
+        <translation>Send</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="380"/>
         <source>手动对话</source>
-        <translation type="obsolete">Manual</translation>
+        <translation>Manual</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>参数配置</source>
-        <translation type="obsolete">Settings</translation>
+        <translation>Settings</translation>
     </message>
 </context>
 </TS>

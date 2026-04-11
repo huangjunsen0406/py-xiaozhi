@@ -2,7 +2,7 @@
 <!DOCTYPE TS>
 <TS version="2.1">
 <context>
-    <name>Audio</name>
+    <name>AudioWidget</name>
     <message>
         <location filename="../../src/views/settings/components/audio/audio_widget.py" line="174"/>
         <source>采样率: {rate}Hz, 通道: {channels}</source>
@@ -215,72 +215,187 @@
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>音频输入设备 (麦克风)</source>
-        <translation type="obsolete">Вход (Микрофон)</translation>
+        <translation>Вход (Микрофон)</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>输入设备:</source>
-        <translation type="obsolete">Устройство ввода:</translation>
+        <translation>Устройство ввода:</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>请选择麦克风设备...</source>
-        <translation type="obsolete">Выберите микрофон...</translation>
+        <translation>Выберите микрофон...</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>测试录音</source>
-        <translation type="obsolete">Тест записи</translation>
+        <translation>Тест записи</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>设备信息:</source>
-        <translation type="obsolete">Информация:</translation>
+        <translation>Информация:</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>未选择设备</source>
-        <translation type="obsolete">Устройство не выбрано</translation>
+        <translation>Устройство не выбрано</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>音频输出设备 (扬声器)</source>
-        <translation type="obsolete">Выход (Динамик)</translation>
+        <translation>Выход (Динамик)</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>输出设备:</source>
-        <translation type="obsolete">Устройство вывода:</translation>
+        <translation>Устройство вывода:</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>请选择扬声器设备...</source>
-        <translation type="obsolete">Выберите динамик...</translation>
+        <translation>Выберите динамик...</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>测试播放</source>
-        <translation type="obsolete">Тест воспроизведения</translation>
+        <translation>Тест воспроизведения</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>扫描设备</source>
-        <translation type="obsolete">Сканировать</translation>
+        <translation>Сканировать</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>设备信息</source>
-        <translation type="obsolete">Информация</translation>
+        <translation>Информация</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>设备信息和测试状态将显示在这里...</source>
-        <translation type="obsolete">Информация об устройстве и статус теста будут показаны здесь...</translation>
+        <translation>Информация об устройстве и статус теста будут показаны здесь...</translation>
     </message>
     <message>
         <location filename="../../src/views/settings/components/audio/audio_widget.ui" line="14"/>
         <source>音频设备</source>
         <translation>Аудио</translation>
+    </message>
+</context>
+<context>
+    <name>Audio</name>
+    <message>
+        <source>正在扫描音频设备...</source>
+        <translation>Сканирование аудиоустройств...</translation>
+    </message>
+    <message>
+        <source>扫描完成: 找到 {input} 个输入设备, {output} 个输出设备</source>
+        <translation>Сканирование завершено: найдено {input} входных устройств, {output} выходных устройств</translation>
+    </message>
+    <message>
+        <source>采样率: {rate}Hz, 通道: {channels}</source>
+        <translation>Частота дискретизации: {rate}Гц, Каналы: {channels}</translation>
+    </message>
+    <message>
+        <source>开始录音测试 (设备: {device}, 采样率: {rate}Hz)</source>
+        <translation>Начать тест записи (устройство: {device}, частота: {rate}Гц)</translation>
+    </message>
+    <message>
+        <source>开始播放测试 (设备: {device}, 采样率: {rate}Hz)</source>
+        <translation>Начать тест воспроизведения (устройство: {device}, частота: {rate}Гц)</translation>
+    </message>
+    <message>
+        <source>设备信息获取失败</source>
+        <translation>Не удалось получить информацию об устройстве</translation>
+    </message>
+    <message>
+        <source>未选择设备</source>
+        <translation>Устройство не выбрано</translation>
+    </message>
+    <message>
+        <source> (默认)</source>
+        <translation> (по умолчанию)</translation>
+    </message>
+    <message>
+        <source>扫描设备失败: {error}</source>
+        <translation>Сбой сканирования устройства: {error}</translation>
+    </message>
+    <message>
+        <source>默认</source>
+        <translation>По умолчанию</translation>
+    </message>
+    <message>
+        <source>提示</source>
+        <translation>Подсказка</translation>
+    </message>
+    <message>
+        <source>请先选择输入设备</source>
+        <translation>Сначала выберите входное устройство</translation>
+    </message>
+    <message>
+        <source>录音中...</source>
+        <translation>Запись...</translation>
+    </message>
+    <message>
+        <source>输入设备测试失败: {error}</source>
+        <translation>Тест входного устройства не удался: {error}</translation>
+    </message>
+    <message>
+        <source>错误: 无法获取设备信息</source>
+        <translation>Ошибка: не удается получить информацию об устройстве</translation>
+    </message>
+    <message>
+        <source>正在录音，请说话... (3秒)</source>
+        <translation>Запись, говорите... (3 секунды)</translation>
+    </message>
+    <message>
+        <source>录音完成，正在分析...</source>
+        <translation>Запись завершена, анализ...</translation>
+    </message>
+    <message>
+        <source>[失败] 未检测到音频信号</source>
+        <translation>[Неудача] Аудиосигнал не обнаружен</translation>
+    </message>
+    <message>
+        <source>[警告] 音频信号过载</source>
+        <translation>[Предупреждение] Аудиосигнал перегружен</translation>
+    </message>
+    <message>
+        <source>建议降低麦克风增益或音量设置</source>
+        <translation>Рекомендуется уменьшить усиление микрофона или громкость</translation>
+    </message>
+    <message>
+        <source>[成功] 录音测试通过</source>
+        <translation>[Успех] Тест записи пройден</translation>
+    </message>
+    <message>
+        <source>麦克风工作正常</source>
+        <translation>Микрофон работает нормально</translation>
+    </message>
+    <message>
+        <source>请先选择输出设备</source>
+        <translation>Сначала выберите выходное устройство</translation>
+    </message>
+    <message>
+        <source>播放中...</source>
+        <translation>Воспроизведение...</translation>
+    </message>
+    <message>
+        <source>播放完成</source>
+        <translation>Воспроизведение завершено</translation>
+    </message>
+    <message>
+        <source>测试录音</source>
+        <translation>Тест записи</translation>
+    </message>
+    <message>
+        <source>测试播放</source>
+        <translation>Тест воспроизведения</translation>
+    </message>
+    <message>
+        <source>已重置为默认设置</source>
+        <translation>Сброшено до настроек по умолчанию</translation>
     </message>
 </context>
 <context>
@@ -475,7 +590,7 @@
     </message>
 </context>
 <context>
-    <name>Camera</name>
+    <name>CameraWidget</name>
     <message>
         <location filename="../../src/views/settings/components/camera/camera_widget.py" line="192"/>
         <source>扫描结果</source>
@@ -532,89 +647,89 @@
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>摄像头基本配置</source>
-        <translation type="obsolete">Основные настройки</translation>
+        <translation>Основные настройки</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>摄像头索引:</source>
-        <translation type="obsolete">Индекс камеры:</translation>
+        <translation>Индекс камеры:</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>扫描摄像头</source>
-        <translation type="obsolete">Сканировать камеры</translation>
+        <translation>Сканировать камеры</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>帧宽度:</source>
-        <translation type="obsolete">Ширина кадра:</translation>
+        <translation>Ширина кадра:</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>帧高度:</source>
-        <translation type="obsolete">Высота кадра:</translation>
+        <translation>Высота кадра:</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>帧率(FPS):</source>
-        <translation type="obsolete">Частота (FPS):</translation>
+        <translation>Частота (FPS):</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>视觉语言模型配置</source>
-        <translation type="obsolete">Настройки модели зрения</translation>
+        <translation>Настройки модели зрения</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>本地VL URL:</source>
-        <translation type="obsolete">Локальный VL URL:</translation>
+        <translation>Локальный VL URL:</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>例如: https://open.bigmodel.cn/api/paas/v4/</source>
-        <translation type="obsolete">Например: https://open.bigmodel.cn/api/paas/v4/</translation>
+        <translation>Например: https://open.bigmodel.cn/api/paas/v4/</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>VL API Key:</source>
-        <translation type="obsolete">VL API ключ:</translation>
+        <translation>VL API ключ:</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>请输入您的API密钥</source>
-        <translation type="obsolete">Пожалуйста, введите ваш API ключ</translation>
+        <translation>Пожалуйста, введите ваш API ключ</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>模型名称:</source>
-        <translation type="obsolete">Название модели:</translation>
+        <translation>Название модели:</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>例如: glm-4v-plus</source>
-        <translation type="obsolete">Например: glm-4v-plus</translation>
+        <translation>Например: glm-4v-plus</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>摄像头预览</source>
-        <translation type="obsolete">Предпросмотр</translation>
+        <translation>Предпросмотр</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>摄像头预览区域
 点击刷新预览或更改摄像头索引</source>
-        <translation type="obsolete">Область предпросмотра камеры
+        <translation>Область предпросмотра камеры
 Нажмите для обновления или изменения индекса камеры</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>开始预览</source>
-        <translation type="obsolete">Начать предпросмотр</translation>
+        <translation>Начать предпросмотр</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>停止预览</source>
-        <translation type="obsolete">Остановить</translation>
+        <translation>Остановить</translation>
     </message>
     <message>
         <location filename="../../src/views/settings/components/camera/camera_widget.ui" line="14"/>
@@ -676,6 +791,38 @@
         <translation>Статус: {status}</translation>
     </message>
     <message>
+        <source>未连接</source>
+        <translation>Не подключено</translation>
+    </message>
+    <message>
+        <source>连接中...</source>
+        <translation>Подключение...</translation>
+    </message>
+    <message>
+        <source>已连接</source>
+        <translation>Подключено</translation>
+    </message>
+    <message>
+        <source>连接成功</source>
+        <translation>Подключено</translation>
+    </message>
+    <message>
+        <source>重连成功</source>
+        <translation>Переподключено</translation>
+    </message>
+    <message>
+        <source>待命</source>
+        <translation>Ожидание</translation>
+    </message>
+    <message>
+        <source>聆听中...</source>
+        <translation>Слушает...</translation>
+    </message>
+    <message>
+        <source>说话中...</source>
+        <translation>Говорит...</translation>
+    </message>
+    <message>
         <location filename="../../src/display/gui_display_model.py" line="155"/>
         <source>自动对话</source>
         <translation>Авто</translation>
@@ -714,6 +861,16 @@
         <translation>Настройки сохранены</translation>
     </message>
     <message>
+        <location filename="../../src/views/settings/settings_window.py" line="169"/>
+        <source>配置已保存成功！
+
+为了使配置生效，建议重启软件。
+是否现在重启？</source>
+        <translation>Настройки сохранены!
+
+Для применения настроек рекомендуется перезапустить. Перезапустить сейчас?</translation>
+    </message>
+    <message>
         <location filename="../../src/views/settings/settings_window.py" line="292"/>
         <source>错误</source>
         <translation>Ошибка</translation>
@@ -741,7 +898,7 @@
     <message>
         <location filename="../../src/views/settings/settings_window.py" line="257"/>
         <source>确定要重置所有配置为默认值吗？\n这将清除当前的所有设置。</source>
-        <translation type="obsolete">Вы уверены, что хотите сбросить все настройки до значений по умолчанию?\nЭто сотрёт все текущие настройки.</translation>
+        <translation>Вы уверены, что хотите сбросить все настройки до значений по умолчанию?\nЭто сотрёт все текущие настройки.</translation>
     </message>
     <message>
         <location filename="../../src/views/settings/settings_window.py" line="315"/>
@@ -756,137 +913,137 @@
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>OTA版本URL:</source>
-        <translation type="obsolete">URL версии OTA:</translation>
+        <translation>URL версии OTA:</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>WebSocket URL:</source>
-        <translation type="obsolete">WebSocket URL:</translation>
+        <translation>WebSocket URL:</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>WebSocket Token:</source>
-        <translation type="obsolete">WebSocket токен:</translation>
+        <translation>WebSocket токен:</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>授权URL:</source>
-        <translation type="obsolete">URL авторизации:</translation>
+        <translation>URL авторизации:</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>激活版本:</source>
-        <translation type="obsolete">Версия активации:</translation>
+        <translation>Версия активации:</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>MQTT配置</source>
-        <translation type="obsolete">MQTT настройки</translation>
+        <translation>MQTT настройки</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>端点:</source>
-        <translation type="obsolete">Конечная точка:</translation>
+        <translation>Конечная точка:</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>用户名:</source>
-        <translation type="obsolete">Имя пользователя:</translation>
+        <translation>Имя пользователя:</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>密码:</source>
-        <translation type="obsolete">Пароль:</translation>
+        <translation>Пароль:</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>发布主题:</source>
-        <translation type="obsolete">Тема публикации:</translation>
+        <translation>Тема публикации:</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>订阅主题:</source>
-        <translation type="obsolete">Тема подписки:</translation>
+        <translation>Тема подписки:</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>启用唤醒词:</source>
-        <translation type="obsolete">Включить обнаружение по слову пробуждения:</translation>
+        <translation>Включить обнаружение по слову пробуждения:</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>模型路径:</source>
-        <translation type="obsolete">Путь к модели:</translation>
+        <translation>Путь к модели:</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>浏览</source>
-        <translation type="obsolete">Обзор</translation>
+        <translation>Обзор</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>唤醒词列表:</source>
-        <translation type="obsolete">Список слов пробуждения:</translation>
+        <translation>Список слов пробуждения:</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>每行一个唤醒词</source>
-        <translation type="obsolete">Одно слово пробуждения в строке</translation>
+        <translation>Одно слово пробуждения в строке</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>提示: 每行输入一个唤醒词，如&quot;小智&quot;、&quot;小美&quot;</source>
-        <translation type="obsolete">Подсказка: Введите одно слово пробуждения в строке, например &quot;小智&quot;, &quot;小美&quot;</translation>
+        <translation>Подсказка: Введите одно слово пробуждения в строке, например &quot;小智&quot;, &quot;小美&quot;</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>摄像头索引:</source>
-        <translation type="obsolete">Индекс камеры:</translation>
+        <translation>Индекс камеры:</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>画面宽度:</source>
-        <translation type="obsolete">Ширина кадра:</translation>
+        <translation>Ширина кадра:</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>画面高度:</source>
-        <translation type="obsolete">Высота кадра:</translation>
+        <translation>Высота кадра:</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>帧率:</source>
-        <translation type="obsolete">Частота кадров:</translation>
+        <translation>Частота кадров:</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>本地VL URL:</source>
-        <translation type="obsolete">Локальный VL URL:</translation>
+        <translation>Локальный VL URL:</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>VL API Key:</source>
-        <translation type="obsolete">VL API ключ:</translation>
+        <translation>VL API ключ:</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>模型:</source>
-        <translation type="obsolete">Модель:</translation>
+        <translation>Модель:</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>重置</source>
-        <translation type="obsolete">Сброс</translation>
+        <translation>Сброс</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>保存</source>
-        <translation type="obsolete">Сохранить</translation>
+        <translation>Сохранить</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>取消</source>
-        <translation type="obsolete">Отмена</translation>
+        <translation>Отмена</translation>
     </message>
     <message>
         <location filename="../../src/views/settings/settings_window.ui" line="20"/>
@@ -953,7 +1110,7 @@
     </message>
 </context>
 <context>
-    <name>SystemOptions</name>
+    <name>SystemOptionsWidget</name>
     <message>
         <location filename="../../src/views/settings/components/system_options/system_options_widget.py" line="327"/>
         <source>默认</source>
@@ -972,92 +1129,92 @@
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>系统选项</source>
-        <translation type="obsolete">Система</translation>
+        <translation>Система</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>设备ID:</source>
-        <translation type="obsolete">ID устройства:</translation>
+        <translation>ID устройства:</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>OTA版本URL:</source>
-        <translation type="obsolete">URL версии OTA:</translation>
+        <translation>URL версии OTA:</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>WebSocket URL:</source>
-        <translation type="obsolete">WebSocket URL:</translation>
+        <translation>WebSocket URL:</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>WebSocket Token:</source>
-        <translation type="obsolete">WebSocket токен:</translation>
+        <translation>WebSocket токен:</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>授权URL:</source>
-        <translation type="obsolete">URL авторизации:</translation>
+        <translation>URL авторизации:</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>激活版本:</source>
-        <translation type="obsolete">Версия активации:</translation>
+        <translation>Версия активации:</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>启用AEC回声消除:</source>
-        <translation type="obsolete">Включить AEC:</translation>
+        <translation>Включить AEC:</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>启用</source>
-        <translation type="obsolete">Включить</translation>
+        <translation>Включить</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>主界面宽高:</source>
-        <translation type="obsolete">Размер окна:</translation>
+        <translation>Размер окна:</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>语言:</source>
-        <translation type="obsolete">Язык:</translation>
+        <translation>Язык:</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>简体中文</source>
-        <translation type="obsolete">简体中文</translation>
+        <translation>简体中文</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>MQTT配置</source>
-        <translation type="obsolete">MQTT настройки</translation>
+        <translation>MQTT настройки</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>端点:</source>
-        <translation type="obsolete">Конечная точка:</translation>
+        <translation>Конечная точка:</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>用户名:</source>
-        <translation type="obsolete">Имя пользователя:</translation>
+        <translation>Имя пользователя:</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>密码:</source>
-        <translation type="obsolete">Пароль:</translation>
+        <translation>Пароль:</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>发布主题:</source>
-        <translation type="obsolete">Тема публикации:</translation>
+        <translation>Тема публикации:</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>订阅主题:</source>
-        <translation type="obsolete">Тема подписки:</translation>
+        <translation>Тема подписки:</translation>
     </message>
     <message>
         <location filename="../../src/views/settings/components/system_options/system_options_widget.ui" line="32"/>
@@ -1094,7 +1251,7 @@
     </message>
 </context>
 <context>
-    <name>WakeWord</name>
+    <name>WakeWordWidget</name>
     <message>
         <location filename="../../src/views/settings/components/wake_word/wake_word_widget.py" line="188"/>
         <source>选择模型目录</source>
@@ -1144,39 +1301,39 @@
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>启用唤醒词检测</source>
-        <translation type="obsolete">Включить обнаружение</translation>
+        <translation>Включить обнаружение</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>模型配置</source>
-        <translation type="obsolete">Настройка модели</translation>
+        <translation>Настройка модели</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>模型路径:</source>
-        <translation type="obsolete">Путь к модели:</translation>
+        <translation>Путь к модели:</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>浏览...</source>
-        <translation type="obsolete">Обзор...</translation>
+        <translation>Обзор...</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>唤醒词配置</source>
-        <translation type="obsolete">Настройка слов пробуждения</translation>
+        <translation>Настройка слов пробуждения</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>请输入中文唤醒词，保存时会自动转换为拼音格式
 例如：小米小米（将自动转换为：x iǎo m ǐ x iǎo m ǐ @小米小米）</source>
-        <translation type="obsolete">Введите ключевые слова на китайском, при сохранении они автоматически преобразуются в пиньинь
+        <translation>Введите ключевые слова на китайском, при сохранении они автоматически преобразуются в пиньинь
 Например: 小米小米 (будет преобразовано в: x iǎo m ǐ x iǎo m ǐ @小米小米)</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>请输入中文唤醒词，每行一个（如：小米小米）</source>
-        <translation type="obsolete">Введите ключевые слова на китайском, по одному в строке (например: 小米小米)</translation>
+        <translation>Введите ключевые слова на китайском, по одному в строке (например: 小米小米)</translation>
     </message>
     <message>
         <location filename="../../src/views/settings/components/wake_word/wake_word_widget.ui" line="14"/>
@@ -1189,42 +1346,42 @@
     <message>
         <location filename="../../src/views/activation/activation_window.qml" line="48"/>
         <source>设备激活</source>
-        <translation type="obsolete">Активация устройства</translation>
+        <translation>Активация устройства</translation>
     </message>
     <message>
         <location filename="../../src/views/activation/activation_window.qml" line="77"/>
         <source>未激活</source>
-        <translation type="obsolete">Не активировано</translation>
+        <translation>Не активировано</translation>
     </message>
     <message>
         <location filename="../../src/views/activation/activation_window.qml" line="177"/>
         <source>设备信息</source>
-        <translation type="obsolete">Информация об устройстве</translation>
+        <translation>Информация об устройстве</translation>
     </message>
     <message>
         <location filename="../../src/views/activation/activation_window.qml" line="191"/>
         <source>设备序列号</source>
-        <translation type="obsolete">Серийный номер устройства</translation>
+        <translation>Серийный номер устройства</translation>
     </message>
     <message>
         <location filename="../../src/views/activation/activation_window.qml" line="198"/>
         <source>MAC地址</source>
-        <translation type="obsolete">MAC-адрес</translation>
+        <translation>MAC-адрес</translation>
     </message>
     <message>
         <location filename="../../src/views/activation/activation_window.qml" line="257"/>
         <source>激活验证码</source>
-        <translation type="obsolete">Код активации</translation>
+        <translation>Код активации</translation>
     </message>
     <message>
         <location filename="../../src/views/activation/activation_window.qml" line="286"/>
         <source>复制</source>
-        <translation type="obsolete">Копировать</translation>
+        <translation>Копировать</translation>
     </message>
     <message>
         <location filename="../../src/views/activation/activation_window.qml" line="332"/>
         <source>跳转激活</source>
-        <translation type="obsolete">Перейти к активации</translation>
+        <translation>Перейти к активации</translation>
     </message>
 </context>
 <context>
@@ -1232,52 +1389,52 @@
     <message>
         <location filename="../../src/display/gui_display.qml" line="121"/>
         <source>状态: 未连接</source>
-        <translation type="obsolete">Статус: Не подключено</translation>
+        <translation>Статус: Не подключено</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="214"/>
         <source>待命</source>
-        <translation type="obsolete">Ожидание</translation>
+        <translation>Ожидание</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="267"/>
         <source>按住后说话</source>
-        <translation type="obsolete">Нажмите и удерживайте для голосового ввода</translation>
+        <translation>Нажмите и удерживайте для голосового ввода</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="266"/>
         <source>松开以停止</source>
-        <translation type="obsolete">Отпустите для остановки</translation>
+        <translation>Отпустите для остановки</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="277"/>
         <source>开始对话</source>
-        <translation type="obsolete">Начать диалог</translation>
+        <translation>Начать диалог</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="305"/>
         <source>打断对话</source>
-        <translation type="obsolete">Прервать</translation>
+        <translation>Прервать</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="348"/>
         <source>输入文字...</source>
-        <translation type="obsolete">Введите текст...</translation>
+        <translation>Введите текст...</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="359"/>
         <source>发送</source>
-        <translation type="obsolete">Отправить</translation>
+        <translation>Отправить</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="380"/>
         <source>手动对话</source>
-        <translation type="obsolete">Ручной диалог</translation>
+        <translation>Ручной диалог</translation>
     </message>
     <message>
         <location filename="../../src/display/gui_display.qml" line="401"/>
         <source>参数配置</source>
-        <translation type="obsolete">Настройки</translation>
+        <translation>Настройки</translation>
     </message>
 </context>
 </TS>
