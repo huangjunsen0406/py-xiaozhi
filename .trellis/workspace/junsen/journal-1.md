@@ -238,3 +238,40 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 8: 修复 Linux 唤醒词打断慢/失效问题
+
+**Date**: 2026-05-08
+**Task**: 修复 Linux 唤醒词打断慢/失效问题
+**Branch**: `feature/new_architecture`
+
+### Summary
+
+经过多轮迭代修复唤醒词打断问题：保留原有轮询模式（事件驱动 queue.get() 会饿死事件循环），添加哨兵停止避免 Python 3.10 task pending 错误，检测到唤醒词后暂停并排空队列防重复触发，移除 TTS stop 中的 clear_audio_queue 修复尾部截断。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `dc679d2` | (see git log) |
+| `ada760e` | (see git log) |
+| `a516799` | (see git log) |
+| `adfcd9b` | (see git log) |
+| `c39b6aa` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
