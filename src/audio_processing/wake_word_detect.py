@@ -49,23 +49,17 @@ class WakeWordDetector:
 
     async def initialize(self, model_path: Optional[str] = None) -> bool:
         try:
-            # Stop if running
-            if self._running:
-                await self.stop()
-
-            # Release old model
-            self._release_model()
-
-            # Load config
+            # 1. 检查配置是否启用
             config = ConfigManager.get_instance()
-
-            # Check if wake word is enabled
             if not config.get_config("WAKE_WORD_OPTIONS.USE_WAKE_WORD", False):
                 logger.info("唤醒词功能已禁用")
                 self.enabled = False
                 return False
 
-            # Determine model path
+            # 2. 加载配置参数
+            self._load_config(config)
+
+            # 3. 确定模型路径
             if model_path is None:
                 model_path = config.get_config("WAKE_WORD_OPTIONS.MODEL_PATH", "models")
 
@@ -76,10 +70,12 @@ class WakeWordDetector:
                 self.enabled = False
                 return False
 
-            # Load config parameters
-            self._load_config(config)
+            # 4. 停止旧检测循环并释放旧模型
+            if self._running:
+                await self.stop()
+            self._release_model()
 
-            # Load model
+            # 5. 加载新模型
             if not self._load_model():
                 self.enabled = False
                 return False
@@ -136,22 +132,23 @@ class WakeWordDetector:
 
             logger.info(f"加载 KeywordSpotter 模型: {self._model_dir}")
 
-            # Create KeywordSpotter
-            self._keyword_spotter = sherpa_onnx.KeywordSpotter(
-                tokens=str(tokens_path),
-                encoder=str(encoder_path),
-                decoder=str(decoder_path),
-                joiner=str(joiner_path),
-                keywords_file=str(keywords_path),
-                num_threads=self._num_threads,
-                sample_rate=self._sample_rate,
-                feature_dim=80,
-                max_active_paths=self._max_active_paths,
-                keywords_score=self._keywords_score,
-                keywords_threshold=self._keywords_threshold,
-                num_trailing_blanks=self._num_trailing_blanks,
-                provider=self._provider,
-            )
+            # Create KeywordSpotter（加锁保护，与 _release_model/_process_audio 一致）
+            with self._onnx_lock:
+                self._keyword_spotter = sherpa_onnx.KeywordSpotter(
+                    tokens=str(tokens_path),
+                    encoder=str(encoder_path),
+                    decoder=str(decoder_path),
+                    joiner=str(joiner_path),
+                    keywords_file=str(keywords_path),
+                    num_threads=self._num_threads,
+                    sample_rate=self._sample_rate,
+                    feature_dim=80,
+                    max_active_paths=self._max_active_paths,
+                    keywords_score=self._keywords_score,
+                    keywords_threshold=self._keywords_threshold,
+                    num_trailing_blanks=self._num_trailing_blanks,
+                    provider=self._provider,
+                )
 
             logger.info("KeywordSpotter 模型加载成功")
             return True
@@ -164,6 +161,8 @@ class WakeWordDetector:
             return False
 
     def _release_model(self):
+        if not self._model_loaded:
+            return
         with self._onnx_lock:
             try:
                 # 先置空引用，再删除，避免竞态
