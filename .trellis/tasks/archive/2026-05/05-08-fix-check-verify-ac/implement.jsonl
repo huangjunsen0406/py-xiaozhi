@@ -1,0 +1,3 @@
+{"file": ".claude/skills/trellis-check/SKILL.md", "reason": "主修改目标：新增 PRD AC 验证步骤"}
+{"file": ".trellis/workflow.md", "reason": "同步更新 Phase 2.2 / 3.1 的 check 描述"}
+{"file": ".trellis/tasks/05-08-fix-check-verify-ac/prd.md", "reason": "任务需求：了解要新增的 AC 验证逻辑"}
