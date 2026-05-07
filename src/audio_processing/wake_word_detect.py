@@ -330,26 +330,8 @@ class WakeWordDetector:
                     await asyncio.sleep(0.1)
                     continue
 
-                if not self._audio_queue:
-                    await asyncio.sleep(0.1)
-                    continue
-
-                # 事件驱动：阻塞等待音频数据，避免 wait_for 在 Python 3.10
-                # 取消 task 时产生 "Task was destroyed but it is pending!" 错误
-                try:
-                    audio_data = await self._audio_queue.get()
-                except RuntimeError:
-                    break
-
-                # 停止哨兵：stop() 放入的特殊值，用于唤醒阻塞的 get()
-                if audio_data is _STOP_SENTINEL:
-                    break
-
-                if audio_data is None or len(audio_data) == 0:
-                    continue
-
-                # 实时处理：收到一帧立刻送入模型，不累积
-                await self._process_frame(audio_data)
+                await self._process_audio()
+                await asyncio.sleep(0.005)
                 error_count = 0
 
             except asyncio.CancelledError:
@@ -384,8 +366,23 @@ class WakeWordDetector:
 
                 await asyncio.sleep(1)
 
-    async def _process_frame(self, audio_data):
+    async def _process_audio(self):
         if self._stopping:
+            return
+
+        if not self._audio_queue:
+            return
+
+        try:
+            audio_data = self._audio_queue.get_nowait()
+        except asyncio.QueueEmpty:
+            return
+
+        if audio_data is _STOP_SENTINEL:
+            # 哨兵唤醒后退出循环，由 stop() 中的 while 条件处理
+            return
+
+        if audio_data is None or len(audio_data) == 0:
             return
 
         detected_result = None
@@ -399,18 +396,15 @@ class WakeWordDetector:
                     sample_rate=self._sample_rate, waveform=audio_data
                 )
 
-                if not self._keyword_spotter.is_ready(self._stream):
-                    return
+                if self._keyword_spotter.is_ready(self._stream):
+                    self._keyword_spotter.decode_stream(self._stream)
+                    result = self._keyword_spotter.get_result(self._stream)
 
-                self._keyword_spotter.decode_stream(self._stream)
-                result = self._keyword_spotter.get_result(self._stream)
-
-                if result:
-                    detected_result = result
-                    self._keyword_spotter.reset_stream(self._stream)
-
+                    if result:
+                        detected_result = result
+                        self._keyword_spotter.reset_stream(self._stream)
             except Exception as e:
-                logger.debug(f"处理音频帧时出错: {e}")
+                logger.debug(f"处理音频时出错: {e}")
 
         if detected_result is not None:
             await self._handle_detection(detected_result)
