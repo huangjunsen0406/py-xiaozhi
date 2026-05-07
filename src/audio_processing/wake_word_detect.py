@@ -153,8 +153,8 @@ class WakeWordDetector:
             logger.info("KeywordSpotter 模型加载成功")
             return True
 
-        except ImportError:
-            logger.error("sherpa_onnx 未安装，无法使用唤醒词功能")
+        except ImportError as e:
+            logger.error(f"sherpa_onnx 导入失败: {e}", exc_info=True)
             return False
         except Exception as e:
             logger.error(f"加载模型失败: {e}", exc_info=True)
