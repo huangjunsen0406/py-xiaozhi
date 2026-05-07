@@ -39,3 +39,36 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 2: 新增 Git 工作流与提交规范 spec
+
+**Date**: 2026-05-07
+**Task**: 新增 Git 工作流与提交规范 spec
+**Branch**: `feature/new_architecture`
+
+### Summary
+
+新增 .trellis/spec/backend/git-workflow.md (301 行) 沉淀项目事实上的工作流: GitHub Flow (main + feature/*, 不引入 develop)、Conventional Commits 完整规则 (type/scope/subject 中文 ≤ 25 字 / body 解释 why / footer)、commit 拆分要求 (rebase + ff 必须每 commit 独立可运行)、PR 流程 (rebase 保线性 / maintainer 用 --ff-only 合并 / 合后删分支)、SemVer 手动 tag、AI Co-Authored-By trailer 固定格式、11 条反模式清单。同步更新 index.md 注册新条目, quality-guidelines.md 在跨规范禁止项加 git/commit 条目并新增评审清单 'Git/Commit' 段。本任务自身严格按新规范实施 (commit 走 docs(spec) + 中文 subject 11 字 + body 解释 why + Co-Authored-By),作为规范自检。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `931fb01` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
