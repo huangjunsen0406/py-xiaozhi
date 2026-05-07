@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 5
+- **Total Sessions**: 6
 - **Last Active**: 2026-05-07
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~174 | Active |
+| `journal-1.md` | ~207 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 6 | 2026-05-07 | 消灭 except Exception: pass — 40+ 处静默吞异常修复 | `acd4202` | `feature/new_architecture` |
 | 5 | 2026-05-07 | 补充遗留代码修复规范 | `bb706fd` | `feature/new_architecture` |
 | 4 | 2026-05-07 | 激活流程重构：提取 BaseActivation + 补充 spec | `1743847`, `76e3913` | `feature/new_architecture` |
 | 3 | 2026-05-07 | 解耦 CLI 与 GUI 依赖 | `745f80e` | `feature/new_architecture` |

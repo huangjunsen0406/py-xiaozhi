@@ -172,3 +172,36 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 6: 消灭 except Exception: pass — 40+ 处静默吞异常修复
+
+**Date**: 2026-05-07
+**Task**: 消灭 except Exception: pass — 40+ 处静默吞异常修复
+**Branch**: `feature/new_architecture`
+
+### Summary
+
+扫描到 16 个文件中 40+ 处 except Exception: pass，全部替换为分级日志。高危修复 mcp.py（4处）和 manager.py（5处）的静默吞异常，mcp.py 的 add_common_tools() 失败现在有 exc_info=True。全局规则：功能级异常 → logger.error，清理级 → logger.debug。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `acd4202` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
