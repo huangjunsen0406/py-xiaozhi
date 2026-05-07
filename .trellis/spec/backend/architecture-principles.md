@@ -144,6 +144,27 @@ class MyPlugin(Plugin):
 - **"为了好看"的间接层**: A → B → C,B 没有任何转换或选择逻辑 —— 删 B,直接 A → C。
 - **抽出来再 if/elif 各种类型**: 如果抽象内部要靠类型判断分支,说明抽象错了 —— 多半是两个不同的概念被强塞一起。
 
+### 正例：激活流程的 Template Method + 工厂
+
+GUI/CLI/GPIO 三种激活原本是三个独立类，核心流程完全一致，仅在展示层不同。重构后：
+
+```
+BaseActivation (模板方法 _core_activate)
+├── CLIActivation (覆盖 _show_code / _show_result)    —— cli / gpio 模式
+└── GUIActivation (QObject + BaseActivation 多重继承) —— gui 模式
+
+main.py:
+  handle_activation() → _create_activation(mode, svc, result).run()
+```
+
+满足了"三次法则"的三个标准：
+
+1. **三处重复**：CLI/GUI/GPIO 的 `get_data → show_code → activate → show_result` 完全相同。
+2. **相同意图**：都在执行"获取激活数据、展示验证码、等待激活、展示结果"这一件事。
+3. **命名清晰**：`BaseActivation._core_activate()` 无需打开实现就能理解。
+
+工厂 `_create_activation(mode, ...)` 虽只被一处调用，但它隔离了"选哪个实现"的决策，让 `handle_activation()` 保持简洁。
+
 ### 引入新 Plugin / Protocol / 单例 / 接口前的检查清单
 
 - [ ] 已经有具体场景在用,不是预期。
@@ -233,4 +254,5 @@ class MyPlugin(Plugin):
 - `src/bootstrap/protocols.py` —— `PluginContext` / `PluginCommands` / `WindowContext`。
 - `src/plugins/base.py` / `manager.py` —— 插件基类与拓扑排序。
 - `src/core/event_bus.py` —— EventBus 实现与 `Events` 常量集合。
+- `src/ui/shared/activation.py` —— 激活基类，模板方法模式的标准范本。
 - `src/plugins/mcp.py` —— 一个紧凑插件的完整范本(setup 注入、事件钩子、shutdown 清理)。

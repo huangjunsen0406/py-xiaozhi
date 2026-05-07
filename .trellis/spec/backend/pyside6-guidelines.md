@@ -170,6 +170,42 @@ if not self._engine.rootObjects():
 
 ---
 
+## QObject 与 Python 类的多重继承
+
+当 QObject（需要 Signal/Slot/QML 可见）需同时继承一个 Python 业务基类时，会遇到 MRO `__init__` 链问题。
+
+### 问题
+
+`QObject.__init__()` 内部通过 `super()` 链最终调用到 Python 基类的 `__init__`，但 Qt 侧无参调用，如果 Python 基类要求必选参数则 `TypeError`。
+
+### 规则（来自 Shiboken 官方文档）
+
+**所有参与多重继承的 Python 类必须继承自 `object`。** 不能用 `abc.ABC`（`ABCMeta` 元类与 `Shiboken.ObjectType` 冲突）。
+
+来源：[Shiboken Considerations](https://doc.qt.io/qtforpython-6/shiboken6/considerations.html)
+
+```python
+# 正确 —— 普通类，隐式继承 object，无自定义元类
+class BaseActivation:
+    def __init__(self, service=None, result=None):
+        self._service = service    # 参数设为可选，容忍 MRO 链的无参调用
+        self._result = result
+
+class GUIActivation(QObject, BaseActivation):
+    def __init__(self, service, result, parent=None):
+        QObject.__init__(self, parent)                  # Qt 侧：会通过 MRO 链无参调用 BaseActivation.__init__
+        BaseActivation.__init__(self, service, result)  # 显式调用，覆盖正确值
+```
+
+### 要点
+
+- Python 基类的 `__init__` 参数必须全部可选（默认 `None`）——QObject 的 MRO 链会无参调用。
+- 子类用 **显式双调用**：`QObject.__init__(self, parent)` + `Base.__init__(self, ...)`，不走 `super()`。
+- Python 基类不能用 `abc.ABC` / `abc.abstractmethod` —— 用 `raise NotImplementedError` 代替。
+- 基类中 `if self._xxx is None` 的防御性检查是合理且必要的（Qt 链调用时是瞬态，会被显式调用立即覆盖）。
+
+---
+
 ## 线程与 Qt
 
 - 在 qasync 下,GUI 线程 **就是** asyncio loop 线程。只有 Qt 之外的工作线程(pynput / lgpio backend、音频 worker、`settings_model.py` 里设备探测起的 `threading.Thread`)才需要跨线程桥。
