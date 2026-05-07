@@ -205,3 +205,36 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 7: 修复唤醒词初始化流程：释放顺序 + 竞态条件
+
+**Date**: 2026-05-07
+**Task**: 修复唤醒词初始化流程：释放顺序 + 竞态条件
+**Branch**: `feature/new_architecture`
+
+### Summary
+
+从日志'模型资源已释放'出现在'sherpa_onnx未安装'之前的反常顺序发现 initialize() 流程问题。三个修复：_release_model() 加 _model_loaded 守卫、_load_model() 用 _onnx_lock 保护赋值、initialize() 重排为配置检查→参数→路径→释放→加载。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `24eb5f7` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
