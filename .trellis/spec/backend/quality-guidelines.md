@@ -72,6 +72,9 @@ isort `profile=black`、`known_first_party=["src"]` 强制顺序: 标准库 → 
 - `# -*- coding: utf-8 -*-` 头(见 [`python-style.md`](./python-style.md))。
 - `asyncio.get_event_loop()` / `asyncio.ensure_future()` / 未追踪的 `asyncio.create_task()`(见 [`asyncio-guidelines.md`](./asyncio-guidelines.md))。
 - 暴露给 QML 的类用 `@property`(见 [`pyside6-guidelines.md`](./pyside6-guidelines.md))。
+- 直接 push 到 `main`、`git push --force` 到共享分支、`git commit --no-verify` 跳过 hook(见 [`git-workflow.md`](./git-workflow.md))。
+- 空洞 commit message(`WIP` / `update` / `修了下` / `Update foo.py`)或非 Conventional Commits 格式。
+- 中文分支名 / `bugfix/` 前缀(应为 `fix/`)/ 无前缀的个人命名空间分支。
 
 ---
 
@@ -127,3 +130,11 @@ PySide6 / QML(见 [`pyside6-guidelines.md`](./pyside6-guidelines.md)):
 - [ ] 依赖方向遵循 bootstrap → core / plugins / protocols / ui;无 core import plugins、UI import protocols 等反向。
 - [ ] 是否新增了仅有 1 个调用点的间接层 / Protocol / 单例?能否删掉。
 - [ ] 是否给同模块内的方法之间用 EventBus 通信?直接调函数。
+
+Git / Commit(见 [`git-workflow.md`](./git-workflow.md)):
+
+- [ ] 分支名英文 kebab-case,前缀正确(`feature/` / `fix/` / `hotfix/` / `chore/` / `docs/` / `refactor/`),无中文。
+- [ ] commit message 走 Conventional Commits: `<type>(<scope>)?: <subject>`,type 在限定列表内,subject 中文 ≤ 25 字、不以句号结尾。
+- [ ] 每个 commit 自身可独立编译/运行(rebase + ff 要求);重构与功能改动不混。
+- [ ] PR 描述含 **动机 / 方案 / 验证步骤** 三段;feature 分支基于最新 `main` rebase,无 merge commit。
+- [ ] AI 实质参与代码改动时,footer 含 `Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>`;user-visible 改动同步打 SemVer tag 并对齐 `pyproject.toml` 的 `version`。

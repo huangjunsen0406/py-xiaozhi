@@ -26,6 +26,7 @@
 | [日志规范](./logging-guidelines.md) | `from src.logging import get_logger`、日志级别、`exc_info=True` 规则、敏感信息过滤 |
 | [错误处理](./error-handling.md) | 三种实际使用的 try/except 模式;不引入自定义异常类 |
 | [质量规范](./quality-guidelines.md) | ruff/black/isort、async、docstring、评审清单 |
+| [Git 工作流](./git-workflow.md) | 分支模型、Conventional Commits、PR / merge 流程、SemVer tag |
 | [MCP 工具](./mcp-tool-pattern.md) | `@mcp_tool` 装饰器 + auto-discovery 的目录骨架 |
 
 ---
