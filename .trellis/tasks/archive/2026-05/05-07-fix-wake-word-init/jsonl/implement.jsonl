@@ -1,0 +1,1 @@
+{"type": "spec", "path": ".trellis/spec/backend/architecture-principles.md", "reason": "thread safety and init order"}
