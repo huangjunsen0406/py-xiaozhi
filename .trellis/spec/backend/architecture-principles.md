@@ -206,6 +206,27 @@ class MyPlugin(Plugin):
 
 ---
 
+## 前端依赖隔离
+
+`pyproject.toml` 顶层 `[project] dependencies` 只列 **运行任意一个 mode 都需要** 的依赖。GUI / 平台特定 / 开发工具走 extras 或 dev group:
+
+| 类型 | 位置 | 例 |
+|---|---|---|
+| 全模式运行依赖 | `[project] dependencies` | aiohttp、sherpa-onnx、opuslib、numpy |
+| GUI 模式 | `[project.optional-dependencies] gui` | PySide6、qasync |
+| 平台限定 | sys_platform 标注 | pyobjc(macOS)、pycaw(Windows)、gpiozero(Linux GPIO) |
+| 开发工具 | `[dependency-groups] dev` | pyinstaller、ruff、pytest、pytest-asyncio |
+
+**禁止**:
+
+- 顶层 deps 出现 GUI 专属库(`PySide6`、`qasync`、`PyQt*`)
+- 顶层 deps 出现纯开发工具(`pyinstaller`、`ruff`、`pytest`)
+- `src/ui/gui/` 之外的代码 `import PySide6.*`(已经在 `pyside6-guidelines.md` 列禁,这里复述强调)
+
+**评审动作**: 任何接触 `pyproject.toml` 的 PR,reviewer 必须确认顶层 deps 只增不减地保持"全模式必需"语义。
+
+---
+
 ## 参考文件
 
 - `src/bootstrap/container.py` —— 容器、Adapter、依赖注入入口。

@@ -177,7 +177,13 @@ if __name__ == "__main__":
                 import qasync
                 from PySide6.QtWidgets import QApplication
             except ImportError as e:
-                logger.error(f"GUI模式需要 qasync 和 PySide6 库: {e}")
+                logger.error(
+                    "GUI 模式需要 PySide6 + qasync,但未安装。请运行:\n"
+                    "  uv sync --extra gui          # 推荐 (uv 用户)\n"
+                    "  pip install '.[gui]'         # pip 用户\n"
+                    "若改用 CLI 或 GPIO 模式: python main.py --mode cli  "
+                    f"(原始错误: {e})"
+                )
                 sys.exit(1)
 
             qt_app = QApplication.instance() or QApplication(sys.argv)

@@ -211,16 +211,24 @@ py-xiaozhi/
 git clone https://github.com/huangjunsen0406/py-xiaozhi.git
 cd py-xiaozhi
 
-# 安装依赖
-pip install -r requirements.txt
+# 基础安装(CLI / GPIO 模式)
+uv sync                                    # 推荐 (uv 用户)
+# 或: pip install -e .                    # pip 用户
+
+# GUI 模式(额外安装 PySide6 + qasync)
+uv sync --extra gui                        # 推荐 (uv 用户)
+# 或: pip install -e '.[gui]'             # pip 用户
+
+# 完整开发环境(GUI + 测试 / 打包工具)
+uv sync --extra gui --group dev
 
 # 代码格式化
 ./format_code.sh
 
-# 运行程序 - GUI模式（默认）
+# 运行程序 - GUI 模式(默认,需先装 gui extra)
 python main.py
 
-# 运行程序 - CLI模式
+# 运行程序 - CLI 模式(基础安装即可)
 python main.py --mode cli
 
 # 指定通信协议

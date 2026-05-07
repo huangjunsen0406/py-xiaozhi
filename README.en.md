@@ -212,16 +212,24 @@ py-xiaozhi/
 git clone https://github.com/huangjunsen0406/py-xiaozhi.git
 cd py-xiaozhi
 
-# Install dependencies
-pip install -r requirements.txt
+# Base install (CLI / GPIO mode)
+uv sync                                    # Recommended (uv users)
+# or: pip install -e .                    # pip users
+
+# GUI mode (extra: PySide6 + qasync)
+uv sync --extra gui                        # Recommended (uv users)
+# or: pip install -e '.[gui]'             # pip users
+
+# Full development environment (GUI + test / packaging tools)
+uv sync --extra gui --group dev
 
 # Code formatting
 ./format_code.sh
 
-# Run program - GUI mode (default)
+# Run program - GUI mode (default; requires gui extra)
 python main.py
 
-# Run program - CLI mode
+# Run program - CLI mode (base install is enough)
 python main.py --mode cli
 
 # Specify communication protocol

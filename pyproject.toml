@@ -9,9 +9,6 @@ authors = [{ name = "Junsen", email = "junsen@example.com" }]
 keywords = ["ai", "voice-assistant", "xiaozhi"]
 
 dependencies = [
-    # GUI 框架
-    "PySide6>=6.6.0",
-    "qasync>=0.27.1",
     # 音频处理
     "numpy>=1.26.0",
     "sounddevice>=0.4.4",
@@ -25,6 +22,7 @@ dependencies = [
     # AI/ML
     "openai>=1.0.0",
     "sherpa-onnx>=1.12.8",
+    "sherpa-onnx-core>=1.12.20",
     # 图像处理
     "opencv-python-headless>=4.9.0",
     "pillow>=10.0.0",
@@ -58,15 +56,16 @@ dependencies = [
     # Linux 依赖 (GPIO 模式)
     "gpiozero>=2.0.1; sys_platform == 'linux'",
     "lgpio>=0.2.2.0; sys_platform == 'linux'",
-    # 开发
-    "pyinstaller>=6.0.0",
-    "ruff>=0.4.0",
-    "pytest>=8.0.0",
-    "pytest-asyncio>=0.23.0",
-    "sherpa-onnx-core>=1.12.20",
 ]
 
 [project.optional-dependencies]
+# GUI 模式额外依赖
+# 使用 `uv sync --extra gui` 或 `pip install '.[gui]'` 启用
+gui = [
+    "PySide6>=6.6.0",
+    "qasync>=0.27.1",
+]
+
 # macOS 特定依赖 (已通过环境标记自动安装，保留用于显式安装)
 macos = [
     "applescript>=2021.2.9",
