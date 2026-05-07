@@ -72,3 +72,36 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 3: 解耦 CLI 与 GUI 依赖
+
+**Date**: 2026-05-07
+**Task**: 解耦 CLI 与 GUI 依赖
+**Branch**: `feature/new_architecture`
+
+### Summary
+
+将 PySide6 + qasync 从核心依赖拆分为可选 extra [gui]，CLI 模式不再需要 GUI 库。添加 import 守卫，缺失时给出清晰安装提示。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `745f80e` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

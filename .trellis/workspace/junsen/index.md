@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 2
+- **Total Sessions**: 3
 - **Last Active**: 2026-05-07
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~74 | Active |
+| `journal-1.md` | ~107 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 3 | 2026-05-07 | 解耦 CLI 与 GUI 依赖 | `745f80e` | `feature/new_architecture` |
 | 2 | 2026-05-07 | 新增 Git 工作流与提交规范 spec | `931fb01` | `feature/new_architecture` |
 | 1 | 2026-05-07 | 去除 AEC dead code + 接入 Trellis 工作流 + 项目 spec 体系 | `7360e4d`, `3fdb654` | `feature/new_architecture` |
 <!-- @@@/auto:session-history -->
