@@ -404,21 +404,22 @@ class WakeWordDetector:
                 return
 
             try:
-                # 批量送入所有帧
+                # 批内交错：accept → decode，保持 transducer 模型的流式处理语义
                 for audio_data in frames:
                     self._stream.accept_waveform(
                         sample_rate=self._sample_rate, waveform=audio_data
                     )
 
-                # 循环解码：处理所有 ready 的解码请求
-                while self._keyword_spotter.is_ready(self._stream):
+                    if not self._keyword_spotter.is_ready(self._stream):
+                        continue
+
                     self._keyword_spotter.decode_stream(self._stream)
                     result = self._keyword_spotter.get_result(self._stream)
 
                     if result:
                         detected_result = result
                         self._keyword_spotter.reset_stream(self._stream)
-                        break  # 检测到关键词，停止本次批次
+                        break
 
             except Exception as e:
                 logger.debug(f"处理音频批次时出错: {e}")
