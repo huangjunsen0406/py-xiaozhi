@@ -90,8 +90,6 @@ class AudioPlugin(Plugin):
                     await self._pause_music_for_tts()
                 elif state == "stop":
                     await self._resume_music_after_tts()
-                    if self.codec:
-                        await self.codec.clear_audio_queue()
         except Exception as e:
             logger.error(f"处理 TTS 事件失败: {e}", exc_info=True)
 

@@ -317,14 +317,37 @@ class WakeWordDetector:
                     await asyncio.sleep(0.1)
                     continue
 
-                await self._process_audio()
-                await asyncio.sleep(0.005)
+                if not self._audio_queue:
+                    await asyncio.sleep(0.1)
+                    continue
+
+                # 事件驱动：阻塞等待音频数据，替代忙轮询
+                try:
+                    audio_data = await asyncio.wait_for(
+                        self._audio_queue.get(), timeout=0.3
+                    )
+                except asyncio.TimeoutError:
+                    continue
+
+                if audio_data is None or len(audio_data) == 0:
+                    continue
+
+                # 批量处理：排空队列中的所有帧，减少锁开销
+                frames = [audio_data]
+                while len(frames) < 20:
+                    try:
+                        f = self._audio_queue.get_nowait()
+                        if f is not None and len(f) > 0:
+                            frames.append(f)
+                    except asyncio.QueueEmpty:
+                        break
+
+                await self._process_batch(frames)
                 error_count = 0
 
             except asyncio.CancelledError:
                 break
             except RuntimeError as e:
-                # 检测到事件循环问题，静默退出
                 if "no running event loop" in str(e) or "Event loop is closed" in str(e):
                     break
                 error_count += 1
@@ -354,59 +377,66 @@ class WakeWordDetector:
 
                 await asyncio.sleep(1)
 
-    async def _process_audio(self):
-        # 检查是否正在停止
+    async def _process_batch(self, frames: list):
         if self._stopping:
-            return
-
-        if not self._audio_queue:
-            return
-
-        try:
-            audio_data = self._audio_queue.get_nowait()
-        except asyncio.QueueEmpty:
-            return
-
-        if audio_data is None or len(audio_data) == 0:
             return
 
         detected_result = None
 
-        # 使用锁保护 sherpa-onnx 对象的访问
         with self._onnx_lock:
-            # 再次检查对象是否有效（可能在等待锁时被释放）
             if self._stopping or self._stream is None or self._keyword_spotter is None:
                 return
 
             try:
-                self._stream.accept_waveform(sample_rate=self._sample_rate, waveform=audio_data)
+                # 批量送入所有帧
+                for audio_data in frames:
+                    self._stream.accept_waveform(
+                        sample_rate=self._sample_rate, waveform=audio_data
+                    )
 
-                if self._keyword_spotter.is_ready(self._stream):
+                # 循环解码：处理所有 ready 的解码请求
+                while self._keyword_spotter.is_ready(self._stream):
                     self._keyword_spotter.decode_stream(self._stream)
                     result = self._keyword_spotter.get_result(self._stream)
 
                     if result:
                         detected_result = result
                         self._keyword_spotter.reset_stream(self._stream)
-            except Exception as e:
-                logger.debug(f"处理音频时出错: {e}")
+                        break  # 检测到关键词，停止本次批次
 
-        # 在锁外处理回调，避免死锁
+            except Exception as e:
+                logger.debug(f"处理音频批次时出错: {e}")
+
         if detected_result is not None:
             await self._handle_detection(detected_result)
 
-    async def _handle_detection(self, result):        # Anti-repeat check
+    async def _handle_detection(self, result):
+        # Anti-repeat check
         current_time = time.time()
         if current_time - self._last_detection_time < self._detection_cooldown:
             return
 
         self._last_detection_time = current_time
 
-        if self.on_detected_callback:
-            try:
-                if asyncio.iscoroutinefunction(self.on_detected_callback):
-                    await self.on_detected_callback(result, result)
-                else:
-                    self.on_detected_callback(result, result)
-            except Exception as e:
-                logger.error(f"唤醒词回调执行失败: {e}")
+        # 短暂暂停检测，让打断流程完成，避免旧音频触发重复检测
+        self._paused = True
+        try:
+            if self.on_detected_callback:
+                try:
+                    if asyncio.iscoroutinefunction(self.on_detected_callback):
+                        await self.on_detected_callback(result, result)
+                    else:
+                        self.on_detected_callback(result, result)
+                except Exception as e:
+                    logger.error(f"唤醒词回调执行失败: {e}")
+        finally:
+            # 延迟后恢复检测（等待 abort + clear_audio_queue 完成）
+            await asyncio.sleep(0.3)
+            # 排空队列中残留的旧音频帧
+            if self._audio_queue:
+                while True:
+                    try:
+                        self._audio_queue.get_nowait()
+                    except asyncio.QueueEmpty:
+                        break
+            self._paused = False
