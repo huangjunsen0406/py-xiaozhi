@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 4
+- **Total Sessions**: 5
 - **Last Active**: 2026-05-07
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~141 | Active |
+| `journal-1.md` | ~174 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 5 | 2026-05-07 | 补充遗留代码修复规范 | `bb706fd` | `feature/new_architecture` |
 | 4 | 2026-05-07 | 激活流程重构：提取 BaseActivation + 补充 spec | `1743847`, `76e3913` | `feature/new_architecture` |
 | 3 | 2026-05-07 | 解耦 CLI 与 GUI 依赖 | `745f80e` | `feature/new_architecture` |
 | 2 | 2026-05-07 | 新增 Git 工作流与提交规范 spec | `931fb01` | `feature/new_architecture` |

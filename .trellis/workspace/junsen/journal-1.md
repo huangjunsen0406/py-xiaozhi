@@ -139,3 +139,36 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 5: 补充遗留代码修复规范
+
+**Date**: 2026-05-07
+**Task**: 补充遗留代码修复规范
+**Branch**: `feature/new_architecture`
+
+### Summary
+
+在 architecture-principles.md 新增「遗留代码处理」章节：接触即修、不复刻旧写法、范围限当前 diff。补充了 pyside6-guidelines.md 中已有提及的通用化表述。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `bb706fd` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
