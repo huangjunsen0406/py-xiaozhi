@@ -1,0 +1,3 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "本任务要在 index 表里新增一行,需要先看现有索引格式"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "需要在 Forbidden patterns 与 Review checklist 中添加 git/commit 条目,保持各 spec 之间的一致引用风格"}
+{"file": ".trellis/spec/backend/python-style.md", "reason": "参照其文件头/语言/格式风格(中文、章节分段、引用真实代码),新 spec 保持一致体例"}
