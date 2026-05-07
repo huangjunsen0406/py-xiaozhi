@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 8
+- **Total Sessions**: 9
 - **Last Active**: 2026-05-08
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~277 | Active |
+| `journal-1.md` | ~310 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 9 | 2026-05-08 | trellis-check 新增 PRD AC 验证步骤 | `25f8832` | `feature/new_architecture` |
 | 8 | 2026-05-08 | 修复 Linux 唤醒词打断慢/失效问题 | `dc679d2`, `ada760e`, `a516799`, `adfcd9b`, `c39b6aa` | `feature/new_architecture` |
 | 7 | 2026-05-07 | 修复唤醒词初始化流程：释放顺序 + 竞态条件 | `24eb5f7` | `feature/new_architecture` |
 | 6 | 2026-05-07 | 消灭 except Exception: pass — 40+ 处静默吞异常修复 | `acd4202` | `feature/new_architecture` |

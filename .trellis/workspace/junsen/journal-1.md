@@ -275,3 +275,36 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 9: trellis-check 新增 PRD AC 验证步骤
+
+**Date**: 2026-05-08
+**Task**: trellis-check 新增 PRD AC 验证步骤
+**Branch**: `feature/new_architecture`
+
+### Summary
+
+在 trellis-check skill 中新增 Step 5：回读 PRD Acceptance Criteria，区分可自动验证项（lint/文件存在/代码模式）与需手动测试项，通过则勾选 [x]，不可验证的保留 [ ] 并说明原因。同步更新 workflow.md Phase 2.2/3.1。用历史归档任务 05-07-refactor-activation 做 dry-run 验证分类正确。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `25f8832` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
