@@ -13,6 +13,8 @@ from src.utils.resource_finder import get_app_root, get_user_keywords_path
 
 logger = get_logger()
 
+_STOP_SENTINEL = object()
+
 
 class WakeWordDetector:
 
@@ -202,7 +204,7 @@ class WakeWordDetector:
             except (asyncio.QueueEmpty, asyncio.QueueFull):
                 pass
         except Exception as e:
-            logger.debug(f"音频数据入队失败: {e}")
+            logger.debug(f"音频数据入队失败: {type(e).__name__}: {e}")
 
     async def start(self, audio_codec) -> bool:
         if not self.enabled:
@@ -238,7 +240,6 @@ class WakeWordDetector:
             return False
 
     async def stop(self):
-        # 标记正在停止，让检测循环安全退出
         self._stopping = True
         self._running = False
 
@@ -247,16 +248,28 @@ class WakeWordDetector:
             self.audio_codec.remove_audio_listener(self)
             self.audio_codec = None
 
-        if self._detection_task:
-            self._detection_task.cancel()
+        # 用哨兵唤醒阻塞在 queue.get() 上的检测循环
+        if self._audio_queue:
             try:
-                await self._detection_task
-            except asyncio.CancelledError:
-                pass
-            self._detection_task = None
+                self._audio_queue.put_nowait(_STOP_SENTINEL)
+            except asyncio.QueueFull:
+                try:
+                    self._audio_queue.get_nowait()
+                    self._audio_queue.put_nowait(_STOP_SENTINEL)
+                except (asyncio.QueueEmpty, asyncio.QueueFull):
+                    pass
 
-        # 等待一小段时间确保检测循环完全退出
-        await asyncio.sleep(0.05)
+        # 等待检测循环自然退出（由哨兵触发）
+        if self._detection_task:
+            try:
+                await asyncio.wait_for(self._detection_task, timeout=1.0)
+            except asyncio.TimeoutError:
+                self._detection_task.cancel()
+                try:
+                    await self._detection_task
+                except asyncio.CancelledError:
+                    pass
+            self._detection_task = None
 
         # Clear queue
         if self._audio_queue:
@@ -321,13 +334,16 @@ class WakeWordDetector:
                     await asyncio.sleep(0.1)
                     continue
 
-                # 事件驱动：阻塞等待音频数据，替代忙轮询
+                # 事件驱动：阻塞等待音频数据，避免 wait_for 在 Python 3.10
+                # 取消 task 时产生 "Task was destroyed but it is pending!" 错误
                 try:
-                    audio_data = await asyncio.wait_for(
-                        self._audio_queue.get(), timeout=0.3
-                    )
-                except asyncio.TimeoutError:
-                    continue
+                    audio_data = await self._audio_queue.get()
+                except RuntimeError:
+                    break
+
+                # 停止哨兵：stop() 放入的特殊值，用于唤醒阻塞的 get()
+                if audio_data is _STOP_SENTINEL:
+                    break
 
                 if audio_data is None or len(audio_data) == 0:
                     continue
