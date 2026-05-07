@@ -492,6 +492,7 @@ The check agent's job:
 - Review code changes against specs
 - Auto-fix issues it finds
 - Run lint and typecheck to verify
+- Verify PRD Acceptance Criteria and check off completed items
 
 [/Claude Code, Cursor, OpenCode, Codex, Kiro, Gemini, Qoder, CodeBuddy, Copilot, Droid, Pi]
 
@@ -524,6 +525,7 @@ Load the `trellis-check` skill and do a final verification:
 - Spec compliance
 - lint / type-check / tests
 - Cross-layer consistency (when changes span layers)
+- PRD Acceptance Criteria verified and checked off
 
 If issues are found → fix → re-check, until green.
 

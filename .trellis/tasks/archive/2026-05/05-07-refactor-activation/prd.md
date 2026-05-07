@@ -27,11 +27,11 @@
 * [ ] CLI 模式激活正常（`python main.py --mode cli --skip-activation` 跳过，或真实激活流）
 * [ ] GUI 模式激活正常（窗口弹出、激活码显示、激活流程可用）
 * [ ] GPIO 模式激活正常（委托 CLI 不变）
-* [ ] `initialize()` 每种模式只调用一次
+* [x] `initialize()` 每种模式只调用一次
 * [ ] `uv run python main.py --mode cli` 启动正常
 * [ ] `uv run python main.py --mode gui` 启动正常
-* [ ] 激活相关代码行数减少 30%+
-* [ ] 通过 `ast.parse` 语法检查
+* [x] 激活相关代码行数减少 30%+
+* [x] 通过 `ast.parse` 语法检查
 
 ## Definition of Done
 
