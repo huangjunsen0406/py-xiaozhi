@@ -105,3 +105,37 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 4: 激活流程重构：提取 BaseActivation + 补充 spec
+
+**Date**: 2026-05-07
+**Task**: 激活流程重构：提取 BaseActivation + 补充 spec
+**Branch**: `feature/new_architecture`
+
+### Summary
+
+消除 GUI/CLI/GPIO 激活代码重复：提取 BaseActivation 模板方法基类，GUIActivation 通过多重继承（QObject+BaseActivation）复用核心流程。补充 pyside6-guidelines.md（多重继承规则，来源 Shiboken 官方文档）和 architecture-principles.md（Template Method+工厂正例）。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `1743847` | (see git log) |
+| `76e3913` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
