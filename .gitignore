@@ -33,3 +33,9 @@ xiaozhi.spec
 xiaozhi-desktop/
 chakra-qml/
 py-xiaozhi/
+
+# Claude Code 本地私人配置(权限选择等)
+.claude/settings.local.json
+
+# 本地草稿/笔记
+/impl.md
