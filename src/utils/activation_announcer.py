@@ -149,15 +149,15 @@ class ActivationAnnouncer:
         if self._process:
             try:
                 self._process.kill()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"终止播报进程失败: {e}")
             self._process = None
 
         # 停止音频播放
         try:
             sd.stop()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"停止音频播放失败: {e}")
 
         # 等待线程结束
         if self._play_thread and self._play_thread.is_alive():

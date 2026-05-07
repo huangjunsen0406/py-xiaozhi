@@ -186,8 +186,8 @@ class MacOSShortcutBackend(ShortcutBackend):
             try:
                 # 等待 Future 完成（忽略取消异常）
                 self._health_check_task.result(timeout=1.0)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"MacOS 健康检查超时: {e}")
             self._health_check_task = None
 
         # 移除 event tap

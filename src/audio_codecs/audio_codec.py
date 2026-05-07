@@ -400,8 +400,8 @@ class AudioCodec:
             try:
                 with self._listeners_lock:
                     self._audio_listeners.clear()
-            except Exception:
-                pass  # 锁可能已损坏，忽略
+            except Exception as e:
+                logger.warning(f"清理音频监听器失败（锁可能已损坏）: {e}")
 
             logger.debug("AudioCodec 析构清理完成")
 

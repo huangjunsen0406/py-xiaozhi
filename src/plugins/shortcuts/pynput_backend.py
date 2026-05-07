@@ -81,8 +81,8 @@ class PynputShortcutBackend(ShortcutBackend):
             try:
                 # 等待 Future 完成（忽略取消异常）
                 self._health_check_task.result(timeout=1.0)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Pynput 健康检查超时: {e}")
             self._health_check_task = None
 
         # 停止监听器
@@ -166,8 +166,8 @@ class PynputShortcutBackend(ShortcutBackend):
                 if char in self._key_mapping:
                     return self._key_mapping[char]
                 return char.lower()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"按键映射失败: {e}")
         return None
 
     def _check_shortcuts(self) -> None:
@@ -232,8 +232,8 @@ class PynputShortcutBackend(ShortcutBackend):
             if self._listener:
                 try:
                     self._listener.stop()
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"停止 Pynput 监听器失败: {e}")
                 self._listener = None
 
             # 短暂等待

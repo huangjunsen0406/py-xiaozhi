@@ -908,8 +908,8 @@ class MusicPlayer:
                 try:
                     temp_path.unlink()
                     logger.debug(f"已清理临时下载文件: {temp_path}")
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"清理临时文件失败: {e}")
             return None
 
     async def _fetch_song_info(self, song_id: str, source: str = None):
@@ -1249,8 +1249,8 @@ class MusicPlayer:
         """清理资源"""
         try:
             self._clean_temp_cache()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"__del__ 清理临时缓存失败: {e}")
 
 
 # 全局音乐播放器实例

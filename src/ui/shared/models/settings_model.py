@@ -500,8 +500,8 @@ class SettingsModel(BaseModel):
         try:
             sd._terminate()
             sd._initialize()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"重新初始化 sounddevice 失败: {e}")
         self._load_audio_devices()
         self.statusMessage.emit("设备列表已刷新")
 

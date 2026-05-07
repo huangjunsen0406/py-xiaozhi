@@ -568,8 +568,8 @@ class ScreenshotCamera(BaseCamera):
             for display in displays:
                 try:
                     os.unlink(display["path"])
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"清理截图临时文件失败: {e}")
 
             if len(displays) == 1:
                 # 单显示器，直接返回

@@ -172,8 +172,8 @@ class MusicDecoder:
                                 logger.error(
                                     f"FFmpeg 错误输出: {stderr_output.decode('utf-8', errors='ignore')}"
                                 )
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            logger.debug(f"读取 FFmpeg stderr 失败: {e}")
 
                     eof_reached = True
                     break
@@ -238,8 +238,8 @@ class MusicDecoder:
             if eof_reached:
                 try:
                     await output_queue.put(None)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"发送 EOF 信号失败: {e}")
 
     async def stop(self):
         if self._stopped:
@@ -254,8 +254,8 @@ class MusicDecoder:
                 await self._decode_task
             except asyncio.CancelledError:
                 pass
-            except Exception:
-                pass
+            except Exception as e:
+                logger.error(f"解码任务异常: {e}")
 
         if self._process:
             try:
@@ -266,8 +266,8 @@ class MusicDecoder:
                 try:
                     self._process.kill()
                     await self._process.wait()
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"强制终止进程失败: {e}")
             except Exception as e:
                 logger.debug(f"终止 FFmpeg 进程失败: {e}")
 
@@ -282,5 +282,5 @@ class MusicDecoder:
         if self._decode_task and not self._decode_task.done():
             try:
                 await self._decode_task
-            except Exception:
-                pass
+            except Exception as e:
+                logger.error(f"等待解码完成失败: {e}")

@@ -13,6 +13,8 @@ import os
 import shutil
 import sys
 from collections import deque
+
+from src.logging import get_logger
 from typing import Callable, Optional
 
 from src.constants.system import SystemConstants
@@ -159,8 +161,8 @@ class CLIDisplay:
             try:
                 if self._loop.is_running():
                     self._loop.call_soon_threadsafe(self._do_render)
-            except Exception:
-                pass
+            except Exception as e:
+                logging.getLogger(__name__).error(f"调度渲染失败: {e}")
 
     def _do_render(self):
         """执行渲染（在事件循环中调用）."""
@@ -168,8 +170,8 @@ class CLIDisplay:
             return
         try:
             asyncio.create_task(self._safe_render())
-        except Exception:
-            pass
+        except Exception as e:
+            logging.getLogger(__name__).error(f"创建渲染任务失败: {e}")
 
     async def _safe_render(self):
         """安全渲染（带锁）."""
@@ -436,8 +438,8 @@ class CLIDisplay:
                     msg = self.format(record)
                     self.display._log_lines.append(msg)
                     self.display._schedule_render()
-                except Exception:
-                    pass
+                except Exception as e:
+                    logging.getLogger(__name__).error(f"日志记录失败: {e}")
 
         handler = DisplayLogHandler(self)
         handler.setLevel(logging.INFO)

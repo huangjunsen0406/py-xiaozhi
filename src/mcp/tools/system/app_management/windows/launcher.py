@@ -142,8 +142,8 @@ def _try_registry_launch(app_name: str) -> bool:
         if executable_path:
             subprocess.Popen([executable_path])
             return True
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"注册表查找应用失败: {e}")
     return False
 
 
@@ -182,8 +182,8 @@ def _try_where_command(app_name: str) -> bool:
             if exe_path and os.path.exists(exe_path):
                 subprocess.Popen([exe_path])
                 return True
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"where.exe 查找应用失败: {e}")
     return False
 
 

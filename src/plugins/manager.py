@@ -43,8 +43,8 @@ class PluginManager:
                     name = getattr(p, "name", None)
                     if isinstance(name, str) and name:
                         self._by_name[name] = p
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.error(f"插件注册失败: {e}", exc_info=True)
         self._sorted = False
 
     def get_plugin(self, name: str) -> Optional[Plugin]:
@@ -167,32 +167,32 @@ class PluginManager:
             try:
                 if p.on_protocol_connected:
                     await p.on_protocol_connected(protocol)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.error(f"插件 {getattr(p, 'name', 'unknown')} on_protocol_connected 失败: {e}")
 
     async def notify_incoming_json(self, message: Any) -> None:
         """通知收到 JSON 消息."""
         for p in list(self._plugins):
             try:
                 await p.on_incoming_json(message)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.error(f"插件 {getattr(p, 'name', 'unknown')} on_incoming_json 失败: {e}")
 
     async def notify_incoming_audio(self, data: bytes) -> None:
         """通知收到音频数据."""
         for p in list(self._plugins):
             try:
                 await p.on_incoming_audio(data)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.error(f"插件 {getattr(p, 'name', 'unknown')} on_incoming_audio 失败: {e}")
 
     async def notify_device_state_changed(self, state: Any) -> None:
         """通知设备状态变更."""
         for p in list(self._plugins):
             try:
                 await p.on_device_state_changed(state)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.error(f"插件 {getattr(p, 'name', 'unknown')} on_device_state_changed 失败: {e}")
 
     async def stop_all(self) -> None:
         """停止所有插件（逆序）."""

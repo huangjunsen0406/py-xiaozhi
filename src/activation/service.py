@@ -798,8 +798,8 @@ class ActivationService:
                             )
 
                             announce_activation_code(code, locale="zh-CN")
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            logger.warning(f"激活码播报失败: {e}")
 
                     async with session.post(
                         activate_url, headers=headers, json=payload

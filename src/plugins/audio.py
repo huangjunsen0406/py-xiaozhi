@@ -157,8 +157,8 @@ class AudioPlugin(Plugin):
                 try:
                     music_player = get_music_player_instance()
                     music_player.set_audio_codec(None)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"清理音乐播放器音频编码器失败: {e}")
 
                 await self.codec.close()
             except Exception as e:
@@ -174,8 +174,8 @@ class AudioPlugin(Plugin):
             if not self._cmd:
                 return
             self._cmd.schedule_command_nowait(self._send_audio_async, encoded_data)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error(f"调度音频发送失败: {e}")
 
     async def _send_audio_async(self, encoded_data: bytes) -> None:
         """
@@ -187,8 +187,8 @@ class AudioPlugin(Plugin):
                     return
                 if self._should_send_microphone_audio():
                     await self._cmd.send_audio(encoded_data)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.error(f"发送音频数据失败: {e}")
 
     def _should_send_microphone_audio(self) -> bool:
         """

@@ -7,6 +7,10 @@ from typing import Any, Dict, List, Optional, Union
 import numpy as np
 import sounddevice as sd
 
+from src.logging import get_logger
+
+logger = get_logger()
+
 
 class ALSAErrorSuppressor:
     """
@@ -310,7 +314,7 @@ def select_audio_device(
         if packed:
             return packed
     except Exception:
-        pass
+        logger.debug(f"查询系统默认{kind}设备失败，尝试兜底策略")
 
     # 2. 兜底：第一个可用的非虚拟设备
     for i, d in enumerate(devices):

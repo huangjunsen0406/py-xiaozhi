@@ -31,14 +31,14 @@ class McpPlugin(Plugin):
         async def _send(msg: str):
             try:
                 await cmd.send_mcp_message(msg)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.error(f"MCP 发送响应失败: {e}")
 
         try:
             self._server.set_send_callback(_send)
             self._server.add_common_tools()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error(f"MCP 工具注册失败: {e}", exc_info=True)
 
         # 为 MusicPlayer 注入 EventBus
         try:
@@ -61,8 +61,8 @@ class McpPlugin(Plugin):
                 if self._server is None:
                     self._server = McpServer.get_instance()
                 await self._server.parse_message(payload)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error(f"MCP 消息处理失败: {e}", exc_info=True)
 
     async def shutdown(self) -> None:
         # 停止音乐播放器
@@ -79,5 +79,5 @@ class McpPlugin(Plugin):
         try:
             if self._server:
                 self._server.set_send_callback(None)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"MCP shutdown 清理失败: {e}")

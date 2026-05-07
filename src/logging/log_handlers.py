@@ -220,8 +220,8 @@ class AsyncHandler(QueueHandler):
         """
         try:
             self._listener.stop()
-        except Exception:
-            pass
+        except Exception as e:
+            logging.getLogger(__name__).debug(f"停止日志监听器失败: {e}")
         super().close()
 
     def emit(self, record: logging.LogRecord) -> None:
@@ -352,8 +352,8 @@ class BufferedHandler(logging.Handler):
         for record in self._buffer:
             try:
                 self.target.emit(record)
-            except Exception:
-                pass
+            except Exception as e:
+                logging.getLogger(__name__).debug(f"发送缓冲日志失败: {e}")
         self._buffer.clear()
 
     def _periodic_flush(self) -> None:
