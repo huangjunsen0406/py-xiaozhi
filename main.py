@@ -58,7 +58,7 @@ async def handle_activation(mode: str) -> bool:
     """处理设备激活流程.
 
     Args:
-        mode: 运行模式，"gui"或"cli"
+        mode: 运行模式，"gui"、"cli" 或 "gpio"
 
     Returns:
         bool: 激活是否成功
@@ -67,57 +67,39 @@ async def handle_activation(mode: str) -> bool:
         from src.activation import ActivationService
 
         logger.info("开始设备激活流程检查...")
-
-        # 获取激活服务实例
         activation_service = await ActivationService.get_instance()
-
-        # 运行初始化
         init_result = await activation_service.initialize()
 
         if not init_result.get("success", False):
             logger.error(f"初始化失败: {init_result.get('error', '未知错误')}")
             return False
 
-        # 检查是否需要激活
         if not init_result.get("need_activation_ui", False):
             logger.info("设备已激活，无需激活流程")
             return True
 
-        # 需要激活，根据模式启动激活界面
-        if mode == "gui":
-            return await _run_gui_activation(activation_service)
-        elif mode == "gpio":
-            return await _run_gpio_activation(activation_service)
-        else:
-            return await _run_cli_activation(activation_service)
+        return await _create_activation(mode, activation_service, init_result).run()
 
     except Exception as e:
         logger.error(f"激活流程异常: {e}", exc_info=True)
         return False
 
 
-async def _run_gui_activation(activation_service) -> bool:
-    """运行 GUI 激活流程."""
-    from src.ui.gui import GUIActivation
+def _create_activation(mode: str, activation_service, init_result: dict):
+    """创建激活处理器工厂.
 
-    gui_activation = GUIActivation(activation_service)
-    return await gui_activation.run()
+    GUI 使用 PySide6 窗口，CLI/GPIO 共用终端交互。
+    init_result 传入避免重复调用 initialize()。
+    """
+    if mode == "gui":
+        from src.ui.gui import GUIActivation
 
+        return GUIActivation(activation_service, init_result)
+    else:
+        # cli / gpio 同走 CLIActivation
+        from src.ui.cli import CLIActivation
 
-async def _run_cli_activation(activation_service) -> bool:
-    """运行 CLI 激活流程."""
-    from src.ui.cli import CLIActivation
-
-    cli_activation = CLIActivation(activation_service)
-    return await cli_activation.run_activation_process()
-
-
-async def _run_gpio_activation(activation_service) -> bool:
-    """运行 GPIO 激活流程（复用 CLI 激活）."""
-    from src.ui.gpio import GPIOActivation
-
-    gpio_activation = GPIOActivation(activation_service)
-    return await gpio_activation.run_activation_process()
+        return CLIActivation(activation_service, init_result)
 
 
 async def start_app(mode: str, protocol: str, skip_activation: bool) -> int:

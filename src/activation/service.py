@@ -828,5 +828,3 @@ class ActivationService:
 
         self.logger.error(f"激活失败，达到最大重试次数 ({max_retries})")
         return False
-        self.logger.error(f"激活失败，达到最大重试次数 ({max_retries})")
-        return False
