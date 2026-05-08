@@ -13,7 +13,9 @@ import traceback
 from datetime import datetime, timezone
 from typing import Any, Optional, Union
 
-from .context import get_all_context
+
+def _empty_context() -> dict[str, Any]:
+    return {}
 
 
 class ColoredFormatter(logging.Formatter):
@@ -141,7 +143,7 @@ class ColoredFormatter(logging.Formatter):
 
         # 添加 Trace ID
         if self.show_trace_id:
-            trace_id = getattr(record, "trace_id", None) or get_all_context().get(
+            trace_id = getattr(record, "trace_id", None) or _empty_context().get(
                 "trace_id"
             )
             if trace_id and trace_id != "-":
@@ -230,7 +232,7 @@ class JsonFormatter(logging.Formatter):
         }
 
         # 添加上下文信息
-        context = get_all_context()
+        context = _empty_context()
         if context:
             log_data["context"] = context
 
@@ -360,7 +362,7 @@ class SimpleFormatter(logging.Formatter):
         """
         # 添加 trace_id
         if self.include_trace_id:
-            trace_id = getattr(record, "trace_id", None) or get_all_context().get(
+            trace_id = getattr(record, "trace_id", None) or _empty_context().get(
                 "trace_id", "-"
             )
             record.trace_id = trace_id

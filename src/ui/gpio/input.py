@@ -59,7 +59,7 @@ class GPIOInput:
 
         # 尝试导入 gpiozero
         try:
-            from gpiozero import Button
+            from gpiozero import Button  # type: ignore[import-not-found]
 
             self._Button = Button
             self._available = True

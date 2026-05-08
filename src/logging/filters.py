@@ -10,9 +10,6 @@ import logging
 import re
 from typing import Optional
 
-from .context import get_all_context
-
-
 class SensitiveDataFilter(logging.Filter):
     """
     敏感数据过滤器，自动脱敏敏感信息.
@@ -136,110 +133,6 @@ class SensitiveDataFilter(logging.Filter):
                     result = pattern.sub(replacement, result)
 
         return result
-
-
-class ContextFilter(logging.Filter):
-    """
-    上下文过滤器，将上下文信息注入到日志记录中.
-    """
-
-    def filter(self, record: logging.LogRecord) -> bool:
-        """
-        将上下文信息添加到日志记录.
-        """
-        context = get_all_context()
-
-        # 添加上下文字段
-        record.trace_id = context.get("trace_id", "-")
-        record.request_id = context.get("request_id", "-")
-        record.user_id = context.get("user_id", "-")
-        record.session_id = context.get("session_id", "-")
-
-        # 添加额外上下文
-        record.extra_context = {
-            k: v
-            for k, v in context.items()
-            if k not in ("trace_id", "request_id", "user_id", "session_id")
-        }
-
-        return True
-
-
-class ModuleFilter(logging.Filter):
-    """
-    模块过滤器，只允许特定模块的日志通过.
-    """
-
-    def __init__(
-        self,
-        name: str = "",
-        allowed_modules: Optional[list[str]] = None,
-        denied_modules: Optional[list[str]] = None,
-    ) -> None:
-        super().__init__(name)
-        self.allowed_modules = allowed_modules or []
-        self.denied_modules = denied_modules or []
-
-    def filter(self, record: logging.LogRecord) -> bool:
-        """
-        过滤日志记录.
-        """
-        module_name = record.name
-
-        # 如果在拒绝列表中，直接拒绝
-        for denied in self.denied_modules:
-            if module_name.startswith(denied):
-                return False
-
-        # 如果设置了允许列表，检查是否在列表中
-        if self.allowed_modules:
-            for allowed in self.allowed_modules:
-                if module_name.startswith(allowed):
-                    return True
-            return False
-
-        return True
-
-
-class RateLimitFilter(logging.Filter):
-    """
-    速率限制过滤器，防止日志刷屏.
-    """
-
-    def __init__(
-        self,
-        name: str = "",
-        rate_limit: int = 100,
-        per_seconds: int = 60,
-    ) -> None:
-        super().__init__(name)
-        self.rate_limit = rate_limit
-        self.per_seconds = per_seconds
-        self._message_counts: dict[str, list[float]] = {}
-
-    def filter(self, record: logging.LogRecord) -> bool:
-        """
-        基于消息内容进行速率限制.
-        """
-        import time
-
-        now = time.time()
-        key = f"{record.name}:{record.msg}"
-
-        if key not in self._message_counts:
-            self._message_counts[key] = []
-
-        # 清理过期记录
-        self._message_counts[key] = [
-            t for t in self._message_counts[key] if now - t < self.per_seconds
-        ]
-
-        # 检查是否超过限制
-        if len(self._message_counts[key]) >= self.rate_limit:
-            return False
-
-        self._message_counts[key].append(now)
-        return True
 
 
 class DuplicateFilter(logging.Filter):

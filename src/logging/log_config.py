@@ -150,20 +150,25 @@ class LoggingConfigManager:
                 third_party = logging_cfg.get("THIRD_PARTY_LEVELS")
                 if third_party:
                     config.third_party_levels.update(third_party)
-        except Exception:
-            # ConfigManager 未初始化时使用默认配置
+        except ImportError:
+            # ConfigManager 未安装时使用默认配置
             pass
 
-        # 从环境变量加载（优先级更高）
-        config.level = os.environ.get("LOG_LEVEL", config.level).upper()
+        # 从环境变量加载（优先级最高）
+        env_level = os.environ.get("LOG_LEVEL")
+        if env_level:
+            config.level = env_level.upper()
         config.format_type = os.environ.get("LOG_FORMAT", config.format_type)
 
-        # 根据环境自动调整
+        # 根据环境自动调整（仅在未通过环境变量显式设置级别时）
         env = self._get_environment()
-        if env == Environment.DEVELOPMENT:
-            config.level = os.environ.get("LOG_LEVEL", "DEBUG")
-        elif env == Environment.PRODUCTION:
-            config.level = os.environ.get("LOG_LEVEL", "INFO")
+        if not env_level:
+            if env == Environment.DEVELOPMENT:
+                config.level = "DEBUG"
+            elif env == Environment.PRODUCTION:
+                config.level = "INFO"
+
+        if env == Environment.PRODUCTION:
             config.enable_json_file = True
             config.enable_async = True
 

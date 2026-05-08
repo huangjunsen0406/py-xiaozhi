@@ -5,36 +5,13 @@ from pathlib import Path
 from typing import Any, Optional, Union
 
 from .log_config import LoggingConfig, LoggingConfigManager
-from .context import (
-    LogContext,
-    clear_all_context,
-    copy_context_to_thread,
-    get_all_context,
-    get_request_id,
-    get_session_id,
-    get_trace_id,
-    get_user_id,
-    set_context,
-    set_request_id,
-    set_session_id,
-    set_trace_id,
-    set_user_id,
-    with_context,
-    with_trace,
-)
 from .filters import (
-    ContextFilter,
     DuplicateFilter,
-    ModuleFilter,
-    RateLimitFilter,
     SensitiveDataFilter,
 )
 from .formatters import ColoredFormatter, JsonFormatter, SimpleFormatter
 from .log_handlers import (
     AsyncHandler,
-    BufferedHandler,
-    CallbackHandler,
-    LevelSeparatedHandler,
     TimeSizeRotatingFileHandler,
 )
 
@@ -53,27 +30,8 @@ __all__ = [
     # 配置
     "LoggingConfig",
     "LoggingConfigManager",
-    # 上下文
-    "LogContext",
-    "set_trace_id",
-    "get_trace_id",
-    "set_request_id",
-    "get_request_id",
-    "set_user_id",
-    "get_user_id",
-    "set_session_id",
-    "get_session_id",
-    "set_context",
-    "get_all_context",
-    "clear_all_context",
-    "with_trace",
-    "with_context",
-    "copy_context_to_thread",
     # 过滤器
     "SensitiveDataFilter",
-    "ContextFilter",
-    "ModuleFilter",
-    "RateLimitFilter",
     "DuplicateFilter",
     # 格式化器
     "ColoredFormatter",
@@ -82,9 +40,6 @@ __all__ = [
     # 处理器
     "TimeSizeRotatingFileHandler",
     "AsyncHandler",
-    "BufferedHandler",
-    "LevelSeparatedHandler",
-    "CallbackHandler",
 ]
 
 
@@ -146,7 +101,7 @@ def setup_logging(
             root_logger.removeHandler(handler)
 
     # 创建过滤器
-    filters = [ContextFilter(), DuplicateFilter(suppress_seconds=3.0)]
+    filters = [DuplicateFilter(suppress_seconds=3.0)]
     if config.enable_sensitive_filter:
         filters.append(SensitiveDataFilter(patterns=config.sensitive_patterns))
 

@@ -1,9 +1,8 @@
 """日志处理器模块.
 
-提供多种日志处理器：
+提供：
 - 双重轮转文件处理器（时间 + 大小）
 - 异步日志处理器
-- 按级别分离的文件处理器
 """
 
 import atexit
@@ -11,11 +10,10 @@ import gzip
 import logging
 import queue
 import shutil
-import threading
 import time
 from logging.handlers import BaseRotatingHandler, QueueHandler, QueueListener
 from pathlib import Path
-from typing import Callable, Union
+from typing import Union
 
 
 class TimeSizeRotatingFileHandler(BaseRotatingHandler):
@@ -231,197 +229,6 @@ class AsyncHandler(QueueHandler):
         try:
             self.enqueue(record)
         except queue.Full:
-            # 队列满时丢弃日志，避免阻塞
-            pass
+            logging.getLogger(__name__).debug("日志队列已满，丢弃一条日志")
 
 
-class LevelSeparatedHandler(logging.Handler):
-    """按级别分离的处理器.
-
-    将不同级别的日志写入不同的文件。
-    """
-
-    def __init__(
-        self,
-        log_dir: Union[str, Path],
-        base_name: str = "app",
-        encoding: str = "utf-8",
-        max_bytes: int = 10 * 1024 * 1024,
-        backup_count: int = 30,
-    ) -> None:
-        super().__init__()
-        self.log_dir = Path(log_dir)
-        self.log_dir.mkdir(parents=True, exist_ok=True)
-
-        self.encoding = encoding
-        self.max_bytes = max_bytes
-        self.backup_count = backup_count
-
-        # 为不同级别创建处理器
-        self._handlers: dict[int, logging.Handler] = {}
-
-        # 级别到文件名的映射
-        self._level_files = {
-            logging.DEBUG: f"{base_name}.debug.log",
-            logging.INFO: f"{base_name}.info.log",
-            logging.WARNING: f"{base_name}.warning.log",
-            logging.ERROR: f"{base_name}.error.log",
-            logging.CRITICAL: f"{base_name}.critical.log",
-        }
-
-    def _get_handler(self, level: int) -> logging.Handler:
-        """
-        获取或创建指定级别的处理器.
-        """
-        if level not in self._handlers:
-            filename = self._level_files.get(level, "app.log")
-            filepath = self.log_dir / filename
-
-            handler = TimeSizeRotatingFileHandler(
-                filepath,
-                max_bytes=self.max_bytes,
-                backup_count=self.backup_count,
-                encoding=self.encoding,
-            )
-            handler.setLevel(level)
-            handler.setFormatter(self.formatter)
-            self._handlers[level] = handler
-
-        return self._handlers[level]
-
-    def emit(self, record: logging.LogRecord) -> None:
-        """
-        发送日志记录到对应级别的处理器.
-        """
-        try:
-            handler = self._get_handler(record.levelno)
-            handler.emit(record)
-        except Exception:
-            self.handleError(record)
-
-    def close(self) -> None:
-        """
-        关闭所有处理器.
-        """
-        for handler in self._handlers.values():
-            handler.close()
-        self._handlers.clear()
-        super().close()
-
-
-class BufferedHandler(logging.Handler):
-    """缓冲处理器.
-
-    批量写入日志，减少 I/O 操作次数。
-    """
-
-    def __init__(
-        self,
-        target: logging.Handler,
-        capacity: int = 1000,
-        flush_interval: float = 5.0,
-    ) -> None:
-        super().__init__()
-        self.target = target
-        self.capacity = capacity
-        self.flush_interval = flush_interval
-
-        self._buffer: list[logging.LogRecord] = []
-        self._lock = threading.Lock()
-
-        # 启动定时刷新线程
-        self._shutdown = threading.Event()
-        self._flush_thread = threading.Thread(target=self._periodic_flush, daemon=True)
-        self._flush_thread.start()
-
-        atexit.register(self.close)
-
-    def emit(self, record: logging.LogRecord) -> None:
-        """
-        添加日志记录到缓冲区.
-        """
-        with self._lock:
-            self._buffer.append(record)
-            if len(self._buffer) >= self.capacity:
-                self._flush_buffer()
-
-    def _flush_buffer(self) -> None:
-        """
-        刷新缓冲区（需要在锁内调用）.
-        """
-        for record in self._buffer:
-            try:
-                self.target.emit(record)
-            except Exception as e:
-                logging.getLogger(__name__).debug(f"发送缓冲日志失败: {e}")
-        self._buffer.clear()
-
-    def _periodic_flush(self) -> None:
-        """
-        定期刷新缓冲区.
-        """
-        while not self._shutdown.wait(self.flush_interval):
-            with self._lock:
-                if self._buffer:
-                    self._flush_buffer()
-
-    def flush(self) -> None:
-        """
-        手动刷新.
-        """
-        with self._lock:
-            self._flush_buffer()
-        self.target.flush()
-
-    def close(self) -> None:
-        """
-        关闭处理器.
-        """
-        self._shutdown.set()
-        self.flush()
-        self.target.close()
-        super().close()
-
-
-class CallbackHandler(logging.Handler):
-    """回调处理器.
-
-    允许注册回调函数来处理特定级别的日志。
-    """
-
-    def __init__(self) -> None:
-        super().__init__()
-        self._callbacks: dict[int, list[Callable[[logging.LogRecord], None]]] = {}
-
-    def add_callback(
-        self, level: int, callback: Callable[[logging.LogRecord], None]
-    ) -> None:
-        """
-        添加回调函数.
-        """
-        if level not in self._callbacks:
-            self._callbacks[level] = []
-        self._callbacks[level].append(callback)
-
-    def remove_callback(
-        self, level: int, callback: Callable[[logging.LogRecord], None]
-    ) -> None:
-        """
-        移除回调函数.
-        """
-        if level in self._callbacks:
-            try:
-                self._callbacks[level].remove(callback)
-            except ValueError:
-                pass
-
-    def emit(self, record: logging.LogRecord) -> None:
-        """
-        执行回调函数.
-        """
-        callbacks = self._callbacks.get(record.levelno, [])
-        for callback in callbacks:
-            try:
-                callback(record)
-            except Exception:
-                self.handleError(record)
