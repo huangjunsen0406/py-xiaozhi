@@ -143,7 +143,7 @@ class ShortcutsPlugin(Plugin):
     async def _on_config_changed(self, data=None) -> None:
         """配置变更时重新加载."""
         logger.info("ShortcutsPlugin: 收到配置变更事件，重新加载配置")
-        await self.reload_from_config()
+        self.reload_from_config()
 
     async def start(self) -> None:
         """启动插件."""
@@ -255,7 +255,7 @@ class ShortcutsPlugin(Plugin):
         if backend:
             pool.register("shortcuts.backend", backend.stop)
 
-    async def reload_from_config(self) -> None:
+    def reload_from_config(self) -> None:
         """从配置重新加载."""
         self._load_config()
 

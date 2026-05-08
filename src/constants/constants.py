@@ -1,11 +1,12 @@
 import platform
+from enum import Enum
 
 from src.utils.config_manager import ConfigManager
 
 config = ConfigManager.get_instance()
 
 
-class ListeningMode:
+class ListeningMode(str, Enum):
     """
     监听模式.
     """
@@ -15,7 +16,7 @@ class ListeningMode:
     MANUAL = "manual"
 
 
-class AbortReason:
+class AbortReason(str, Enum):
     """
     中止原因.
     """
@@ -25,13 +26,12 @@ class AbortReason:
     USER_INTERRUPTION = "user_interruption"
 
 
-class DeviceState:
+class DeviceState(str, Enum):
     """
     设备状态.
     """
 
     IDLE = "idle"
-    CONNECTING = "connecting"
     LISTENING = "listening"
     SPEAKING = "speaking"
 

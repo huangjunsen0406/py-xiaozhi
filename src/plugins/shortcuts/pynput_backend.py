@@ -35,7 +35,6 @@ class PynputShortcutBackend(ShortcutBackend):
         self._last_activity_time = 0.0
         self._health_check_task = None
         self._check_interval = 10.0  # 健康检查间隔（秒）
-        self._activity_timeout = 300.0  # 活动超时（秒）
 
         # 控制字符映射
         self._key_mapping = {

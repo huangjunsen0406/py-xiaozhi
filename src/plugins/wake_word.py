@@ -126,7 +126,7 @@ class WakeWordPlugin(Plugin):
         except Exception as e:
             logger.error(f"处理唤醒词检测失败: {e}", exc_info=True)
 
-    def _on_error(self, error):
+    async def _on_error(self, error):
         """
         唤醒词检测错误回调.
         """

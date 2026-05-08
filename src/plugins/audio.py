@@ -28,7 +28,6 @@ class AudioPlugin(Plugin):
         self.codec: Optional[AudioCodec] = None
         self._send_sem = asyncio.Semaphore(MAX_CONCURRENT_AUDIO_SENDS)
         self._in_silence_period = False
-        self._audio_consumer_task = None
 
     async def setup(self, ctx: "PluginContext", cmd: "PluginCommands") -> None:
         await super().setup(ctx, cmd)
@@ -146,12 +145,6 @@ class AudioPlugin(Plugin):
 
             async def _cleanup():
                 """音频编解码器完整清理"""
-                if self._audio_consumer_task and not self._audio_consumer_task.done():
-                    self._audio_consumer_task.cancel()
-                    try:
-                        await self._audio_consumer_task
-                    except asyncio.CancelledError:
-                        pass
                 try:
                     from src.mcp.tools.music.music_player import get_music_player_instance
 
