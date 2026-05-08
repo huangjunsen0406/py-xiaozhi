@@ -375,3 +375,38 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 12: ResourcePool 统一资源释放 + 退出稳定性修复
+
+**Date**: 2026-05-08
+**Task**: ResourcePool 统一资源释放 + 退出稳定性修复
+**Branch**: `feature/new_architecture`
+
+### Summary
+
+引入 ResourcePool 统一资源释放机制（59行），逆序释放异常隔离；清理各插件 shutdown() 与 register_resources() 重复逻辑；修复 opus double free 崩溃、wake_word 退出阻塞、soxr nanobind 泄漏、coroutine never-awaited 警告等5个退出路径问题。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `9c4fabc` | (see git log) |
+| `08dcd06` | (see git log) |
+| `d4c12bc` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

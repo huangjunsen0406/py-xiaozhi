@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 11
+- **Total Sessions**: 12
 - **Last Active**: 2026-05-08
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~377 | Active |
+| `journal-1.md` | ~412 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 12 | 2026-05-08 | ResourcePool 统一资源释放 + 退出稳定性修复 | `9c4fabc`, `08dcd06`, `d4c12bc` | `feature/new_architecture` |
 | 11 | 2026-05-08 | 修复 4 个高优先级问题 + 更新代码分析报告 | `22c6db2` | `feature/new_architecture` |
 | 10 | 2026-05-08 | 修复 MQTT/WSS 通信稳定性 + 提取协议基类重复代码 | `72b2ec8`, `30448ae` | `feature/new_architecture` |
 | 9 | 2026-05-08 | trellis-check 新增 PRD AC 验证步骤 | `25f8832` | `feature/new_architecture` |
