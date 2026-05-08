@@ -342,3 +342,36 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 11: 修复 4 个高优先级问题 + 更新代码分析报告
+
+**Date**: 2026-05-08
+**Task**: 修复 4 个高优先级问题 + 更新代码分析报告
+**Branch**: `feature/new_architecture`
+
+### Summary
+
+修复 #3 _on_network_error 硬编码依赖（移至 UIPlugin EventBus 订阅）、#5 删除 calendar/timer 空目录、#6 OpusCodec.close() 显式释放 C 资源、#7 WebSocket 移除冗余心跳。同步更新 reports/00-summary.md 和模块报告。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `22c6db2` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
