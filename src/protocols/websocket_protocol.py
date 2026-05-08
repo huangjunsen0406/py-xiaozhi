@@ -1,7 +1,6 @@
 import asyncio
 import json
 import ssl
-import time
 
 import websockets
 
@@ -27,13 +26,6 @@ class WebsocketProtocol(Protocol):
         self.hello_received = None  # 初始化时先设为 None
         # 消息处理任务引用，便于在关闭时取消
         self._message_task = None
-
-        # 连接健康状态监测
-        self._last_ping_time = None
-        self._last_pong_time = None
-        self._ping_interval = 30.0  # 心跳间隔（秒）
-        self._ping_timeout = 10.0  # ping超时时间（秒）
-        self._heartbeat_task = None
 
         self.WEBSOCKET_URL = self.config.get_config(
             "SYSTEM_OPTIONS.NETWORK.WEBSOCKET_URL"
@@ -97,9 +89,6 @@ class WebsocketProtocol(Protocol):
             # 启动消息处理循环（保存任务引用，关闭时可取消）
             self._message_task = asyncio.create_task(self._message_handler())
 
-            # 启动自定义心跳，配合websockets内置ping_interval=20提供双重保活
-            self._start_heartbeat()
-
             # 启动连接监控
             self._start_connection_monitor()
 
@@ -146,13 +135,6 @@ class WebsocketProtocol(Protocol):
                 self._on_network_error(f"无法连接服务: {str(e)}")
             return False
 
-    def _start_heartbeat(self):
-        """
-        启动心跳检测任务.
-        """
-        if self._heartbeat_task is None or self._heartbeat_task.done():
-            self._heartbeat_task = asyncio.create_task(self._heartbeat_loop())
-
     # ============ 模板方法实现 ============
 
     @property
@@ -183,14 +165,6 @@ class WebsocketProtocol(Protocol):
                 logger.debug(f"等待消息任务取消时异常: {e}")
         self._message_task = None
 
-        # 取消心跳任务
-        if self._heartbeat_task and not self._heartbeat_task.done():
-            self._heartbeat_task.cancel()
-            try:
-                await self._heartbeat_task
-            except asyncio.CancelledError:
-                pass
-
         # 关闭WebSocket连接
         if self.websocket and self.websocket.close_code is None:
             try:
@@ -199,44 +173,6 @@ class WebsocketProtocol(Protocol):
                 logger.error(f"关闭WebSocket连接时出错: {e}")
 
         self.websocket = None
-        self._last_ping_time = None
-        self._last_pong_time = None
-
-    async def _heartbeat_loop(self):
-        """
-        心跳检测循环.
-        """
-        try:
-            while self.websocket and not self._is_closing:
-                await asyncio.sleep(self._ping_interval)
-
-                if self.websocket and not self._is_closing:
-                    try:
-                        self._last_ping_time = time.time()
-                        # 发送ping并等待pong响应
-                        pong_waiter = await self.websocket.ping()
-                        logger.debug("发送心跳ping")
-
-                        # 等待pong响应
-                        try:
-                            await asyncio.wait_for(
-                                pong_waiter, timeout=self._ping_timeout
-                            )
-                            self._last_pong_time = time.time()
-                            logger.debug("收到心跳pong响应")
-                        except asyncio.TimeoutError:
-                            logger.warning("心跳pong响应超时")
-                            await self._handle_connection_loss("心跳pong超时")
-                            break
-
-                    except Exception as e:
-                        logger.error(f"发送心跳失败: {e}")
-                        await self._handle_connection_loss("心跳发送失败")
-                        break
-        except asyncio.CancelledError:
-            logger.debug("心跳任务被取消")
-        except Exception as e:
-            logger.error(f"心跳循环异常: {e}")
 
     def get_connection_info(self) -> dict:
         """获取 WSS 连接信息.
@@ -251,8 +187,6 @@ class WebsocketProtocol(Protocol):
                 "websocket_closed": (
                     self.websocket.close_code is not None if self.websocket else True
                 ),
-                "last_ping_time": self._last_ping_time,
-                "last_pong_time": self._last_pong_time,
                 "websocket_url": self.WEBSOCKET_URL,
             }
         )

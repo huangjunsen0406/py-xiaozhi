@@ -9,6 +9,8 @@ setup_opus()
 
 # 必须在 setup_opus() 之后导入
 import opuslib  # noqa: E402
+import opuslib.api.decoder as decoder_api  # noqa: E402
+import opuslib.api.encoder as encoder_api  # noqa: E402
 
 from src.constants.constants import AudioConfig  # noqa: E402
 from src.logging import get_logger  # noqa: E402
@@ -115,7 +117,11 @@ class OpusCodec:
         return np.frombuffer(pcm_bytes, dtype=np.float32)
 
     def close(self):
-        """释放资源"""
-        self.encoder = None
-        self.decoder = None
+        """释放资源，显式销毁 C 层编解码器状态"""
+        if self.encoder is not None:
+            encoder_api.destroy(self.encoder.encoder_state)
+            self.encoder = None
+        if self.decoder is not None:
+            decoder_api.destroy(self.decoder.decoder_state)
+            self.decoder = None
         logger.debug("Opus编解码器已释放")

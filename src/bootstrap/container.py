@@ -326,14 +326,6 @@ class ServiceContainer:
     async def _on_network_error(self, error_message: str = None) -> None:
         self.state.set_keep_listening(False)
 
-        # 发射 UI 状态更新事件，显示未连接状态
-        from src.core.event_bus import Events
-        from src.ui.shared.events import UIStatusUpdate
-
-        await self.event_bus.emit(
-            Events.UI_UPDATE_STATUS, UIStatusUpdate(status="未连接", connected=False)
-        )
-
     async def _on_device_state_changed(self, data: dict) -> None:
         new_state = data.get("new_state")
         if new_state:

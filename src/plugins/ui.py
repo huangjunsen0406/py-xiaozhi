@@ -65,6 +65,7 @@ class UIPlugin(Plugin):
         # 订阅事件
         from src.core.event_bus import Events
 
+        self._ctx.event_bus.on(Events.NETWORK_ERROR, self._on_network_error)
         self._ctx.event_bus.on(Events.MUSIC_STATE_CHANGED, self._on_music_state_changed)
         self._ctx.event_bus.on(Events.MUSIC_LYRICS_UPDATE, self._on_music_lyrics_update)
         logger.info("UIPlugin 已订阅音乐事件")
@@ -135,11 +136,20 @@ class UIPlugin(Plugin):
                 self.view_manager.set_emotion("neutral")
                 self.view_manager.set_status(status_text, connected=True)
 
+    async def _on_network_error(self, error_message: str = None) -> None:
+        """处理网络错误事件，更新 UI 状态."""
+        if self.view_manager:
+            if self._is_gui:
+                self.view_manager.main_model.set_status("未连接", connected=False)
+            else:
+                self.view_manager.set_status("未连接", connected=False)
+
     async def shutdown(self) -> None:
         # 取消订阅所有事件
         try:
             from src.core.event_bus import Events
 
+            self._ctx.event_bus.off(Events.NETWORK_ERROR, self._on_network_error)
             self._ctx.event_bus.off(Events.MUSIC_STATE_CHANGED, self._on_music_state_changed)
             self._ctx.event_bus.off(Events.MUSIC_LYRICS_UPDATE, self._on_music_lyrics_update)
             self._ctx.event_bus.off(Events.UI_BUTTON_PRESS, self._press)
