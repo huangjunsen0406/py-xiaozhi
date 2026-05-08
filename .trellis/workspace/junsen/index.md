@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 17
+- **Total Sessions**: 18
 - **Last Active**: 2026-05-08
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~578 | Active |
+| `journal-1.md` | ~611 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 18 | 2026-05-08 | 修复 core/ 模块 5 个已知问题 | `99e6708` | `feature/new_architecture` |
 | 17 | 2026-05-08 | 重构音频配置解耦——设备层/协议层分离 | `f933cb9` | `feature/new_architecture` |
 | 16 | 2026-05-08 | 修复 UI 剩余 5 问题 — None 守卫、线程锁、monkey patch、弃用 API | `5825a2f` | `feature/new_architecture` |
 | 15 | 2026-05-08 | 清理 UI 模块死代码与 asyncio.create_task 保护 | `807585f` | `feature/new_architecture` |
