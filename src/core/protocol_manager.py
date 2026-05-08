@@ -91,6 +91,7 @@ class ProtocolTransport:
         try:
             return bool(self._protocol and self._protocol.is_audio_channel_opened())
         except Exception:
+            logger.debug("检查音频通道状态时发生异常", exc_info=True)
             return False
 
     async def connect(self, timeout: float = 12.0) -> bool:
@@ -142,6 +143,8 @@ class ProtocolGateway:
         protocol = self._transport.protocol
         if protocol and self._transport.is_audio_channel_opened():
             await protocol.send_audio(data)
+        else:
+            logger.debug("音频通道未打开，跳过发送音频数据")
 
     async def send_text(self, text: str) -> None:
         protocol = self._transport.protocol

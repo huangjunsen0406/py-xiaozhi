@@ -88,7 +88,6 @@ class EventBus:
         self._handlers: dict[str, list[Callable[..., Awaitable[None]]]] = defaultdict(
             list
         )
-        self._lock = asyncio.Lock()
 
     def on(self, event: str, handler: Callable[..., Awaitable[None]]) -> None:
         """注册事件处理器.
@@ -134,7 +133,7 @@ class EventBus:
             event: 事件名称
             data: 事件数据
         """
-        handlers = self._handlers.get(event, [])
+        handlers = list(self._handlers.get(event, []))
         if not handlers:
             return
 
@@ -160,7 +159,7 @@ class EventBus:
             event: 事件名称
             data: 事件数据
         """
-        handlers = self._handlers.get(event, [])
+        handlers = list(self._handlers.get(event, []))
         for handler in handlers:
             await self._safe_call(handler, data)
 
