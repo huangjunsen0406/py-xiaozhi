@@ -410,3 +410,36 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 13: 精简 logging 模块，修复日志系统问题
+
+**Date**: 2026-05-08
+**Task**: 精简 logging 模块，修复日志系统问题
+**Branch**: `feature/new_architecture`
+
+### Summary
+
+logging 模块从 1959 行精简到 1339 行（-32%），删除未使用的 context.py 全文件、4 个未实例化的 filter/handler 类、ContextFilter；修复 except Exception: pass 裸吞异常、环境自适应覆盖 ConfigManager 级别、队列满静默丢弃 3 个 bug。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `1a2c1e3` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
