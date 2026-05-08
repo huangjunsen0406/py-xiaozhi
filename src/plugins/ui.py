@@ -144,29 +144,10 @@ class UIPlugin(Plugin):
             else:
                 self.view_manager.set_status("未连接", connected=False)
 
-    async def shutdown(self) -> None:
-        # 取消订阅所有事件
-        try:
-            from src.core.event_bus import Events
-
-            self._ctx.event_bus.off(Events.NETWORK_ERROR, self._on_network_error)
-            self._ctx.event_bus.off(Events.MUSIC_STATE_CHANGED, self._on_music_state_changed)
-            self._ctx.event_bus.off(Events.MUSIC_LYRICS_UPDATE, self._on_music_lyrics_update)
-            self._ctx.event_bus.off(Events.UI_BUTTON_PRESS, self._press)
-            self._ctx.event_bus.off(Events.UI_BUTTON_RELEASE, self._release)
-            self._ctx.event_bus.off(Events.UI_MANUAL_TOGGLE, self._manual_toggle)
-            self._ctx.event_bus.off(Events.UI_AUTO_TOGGLE, self._auto_toggle)
-            self._ctx.event_bus.off(Events.UI_AUTO_START, self._auto_start)
-            self._ctx.event_bus.off(Events.UI_ABORT_REQUEST, self._abort)
-            self._ctx.event_bus.off(Events.UI_SEND_TEXT, self._send_text_from_event)
-            self._ctx.event_bus.off(Events.UI_QUIT_REQUEST, self._request_shutdown)
-            logger.info("UIPlugin 已取消订阅所有事件")
-        except Exception as e:
-            logger.warning(f"取消订阅事件失败: {e}")
-
-        if self.view_manager:
-            await self.view_manager.close()
-            self.view_manager = None
+    def register_resources(self, pool) -> None:
+        view_manager = self.view_manager
+        if view_manager:
+            pool.register("ui.view_manager", view_manager.close)
 
     # ===== 回调函数 =====
 

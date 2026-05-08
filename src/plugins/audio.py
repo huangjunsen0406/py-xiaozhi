@@ -140,29 +140,31 @@ class AudioPlugin(Plugin):
         except Exception as e:
             logger.error(f"发送音乐恢复请求失败: {e}", exc_info=True)
 
-    async def shutdown(self) -> None:
-        if self._audio_consumer_task and not self._audio_consumer_task.done():
-            self._audio_consumer_task.cancel()
-            try:
-                await self._audio_consumer_task
-            except asyncio.CancelledError:
-                pass
+    def register_resources(self, pool) -> None:
+        codec = self.codec
+        if codec:
 
-        if self.codec:
-            try:
-                from src.mcp.tools.music.music_player import get_music_player_instance
-
+            async def _cleanup():
+                """音频编解码器完整清理"""
+                if self._audio_consumer_task and not self._audio_consumer_task.done():
+                    self._audio_consumer_task.cancel()
+                    try:
+                        await self._audio_consumer_task
+                    except asyncio.CancelledError:
+                        pass
                 try:
-                    music_player = get_music_player_instance()
-                    music_player.set_audio_codec(None)
-                except Exception as e:
-                    logger.debug(f"清理音乐播放器音频编码器失败: {e}")
+                    from src.mcp.tools.music.music_player import get_music_player_instance
 
-                await self.codec.close()
-            except Exception as e:
-                logger.error(f"关闭音频编解码器失败: {e}", exc_info=True)
-            finally:
-                self.codec = None
+                    try:
+                        music_player = get_music_player_instance()
+                        music_player.set_audio_codec(None)
+                    except Exception as e:
+                        logger.debug(f"清理音乐播放器音频编码器失败: {e}")
+                except Exception:
+                    pass
+                await codec.close()
+
+            pool.register("audio.codec", _cleanup)
 
     def _on_encoded_audio(self, encoded_data: bytes) -> None:
         """

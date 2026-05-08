@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any, List, Optional
 
 if TYPE_CHECKING:
     from src.bootstrap.protocols import PluginCommands, PluginContext
+    from src.core.resource_pool import ResourcePool
 
 
 class Plugin:
@@ -117,8 +118,12 @@ class Plugin:
         self._started = False
         await asyncio.sleep(0)
 
-    async def shutdown(self) -> None:
+    def register_resources(self, pool: "ResourcePool") -> None:
         """
-        插件最终清理.
+        向资源池注册清理函数。子类重写此方法以注册需要释放的资源。
+        资源按注册的逆序释放，先注册的后释放。
+
+        Args:
+            pool: 资源池实例
         """
-        await asyncio.sleep(0)
+        pass

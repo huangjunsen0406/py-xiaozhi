@@ -21,7 +21,7 @@ class PluginManager:
     职责:
     - 按依赖关系拓扑排序
     - 自动注入插件依赖
-    - 统一 setup/start/stop/shutdown 广播
+    - 统一 setup/start/stop 广播
     - 错误隔离，单个插件失败不影响其他插件
     """
 
@@ -202,10 +202,3 @@ class PluginManager:
             except Exception as e:
                 logger.error(f"插件 {getattr(p, 'name', 'unknown')} stop 失败: {e}")
 
-    async def shutdown_all(self) -> None:
-        """关闭所有插件（逆序）."""
-        for p in reversed(self._plugins):
-            try:
-                await p.shutdown()
-            except Exception as e:
-                logger.error(f"插件 {getattr(p, 'name', 'unknown')} shutdown 失败: {e}")

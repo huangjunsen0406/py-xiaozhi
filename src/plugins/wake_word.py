@@ -79,12 +79,10 @@ class WakeWordPlugin(Plugin):
             except Exception as e:
                 logger.warning(f"停止唤醒词检测器失败: {e}")
 
-    async def shutdown(self) -> None:
-        if self.detector:
-            try:
-                await self.detector.shutdown()
-            except Exception as e:
-                logger.warning(f"关闭唤醒词检测器失败: {e}")
+    def register_resources(self, pool) -> None:
+        detector = self.detector
+        if detector:
+            pool.register("wake_word.detector", detector.shutdown)
 
     async def reload_model(self, model_path: Optional[str] = None) -> bool:
         """热重载唤醒词模型.

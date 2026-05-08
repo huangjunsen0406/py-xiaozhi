@@ -10,6 +10,7 @@ from src.bootstrap.protocols import PluginCommands, PluginContext, WindowContext
 from src.constants.constants import DeviceState, ListeningMode
 from src.core.event_bus import EventBus, Events
 from src.core.protocol_manager import ProtocolManager
+from src.core.resource_pool import ResourcePool
 from src.core.state_manager import StateManager
 from src.core.task_manager import TaskManager
 from src.logging import get_logger
@@ -28,10 +29,10 @@ class PluginContextAdapter:
         self._container = container
 
     def get_device_state(self) -> DeviceState:
-        return self._container.state.get_device_state()
+        return self._container.state.device_state
 
     def get_listening_mode(self) -> ListeningMode:
-        return self._container.state.get_listening_mode()
+        return self._container.state.listening_mode
 
     def is_listening(self) -> bool:
         return self._container.state.is_listening()
@@ -49,7 +50,7 @@ class PluginContextAdapter:
         return self._container.state.should_capture_audio()
 
     def is_keep_listening(self) -> bool:
-        return self._container.state.is_keep_listening()
+        return self._container.state.keep_listening
 
     def get_config(self) -> ConfigManager:
         return self._container.config
@@ -111,10 +112,10 @@ class WindowContextAdapter:
         self._container = container
 
     def get_device_state(self) -> DeviceState:
-        return self._container.state.get_device_state()
+        return self._container.state.device_state
 
     def get_listening_mode(self) -> ListeningMode:
-        return self._container.state.get_listening_mode()
+        return self._container.state.listening_mode
 
     def is_listening(self) -> bool:
         return self._container.state.is_listening()
@@ -171,6 +172,7 @@ class ServiceContainer:
         self.protocol = ProtocolManager(self.event_bus)
         self.tasks = TaskManager()
         self.plugins = PluginManager()
+        self.resource_pool = ResourcePool()
 
         # 适配器
         self._plugin_context: Optional[PluginContextAdapter] = None
@@ -182,6 +184,9 @@ class ServiceContainer:
 
         # 运行模式
         self._mode: str = "cli"
+
+        # 关闭状态（防重入）
+        self._shutting_down = False
 
     # -------------------------
     # 适配器创建
@@ -230,7 +235,7 @@ class ServiceContainer:
 
             # 广播初始状态
             await self.plugins.notify_device_state_changed(
-                self.state.get_device_state()
+                self.state.device_state
             )
 
             # 等待关闭信号
@@ -260,10 +265,11 @@ class ServiceContainer:
         wake_word_plugin = WakeWordPlugin()
         ui_plugin = UIPlugin(mode=mode)
         shortcuts_plugin = ShortcutsPlugin()
+        mcp_plugin = McpPlugin()
 
         # 注册插件
         self.plugins.register(
-            McpPlugin(),
+            mcp_plugin,
             audio_plugin,
             wake_word_plugin,
             ui_plugin,
@@ -272,6 +278,9 @@ class ServiceContainer:
 
         # 初始化所有插件（PluginManager 会自动拓扑排序并注入依赖）
         await self.plugins.setup_all(ctx, cmd)
+
+        # 注册所有资源的清理函数到资源池（逆序释放）
+        self._register_cleanup_resources()
 
         # 设置音频直连通道（TTS 音频不经过 EventBus，减少延迟）
         self.protocol.set_audio_handler(audio_plugin.on_incoming_audio)
@@ -287,18 +296,34 @@ class ServiceContainer:
         self.event_bus.on(Events.NETWORK_ERROR, self._on_network_error)
         self.event_bus.on(Events.DEVICE_STATE_CHANGED, self._on_device_state_changed)
 
+    def _register_cleanup_resources(self) -> None:
+        """将所有模块的清理函数注册到资源池（先注册的后释放）."""
+        pool = self.resource_pool
+
+        # 事件总线最后释放（最先注册）
+        pool.register("event_bus", self.event_bus.clear)
+
+        # 各插件注册自身资源
+        for plugin in self.plugins._plugins:
+            plugin.register_resources(pool)
+
+        # 网络连接
+        pool.register("protocol", self.protocol.disconnect)
+
+        # 异步任务
+        pool.register("tasks", self.tasks.cancel_all)
+
     async def shutdown(self) -> None:
-        """
-        关闭应用.
-        """
+        """关闭应用，统一通过资源池逆序释放所有资源."""
+        if self._shutting_down:
+            logger.debug("ServiceContainer 已在关闭中，跳过")
+            return
+        self._shutting_down = True
         logger.info("正在关闭 ServiceContainer...")
 
         try:
-            await self.tasks.cancel_all()
-            await self.protocol.disconnect()
-            await self.plugins.stop_all()
-            await self.plugins.shutdown_all()
-            self.event_bus.clear()
+            # 资源池统一释放（逆序执行注册的清理函数）
+            await self.resource_pool.shutdown()
             logger.info("ServiceContainer 关闭完成")
         except Exception as e:
             logger.error(f"关闭时出错: {e}", exc_info=True)

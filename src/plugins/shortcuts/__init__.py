@@ -250,11 +250,10 @@ class ShortcutsPlugin(Plugin):
         if self._backend:
             await self._backend.stop()
 
-    async def shutdown(self) -> None:
-        """关闭插件."""
-        if self._backend:
-            await self._backend.stop()
-            self._backend = None
+    def register_resources(self, pool) -> None:
+        backend = self._backend
+        if backend:
+            pool.register("shortcuts.backend", backend.stop)
 
     async def reload_from_config(self) -> None:
         """从配置重新加载."""

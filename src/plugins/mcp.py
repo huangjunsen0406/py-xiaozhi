@@ -64,20 +64,21 @@ class McpPlugin(Plugin):
         except Exception as e:
             logger.error(f"MCP 消息处理失败: {e}", exc_info=True)
 
-    async def shutdown(self) -> None:
-        # 停止音乐播放器
-        try:
-            from src.mcp.tools.music.music_player import get_music_player_instance
+    def register_resources(self, pool) -> None:
+        async def _mcp_cleanup():
+            try:
+                from src.mcp.tools.music.music_player import get_music_player_instance
 
-            music_player = get_music_player_instance()
-            if music_player.is_playing:
-                await music_player.stop()
-                logger.debug("MCP shutdown: 已停止音乐播放器")
-        except Exception as e:
-            logger.debug(f"停止音乐播放器失败: {e}")
+                music_player = get_music_player_instance()
+                if music_player.is_playing:
+                    await music_player.stop()
+            except Exception as e:
+                logger.debug(f"停止音乐播放器失败: {e}")
 
-        try:
-            if self._server:
-                self._server.set_send_callback(None)
-        except Exception as e:
-            logger.debug(f"MCP shutdown 清理失败: {e}")
+            try:
+                if self._server:
+                    self._server.set_send_callback(None)
+            except Exception as e:
+                logger.debug(f"MCP shutdown 清理失败: {e}")
+
+        pool.register("mcp.server", _mcp_cleanup)
