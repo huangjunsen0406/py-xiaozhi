@@ -12,7 +12,6 @@ import opuslib  # noqa: E402
 import opuslib.api.decoder as decoder_api  # noqa: E402
 import opuslib.api.encoder as encoder_api  # noqa: E402
 
-from src.constants.constants import AudioConfig  # noqa: E402
 from src.logging import get_logger  # noqa: E402
 
 logger = get_logger()
@@ -26,16 +25,16 @@ class OpusCodec:
 
     def __init__(
         self,
-        input_sample_rate: int = AudioConfig.INPUT_SAMPLE_RATE,
-        output_sample_rate: int = AudioConfig.OUTPUT_SAMPLE_RATE,
-        channels: int = AudioConfig.CHANNELS,
+        input_sample_rate: int,
+        output_sample_rate: int,
+        channels: int = 1,
     ):
         """初始化Opus编解码器
 
         Args:
-            input_sample_rate: 输入采样率（编码）
-            output_sample_rate: 输出采样率（解码）
-            channels: 声道数
+            input_sample_rate: 输入采样率（编码），如 16000
+            output_sample_rate: 输出采样率（解码），如 24000
+            channels: 声道数，默认 1
         """
         self.input_sample_rate = input_sample_rate
         self.output_sample_rate = output_sample_rate

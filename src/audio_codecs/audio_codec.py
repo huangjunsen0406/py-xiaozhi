@@ -39,9 +39,16 @@ class AudioCodec:
 
     def __init__(self):
         """初始化音频编解码器"""
+        # 刷新协议配置（支持 Settings UI 修改后生效）
+        AudioConfig.reload()
+
         # 组件（依赖注入）
         self.device_manager = AudioDeviceManager(ConfigManager.get_instance())
-        self.opus_codec = OpusCodec()
+        self.opus_codec = OpusCodec(
+            input_sample_rate=AudioConfig.INPUT_SAMPLE_RATE,
+            output_sample_rate=AudioConfig.OUTPUT_SAMPLE_RATE,
+            channels=AudioConfig.CHANNELS,
+        )
         self.converter = AudioConverter()
         self.stream_manager = None
         self.output_buffer = AudioBuffer(maxsize=500)
@@ -63,8 +70,8 @@ class AudioCodec:
 
         流程：
         1. 加载/检测设备
-        2. 初始化 Opus
-        3. 配置格式转换
+        2. 刷新协议配置 + 初始化 Opus
+        3. 配置格式转换管线
         4. 创建音频流
         5. 启动音频流
         """
@@ -72,22 +79,18 @@ class AudioCodec:
             # 1. 加载/检测设备
             self.device_config = self.device_manager.load_or_detect_devices()
 
-            # 2. 初始化 Opus
+            # 2. 刷新协议配置并初始化 Opus
+            AudioConfig.reload()
+            self.opus_codec.close()
+            self.opus_codec = OpusCodec(
+                input_sample_rate=AudioConfig.INPUT_SAMPLE_RATE,
+                output_sample_rate=AudioConfig.OUTPUT_SAMPLE_RATE,
+                channels=AudioConfig.CHANNELS,
+            )
             self.opus_codec.initialize()
 
-            # 3. 配置格式转换
-            self.converter.setup_input_converter(
-                from_rate=self.device_config.input_sample_rate,
-                to_rate=AudioConfig.INPUT_SAMPLE_RATE,
-                from_channels=self.device_config.input_channels,
-                to_channels=1,
-            )
-            self.converter.setup_output_converter(
-                from_rate=AudioConfig.OUTPUT_SAMPLE_RATE,
-                to_rate=self.device_config.output_sample_rate,
-                from_channels=1,
-                to_channels=self.device_config.output_channels,
-            )
+            # 3. 配置格式转换管线
+            self._configure_pipeline()
 
             # 4. 创建音频流
             self.stream_manager = AudioStreamManager(self.device_config)
@@ -193,6 +196,26 @@ class AudioCodec:
             logger.error(f"输出回调错误: {e}")
             outdata.fill(0.0)
 
+    def _configure_pipeline(self):
+        """配置格式转换管线（设备 ↔ 协议）。
+
+        根据设备原生参数和协议要求参数，设置输入/输出转换链。
+        输入：设备(f32, device_rate, device_ch) → 协议(f32, 16kHz, 1ch)
+        输出：协议(f32, opus_out_rate, 1ch) → 设备(f32, device_rate, device_ch)
+        """
+        self.converter.setup_input_converter(
+            from_rate=self.device_config.input_sample_rate,
+            to_rate=AudioConfig.INPUT_SAMPLE_RATE,
+            from_channels=self.device_config.input_channels,
+            to_channels=1,
+        )
+        self.converter.setup_output_converter(
+            from_rate=AudioConfig.OUTPUT_SAMPLE_RATE,
+            to_rate=self.device_config.output_sample_rate,
+            from_channels=1,
+            to_channels=self.device_config.output_channels,
+        )
+
     # === 对外接口（保持兼容） ===
 
     def set_encoded_callback(self, callback: Callable[[bytes], None]):
@@ -287,8 +310,8 @@ class AudioCodec:
 
         流程：
         1. 停止当前音频流
-        2. 重新加载设备配置
-        3. 重新配置格式转换器
+        2. 重新加载设备配置 + 协议配置
+        3. 重建格式转换器 + Opus 编解码器
         4. 重新创建并启动音频流
 
         Returns:
@@ -307,29 +330,28 @@ class AudioCodec:
             self.device_config = self.device_manager.load_or_detect_devices()
             logger.info(f"AudioCodec: 新设备配置 - 输入ID: {self.device_config.input_device_id}, 输出ID: {self.device_config.output_device_id}")
 
-            # 3. 重新配置格式转换器
-            self.converter.clear_buffers()
-            self.converter.setup_input_converter(
-                from_rate=self.device_config.input_sample_rate,
-                to_rate=AudioConfig.INPUT_SAMPLE_RATE,
-                from_channels=self.device_config.input_channels,
-                to_channels=1,
+            # 3. 刷新协议配置并重建 Opus 编解码器
+            AudioConfig.reload()
+            self.opus_codec.close()
+            self.opus_codec = OpusCodec(
+                input_sample_rate=AudioConfig.INPUT_SAMPLE_RATE,
+                output_sample_rate=AudioConfig.OUTPUT_SAMPLE_RATE,
+                channels=AudioConfig.CHANNELS,
             )
-            self.converter.setup_output_converter(
-                from_rate=AudioConfig.OUTPUT_SAMPLE_RATE,
-                to_rate=self.device_config.output_sample_rate,
-                from_channels=1,
-                to_channels=self.device_config.output_channels,
-            )
+            self.opus_codec.initialize()
 
-            # 4. 重新创建音频流
+            # 4. 重建格式转换器
+            self.converter.clear_buffers()
+            self._configure_pipeline()
+
+            # 5. 重新创建音频流
             self.stream_manager = AudioStreamManager(self.device_config)
             self.stream_manager.create_streams(
                 input_callback=self._input_callback,
                 output_callback=self._output_callback,
             )
 
-            # 5. 启动音频流
+            # 6. 启动音频流
             self.stream_manager.start()
 
             logger.info("AudioCodec: 音频设备热重载完成")
