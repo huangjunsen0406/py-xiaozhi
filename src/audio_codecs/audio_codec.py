@@ -351,8 +351,8 @@ class AudioCodec:
             # 2. 清空队列
             await self.clear_audio_queue()
 
-            # 3. 清空转换器缓冲区
-            self.converter.clear_buffers()
+            # 3. 释放转换器（含 soxr 重采样器）
+            self.converter.close()
 
             # 4. 释放 Opus
             self.opus_codec.close()
@@ -388,9 +388,9 @@ class AudioCodec:
                 if count > 0:
                     logger.debug(f"析构函数清空了 {count} 帧音频")
 
-            # 3. 清空转换器缓冲区（同步）
+            # 3. 释放转换器（同步，含 soxr 重采样器）
             if self.converter:
-                self.converter.clear_buffers()
+                self.converter.close()
 
             # 4. 释放 Opus（同步）
             if self.opus_codec:

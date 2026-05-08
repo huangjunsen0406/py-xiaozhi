@@ -153,3 +153,9 @@ class AudioConverter:
         self._input_buffer.clear()
         self._output_buffer.clear()
         logger.debug("音频转换器缓冲区已清空")
+
+    def close(self):
+        """释放 soxr 重采样器，防止 nanobind C++ 对象泄漏."""
+        self.clear_buffers()
+        self.input_resampler = None
+        self.output_resampler = None

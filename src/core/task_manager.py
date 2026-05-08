@@ -125,9 +125,11 @@ class TaskManager:
             try:
                 result = fn(*args, **kwargs)
                 if asyncio.iscoroutine(result):
-                    self.spawn(
+                    task = self.spawn(
                         result, name=f"scheduled:{getattr(fn, '__name__', 'anon')}"
                     )
+                    if task is None:
+                        result.close()
             except Exception as e:
                 logger.error(f"调度的可调用执行失败: {e}", exc_info=True)
 
