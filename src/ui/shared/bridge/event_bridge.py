@@ -1,8 +1,7 @@
-# -*- coding: utf-8 -*-
 """EventBus 桥接器 - Python 信号与 QML 信号双向转换."""
 
 import asyncio
-from typing import Callable, Optional
+from collections.abc import Callable
 
 from PySide6.QtCore import QObject, QTimer, Signal, Slot
 from PySide6.QtGui import QGuiApplication
@@ -21,13 +20,6 @@ class EventBridge(QObject):
     """
 
     # ========== Python → QML 信号 ==========
-    # 状态更新
-    statusChanged = Signal(str, bool, arguments=["status", "connected"])
-    emotionChanged = Signal(str, arguments=["emotionUrl"])
-    textChanged = Signal(str, arguments=["text"])
-
-    # 模式切换
-    modeChanged = Signal(bool, arguments=["autoMode"])
 
     # 窗口控制
     showWindow = Signal()
@@ -40,11 +32,10 @@ class EventBridge(QObject):
 
     # ========== 构造 ==========
 
-    def __init__(self, event_bus: EventBus, parent: Optional[QObject] = None):
+    def __init__(self, event_bus: EventBus, parent: QObject | None = None):
         super().__init__(parent)
         self._event_bus = event_bus
-        self._pending_events: list[tuple[str, any]] = []
-        self._activation_code_getter: Optional[Callable[[], str]] = None
+        self._activation_code_getter: Callable[[], str] | None = None
 
     def _emit_event(self, event: str, data=None):
         """安全地发射 EventBus 事件，使用 QTimer 在主线程中调度."""
@@ -155,19 +146,3 @@ class EventBridge(QObject):
         self._activation_code_getter = getter
 
     # ========== Python → QML (发射信号) ==========
-
-    def emit_status(self, status: str, connected: bool):
-        """发射状态变化信号到 QML."""
-        self.statusChanged.emit(status, connected)
-
-    def emit_emotion(self, emotion_url: str):
-        """发射表情变化信号到 QML."""
-        self.emotionChanged.emit(emotion_url)
-
-    def emit_text(self, text: str):
-        """发射文本变化信号到 QML."""
-        self.textChanged.emit(text)
-
-    def emit_mode(self, auto_mode: bool):
-        """发射模式变化信号到 QML."""
-        self.modeChanged.emit(auto_mode)

@@ -1,19 +1,16 @@
-# -*- coding: utf-8 -*-
 """视图管理器 - PySide6 + QtQuick 统一入口."""
 
-import asyncio
 from pathlib import Path
-from typing import Optional
 
 from PySide6.QtCore import QObject, QUrl, Slot
 from PySide6.QtQml import QQmlApplicationEngine
 
 from src.core.event_bus import EventBus, Events
+from src.core.task_manager import TaskManager
 from src.logging import get_logger
-
+from src.ui.gui.services import EmotionService, TrayService
 from src.ui.shared.bridge import EventBridge
 from src.ui.shared.models import ActivationModel, MainModel, SettingsModel
-from src.ui.gui.services import EmotionService, TrayService
 
 logger = get_logger()
 
@@ -24,8 +21,12 @@ class ViewManager(QObject):
     def __init__(self, event_bus: EventBus):
         super().__init__()
         self._event_bus = event_bus
-        self._engine: Optional[QQmlApplicationEngine] = None
+        self._engine: QQmlApplicationEngine | None = None
         self._running = False
+
+        # 任务管理
+        self._tasks = TaskManager()
+        self._tasks.initialize()
 
         # 桥接层
         self._bridge = EventBridge(event_bus)
@@ -40,7 +41,7 @@ class ViewManager(QObject):
 
         # Services
         self._emotion_service = EmotionService()
-        self._tray_service: Optional[TrayService] = None
+        self._tray_service: TrayService | None = None
 
         # 激活服务引用
         self._activation_service = None
@@ -63,7 +64,7 @@ class ViewManager(QObject):
     def _on_config_saved(self):
         """配置保存后触发热重载事件."""
         logger.info("ViewManager: 配置已保存，触发热重载事件")
-        asyncio.create_task(self._event_bus.emit(Events.CONFIG_CHANGED))
+        self._tasks.spawn(self._event_bus.emit(Events.CONFIG_CHANGED), name="ui:config_changed")
 
     async def _on_update_text(self, data):
         """处理文本更新."""
@@ -169,7 +170,7 @@ class ViewManager(QObject):
 
     def _request_quit(self):
         """请求退出应用."""
-        asyncio.create_task(self._event_bus.emit(Events.UI_QUIT_REQUEST))
+        self._tasks.spawn(self._event_bus.emit(Events.UI_QUIT_REQUEST), name="ui:quit_request")
 
     async def close(self):
         """关闭视图."""
@@ -206,7 +207,7 @@ class ViewManager(QObject):
     def toggle_mode(self):
         """切换对话模式."""
         self._main_model.toggle_auto_mode()
-        asyncio.create_task(self._event_bus.emit(Events.UI_AUTO_TOGGLE))
+        self._tasks.spawn(self._event_bus.emit(Events.UI_AUTO_TOGGLE), name="ui:auto_toggle")
 
     @Slot()
     def toggle_window(self):
