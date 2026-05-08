@@ -90,7 +90,8 @@ __all__ = ["name_action"]
 ## 不要做
 
 - **不要** 在功能代码里手动调 `McpServer.add_tool(...)`。装饰器 + 自动发现是 **唯一** 注册路径。早期手工实例化 `McpTool` 的写法已经过时。
-- **不要** 在 `@mcp_tool` 上放 async 函数,除非确认服务器侧已正确处理 async callback —— 现有示例都是 sync。在有先例之前视为不支持。
+- **async 工具函数**：需要 I/O 操作（网络请求、文件读写、硬件访问）时使用 `async def` + `asyncio.to_thread()` 将阻塞操作卸载到线程池，避免阻塞事件循环。参考 `src/mcp/tools/camera/__init__.py` 和 `src/mcp/tools/screenshot/__init__.py`。
+- **外部 API 客户端必须设超时**：`requests.post(timeout=N)`、`OpenAI(timeout=httpx.Timeout(...))`。无超时的阻塞调用会在线程池中永久挂起，耗尽线程池资源。
 - **不要** 返回 Python 富对象、dataclass、pydantic model —— 返回 JSON 字符串。
 - **不要** 用 `_` 开头的文件名(除非按 `_tools.py` 约定)。会被自动发现静默跳过。
 

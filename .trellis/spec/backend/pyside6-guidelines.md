@@ -214,6 +214,39 @@ class GUIActivation(QObject, BaseActivation):
   - `loop.call_soon_threadsafe(...)` 弹回 asyncio/GUI 线程。
 - `QTimer.singleShot(0, fn)` **不会** 让 `fn` 跨线程安全。它在 QObject 自己的线程上调度。
 
+### 硬件探测必须后台线程
+
+`cv2.VideoCapture`、`subprocess.run` 等可能阻塞数百毫秒以上的操作，**绝不**在 Qt 主线程上同步执行。模式：
+
+```python
+def _load_cameras(self):
+    """非阻塞启动摄像头扫描."""
+    thread = threading.Thread(target=self._do_load_cameras, daemon=True)
+    thread.start()
+
+def _do_load_cameras(self):
+    """在后台线程中执行 cv2 扫描."""
+    try:
+        import cv2
+        cameras = []
+        for i in range(10):
+            cap = cv2.VideoCapture(i)
+            if cap.isOpened():
+                cameras.append({"index": i, "name": f"摄像头 {i}"})
+                cap.release()
+        self._cameras = cameras
+        self.devicesChanged.emit()
+        self.statusMessage.emit("摄像头列表已刷新")
+    except Exception as e:
+        logger.error(f"扫描摄像头失败: {e}", exc_info=True)
+```
+
+要点：
+- 入口方法只启动线程，立即返回
+- 实际工作在 `_do_xxx` 中完成
+- 完成后通过 Qt Signal 通知 UI（Signal 自动 queued connection）
+- `daemon=True` 确保线程不阻止进程退出
+
 ---
 
 ## Qt 代码禁止
