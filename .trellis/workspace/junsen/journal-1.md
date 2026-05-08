@@ -443,3 +443,37 @@ logging 模块从 1959 行精简到 1339 行（-32%），删除未使用的 cont
 ### Next Steps
 
 - None - task complete
+
+
+## Session 14: 修复 camera 全链路阻塞 qasync 主线程
+
+**Date**: 2026-05-08
+**Task**: 修复 camera 全链路阻塞 qasync 主线程
+**Branch**: `feature/new_architecture`
+
+### Summary
+
+修复3个阻塞问题: _load_cameras() cv2扫描移到后台线程, VLCamera OpenAI客户端加httpx.Timeout, capture_with_cv2()加ThreadPoolExecutor超时保护。更新MCP工具和PySide6规范。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `da7478f` | (see git log) |
+| `4ece521` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

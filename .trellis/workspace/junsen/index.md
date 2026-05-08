@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 13
+- **Total Sessions**: 14
 - **Last Active**: 2026-05-08
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~445 | Active |
+| `journal-1.md` | ~479 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 14 | 2026-05-08 | 修复 camera 全链路阻塞 qasync 主线程 | `da7478f`, `4ece521` | `feature/new_architecture` |
 | 13 | 2026-05-08 | 精简 logging 模块，修复日志系统问题 | `1a2c1e3` | `feature/new_architecture` |
 | 12 | 2026-05-08 | ResourcePool 统一资源释放 + 退出稳定性修复 | `9c4fabc`, `08dcd06`, `d4c12bc` | `feature/new_architecture` |
 | 11 | 2026-05-08 | 修复 4 个高优先级问题 + 更新代码分析报告 | `22c6db2` | `feature/new_architecture` |
