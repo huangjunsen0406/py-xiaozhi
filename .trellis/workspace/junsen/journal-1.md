@@ -477,3 +477,36 @@ logging 模块从 1959 行精简到 1339 行（-32%），删除未使用的 cont
 ### Next Steps
 
 - None - task complete
+
+
+## Session 15: 清理 UI 模块死代码与 asyncio.create_task 保护
+
+**Date**: 2026-05-08
+**Task**: 清理 UI 模块死代码与 asyncio.create_task 保护
+**Branch**: `feature/new_architecture`
+
+### Summary
+
+删除 EventBridge 4个零调用 emit_* 方法及未使用 Signal, 删除 _pending_events, 删除 shared/platform/ 空实现子模块, manager.py 3处 asyncio.create_task 迁移到 TaskManager.spawn()
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `807585f` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
