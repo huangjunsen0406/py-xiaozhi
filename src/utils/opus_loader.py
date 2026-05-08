@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import contextlib
 import ctypes
 import ctypes.util
 import os
 import sys
 from pathlib import Path
-from typing import Optional, Union
+from typing import Generator, Optional, Union
 
 from src.logging import get_logger
 from src.utils.resource_finder import get_lib_path
@@ -53,18 +54,27 @@ def _try_load(path: Union[str, Path]) -> bool:
         return False
 
 
-def _patch_find_library(lib_path: str) -> None:
-    """
-    修补 ctypes.util.find_library，让 opuslib 能找到库.
-    """
-    original = ctypes.util.find_library
+def _make_patched_finder(lib_path: str):
+    """创建修补后的 find_library 函数（闭包捕获 original）."""
+    original = getattr(ctypes.util, "_original_find_library", ctypes.util.find_library)
 
     def patched(name: str) -> Optional[str]:
         if name == "opus":
             return lib_path
         return original(name)
 
-    ctypes.util.find_library = patched
+    return patched
+
+
+@contextlib.contextmanager
+def patched_find_library(lib_path: str) -> Generator[None, None, None]:
+    """临时修补 ctypes.util.find_library，退出时恢复原始值."""
+    original = ctypes.util.find_library
+    ctypes.util.find_library = _make_patched_finder(lib_path)
+    try:
+        yield
+    finally:
+        ctypes.util.find_library = original
 
 
 def setup_opus() -> bool:
@@ -84,7 +94,8 @@ def setup_opus() -> bool:
     system_path = _find_system_opus()
     if system_path and _try_load(system_path):
         logger.debug(f"使用系统 opus: {system_path}")
-        _patch_find_library(system_path)
+        ctypes.util._original_find_library = ctypes.util.find_library
+        ctypes.util.find_library = _make_patched_finder(system_path)
         sys._opus_loaded = True
         return True
 
@@ -100,7 +111,8 @@ def setup_opus() -> bool:
 
         if _try_load(bundled_path):
             logger.debug(f"使用内置 opus: {bundled_path}")
-            _patch_find_library(str(bundled_path))
+            ctypes.util._original_find_library = ctypes.util.find_library
+            ctypes.util.find_library = _make_patched_finder(str(bundled_path))
             sys._opus_loaded = True
             return True
 
@@ -109,3 +121,10 @@ def setup_opus() -> bool:
         "Linux/macOS 可通过包管理器安装: brew install opus / apt install libopus0"
     )
     return False
+
+
+def restore_find_library():
+    """恢复 ctypes.util.find_library 为系统默认值."""
+    if hasattr(ctypes.util, "_original_find_library"):
+        ctypes.util.find_library = ctypes.util._original_find_library
+        del ctypes.util._original_find_library

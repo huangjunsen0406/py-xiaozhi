@@ -29,7 +29,7 @@ def scan_installed_applications() -> List[Dict[str, str]]:
     if applications_dir.exists():
         for app_path in applications_dir.glob("*.app"):
             app_name = app_path.stem
-            clean_name = _clean_app_name(app_name)
+            clean_name = clean_app_name(app_name)
             apps.append(
                 {
                     "name": clean_name,
@@ -44,7 +44,7 @@ def scan_installed_applications() -> List[Dict[str, str]]:
     if user_apps_dir.exists():
         for app_path in user_apps_dir.glob("*.app"):
             app_name = app_path.stem
-            clean_name = _clean_app_name(app_name)
+            clean_name = clean_app_name(app_name)
             apps.append(
                 {
                     "name": clean_name,
@@ -131,7 +131,7 @@ def scan_running_applications() -> List[Dict[str, str]]:
                     # 过滤掉不需要的进程
                     if _should_include_process(comm, command):
                         display_name = _extract_app_name(comm, command)
-                        clean_name = _clean_app_name(display_name)
+                        clean_name = clean_app_name(display_name)
 
                         apps.append(
                             {
@@ -307,27 +307,4 @@ def _extract_app_name(comm: str, command: str) -> str:
     return comm if comm else "Unknown"
 
 
-def _clean_app_name(name: str) -> str:
-    """清理应用程序名称，移除版本号和特殊字符.
-
-    Args:
-        name: 原始名称
-
-    Returns:
-        str: 清理后的名称
-    """
-    if not name:
-        return ""
-
-    # 移除常见的版本号模式
-    import re
-
-    # 移除版本号 (如 "App 1.0", "App v2.1", "App (2023)")
-    name = re.sub(r"\s+v?\d+[\.\d]*", "", name)
-    name = re.sub(r"\s*\(\d+\)", "", name)
-    name = re.sub(r"\s*\[.*?\]", "", name)
-
-    # 移除多余的空格
-    name = " ".join(name.split())
-
-    return name.strip()
+from src.mcp.tools.system.app_management._utils import clean_app_name

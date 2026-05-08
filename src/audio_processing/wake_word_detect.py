@@ -167,17 +167,19 @@ class WakeWordDetector:
             return
         with self._onnx_lock:
             try:
-                # 先置空引用，再删除，避免竞态
-                stream = self._stream
                 spotter = self._keyword_spotter
-                self._stream = None
+                stream = self._stream
                 self._keyword_spotter = None
+                self._stream = None
+
+                # 必须先释放 spotter，再释放 stream。
+                # KeywordSpotter 在 C++ 层拥有 stream 的所有权，
+                # 反序释放会导致 spotter 析构时 double free stream。
+                if spotter is not None:
+                    del spotter
 
                 if stream is not None:
                     del stream
-
-                if spotter is not None:
-                    del spotter
 
                 self._model_loaded = False
                 logger.debug("模型资源已释放")
@@ -280,11 +282,6 @@ class WakeWordDetector:
                     break
             self._audio_queue = None
 
-        with self._onnx_lock:
-            if self._stream is not None:
-                _stream = self._stream  # noqa: F841
-                self._stream = None
-                del _stream
 
         self._stopping = False
         logger.info("唤醒词检测器已停止")
@@ -367,10 +364,7 @@ class WakeWordDetector:
                 await asyncio.sleep(1)
 
     async def _process_audio(self):
-        if self._stopping:
-            return
-
-        if not self._audio_queue:
+        if self._stopping or not self._audio_queue:
             return
 
         try:
@@ -379,7 +373,6 @@ class WakeWordDetector:
             return
 
         if audio_data is _STOP_SENTINEL:
-            # 哨兵唤醒后退出循环，由 stop() 中的 while 条件处理
             return
 
         if audio_data is None or len(audio_data) == 0:
@@ -429,6 +422,10 @@ class WakeWordDetector:
                 except Exception as e:
                     logger.error(f"唤醒词回调执行失败: {e}")
         finally:
+            # 快速退出：正在停止时跳过延迟和队列清理
+            if self._stopping:
+                self._paused = False
+                return
             # 延迟后恢复检测（等待 abort + clear_audio_queue 完成）
             await asyncio.sleep(0.3)
             # 排空队列中残留的旧音频帧

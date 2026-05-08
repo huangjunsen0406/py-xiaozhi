@@ -117,11 +117,22 @@ class OpusCodec:
         return np.frombuffer(pcm_bytes, dtype=np.float32)
 
     def close(self):
-        """释放资源，显式销毁 C 层编解码器状态"""
+        """释放资源，显式销毁 C 层编解码器状态.
+
+        opuslib 的 Encoder/Decoder.__del__ 也会调用 destroy()，
+        必须先将 encoder_state/decoder_state 置空，避免 double free。
+        幂等：可安全重复调用。
+        """
+        if getattr(self, '_closed', False):
+            return
+        self._closed = True
+
         if self.encoder is not None:
             encoder_api.destroy(self.encoder.encoder_state)
+            self.encoder.encoder_state = None  # 防止 __del__ 二次释放
             self.encoder = None
         if self.decoder is not None:
             decoder_api.destroy(self.decoder.decoder_state)
+            self.decoder.decoder_state = None  # 防止 __del__ 二次释放
             self.decoder = None
         logger.debug("Opus编解码器已释放")

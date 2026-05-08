@@ -1,4 +1,5 @@
 import json
+import os
 import shutil
 import uuid
 from typing import Any, Dict
@@ -190,17 +191,15 @@ class ConfigManager:
             return self.DEFAULT_CONFIG.copy()
 
     def _save_config(self, config: dict) -> bool:
-        """
-        保存配置到文件.
-        """
+        """原子写入配置文件（临时文件 + rename 防写入中断损坏）."""
         try:
-            # 确保配置目录存在
             self.config_dir.mkdir(parents=True, exist_ok=True)
 
-            # 保存配置文件
-            self.config_file.write_text(
+            tmp_file = self.config_file.with_suffix(".tmp")
+            tmp_file.write_text(
                 json.dumps(config, indent=2, ensure_ascii=False), encoding="utf-8"
             )
+            os.replace(tmp_file, self.config_file)
             logger.debug(f"配置已保存到: {self.config_file}")
             return True
 

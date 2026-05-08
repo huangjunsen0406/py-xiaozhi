@@ -2,6 +2,8 @@
 Camera tool for MCP.
 """
 
+import asyncio
+
 from src.logging import get_logger
 from src.mcp.decorators import Prop, PropType, mcp_tool
 from src.utils.config_manager import ConfigManager
@@ -51,7 +53,7 @@ def get_camera_instance():
     ),
     props=[Prop("question", PropType.STR)],
 )
-def take_photo(arguments: dict) -> str:
+async def take_photo(arguments: dict) -> str:
     """
     拍照并分析的工具函数.
     """
@@ -61,12 +63,12 @@ def take_photo(arguments: dict) -> str:
     question = arguments.get("question", "")
     logger.info(f"Taking photo with question: {question}")
 
-    # 拍照
-    success = camera.capture()
+    # 拍照（cv2 阻塞操作，放线程池避免卡 GUI）
+    success = await asyncio.to_thread(camera.capture)
     if not success:
         logger.error("Failed to capture photo")
         return '{"success": false, "message": "Failed to capture photo"}'
 
-    # 分析图片
+    # 分析图片（requests 阻塞操作，放线程池避免卡 GUI）
     logger.info("Photo captured, starting analysis...")
-    return camera.analyze(question)
+    return await asyncio.to_thread(camera.analyze, question)

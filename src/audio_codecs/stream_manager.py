@@ -96,7 +96,11 @@ class AudioStreamManager:
             raise
 
     def stop(self) -> None:
-        """停止音频流"""
+        """停止音频流，幂等可重复调用"""
+        if getattr(self, '_stopped', False):
+            return
+        self._stopped = True
+
         try:
             if self.input_stream:
                 self.input_stream.stop()

@@ -2,6 +2,8 @@
 Screenshot tool for MCP.
 """
 
+import asyncio
+
 from src.logging import get_logger
 from src.mcp.decorators import Prop, PropType, mcp_tool
 
@@ -34,7 +36,7 @@ def get_screenshot_camera_instance():
         Prop("display", PropType.STR),
     ],
 )
-def take_screenshot(arguments: dict) -> str:
+async def take_screenshot(arguments: dict) -> str:
     """截取桌面并分析的工具函数."""
     camera = get_screenshot_camera_instance()
     logger.info(f"Using screenshot camera implementation: {camera.__class__.__name__}")
@@ -67,12 +69,12 @@ def take_screenshot(arguments: dict) -> str:
 
     logger.info(f"Taking screenshot with question: {question}, display: {display_id}")
 
-    # 截图
-    success = camera.capture(display_id)
+    # 截图（subprocess/PIL 阻塞操作，放线程池避免卡 GUI）
+    success = await asyncio.to_thread(camera.capture, display_id)
     if not success:
         logger.error("Failed to capture screenshot")
         return '{"success": false, "message": "Failed to capture screenshot"}'
 
-    # 分析截图
+    # 分析截图（requests 阻塞操作，放线程池避免卡 GUI）
     logger.info("Screenshot captured, starting analysis...")
-    return camera.analyze(question)
+    return await asyncio.to_thread(camera.analyze, question)

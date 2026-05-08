@@ -93,12 +93,6 @@ class StateManager:
             {"old_state": old_state, "new_state": state},
         )
 
-    def get_device_state(self) -> DeviceState:
-        """
-        获取当前设备状态.
-        """
-        return self._device_state
-
     def is_idle(self) -> bool:
         """
         是否处于空闲状态.
@@ -127,12 +121,6 @@ class StateManager:
         """
         return self._listening_mode
 
-    def get_listening_mode(self) -> ListeningMode:
-        """
-        获取当前监听模式.
-        """
-        return self._listening_mode
-
     def set_listening_mode(self, mode: ListeningMode) -> None:
         """
         设置监听模式.
@@ -145,12 +133,6 @@ class StateManager:
     # -------------------------
     @property
     def keep_listening(self) -> bool:
-        """
-        是否保持持续监听.
-        """
-        return self._keep_listening
-
-    def is_keep_listening(self) -> bool:
         """
         是否保持持续监听.
         """
