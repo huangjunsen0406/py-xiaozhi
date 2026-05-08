@@ -4,7 +4,7 @@ Base camera implementation.
 
 import threading
 from abc import ABC, abstractmethod
-from typing import Dict
+from typing import Any
 
 from src.logging import get_logger
 from src.utils.config_manager import ConfigManager
@@ -43,12 +43,9 @@ class BaseCamera(ABC):
                     cls._instances[cls] = cls()
         return cls._instances[cls]
 
-    def capture_with_cv2(self) -> bool:
+    def _do_cv2_capture(self) -> bool:
         """
-        使用 OpenCV 捕获图像的通用实现.
-
-        Returns:
-            成功返回 True，失败返回 False
+        在独立线程中执行 cv2 捕获操作（内部实现）.
         """
         try:
             import cv2
@@ -103,8 +100,30 @@ class BaseCamera(ABC):
             return True
 
         except Exception as e:
-            logger.error(f"Exception during capture: {e}")
+            logger.error(f"Exception during capture: {e}", exc_info=True)
             return False
+
+    def capture_with_cv2(self) -> bool:
+        """
+        使用 OpenCV 捕获图像的通用实现（带超时保护）.
+
+        cv2.VideoCapture 在摄像头被占用或故障时可能长时间挂起，
+        通过 ThreadPoolExecutor 包装超时保护。
+
+        Returns:
+            成功返回 True，失败返回 False
+        """
+        import concurrent.futures
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(self._do_cv2_capture)
+            try:
+                return future.result(timeout=10.0)
+            except concurrent.futures.TimeoutError:
+                logger.error(
+                    f"Camera capture timed out after 10s (index={self.camera_index})"
+                )
+                return False
 
     @abstractmethod
     def capture(self) -> bool:
@@ -118,7 +137,7 @@ class BaseCamera(ABC):
         分析图像.
         """
 
-    def get_jpeg_data(self) -> Dict[str, any]:
+    def get_jpeg_data(self) -> dict[str, Any]:
         """
         获取JPEG数据.
         """

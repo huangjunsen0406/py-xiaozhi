@@ -4,6 +4,7 @@ VL camera implementation using Zhipu AI.
 
 import base64
 
+import httpx
 from openai import OpenAI
 
 from src.logging import get_logger
@@ -26,13 +27,14 @@ class VLCamera(BaseCamera):
         super().__init__()
         config = ConfigManager.get_instance()
 
-        # 初始化OpenAI客户端
+        # 初始化OpenAI客户端（设置超时防止 API 无响应时线程池挂起）
         self.client = OpenAI(
             api_key=config.get_config("CAMERA.VLapi_key"),
             base_url=config.get_config(
                 "CAMERA.Local_VL_url",
                 "https://open.bigmodel.cn/api/paas/v4/chat/completions",
             ),
+            timeout=httpx.Timeout(30.0, connect=10.0),
         )
         self.model = config.get_config("CAMERA.models", "glm-4v-plus")
         logger.info(f"VL Camera initialized with model: {self.model}")
@@ -99,5 +101,5 @@ class VLCamera(BaseCamera):
 
         except Exception as e:
             error_msg = f"Failed to analyze image with VL: {str(e)}"
-            logger.error(error_msg)
+            logger.error(error_msg, exc_info=True)
             return f'{{"success": false, "message": "{error_msg}"}}'

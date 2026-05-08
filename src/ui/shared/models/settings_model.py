@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """设置窗口 ViewModel.
 
 完整支持所有配置项，参照旧 PyQt5 实现。
@@ -7,7 +6,7 @@
 import json
 import threading
 import time
-from typing import Any, List
+from typing import Any
 
 import numpy as np
 import sounddevice as sd
@@ -41,11 +40,11 @@ class SettingsModel(BaseModel):
         self._config: dict = {}
 
         # 音频设备
-        self._input_devices: List[dict] = []
-        self._output_devices: List[dict] = []
+        self._input_devices: list[dict] = []
+        self._output_devices: list[dict] = []
 
         # 摄像头设备
-        self._cameras: List[dict] = []
+        self._cameras: list[dict] = []
 
         # 测试状态
         self._testing_input = False
@@ -68,7 +67,7 @@ class SettingsModel(BaseModel):
         """从文件加载配置."""
         try:
             if self._config_path.exists():
-                with open(self._config_path, "r", encoding="utf-8") as f:
+                with open(self._config_path, encoding="utf-8") as f:
                     self._config = json.load(f)
                 logger.debug("设置配置已加载")
             else:
@@ -159,7 +158,9 @@ class SettingsModel(BaseModel):
     def _set_websocketUrl(self, value: str):
         self._set_value("SYSTEM_OPTIONS.NETWORK.WEBSOCKET_URL", value)
 
-    websocketUrl = Property(str, _get_websocketUrl, _set_websocketUrl, notify=settingsChanged)
+    websocketUrl = Property(
+        str, _get_websocketUrl, _set_websocketUrl, notify=settingsChanged
+    )
 
     # WEBSOCKET_ACCESS_TOKEN
     def _get_websocketToken(self) -> str:
@@ -168,7 +169,9 @@ class SettingsModel(BaseModel):
     def _set_websocketToken(self, value: str):
         self._set_value("SYSTEM_OPTIONS.NETWORK.WEBSOCKET_ACCESS_TOKEN", value)
 
-    websocketToken = Property(str, _get_websocketToken, _set_websocketToken, notify=settingsChanged)
+    websocketToken = Property(
+        str, _get_websocketToken, _set_websocketToken, notify=settingsChanged
+    )
 
     # AUTHORIZATION_URL
     def _get_authorizationUrl(self) -> str:
@@ -177,7 +180,9 @@ class SettingsModel(BaseModel):
     def _set_authorizationUrl(self, value: str):
         self._set_value("SYSTEM_OPTIONS.NETWORK.AUTHORIZATION_URL", value)
 
-    authorizationUrl = Property(str, _get_authorizationUrl, _set_authorizationUrl, notify=settingsChanged)
+    authorizationUrl = Property(
+        str, _get_authorizationUrl, _set_authorizationUrl, notify=settingsChanged
+    )
 
     # ACTIVATION_VERSION
     def _get_activationVersion(self) -> str:
@@ -186,7 +191,9 @@ class SettingsModel(BaseModel):
     def _set_activationVersion(self, value: str):
         self._set_value("SYSTEM_OPTIONS.NETWORK.ACTIVATION_VERSION", value)
 
-    activationVersion = Property(str, _get_activationVersion, _set_activationVersion, notify=settingsChanged)
+    activationVersion = Property(
+        str, _get_activationVersion, _set_activationVersion, notify=settingsChanged
+    )
 
     # WINDOW_SIZE_MODE
     def _get_windowSizeMode(self) -> str:
@@ -195,7 +202,9 @@ class SettingsModel(BaseModel):
     def _set_windowSizeMode(self, value: str):
         self._set_value("SYSTEM_OPTIONS.WINDOW_SIZE_MODE", value)
 
-    windowSizeMode = Property(str, _get_windowSizeMode, _set_windowSizeMode, notify=settingsChanged)
+    windowSizeMode = Property(
+        str, _get_windowSizeMode, _set_windowSizeMode, notify=settingsChanged
+    )
 
     # MQTT 配置
     def _get_mqttEndpoint(self) -> str:
@@ -204,7 +213,9 @@ class SettingsModel(BaseModel):
     def _set_mqttEndpoint(self, value: str):
         self._set_value("SYSTEM_OPTIONS.NETWORK.MQTT_INFO.endpoint", value)
 
-    mqttEndpoint = Property(str, _get_mqttEndpoint, _set_mqttEndpoint, notify=settingsChanged)
+    mqttEndpoint = Property(
+        str, _get_mqttEndpoint, _set_mqttEndpoint, notify=settingsChanged
+    )
 
     def _get_mqttClientId(self) -> str:
         return self._get_value("SYSTEM_OPTIONS.NETWORK.MQTT_INFO.client_id", "")
@@ -212,7 +223,9 @@ class SettingsModel(BaseModel):
     def _set_mqttClientId(self, value: str):
         self._set_value("SYSTEM_OPTIONS.NETWORK.MQTT_INFO.client_id", value)
 
-    mqttClientId = Property(str, _get_mqttClientId, _set_mqttClientId, notify=settingsChanged)
+    mqttClientId = Property(
+        str, _get_mqttClientId, _set_mqttClientId, notify=settingsChanged
+    )
 
     def _get_mqttUsername(self) -> str:
         return self._get_value("SYSTEM_OPTIONS.NETWORK.MQTT_INFO.username", "")
@@ -220,7 +233,9 @@ class SettingsModel(BaseModel):
     def _set_mqttUsername(self, value: str):
         self._set_value("SYSTEM_OPTIONS.NETWORK.MQTT_INFO.username", value)
 
-    mqttUsername = Property(str, _get_mqttUsername, _set_mqttUsername, notify=settingsChanged)
+    mqttUsername = Property(
+        str, _get_mqttUsername, _set_mqttUsername, notify=settingsChanged
+    )
 
     def _get_mqttPassword(self) -> str:
         return self._get_value("SYSTEM_OPTIONS.NETWORK.MQTT_INFO.password", "")
@@ -228,7 +243,9 @@ class SettingsModel(BaseModel):
     def _set_mqttPassword(self, value: str):
         self._set_value("SYSTEM_OPTIONS.NETWORK.MQTT_INFO.password", value)
 
-    mqttPassword = Property(str, _get_mqttPassword, _set_mqttPassword, notify=settingsChanged)
+    mqttPassword = Property(
+        str, _get_mqttPassword, _set_mqttPassword, notify=settingsChanged
+    )
 
     def _get_mqttPublishTopic(self) -> str:
         return self._get_value("SYSTEM_OPTIONS.NETWORK.MQTT_INFO.publish_topic", "")
@@ -236,7 +253,9 @@ class SettingsModel(BaseModel):
     def _set_mqttPublishTopic(self, value: str):
         self._set_value("SYSTEM_OPTIONS.NETWORK.MQTT_INFO.publish_topic", value)
 
-    mqttPublishTopic = Property(str, _get_mqttPublishTopic, _set_mqttPublishTopic, notify=settingsChanged)
+    mqttPublishTopic = Property(
+        str, _get_mqttPublishTopic, _set_mqttPublishTopic, notify=settingsChanged
+    )
 
     def _get_mqttSubscribeTopic(self) -> str:
         return self._get_value("SYSTEM_OPTIONS.NETWORK.MQTT_INFO.subscribe_topic", "")
@@ -244,7 +263,9 @@ class SettingsModel(BaseModel):
     def _set_mqttSubscribeTopic(self, value: str):
         self._set_value("SYSTEM_OPTIONS.NETWORK.MQTT_INFO.subscribe_topic", value)
 
-    mqttSubscribeTopic = Property(str, _get_mqttSubscribeTopic, _set_mqttSubscribeTopic, notify=settingsChanged)
+    mqttSubscribeTopic = Property(
+        str, _get_mqttSubscribeTopic, _set_mqttSubscribeTopic, notify=settingsChanged
+    )
 
     # AEC 启用
     def _get_aecEnabled(self) -> bool:
@@ -253,7 +274,9 @@ class SettingsModel(BaseModel):
     def _set_aecEnabled(self, value: bool):
         self._set_value("AEC_OPTIONS.ENABLED", value)
 
-    aecEnabled = Property(bool, _get_aecEnabled, _set_aecEnabled, notify=settingsChanged)
+    aecEnabled = Property(
+        bool, _get_aecEnabled, _set_aecEnabled, notify=settingsChanged
+    )
 
     # ========== 唤醒词设置 ==========
 
@@ -263,7 +286,9 @@ class SettingsModel(BaseModel):
     def _set_wakeWordEnabled(self, value: bool):
         self._set_value("WAKE_WORD_OPTIONS.USE_WAKE_WORD", value)
 
-    wakeWordEnabled = Property(bool, _get_wakeWordEnabled, _set_wakeWordEnabled, notify=settingsChanged)
+    wakeWordEnabled = Property(
+        bool, _get_wakeWordEnabled, _set_wakeWordEnabled, notify=settingsChanged
+    )
 
     def _get_modelPath(self) -> str:
         return self._get_value("WAKE_WORD_OPTIONS.MODEL_PATH", "models")
@@ -287,7 +312,9 @@ class SettingsModel(BaseModel):
     def _set_keywordsScore(self, value: float):
         self._set_value("WAKE_WORD_OPTIONS.KEYWORDS_SCORE", value)
 
-    keywordsScore = Property(float, _get_keywordsScore, _set_keywordsScore, notify=settingsChanged)
+    keywordsScore = Property(
+        float, _get_keywordsScore, _set_keywordsScore, notify=settingsChanged
+    )
 
     def _get_keywordsThreshold(self) -> float:
         return self._get_value("WAKE_WORD_OPTIONS.KEYWORDS_THRESHOLD", 0.2)
@@ -295,7 +322,9 @@ class SettingsModel(BaseModel):
     def _set_keywordsThreshold(self, value: float):
         self._set_value("WAKE_WORD_OPTIONS.KEYWORDS_THRESHOLD", value)
 
-    keywordsThreshold = Property(float, _get_keywordsThreshold, _set_keywordsThreshold, notify=settingsChanged)
+    keywordsThreshold = Property(
+        float, _get_keywordsThreshold, _set_keywordsThreshold, notify=settingsChanged
+    )
 
     # 唤醒词文本
     def _load_wake_word(self):
@@ -361,6 +390,7 @@ class SettingsModel(BaseModel):
 
             # 写入 keywords.txt 到用户数据目录
             from src.utils.resource_finder import get_user_data_dir
+
             keywords_dir = get_user_data_dir() / "keywords"
             keywords_dir.mkdir(parents=True, exist_ok=True)
             keywords_path = keywords_dir / f"{lang}_keywords.txt"
@@ -388,7 +418,9 @@ class SettingsModel(BaseModel):
     def _set_cameraIndex(self, value: int):
         self._set_value("CAMERA.camera_index", value)
 
-    cameraIndex = Property(int, _get_cameraIndex, _set_cameraIndex, notify=settingsChanged)
+    cameraIndex = Property(
+        int, _get_cameraIndex, _set_cameraIndex, notify=settingsChanged
+    )
 
     def _get_frameWidth(self) -> int:
         return self._get_value("CAMERA.frame_width", 640)
@@ -404,7 +436,9 @@ class SettingsModel(BaseModel):
     def _set_frameHeight(self, value: int):
         self._set_value("CAMERA.frame_height", value)
 
-    frameHeight = Property(int, _get_frameHeight, _set_frameHeight, notify=settingsChanged)
+    frameHeight = Property(
+        int, _get_frameHeight, _set_frameHeight, notify=settingsChanged
+    )
 
     def _get_fps(self) -> int:
         return self._get_value("CAMERA.fps", 30)
@@ -457,26 +491,32 @@ class SettingsModel(BaseModel):
                 # 输入设备
                 if int(d.get("max_input_channels", 0)) > 0:
                     default_mark = " (默认)" if i == default_input else ""
-                    self._input_devices.append({
-                        "index": i,
-                        "name": device_name + default_mark,
-                        "raw_name": device_name,
-                        "sample_rate": sample_rate,
-                        "channels": int(d.get("max_input_channels", 0))
-                    })
+                    self._input_devices.append(
+                        {
+                            "index": i,
+                            "name": device_name + default_mark,
+                            "raw_name": device_name,
+                            "sample_rate": sample_rate,
+                            "channels": int(d.get("max_input_channels", 0)),
+                        }
+                    )
 
                 # 输出设备
                 if int(d.get("max_output_channels", 0)) > 0:
                     default_mark = " (默认)" if i == default_output else ""
-                    self._output_devices.append({
-                        "index": i,
-                        "name": device_name + default_mark,
-                        "raw_name": device_name,
-                        "sample_rate": sample_rate,
-                        "channels": int(d.get("max_output_channels", 0))
-                    })
+                    self._output_devices.append(
+                        {
+                            "index": i,
+                            "name": device_name + default_mark,
+                            "raw_name": device_name,
+                            "sample_rate": sample_rate,
+                            "channels": int(d.get("max_output_channels", 0)),
+                        }
+                    )
 
-            logger.debug(f"加载了 {len(self._input_devices)} 个输入设备, {len(self._output_devices)} 个输出设备")
+            logger.debug(
+                f"加载了 {len(self._input_devices)} 个输入设备, {len(self._output_devices)} 个输出设备"
+            )
             self.devicesChanged.emit()
         except Exception as e:
             logger.error(f"加载音频设备失败: {e}")
@@ -526,7 +566,9 @@ class SettingsModel(BaseModel):
             self._set_value("AUDIO_DEVICES.input_channels", min(device["channels"], 1))
             logger.info(f"选择输入设备: {device['name']}")
 
-    selectedInputIndex = Property(int, _get_selectedInputIndex, _set_selectedInputIndex, notify=settingsChanged)
+    selectedInputIndex = Property(
+        int, _get_selectedInputIndex, _set_selectedInputIndex, notify=settingsChanged
+    )
 
     def _get_selectedOutputIndex(self) -> int:
         """获取当前选中的输出设备索引."""
@@ -555,7 +597,9 @@ class SettingsModel(BaseModel):
             self._set_value("AUDIO_DEVICES.output_channels", min(device["channels"], 2))
             logger.info(f"选择输出设备: {device['name']}")
 
-    selectedOutputIndex = Property(int, _get_selectedOutputIndex, _set_selectedOutputIndex, notify=settingsChanged)
+    selectedOutputIndex = Property(
+        int, _get_selectedOutputIndex, _set_selectedOutputIndex, notify=settingsChanged
+    )
 
     # 设备信息显示
     def _get_inputDeviceInfo(self) -> str:
@@ -583,7 +627,12 @@ class SettingsModel(BaseModel):
     def _set_opusOutputSampleRate(self, value: int):
         self._set_value("AUDIO_DEVICES.opus_output_sample_rate", value)
 
-    opusOutputSampleRate = Property(int, _get_opusOutputSampleRate, _set_opusOutputSampleRate, notify=settingsChanged)
+    opusOutputSampleRate = Property(
+        int,
+        _get_opusOutputSampleRate,
+        _set_opusOutputSampleRate,
+        notify=settingsChanged,
+    )
 
     # 音频帧长度
     def _get_frameDuration(self) -> int:
@@ -593,7 +642,9 @@ class SettingsModel(BaseModel):
         if value in [20, 40, 60]:
             self._set_value("AUDIO_DEVICES.frame_duration", value)
 
-    frameDuration = Property(int, _get_frameDuration, _set_frameDuration, notify=settingsChanged)
+    frameDuration = Property(
+        int, _get_frameDuration, _set_frameDuration, notify=settingsChanged
+    )
 
     # 音频测试
     @Slot()
@@ -644,7 +695,9 @@ class SettingsModel(BaseModel):
                 self.statusMessage.emit("[警告] 音频信号过载")
                 self.testComplete.emit("input", True)
             else:
-                self.statusMessage.emit(f"[成功] 录音测试通过 (音量: {max_amplitude:.1%})")
+                self.statusMessage.emit(
+                    f"[成功] 录音测试通过 (音量: {max_amplitude:.1%})"
+                )
                 self.testComplete.emit("input", True)
 
         except Exception as e:
@@ -714,7 +767,9 @@ class SettingsModel(BaseModel):
     def _set_shortcutsEnabled(self, value: bool):
         self._set_value("SHORTCUTS.ENABLED", value)
 
-    shortcutsEnabled = Property(bool, _get_shortcutsEnabled, _set_shortcutsEnabled, notify=settingsChanged)
+    shortcutsEnabled = Property(
+        bool, _get_shortcutsEnabled, _set_shortcutsEnabled, notify=settingsChanged
+    )
 
     # 快捷键：手动模式
     def _get_shortcutManualModifier(self) -> str:
@@ -723,7 +778,12 @@ class SettingsModel(BaseModel):
     def _set_shortcutManualModifier(self, value: str):
         self._set_value("SHORTCUTS.MANUAL_PRESS.modifier", value)
 
-    shortcutManualModifier = Property(str, _get_shortcutManualModifier, _set_shortcutManualModifier, notify=settingsChanged)
+    shortcutManualModifier = Property(
+        str,
+        _get_shortcutManualModifier,
+        _set_shortcutManualModifier,
+        notify=settingsChanged,
+    )
 
     def _get_shortcutManualKey(self) -> str:
         return self._get_value("SHORTCUTS.MANUAL_PRESS.key", "j")
@@ -731,7 +791,9 @@ class SettingsModel(BaseModel):
     def _set_shortcutManualKey(self, value: str):
         self._set_value("SHORTCUTS.MANUAL_PRESS.key", value)
 
-    shortcutManualKey = Property(str, _get_shortcutManualKey, _set_shortcutManualKey, notify=settingsChanged)
+    shortcutManualKey = Property(
+        str, _get_shortcutManualKey, _set_shortcutManualKey, notify=settingsChanged
+    )
 
     # 快捷键：自动模式
     def _get_shortcutAutoModifier(self) -> str:
@@ -740,7 +802,12 @@ class SettingsModel(BaseModel):
     def _set_shortcutAutoModifier(self, value: str):
         self._set_value("SHORTCUTS.AUTO_TOGGLE.modifier", value)
 
-    shortcutAutoModifier = Property(str, _get_shortcutAutoModifier, _set_shortcutAutoModifier, notify=settingsChanged)
+    shortcutAutoModifier = Property(
+        str,
+        _get_shortcutAutoModifier,
+        _set_shortcutAutoModifier,
+        notify=settingsChanged,
+    )
 
     def _get_shortcutAutoKey(self) -> str:
         return self._get_value("SHORTCUTS.AUTO_TOGGLE.key", "k")
@@ -748,7 +815,9 @@ class SettingsModel(BaseModel):
     def _set_shortcutAutoKey(self, value: str):
         self._set_value("SHORTCUTS.AUTO_TOGGLE.key", value)
 
-    shortcutAutoKey = Property(str, _get_shortcutAutoKey, _set_shortcutAutoKey, notify=settingsChanged)
+    shortcutAutoKey = Property(
+        str, _get_shortcutAutoKey, _set_shortcutAutoKey, notify=settingsChanged
+    )
 
     # 快捷键：中断
     def _get_shortcutAbortModifier(self) -> str:
@@ -757,7 +826,12 @@ class SettingsModel(BaseModel):
     def _set_shortcutAbortModifier(self, value: str):
         self._set_value("SHORTCUTS.ABORT.modifier", value)
 
-    shortcutAbortModifier = Property(str, _get_shortcutAbortModifier, _set_shortcutAbortModifier, notify=settingsChanged)
+    shortcutAbortModifier = Property(
+        str,
+        _get_shortcutAbortModifier,
+        _set_shortcutAbortModifier,
+        notify=settingsChanged,
+    )
 
     def _get_shortcutAbortKey(self) -> str:
         return self._get_value("SHORTCUTS.ABORT.key", "q")
@@ -765,7 +839,9 @@ class SettingsModel(BaseModel):
     def _set_shortcutAbortKey(self, value: str):
         self._set_value("SHORTCUTS.ABORT.key", value)
 
-    shortcutAbortKey = Property(str, _get_shortcutAbortKey, _set_shortcutAbortKey, notify=settingsChanged)
+    shortcutAbortKey = Property(
+        str, _get_shortcutAbortKey, _set_shortcutAbortKey, notify=settingsChanged
+    )
 
     # 快捷键：模式切换
     def _get_shortcutModeModifier(self) -> str:
@@ -774,7 +850,12 @@ class SettingsModel(BaseModel):
     def _set_shortcutModeModifier(self, value: str):
         self._set_value("SHORTCUTS.MODE_TOGGLE.modifier", value)
 
-    shortcutModeModifier = Property(str, _get_shortcutModeModifier, _set_shortcutModeModifier, notify=settingsChanged)
+    shortcutModeModifier = Property(
+        str,
+        _get_shortcutModeModifier,
+        _set_shortcutModeModifier,
+        notify=settingsChanged,
+    )
 
     def _get_shortcutModeKey(self) -> str:
         return self._get_value("SHORTCUTS.MODE_TOGGLE.key", "m")
@@ -782,7 +863,9 @@ class SettingsModel(BaseModel):
     def _set_shortcutModeKey(self, value: str):
         self._set_value("SHORTCUTS.MODE_TOGGLE.key", value)
 
-    shortcutModeKey = Property(str, _get_shortcutModeKey, _set_shortcutModeKey, notify=settingsChanged)
+    shortcutModeKey = Property(
+        str, _get_shortcutModeKey, _set_shortcutModeKey, notify=settingsChanged
+    )
 
     # 快捷键：窗口显示/隐藏
     def _get_shortcutWindowModifier(self) -> str:
@@ -791,7 +874,12 @@ class SettingsModel(BaseModel):
     def _set_shortcutWindowModifier(self, value: str):
         self._set_value("SHORTCUTS.WINDOW_TOGGLE.modifier", value)
 
-    shortcutWindowModifier = Property(str, _get_shortcutWindowModifier, _set_shortcutWindowModifier, notify=settingsChanged)
+    shortcutWindowModifier = Property(
+        str,
+        _get_shortcutWindowModifier,
+        _set_shortcutWindowModifier,
+        notify=settingsChanged,
+    )
 
     def _get_shortcutWindowKey(self) -> str:
         return self._get_value("SHORTCUTS.WINDOW_TOGGLE.key", "w")
@@ -799,27 +887,37 @@ class SettingsModel(BaseModel):
     def _set_shortcutWindowKey(self, value: str):
         self._set_value("SHORTCUTS.WINDOW_TOGGLE.key", value)
 
-    shortcutWindowKey = Property(str, _get_shortcutWindowKey, _set_shortcutWindowKey, notify=settingsChanged)
+    shortcutWindowKey = Property(
+        str, _get_shortcutWindowKey, _set_shortcutWindowKey, notify=settingsChanged
+    )
 
     # ========== 摄像头设备列表 ==========
 
     def _load_cameras(self):
-        """加载摄像头列表."""
-        self._cameras = []
+        """在后台线程加载摄像头列表，避免阻塞 Qt 主线程."""
+        thread = threading.Thread(target=self._do_load_cameras)
+        thread.daemon = True
+        thread.start()
+
+    def _do_load_cameras(self):
+        """执行摄像头扫描（在后台线程）."""
+        cameras = []
         try:
             import cv2
+
             for i in range(10):
                 cap = cv2.VideoCapture(i)
                 if cap.isOpened():
-                    self._cameras.append({
-                        "index": i,
-                        "name": f"摄像头 {i}"
-                    })
+                    cameras.append({"index": i, "name": f"摄像头 {i}"})
                     cap.release()
         except ImportError:
             logger.warning("cv2 未安装，无法扫描摄像头")
         except Exception as e:
-            logger.error(f"扫描摄像头失败: {e}")
+            logger.error(f"扫描摄像头失败: {e}", exc_info=True)
+
+        self._cameras = cameras
+        self.devicesChanged.emit()
+        self.statusMessage.emit("摄像头列表已刷新")
 
     @Slot(result=list)
     def getCameras(self) -> list:
@@ -828,10 +926,8 @@ class SettingsModel(BaseModel):
 
     @Slot()
     def refreshCameras(self):
-        """刷新摄像头列表."""
+        """刷新摄像头列表（非阻塞）."""
         self._load_cameras()
-        self.devicesChanged.emit()
-        self.statusMessage.emit("摄像头列表已刷新")
 
     def _get_selectedCameraIndex(self) -> int:
         """获取当前选中的摄像头索引."""
@@ -848,7 +944,9 @@ class SettingsModel(BaseModel):
             self._set_value("CAMERA.camera_index", camera["index"])
             logger.info(f"选择摄像头: {camera['name']}")
 
-    selectedCameraIndex = Property(int, _get_selectedCameraIndex, _set_selectedCameraIndex, notify=settingsChanged)
+    selectedCameraIndex = Property(
+        int, _get_selectedCameraIndex, _set_selectedCameraIndex, notify=settingsChanged
+    )
 
     @Slot()
     def testCamera(self):
@@ -901,7 +999,9 @@ class SettingsModel(BaseModel):
 
             # 获取实际分辨率
             actual_height, actual_width = frame.shape[:2]
-            self.statusMessage.emit(f"[成功] 摄像头正常 (分辨率: {actual_width}x{actual_height})")
+            self.statusMessage.emit(
+                f"[成功] 摄像头正常 (分辨率: {actual_width}x{actual_height})"
+            )
 
         except ImportError:
             self.statusMessage.emit("[错误] cv2 未安装")
