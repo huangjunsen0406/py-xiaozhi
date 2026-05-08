@@ -510,3 +510,36 @@ logging 模块从 1959 行精简到 1339 行（-32%），删除未使用的 cont
 ### Next Steps
 
 - None - task complete
+
+
+## Session 16: 修复 UI 剩余 5 问题 — None 守卫、线程锁、monkey patch、弃用 API
+
+**Date**: 2026-05-08
+**Task**: 修复 UI 剩余 5 问题 — None 守卫、线程锁、monkey patch、弃用 API
+**Branch**: `feature/new_architecture`
+
+### Summary
+
+activation.py _service is None 守卫, gpio/input.py _callbacks 加 Lock, cli/display.py 移除 Logger.addHandler monkey patch, event_bridge.py get_event_loop→get_running_loop + ensure_future→TaskManager.spawn, UISendTextData 移除
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `5825a2f` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

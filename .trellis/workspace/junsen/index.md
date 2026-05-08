@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 15
+- **Total Sessions**: 16
 - **Last Active**: 2026-05-08
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~512 | Active |
+| `journal-1.md` | ~545 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 16 | 2026-05-08 | 修复 UI 剩余 5 问题 — None 守卫、线程锁、monkey patch、弃用 API | `5825a2f` | `feature/new_architecture` |
 | 15 | 2026-05-08 | 清理 UI 模块死代码与 asyncio.create_task 保护 | `807585f` | `feature/new_architecture` |
 | 14 | 2026-05-08 | 修复 camera 全链路阻塞 qasync 主线程 | `da7478f`, `4ece521` | `feature/new_architecture` |
 | 13 | 2026-05-08 | 精简 logging 模块，修复日志系统问题 | `1a2c1e3` | `feature/new_architecture` |
