@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 18
-- **Last Active**: 2026-05-08
+- **Total Sessions**: 19
+- **Last Active**: 2026-05-09
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~611 | Active |
+| `journal-1.md` | ~644 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 19 | 2026-05-09 | 修复 plugins/constants 6个代码质量问题 | `9639f5e` | `feature/new_architecture` |
 | 18 | 2026-05-08 | 修复 core/ 模块 5 个已知问题 | `99e6708` | `feature/new_architecture` |
 | 17 | 2026-05-08 | 重构音频配置解耦——设备层/协议层分离 | `f933cb9` | `feature/new_architecture` |
 | 16 | 2026-05-08 | 修复 UI 剩余 5 问题 — None 守卫、线程锁、monkey patch、弃用 API | `5825a2f` | `feature/new_architecture` |
