@@ -543,3 +543,36 @@ activation.py _service is None 守卫, gpio/input.py _callbacks 加 Lock, cli/di
 ### Next Steps
 
 - None - task complete
+
+
+## Session 17: 重构音频配置解耦——设备层/协议层分离
+
+**Date**: 2026-05-08
+**Task**: 重构音频配置解耦——设备层/协议层分离
+**Branch**: `feature/new_architecture`
+
+### Summary
+
+AudioConfig 协议参数改为动态可重载类属性，新增 reload() 方法从 ConfigManager 刷新；OpusCodec 移除 AudioConfig 默认参数依赖，由 AudioCodec 显式注入；AudioCodec 提取 _configure_pipeline() 消除 initialize/reload_devices 重复映射代码。修复 Settings UI 修改 opus_output_sample_rate/frame_duration 后热重载不生效的问题。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `f933cb9` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
