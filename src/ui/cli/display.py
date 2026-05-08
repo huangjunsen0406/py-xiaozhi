@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """CLI 终端显示界面.
 
 提供终端 TUI 界面，包含:
@@ -13,8 +12,6 @@ import os
 import shutil
 import sys
 from collections import deque
-
-from src.logging import get_logger
 from typing import Callable, Optional
 
 from src.constants.system import SystemConstants
@@ -89,7 +86,7 @@ class CLIDisplay:
         self._render_lock = asyncio.Lock()
 
         # 确保日志已被拦截（如果还没有调用 intercept_logging）
-        if not hasattr(self, "_original_add_handler"):
+        if not self._log_handler_installed:
             self.intercept_logging()
 
         # 清屏并初始化界面
@@ -449,36 +446,18 @@ class CLIDisplay:
                 datefmt="%H:%M:%S",
             )
         )
-        # 使用原始方法添加处理器，绕过过滤
-        if hasattr(self, "_original_add_handler"):
-            self._original_add_handler(logging.getLogger(), handler)
-        else:
-            logging.getLogger().addHandler(handler)
+        logging.getLogger().addHandler(handler)
 
     def _remove_stream_handlers(self):
         """移除所有标准输出的日志处理器."""
-        # 保存原始的 addHandler 方法
-        self._original_add_handler = logging.Logger.addHandler
-
-        # 创建一个包装函数，阻止添加 StreamHandler
-        def filtered_add_handler(logger_self, handler):
-            if isinstance(handler, logging.StreamHandler):
-                stream = getattr(handler, "stream", None)
-                if stream in (sys.stdout, sys.stderr, None):
-                    # 忽略 stdout/stderr 的 StreamHandler
-                    return
-            self._original_add_handler(logger_self, handler)
-
-        # 替换 addHandler 方法
-        logging.Logger.addHandler = filtered_add_handler
+        root = logging.getLogger()
 
         # 移除根 logger 的所有 StreamHandler
-        root = logging.getLogger()
         for h in list(root.handlers):
             if isinstance(h, logging.StreamHandler):
                 root.removeHandler(h)
 
-        # 遍历所有已注册的 logger
+        # 移除所有已注册 logger 的 StreamHandler
         for name in list(logging.Logger.manager.loggerDict.keys()):
             log = logging.getLogger(name)
             for h in list(log.handlers):
@@ -490,10 +469,6 @@ class CLIDisplay:
 
     def _restore_logging(self):
         """恢复标准日志."""
-        # 恢复原始的 addHandler 方法
-        if hasattr(self, "_original_add_handler"):
-            logging.Logger.addHandler = self._original_add_handler
-
         root = logging.getLogger()
 
         # 移除 DisplayLogHandler

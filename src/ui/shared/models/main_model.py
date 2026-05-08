@@ -1,17 +1,8 @@
-# -*- coding: utf-8 -*-
 """主窗口 ViewModel."""
-
-from dataclasses import dataclass
 
 from PySide6.QtCore import Property, Signal
 
 from .base_model import BaseModel
-
-
-@dataclass
-class UISendTextData:
-    """发送文本数据."""
-    text: str
 
 
 class MainModel(BaseModel):

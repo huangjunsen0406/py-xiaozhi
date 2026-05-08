@@ -1,6 +1,5 @@
 """EventBus 桥接器 - Python 信号与 QML 信号双向转换."""
 
-import asyncio
 from collections.abc import Callable
 
 from PySide6.QtCore import QObject, QTimer, Signal, Slot
@@ -32,20 +31,22 @@ class EventBridge(QObject):
 
     # ========== 构造 ==========
 
-    def __init__(self, event_bus: EventBus, parent: QObject | None = None):
+    def __init__(self, event_bus: EventBus, task_manager=None, parent: QObject | None = None):
         super().__init__(parent)
         self._event_bus = event_bus
+        self._task_manager = task_manager
         self._activation_code_getter: Callable[[], str] | None = None
 
     def _emit_event(self, event: str, data=None):
-        """安全地发射 EventBus 事件，使用 QTimer 在主线程中调度."""
+        """安全地发射 EventBus 事件，在 Qt 主线程中调度到 asyncio loop."""
+        if self._task_manager is None:
+            logger.error("EventBridge: TaskManager 未注入，无法发射事件")
+            return
+
         def do_emit():
             try:
-                loop = asyncio.get_event_loop()
-                if loop.is_running():
-                    asyncio.ensure_future(self._event_bus.emit(event, data))
-                else:
-                    logger.warning(f"EventBridge: 事件循环未运行，跳过事件 {event}")
+                task_name = f"bridge:{event.split('.')[-1]}" if '.' in event else f"bridge:{event}"
+                self._task_manager.spawn(self._event_bus.emit(event, data), name=task_name)
             except Exception as e:
                 logger.warning(f"EventBridge: 发射事件 {event} 失败: {e}")
 
@@ -95,8 +96,8 @@ class EventBridge(QObject):
         """发送文本."""
         if text.strip():
             logger.debug(f"EventBridge: 发送文本: {text[:20]}...")
-            from src.ui.shared.models.main_model import UISendTextData
-            self._emit_event(Events.UI_SEND_TEXT, UISendTextData(text=text))
+            from src.ui.shared.events import UISendTextRequest
+            self._emit_event(Events.UI_SEND_TEXT, UISendTextRequest(text=text))
 
     @Slot()
     def onQuitRequest(self):

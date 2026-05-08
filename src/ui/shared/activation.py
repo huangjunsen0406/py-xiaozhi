@@ -30,6 +30,10 @@ class BaseActivation:
 
         获取激活数据 → 展示验证码 → 调用 activate() → 展示结果.
         """
+        if self._service is None:
+            self._show_error("激活服务未初始化")
+            return False
+
         data = self._service.get_activation_data()
         if not data:
             self._show_error("未获取到激活数据")

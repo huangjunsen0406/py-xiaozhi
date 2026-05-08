@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """GPIO 输入处理.
 
 封装 gpiozero 按键监听，支持树莓派的 GPIO 按键输入。
@@ -18,6 +17,7 @@
 """
 
 import sys
+import threading
 from typing import Callable, List, Optional
 
 from src.logging import get_logger
@@ -50,6 +50,7 @@ class GPIOInput:
         self._bounce_time = bounce_time
         self._buttons: List = []
         self._callbacks: dict[int, dict[str, Optional[Callable]]] = {}
+        self._lock = threading.Lock()
         self._available = False
 
         # 检查平台
@@ -112,16 +113,18 @@ class GPIOInput:
                 self._buttons.append(button)
 
                 # 保存回调
-                self._callbacks[i] = {
-                    "pressed": callbacks[i] if i < len(callbacks) else None,
-                }
+                with self._lock:
+                    self._callbacks[i] = {
+                        "pressed": callbacks[i] if i < len(callbacks) else None,
+                    }
 
                 # 设置按下回调
                 if i < len(callbacks) and callbacks[i]:
                     # 使用闭包捕获索引
                     def make_handler(idx: int):
                         def handler():
-                            cb = self._callbacks.get(idx, {}).get("pressed")
+                            with self._lock:
+                                cb = self._callbacks.get(idx, {}).get("pressed")
                             if cb:
                                 logger.debug(f"KEY{idx + 1} (GPIO{self._pins[idx]}) pressed")
                                 cb()
@@ -148,5 +151,6 @@ class GPIOInput:
                 logger.warning(f"关闭 GPIO 按钮失败: {e}")
 
         self._buttons.clear()
-        self._callbacks.clear()
+        with self._lock:
+            self._callbacks.clear()
         logger.info("GPIO 资源已释放")

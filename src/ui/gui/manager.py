@@ -29,7 +29,7 @@ class ViewManager(QObject):
         self._tasks.initialize()
 
         # 桥接层
-        self._bridge = EventBridge(event_bus)
+        self._bridge = EventBridge(event_bus, task_manager=self._tasks)
 
         # Models
         self._activation_model = ActivationModel()
