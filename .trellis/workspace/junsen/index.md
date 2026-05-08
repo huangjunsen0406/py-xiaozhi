@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 9
+- **Total Sessions**: 10
 - **Last Active**: 2026-05-08
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~310 | Active |
+| `journal-1.md` | ~344 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 10 | 2026-05-08 | 修复 MQTT/WSS 通信稳定性 + 提取协议基类重复代码 | `72b2ec8`, `30448ae` | `feature/new_architecture` |
 | 9 | 2026-05-08 | trellis-check 新增 PRD AC 验证步骤 | `25f8832` | `feature/new_architecture` |
 | 8 | 2026-05-08 | 修复 Linux 唤醒词打断慢/失效问题 | `dc679d2`, `ada760e`, `a516799`, `adfcd9b`, `c39b6aa` | `feature/new_architecture` |
 | 7 | 2026-05-07 | 修复唤醒词初始化流程：释放顺序 + 竞态条件 | `24eb5f7` | `feature/new_architecture` |

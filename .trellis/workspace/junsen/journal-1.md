@@ -308,3 +308,37 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 10: 修复 MQTT/WSS 通信稳定性 + 提取协议基类重复代码
+
+**Date**: 2026-05-08
+**Task**: 修复 MQTT/WSS 通信稳定性 + 提取协议基类重复代码
+**Branch**: `feature/new_architecture`
+
+### Summary
+
+修复 mqtt_protocol 的 loop_forever() 阻塞事件循环、UDP 显式绑定端口、print→logger；恢复 websocket_protocol 心跳检测；提取重复的监控/重连/清理逻辑到 protocol.py 基类，消除 273 行重复代码。reports/ 加入 .gitignore 仅本地查看。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `72b2ec8` | (see git log) |
+| `30448ae` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
