@@ -404,7 +404,8 @@ class ActivationService:
         """
         try:
             return machineid.id()
-        except Exception:
+        except Exception as e:
+            self.logger.warning(f"获取 machine_id 失败: {e}")
             return None
 
     def _generate_serial_number_from_fingerprint(self, fingerprint: Dict) -> str:
