@@ -3,6 +3,7 @@ VL camera implementation using Zhipu AI.
 """
 
 import base64
+import json
 
 import httpx
 from openai import OpenAI
@@ -45,16 +46,16 @@ class VLCamera(BaseCamera):
         """
         return self.capture_with_cv2()
 
-    def analyze(self, question: str) -> str:
-        """
-        使用智普AI分析图像.
-        """
+    def analyze(self, question: str, image_data: bytes | None = None) -> str:
         try:
-            if not self.jpeg_data["buf"]:
-                return '{"success": false, "message": "Camera buffer is empty"}'
+            buf = image_data if image_data is not None else self.jpeg_data["buf"]
+            if not buf:
+                return json.dumps(
+                    {"success": False, "message": "Camera buffer is empty"}
+                )
 
             # 将图像转换为Base64
-            image_base64 = base64.b64encode(self.jpeg_data["buf"]).decode("utf-8")
+            image_base64 = base64.b64encode(buf).decode("utf-8")
 
             # 准备消息
             messages = [
@@ -97,9 +98,11 @@ class VLCamera(BaseCamera):
 
             # 记录响应
             logger.info(f"VL analysis completed, question={question}")
-            return f'{{"success": true, "text": "{result}"}}'
+            return json.dumps(
+                {"success": True, "text": result}, ensure_ascii=False
+            )
 
         except Exception as e:
-            error_msg = f"Failed to analyze image with VL: {str(e)}"
+            error_msg = f"Failed to analyze image with VL: {e}"
             logger.error(error_msg, exc_info=True)
-            return f'{{"success": false, "message": "{error_msg}"}}'
+            return json.dumps({"success": False, "message": error_msg})

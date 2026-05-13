@@ -2,10 +2,11 @@
 MCP 工具装饰器与注册表.
 """
 
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterable, List, Optional
+from typing import Any
 
 from src.logging import get_logger
 from src.mcp.tooling import McpTool, Property, PropertyList, PropertyType
@@ -39,11 +40,11 @@ class Prop:
     name: str
     type: PropType
     default: Any = _NOT_SET
-    min_val: Optional[int] = None
-    max_val: Optional[int] = None
+    min_val: int | None = None
+    max_val: int | None = None
 
     def to_property(self) -> Property:
-        kwargs: Dict[str, Any] = {}
+        kwargs: dict[str, Any] = {}
         if self.default is not _NOT_SET:
             kwargs["default_value"] = self.default
         if self.type == PropType.INT:
@@ -62,7 +63,7 @@ class ToolDef:
 
     name: str
     description: str
-    props: List[Prop] = field(default_factory=list)
+    props: list[Prop] = field(default_factory=list)
     callback: Callable = field(default=None)
 
     def to_mcp_tool(self) -> McpTool:
@@ -70,7 +71,7 @@ class ToolDef:
         return McpTool(self.name, self.description, prop_list, self.callback)
 
 
-_TOOL_REGISTRY: Dict[str, ToolDef] = {}
+_TOOL_REGISTRY: dict[str, ToolDef] = {}
 _DISCOVERY_DONE = False
 
 
@@ -78,7 +79,7 @@ def mcp_tool(
     *,
     name: str,
     description: str,
-    props: Optional[List[Prop]] = None,
+    props: list[Prop] | None = None,
 ) -> Callable:
     """MCP 工具装饰器."""
 
@@ -107,6 +108,12 @@ def discover_tool_modules():
     package = "src.mcp.tools"
     base_path = Path(__file__).parent / "tools"
 
+    def _safe_import(mod_name: str):
+        try:
+            import_module(mod_name)
+        except Exception as e:
+            logger.warning("跳过工具模块 %s (import 失败): %s", mod_name, e)
+
     # 先导入根目录下的 module (例如 tools/foo.py)
     for file_path in base_path.glob("*.py"):
         if file_path.name.startswith("_"):
@@ -115,7 +122,7 @@ def discover_tool_modules():
         if module_name.endswith(".__init__"):
             continue
         logger.debug("Discovering MCP tool module: %s", module_name)
-        import_module(module_name)
+        _safe_import(module_name)
 
     # 再导入子目录（package 和 _tools.py）
     for subdir in base_path.iterdir():
@@ -123,13 +130,13 @@ def discover_tool_modules():
             continue
         module_base = f"{package}.{subdir.name}"
         logger.debug("Discovering MCP tool package: %s", module_base)
-        import_module(module_base)
+        _safe_import(module_base)
 
         tools_file = subdir / "_tools.py"
         if tools_file.exists():
             module_name = f"{module_base}._tools"
             logger.debug("Discovering MCP sub-tools module: %s", module_name)
-            import_module(module_name)
+            _safe_import(module_name)
 
     _DISCOVERY_DONE = True
 

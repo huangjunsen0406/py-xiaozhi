@@ -3,6 +3,7 @@ Camera tool for MCP.
 """
 
 import asyncio
+import json
 
 from src.logging import get_logger
 from src.mcp.decorators import Prop, PropType, mcp_tool
@@ -67,7 +68,9 @@ async def take_photo(arguments: dict) -> str:
     success = await asyncio.to_thread(camera.capture)
     if not success:
         logger.error("Failed to capture photo")
-        return '{"success": false, "message": "Failed to capture photo"}'
+        return json.dumps(
+            {"success": False, "message": "Failed to capture photo"}
+        )
 
     # 分析图片（requests 阻塞操作，放线程池避免卡 GUI）
     logger.info("Photo captured, starting analysis...")

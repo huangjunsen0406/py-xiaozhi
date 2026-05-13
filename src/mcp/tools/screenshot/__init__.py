@@ -3,6 +3,7 @@ Screenshot tool for MCP.
 """
 
 import asyncio
+import json
 
 from src.logging import get_logger
 from src.mcp.decorators import Prop, PropType, mcp_tool
@@ -73,7 +74,9 @@ async def take_screenshot(arguments: dict) -> str:
     success = await asyncio.to_thread(camera.capture, display_id)
     if not success:
         logger.error("Failed to capture screenshot")
-        return '{"success": false, "message": "Failed to capture screenshot"}'
+        return json.dumps(
+            {"success": False, "message": "Failed to capture screenshot"}
+        )
 
     # 分析截图（requests 阻塞操作，放线程池避免卡 GUI）
     logger.info("Screenshot captured, starting analysis...")

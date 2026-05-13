@@ -3,6 +3,7 @@ Screenshot camera implementation for capturing desktop screens.
 """
 
 import io
+import json
 import sys
 
 from src.logging import get_logger
@@ -416,45 +417,21 @@ class ScreenshotCamera(BaseCamera):
             logger.error(f"Linux screenshot capture failed: {e}")
             return None
 
-    def analyze(self, question: str) -> str:
-        """分析截图内容.
-
-        Args:
-            question: 用户的问题或分析要求
-
-        Returns:
-            分析结果的JSON字符串
-        """
+    def analyze(self, question: str, image_data: bytes | None = None) -> str:
         try:
             logger.info(f"Analyzing screenshot with question: {question}")
 
-            # 复用现有的 camera 分析逻辑
             from src.mcp.tools.camera import get_camera_instance
 
             camera_instance = get_camera_instance()
-
-            # 临时保存原始数据并替换为截图数据
-            original_buf = camera_instance.jpeg_data["buf"]
-            original_len = camera_instance.jpeg_data["len"]
-
-            try:
-                # 设置截图数据
-                camera_instance.jpeg_data["buf"] = self.jpeg_data["buf"]
-                camera_instance.jpeg_data["len"] = self.jpeg_data["len"]
-
-                # 调用分析
-                result = camera_instance.analyze(question)
-
-                return result
-
-            finally:
-                # 无论成功失败都要恢复原始数据
-                camera_instance.jpeg_data["buf"] = original_buf
-                camera_instance.jpeg_data["len"] = original_len
+            buf = image_data if image_data is not None else self.jpeg_data["buf"]
+            return camera_instance.analyze(question, image_data=buf)
 
         except Exception as e:
             logger.error(f"Error analyzing screenshot: {e}", exc_info=True)
-            return f'{{"success": false, "message": "Failed to analyze screenshot: {str(e)}"}}'
+            return json.dumps(
+                {"success": False, "message": f"Failed to analyze screenshot: {e}"}
+            )
 
     def _capture_single_display_macos(self, display_num):
         """截取macOS单个显示器.

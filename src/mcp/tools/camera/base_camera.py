@@ -125,6 +125,12 @@ class BaseCamera(ABC):
                 )
                 return False
 
+    def set_explain_url(self, url: str):  # noqa: B027
+        """设置视觉服务 URL（子类按需覆写）."""
+
+    def set_explain_token(self, token: str):  # noqa: B027
+        """设置视觉服务 token（子类按需覆写）."""
+
     @abstractmethod
     def capture(self) -> bool:
         """
@@ -132,9 +138,12 @@ class BaseCamera(ABC):
         """
 
     @abstractmethod
-    def analyze(self, question: str) -> str:
-        """
-        分析图像.
+    def analyze(self, question: str, image_data: bytes | None = None) -> str:
+        """分析图像.
+
+        Args:
+            question: 用户问题
+            image_data: 可选的外部图像数据，为 None 时使用 self.jpeg_data
         """
 
     def get_jpeg_data(self) -> dict[str, Any]:

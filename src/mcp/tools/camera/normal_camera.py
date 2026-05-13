@@ -2,6 +2,8 @@
 Normal camera implementation using remote API.
 """
 
+import json
+
 import requests
 
 from src.logging import get_logger
@@ -26,16 +28,10 @@ class NormalCamera(BaseCamera):
         self.explain_token = ""
 
     def set_explain_url(self, url: str):
-        """
-        设置解释服务的URL.
-        """
         self.explain_url = url
         logger.info(f"Vision service URL set to: {url}")
 
     def set_explain_token(self, token: str):
-        """
-        设置解释服务的token.
-        """
         self.explain_token = token
         if token:
             logger.info("Vision service token has been set")
@@ -46,15 +42,17 @@ class NormalCamera(BaseCamera):
         """
         return self.capture_with_cv2()
 
-    def analyze(self, question: str) -> str:
-        """
-        分析图像.
-        """
+    def analyze(self, question: str, image_data: bytes | None = None) -> str:
         if not self.explain_url:
-            return '{"success": false, "message": "Image explain URL is not set"}'
+            return json.dumps(
+                {"success": False, "message": "Image explain URL is not set"}
+            )
 
-        if not self.jpeg_data["buf"]:
-            return '{"success": false, "message": "Camera buffer is empty"}'
+        buf = image_data if image_data is not None else self.jpeg_data["buf"]
+        if not buf:
+            return json.dumps(
+                {"success": False, "message": "Camera buffer is empty"}
+            )
 
         # 准备请求头
         headers = {
@@ -72,11 +70,14 @@ class NormalCamera(BaseCamera):
         # 准备文件数据
         files = {
             "question": (None, question),
-            "file": ("camera.jpg", self.jpeg_data["buf"], "image/jpeg"),
+            "file": ("camera.jpg", buf, "image/jpeg"),
         }
 
         try:
-            # 发送请求
+            logger.info(
+                f"[Vision] POST {self.explain_url}, "
+                f"question={question}, file_size={len(buf)} bytes"
+            )
             response = requests.post(
                 self.explain_url, headers=headers, files=files, timeout=10
             )
@@ -87,7 +88,7 @@ class NormalCamera(BaseCamera):
                     f"Failed to upload photo, status code: {response.status_code}"
                 )
                 logger.error(error_msg)
-                return f'{{"success": false, "message": "{error_msg}"}}'
+                return json.dumps({"success": False, "message": error_msg})
 
             # 记录响应
             logger.info(
@@ -97,6 +98,6 @@ class NormalCamera(BaseCamera):
             return response.text
 
         except requests.RequestException as e:
-            error_msg = f"Failed to connect to explain URL: {str(e)}"
+            error_msg = f"Failed to connect to explain URL: {e}"
             logger.error(error_msg)
-            return f'{{"success": false, "message": "{error_msg}"}}'
+            return json.dumps({"success": False, "message": error_msg})
