@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 19
-- **Last Active**: 2026-05-09
+- **Total Sessions**: 20
+- **Last Active**: 2026-05-14
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~644 | Active |
+| `journal-1.md` | ~677 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 20 | 2026-05-14 | 修复 MCP 模块 JSON 注入、发现容错、相机代码优化 | `42f96bd` | `feature/new_architecture` |
 | 19 | 2026-05-09 | 修复 plugins/constants 6个代码质量问题 | `9639f5e` | `feature/new_architecture` |
 | 18 | 2026-05-08 | 修复 core/ 模块 5 个已知问题 | `99e6708` | `feature/new_architecture` |
 | 17 | 2026-05-08 | 重构音频配置解耦——设备层/协议层分离 | `f933cb9` | `feature/new_architecture` |
