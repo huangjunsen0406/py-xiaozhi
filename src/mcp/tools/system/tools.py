@@ -1,20 +1,37 @@
 """系统工具实现.
 
-提供具体的系统工具功能实现
+提供具体的系统工具功能实现。
 """
 
 import asyncio
-from typing import Any, Dict
+import json
+from typing import Any
 
 from src.logging import get_logger
 
+from .volume_controller import VolumeController
+
 logger = get_logger()
 
+_volume_controller: VolumeController | None = None
 
-async def set_volume(args: Dict[str, Any]) -> bool:
-    """
-    设置音量.
-    """
+
+def _get_volume_controller() -> VolumeController | None:
+    """获取或初始化模块级音量控制器单例."""
+    global _volume_controller
+    if _volume_controller is None:
+        if not VolumeController.check_dependencies():
+            return None
+        try:
+            _volume_controller = VolumeController()
+        except Exception as e:
+            logger.error(f"音量控制器初始化失败: {e}", exc_info=True)
+            return None
+    return _volume_controller
+
+
+async def set_volume(args: dict[str, Any]) -> bool:
+    """设置音量."""
     try:
         volume = args["volume"]
         logger.info(f"[SystemTools] 设置音量到 {volume}")
@@ -24,16 +41,12 @@ async def set_volume(args: Dict[str, Any]) -> bool:
             logger.warning(f"[SystemTools] 音量值超出范围: {volume}")
             return False
 
-        # 直接使用VolumeController设置音量
-        from src.utils.volume_controller import VolumeController
-
-        # 检查依赖并创建音量控制器
-        if not VolumeController.check_dependencies():
+        controller = _get_volume_controller()
+        if controller is None:
             logger.warning("[SystemTools] 音量控制依赖不完整，无法设置音量")
             return False
 
-        volume_controller = VolumeController()
-        await asyncio.to_thread(volume_controller.set_volume, volume)
+        await asyncio.to_thread(controller.set_volume, volume)
         logger.info(f"[SystemTools] 音量设置成功: {volume}")
         return True
 
@@ -45,43 +58,31 @@ async def set_volume(args: Dict[str, Any]) -> bool:
         return False
 
 
-async def get_volume(args: Dict[str, Any]) -> int:
-    """
-    获取当前音量.
-    """
+async def get_volume(args: dict[str, Any]) -> int:
+    """获取当前音量."""
     try:
         logger.info("[SystemTools] 获取当前音量")
 
-        # 直接使用VolumeController获取音量
-        from src.utils.volume_controller import VolumeController
-
-        # 检查依赖并创建音量控制器
-        if not VolumeController.check_dependencies():
+        controller = _get_volume_controller()
+        if controller is None:
             logger.warning("[SystemTools] 音量控制依赖不完整，返回默认音量")
             return VolumeController.DEFAULT_VOLUME
 
-        volume_controller = VolumeController()
-        current_volume = await asyncio.to_thread(volume_controller.get_volume)
+        current_volume = await asyncio.to_thread(controller.get_volume)
         logger.info(f"[SystemTools] 当前音量: {current_volume}")
         return current_volume
 
     except Exception as e:
         logger.error(f"[SystemTools] 获取音量失败: {e}", exc_info=True)
-        from src.utils.volume_controller import VolumeController
-
         return VolumeController.DEFAULT_VOLUME
 
 
-async def get_volume_status(args: Dict[str, Any]) -> str:
-    """
-    获取音频状态（音量/静音/可用性）.
-    """
+async def get_volume_status(args: dict[str, Any]) -> str:
+    """获取音频状态（音量/静音/可用性）."""
     try:
-        from src.utils.volume_controller import VolumeController
-
-        if VolumeController.check_dependencies():
-            volume_controller = VolumeController()
-            current_volume = await asyncio.to_thread(volume_controller.get_volume)
+        controller = _get_volume_controller()
+        if controller is not None:
+            current_volume = await asyncio.to_thread(controller.get_volume)
             status = {
                 "volume": current_volume,
                 "muted": current_volume == 0,
@@ -102,7 +103,5 @@ async def get_volume_status(args: Dict[str, Any]) -> str:
             "available": False,
             "error": str(e),
         }
-
-    import json
 
     return json.dumps(status, ensure_ascii=False)

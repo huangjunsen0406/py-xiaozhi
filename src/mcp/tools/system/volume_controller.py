@@ -1,17 +1,21 @@
+"""跨平台音量控制器.
+
+提供 Windows、macOS、Linux 三平台的音量获取与设置能力。
+"""
+
 import platform
 import re
 import shutil
 import subprocess
+from collections.abc import Callable
 from functools import wraps
-from typing import Any, Callable, List, Optional
+from typing import Any
 
 from src.logging import get_logger
 
 
 class VolumeController:
-    """
-    跨平台音量控制器.
-    """
+    """跨平台音量控制器."""
 
     # 默认音量常量
     DEFAULT_VOLUME = 70
@@ -49,9 +53,7 @@ class VolumeController:
     }
 
     def __init__(self):
-        """
-        初始化音量控制器.
-        """
+        """初始化音量控制器."""
         self.logger = get_logger()
         self.system = platform.system()
         self.is_arm = platform.machine().startswith(("arm", "aarch"))
@@ -67,7 +69,7 @@ class VolumeController:
             self.logger.warning(f"不支持的操作系统: {self.system}")
             raise NotImplementedError(f"不支持的操作系统: {self.system}")
 
-    def _lazy_import(self, module_name: str, attr: str = None) -> Any:
+    def _lazy_import(self, module_name: str, attr: str | None = None) -> Any:
         """懒加载模块，支持缓存和属性导入.
 
         Args:
@@ -94,9 +96,7 @@ class VolumeController:
         return module
 
     def _safe_execute(self, func_name: str, default_return: Any = None) -> Callable:
-        """
-        安全执行函数的装饰器.
-        """
+        """安全执行函数的装饰器."""
 
         def decorator(func):
             @wraps(func)
@@ -112,11 +112,9 @@ class VolumeController:
         return decorator
 
     def _run_command(
-        self, cmd: List[str], check: bool = False
-    ) -> Optional[subprocess.CompletedProcess]:
-        """
-        通用命令执行方法.
-        """
+        self, cmd: list[str], *, check: bool = False
+    ) -> subprocess.CompletedProcess | None:
+        """通用命令执行方法."""
         try:
             return subprocess.run(cmd, capture_output=True, text=True, check=check)
         except Exception as e:
@@ -124,9 +122,7 @@ class VolumeController:
             return None
 
     def _init_windows(self) -> None:
-        """
-        初始化Windows音量控制.
-        """
+        """初始化Windows音量控制."""
         try:
             # 使用懒加载导入所需模块
             POINTER = self._lazy_import("ctypes", "POINTER")
@@ -148,9 +144,7 @@ class VolumeController:
             raise
 
     def _init_macos(self) -> None:
-        """
-        初始化macOS音量控制.
-        """
+        """初始化macOS音量控制."""
         try:
             applescript = self._lazy_import("applescript")
 
@@ -164,9 +158,7 @@ class VolumeController:
             raise
 
     def _init_linux(self) -> None:
-        """
-        初始化Linux音量控制.
-        """
+        """初始化Linux音量控制."""
         # 按优先级检查工具
         linux_tools = ["pactl", "wpctl", "amixer"]
         for tool in linux_tools:
@@ -181,9 +173,7 @@ class VolumeController:
         self.logger.debug(f"Linux音量控制初始化成功，使用: {self.linux_tool}")
 
     def get_volume(self) -> int:
-        """
-        获取当前音量 (0-100)
-        """
+        """获取当前音量 (0-100)."""
         get_method_name, _ = self.VOLUME_METHODS.get(self.system, (None, None))
         if not get_method_name:
             return self.DEFAULT_VOLUME
@@ -192,9 +182,7 @@ class VolumeController:
         return get_method()
 
     def set_volume(self, volume: int) -> None:
-        """
-        设置音量 (0-100)
-        """
+        """设置音量 (0-100)."""
         # 确保音量在有效范围内
         volume = max(0, min(100, volume))
 
@@ -242,9 +230,7 @@ class VolumeController:
         return set_volume
 
     def _get_linux_volume(self) -> int:
-        """
-        获取Linux音量.
-        """
+        """获取Linux音量."""
         get_method_name, _ = self.LINUX_VOLUME_METHODS.get(
             self.linux_tool, (None, None)
         )
@@ -255,9 +241,7 @@ class VolumeController:
         return get_method()
 
     def _set_linux_volume(self, volume: int) -> None:
-        """
-        设置Linux音量.
-        """
+        """设置Linux音量."""
         _, set_method_name = self.LINUX_VOLUME_METHODS.get(
             self.linux_tool, (None, None)
         )
@@ -271,13 +255,8 @@ class VolumeController:
         def get_volume():
             result = self._run_command(["pactl", "list", "sinks"])
             if result and result.returncode == 0:
-                # 支持多种格式:
-                # 1. Volume: front-left: 65535 / 65% / -10.77 dB
-                # 2. Volume: 65%
-                # 使用更宽松的匹配规则
                 for line in result.stdout.split("\n"):
                     if "Volume:" in line:
-                        # 提取所有百分比，取第一个
                         match = re.search(r"(\d+)%", line)
                         if match:
                             volume = int(match.group(1))
@@ -314,7 +293,6 @@ class VolumeController:
         def get_volume():
             result = self._run_command(["wpctl", "get-volume", "@DEFAULT_AUDIO_SINK@"])
             if result and result.returncode == 0:
-                # 支持多种输出格式: "Volume: 0.65", "0.65", "Volume: 0.65 [MUTED]"
                 match = re.search(r"(\d+\.?\d*)", result.stdout)
                 if match:
                     volume = int(float(match.group(1)) * 100)
@@ -352,10 +330,6 @@ class VolumeController:
         def get_volume():
             result = self._run_command(["amixer", "get", "Master"])
             if result and result.returncode == 0:
-                # 支持多种格式:
-                # 1. Mono: Playback 65 [65%] [-10.77dB] [on]
-                # 2. Front Left: Playback 65 [65%] [-10.77dB] [on]
-                # 提取第一个百分比数值
                 match = re.search(r"\[(\d+)%\]", result.stdout)
                 if match:
                     volume = int(match.group(1))
@@ -387,11 +361,9 @@ class VolumeController:
 
     @staticmethod
     def check_dependencies() -> bool:
-        """
-        检查并报告缺少的依赖.
-        """
+        """检查并报告缺少的依赖."""
         system = platform.system()
-        missing = []
+        missing: list[str] = []
 
         # 检查Python模块依赖
         VolumeController._check_python_modules(system, missing)
@@ -404,10 +376,8 @@ class VolumeController:
         return VolumeController._report_missing_dependencies(system, missing)
 
     @staticmethod
-    def _check_python_modules(system: str, missing: List[str]) -> None:
-        """
-        检查Python模块依赖.
-        """
+    def _check_python_modules(system: str, missing: list[str]) -> None:
+        """检查Python模块依赖."""
         if system == "Windows":
             for module in ["pycaw", "comtypes"]:
                 try:
@@ -421,26 +391,26 @@ class VolumeController:
                 missing.append("applescript")
 
     @staticmethod
-    def _check_linux_tools(missing: List[str]) -> None:
-        """
-        检查Linux工具依赖.
-        """
+    def _check_linux_tools(missing: list[str]) -> None:
+        """检查Linux工具依赖."""
         tools = ["pactl", "wpctl", "amixer"]
         found = any(shutil.which(tool) for tool in tools)
         if not found:
             missing.append("pulseaudio-utils、wireplumber 或 alsa-utils")
 
     @staticmethod
-    def _report_missing_dependencies(system: str, missing: List[str]) -> bool:
-        """
-        报告缺少的依赖.
-        """
+    def _report_missing_dependencies(system: str, missing: list[str]) -> bool:
+        """报告缺少的依赖."""
         if missing:
-            print(f"警告: 音量控制需要以下依赖，但未找到: {', '.join(missing)}")
-            print("请使用以下命令安装缺少的依赖:")
+            logger = get_logger()
+            logger.warning(
+                f"音量控制需要以下依赖，但未找到: {', '.join(missing)}"
+            )
             if system in ["Windows", "Darwin"]:
-                print("pip install " + " ".join(missing))
+                logger.warning(f"请使用以下命令安装: pip install {' '.join(missing)}")
             elif system == "Linux":
-                print("sudo apt-get install " + " ".join(missing))
+                logger.warning(
+                    f"请使用以下命令安装: sudo apt-get install {' '.join(missing)}"
+                )
             return False
         return True
