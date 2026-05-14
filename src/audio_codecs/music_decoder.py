@@ -98,8 +98,8 @@ class MusicDecoder:
 
             cmd = ["ffmpeg"]
 
-            if start_position > 0:
-                cmd.extend(["-ss", str(start_position)])
+            if start_position > 0.1:
+                cmd.extend(["-ss", f"{start_position:.3f}"])
 
             cmd.extend(
                 [
