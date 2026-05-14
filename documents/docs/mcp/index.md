@@ -1,387 +1,202 @@
-# MCP 开发指南
+# MCP 工具开发指南
 
-MCP (Model Context Protocol) 是一个用于AI工具扩展的开放标准协议。本项目基于 MCP 实现了一个强大的工具系统，支持多种功能模块的无缝集成。
+本文档说明如何为 py-xiaozhi 开发内置 MCP 工具。外部 MCP 服务接入请参考 [外挂 MCP 接入指南](xiaozhi-mcp.md)。
 
-## 📖 文档导航
+## 工作原理
 
-- **[🔧 内置MCP开发指南](#系统架构)** - 本文档：开发和使用内置MCP工具
-- **[🔌 外挂MCP接入指南](xiaozhi-mcp.md)** - 外部MCP服务接入和社区项目集成
+1. 启动时，`McpServer.add_common_tools()` 调用 `discover_tool_modules()` 自动扫描 `src/mcp/tools/` 下的所有子包
+2. 扫描会 import 每个子包的 `__init__.py`，以及子包内的 `_tools.py`（如果存在）
+3. import 过程中，`@mcp_tool` 装饰器将工具函数注册到全局注册表
+4. 注册完成后，工具通过 JSON-RPC 2.0 协议对外暴露
 
-> 💡 **选择指南**: 如果你想开发新的内置工具，请参考本文档；如果你想接入外部MCP服务或了解社区项目，请查看[外挂接入指南](xiaozhi-mcp.md)。
+**你只需要写工具函数并加装饰器，不需要修改 `mcp_server.py`。**
 
-## 系统架构
+## 快速上手：开发一个灯控工具
 
-### 核心组件
+### 第 1 步：创建目录
 
-#### 1. MCP 服务器 (`src/mcp/mcp_server.py`)
-- **基于 JSON-RPC 2.0 协议**: 符合 MCP 标准规范
-- **单例模式**: 全局统一的服务器实例管理
-- **工具注册系统**: 支持动态添加和管理工具
-- **参数验证**: 完整的类型检查和参数验证机制
-- **错误处理**: 标准化的错误响应和异常处理
+```
+src/mcp/tools/light/
+├── __init__.py      # 导入 _tools 触发装饰器注册
+├── _tools.py        # 工具注册（@mcp_tool 装饰器）
+└── light_manager.py # 业务逻辑（可选，简单工具可直接写在 _tools.py）
+```
 
-#### 2. 工具属性系统
+### 第 2 步：编写业务逻辑 (`light_manager.py`)
+
 ```python
-# 属性类型定义
-class PropertyType(Enum):
-    BOOLEAN = "boolean"
-    INTEGER = "integer"
-    STRING = "string"
+"""灯光控制业务逻辑."""
 
-# 属性定义
-@dataclass
-class Property:
-    name: str
-    type: PropertyType
-    default_value: Optional[Any] = None
-    min_value: Optional[int] = None
-    max_value: Optional[int] = None
-```
+from src.logging import get_logger
 
-#### 3. 工具定义结构
-```python
-@dataclass
-class McpTool:
-    name: str                  # 工具名称
-    description: str           # 工具描述
-    properties: PropertyList   # 参数列表
-    callback: Callable         # 回调函数
-```
+logger = get_logger()
 
-### 工具管理器架构
 
-每个功能模块都有对应的管理器类，负责：
-- 工具的初始化和注册
-- 业务逻辑的封装
-- 与底层服务的交互
-
-#### 现有工具模块
-
-1. **系统工具 (`src/mcp/tools/system/`)**
-   - 设备状态监控
-   - 应用程序管理（启动、终止、扫描）
-   - 系统信息查询
-
-2. **日程管理 (`src/mcp/tools/calendar/`)**
-   - 日程的增删改查
-   - 智能时间解析
-   - 冲突检测
-   - 提醒服务
-
-3. **定时器 (`src/mcp/tools/timer/`)**
-   - 倒计时器管理
-   - 任务调度
-   - 时间提醒
-
-4. **音乐播放 (`src/mcp/tools/music/`)**
-   - 音乐播放控制
-   - 播放列表管理
-   - 音量控制
-
-5. **铁路查询 (`src/mcp/tools/railway/`)**
-   - 12306 车次查询
-   - 车站信息查询
-   - 票价查询
-
-6. **搜索工具 (`src/mcp/tools/search/`)**
-   - 网络搜索
-   - 信息检索
-   - 结果过滤
-
-7. **菜谱工具 (`src/mcp/tools/recipe/`)**
-   - 菜谱查询
-   - 食谱推荐
-   - 营养信息
-
-8. **相机工具 (`src/mcp/tools/camera/`)**
-   - 拍照功能
-   - 视觉问答
-   - 图像分析
-
-9. **地图工具 (`src/mcp/tools/amap/`)**
-   - 地理编码/逆地理编码
-   - 路径规划
-   - 天气查询
-   - POI 搜索
-
-10. **八字命理 (`src/mcp/tools/bazi/`)**
-    - 八字计算
-    - 命理分析
-    - 合婚分析
-    - 黄历查询
-
-## 工具开发指南
-
-### 1. 创建新工具模块
-
-创建新的工具模块需要以下步骤：
-
-#### 步骤 1: 创建模块目录
-```bash
-mkdir src/mcp/tools/your_tool_name
-cd src/mcp/tools/your_tool_name
-```
-
-#### 步骤 2: 创建必要文件
-```bash
-touch __init__.py
-touch manager.py      # 管理器类
-touch tools.py        # 工具函数实现
-touch models.py       # 数据模型（可选）
-touch client.py       # 客户端类（可选）
-```
-
-#### 步骤 3: 实现管理器类
-```python
-# manager.py
-class YourToolManager:
+class LightManager:
     def __init__(self):
-        # 初始化代码
-        pass
-    
-    def init_tools(self, add_tool, PropertyList, Property, PropertyType):
-        """
-        初始化并注册工具
-        """
-        # 定义工具属性
-        tool_props = PropertyList([
-            Property("param1", PropertyType.STRING),
-            Property("param2", PropertyType.INTEGER, default_value=0)
-        ])
-        
-        # 注册工具
-        add_tool((
-            "tool_name",
-            "工具描述",
-            tool_props,
-            your_tool_function
-        ))
+        self._on = False
+        self._brightness = 100
 
-# 全局管理器实例
-_manager = None
+    def turn_on(self) -> str:
+        self._on = True
+        logger.info("[Light] 灯已打开")
+        return "灯已打开"
 
-def get_your_tool_manager():
-    global _manager
-    if _manager is None:
-        _manager = YourToolManager()
-    return _manager
+    def turn_off(self) -> str:
+        self._on = False
+        logger.info("[Light] 灯已关闭")
+        return "灯已关闭"
+
+    def set_brightness(self, level: int) -> str:
+        self._brightness = max(0, min(100, level))
+        logger.info(f"[Light] 亮度设为 {self._brightness}%")
+        return f"亮度已设为 {self._brightness}%"
+
+    def get_status(self) -> str:
+        state = "开" if self._on else "关"
+        return f"灯状态: {state}, 亮度: {self._brightness}%"
+
+
+_light = LightManager()
+
+
+def get_light_manager() -> LightManager:
+    return _light
 ```
 
-#### 步骤 4: 实现工具函数
+### 第 3 步：注册 MCP 工具 (`_tools.py`)
+
 ```python
-# tools.py
-async def your_tool_function(args: dict) -> str:
-    """
-    工具函数实现
-    """
-    param1 = args.get("param1")
-    param2 = args.get("param2", 0)
-    
-    # 业务逻辑
-    result = perform_operation(param1, param2)
-    
-    return f"操作结果: {result}"
+"""灯光 MCP 工具注册."""
+
+from src.mcp.decorators import Prop, PropType, mcp_tool
+
+from .light_manager import get_light_manager
+
+
+@mcp_tool(
+    name="self.light.turn_on",
+    description="打开灯。当用户说'开灯'、'打开灯'时调用。",
+)
+async def tool_light_on(args):
+    return get_light_manager().turn_on()
+
+
+@mcp_tool(
+    name="self.light.turn_off",
+    description="关闭灯。当用户说'关灯'、'把灯关了'时调用。",
+)
+async def tool_light_off(args):
+    return get_light_manager().turn_off()
+
+
+@mcp_tool(
+    name="self.light.set_brightness",
+    description="设置灯的亮度。参数: brightness (0-100)。",
+    props=[Prop("brightness", PropType.INT, min_val=0, max_val=100)],
+)
+async def tool_set_brightness(args):
+    brightness = args.get("brightness", 100)
+    return get_light_manager().set_brightness(brightness)
+
+
+@mcp_tool(
+    name="self.light.get_status",
+    description="查看灯的当前状态（开/关、亮度）。",
+)
+async def tool_light_status(args):
+    return get_light_manager().get_status()
 ```
 
-#### 步骤 5: 注册到主服务器
-在 `src/mcp/mcp_server.py` 的 `add_common_tools` 方法中添加：
+### 第 4 步：编写 `__init__.py`
+
 ```python
-# 添加你的工具
-from src.mcp.tools.your_tool_name import get_your_tool_manager
+"""灯光控制工具."""
 
-your_tool_manager = get_your_tool_manager()
-your_tool_manager.init_tools(self.add_tool, PropertyList, Property, PropertyType)
+# 导入 _tools 触发 @mcp_tool 装饰器注册
+from . import _tools  # noqa: F401
 ```
 
-### 2. 最佳实践
+**完成。** 重启应用后，4 个灯控工具自动可用。
 
-#### 工具命名规范
-- 使用 `self.module.action` 格式
-- 例如：`self.calendar.create_event`、`self.music.play`
+## API 参考
 
-#### 参数设计
-- 必需参数不设默认值
-- 可选参数设置合理的默认值
-- 使用合适的参数类型（STRING、INTEGER、BOOLEAN）
+### `@mcp_tool` 装饰器
 
-#### 错误处理
 ```python
-async def your_tool_function(args: dict) -> str:
-    try:
-        # 业务逻辑
-        result = await perform_operation(args)
-        return f"成功: {result}"
-    except Exception as e:
-        logger.error(f"工具执行失败: {e}")
-        return f"错误: {str(e)}"
+from src.mcp.decorators import Prop, PropType, mcp_tool
+
+@mcp_tool(
+    name="self.module.action",   # 工具名称（全局唯一）
+    description="工具描述，AI 根据此判断何时调用",
+    props=[                      # 参数列表（可选，无参数时省略）
+        Prop("city", PropType.STR),                              # 必填字符串
+        Prop("days", PropType.INT, default=3, min_val=1, max_val=7),  # 可选整数，带范围
+        Prop("verbose", PropType.BOOL, default=False),           # 可选布尔值
+    ],
+)
+async def tool_function(args: dict) -> str:
+    city = args.get("city", "")
+    days = args.get("days", 3)
+    return json.dumps({"city": city, "days": days}, ensure_ascii=False)
 ```
 
-#### 异步支持
-- 优先使用 async/await
-- 支持同步函数的自动包装
-- 合理使用 asyncio 工具
+### 参数类型
 
-### 3. 工具描述编写
+| 类型 | 用法 | 说明 |
+|------|------|------|
+| `PropType.STR` | `Prop("name", PropType.STR)` | 字符串 |
+| `PropType.INT` | `Prop("count", PropType.INT, min_val=0, max_val=100)` | 整数，可选范围限制 |
+| `PropType.BOOL` | `Prop("flag", PropType.BOOL, default=False)` | 布尔值 |
 
-工具描述应包含：
-- 功能简介
-- 使用场景
-- 参数说明
-- 返回格式
-- 注意事项
+- 不带 `default` 的参数为**必填**
+- 带 `default` 的参数为**可选**
+- `min_val` / `max_val` 仅对 `INT` 有效
 
-示例：
+### 返回值
+
+工具函数必须返回 **`str`** 类型。返回结构化数据时使用 `json.dumps()`：
+
 ```python
-description = """
-创建新的日程事件，支持智能时间设置和冲突检测。
-使用场景：
-1. 安排会议或约会
-2. 设置提醒事项
-3. 时间管理规划
+# 简单文本
+return "操作成功"
 
-参数：
-  title: 事件标题（必需）
-  start_time: 开始时间，ISO格式（必需）
-  end_time: 结束时间，可自动计算
-  description: 事件描述
-  category: 事件分类
-  reminder_minutes: 提醒时间（分钟）
-
-返回：创建成功或失败的消息
-"""
+# 结构化 JSON
+return json.dumps({"status": "success", "data": result}, ensure_ascii=False)
 ```
 
-## 使用示例
+**不要返回 `dict`**，MCP 协议要求文本内容。
 
-### 日程管理
-```python
-# 创建日程
-await mcp_server.call_tool("self.calendar.create_event", {
-    "title": "团队会议",
-    "start_time": "2024-01-01T10:00:00",
-    "category": "会议",
-    "reminder_minutes": 15
-})
+## 自动发现规则
 
-# 查询今日日程
-await mcp_server.call_tool("self.calendar.get_events", {
-    "date_type": "today"
-})
-```
+`discover_tool_modules()` 的扫描顺序：
 
-### 地图功能
-```python
-# 地址转经纬度
-await mcp_server.call_tool("self.amap.geocode", {
-    "address": "北京市天安门广场"
-})
+1. `src/mcp/tools/*.py` — 根目录下的独立文件（跳过 `_` 开头的）
+2. `src/mcp/tools/<name>/` — 每个子包的 `__init__.py`
+3. `src/mcp/tools/<name>/_tools.py` — 子包内的 `_tools.py`（如果存在）
 
-# 路径规划
-await mcp_server.call_tool("self.amap.direction_walking", {
-    "origin": "116.397428,39.90923",
-    "destination": "116.390813,39.904368"
-})
-```
+**关键点**：
+- `__init__.py` 必须 import `_tools` 或工具模块，否则装饰器不会触发
+- `_` 开头的文件名会被跳过（`_tools.py` 是唯一例外，会被显式拉取）
+- 单个模块 import 失败只会 warning，不影响其他工具加载
 
-### 八字命理
-```python
-# 获取八字分析
-await mcp_server.call_tool("self.bazi.get_bazi_detail", {
-    "solar_datetime": "2008-03-01T13:00:00+08:00",
-    "gender": 1
-})
+## 开发规范
 
-# 合婚分析
-await mcp_server.call_tool("self.bazi.analyze_marriage_compatibility", {
-    "male_solar_datetime": "1990-01-01T10:00:00+08:00",
-    "female_solar_datetime": "1992-05-15T14:30:00+08:00"
-})
-```
+| 规则 | 说明 |
+|------|------|
+| 命名 | 工具名格式 `self.module.action`，全局唯一 |
+| 异步 | 工具函数用 `async def`；阻塞操作用 `asyncio.to_thread()` 包裹 |
+| 超时 | 外部 API 调用必须设 `timeout` |
+| 日志 | 用 `from src.logging import get_logger`，加 `[ToolName]` 前缀 |
+| 错误处理 | try/except 捕获异常，返回用户可读的错误信息，`logger.error(..., exc_info=True)` 记录堆栈 |
 
-## 高级特性
+## 现有工具模块
 
-### 1. 参数验证
-系统提供完整的参数验证机制：
-- 类型检查
-- 范围验证
-- 必需参数检查
-- 默认值处理
-
-### 2. 工具发现
-支持动态工具发现和列表获取：
-- 分页支持
-- 大小限制
-- 游标遍历
-
-### 3. 视觉能力
-支持视觉相关功能：
-- 图像分析
-- 视觉问答
-- 配置外部视觉服务
-
-### 4. 并发处理
-- 异步工具执行
-- 任务调度
-- 资源管理
-
-## 调试和测试
-
-### 日志系统
-```python
-from src.utils.logging_config import get_logger
-logger = get_logger(__name__)
-
-logger.info("工具执行开始")
-logger.error("执行失败", exc_info=True)
-```
-
-### 测试工具
-```python
-# 测试工具注册
-server = McpServer.get_instance()
-server.add_common_tools()
-
-# 测试工具调用
-result = await server.parse_message({
-    "jsonrpc": "2.0",
-    "method": "tools/call",
-    "params": {
-        "name": "your_tool_name",
-        "arguments": {"param1": "value1"}
-    },
-    "id": 1
-})
-```
-
-## 部署和配置
-
-### 环境要求
-- Python 3.8+
-- 异步支持
-- 相关依赖库
-
-### 配置文件
-工具配置通过 `config/config.json` 进行管理，支持：
-- API 密钥配置
-- 服务端点设置
-- 功能开关控制
-
-### 性能优化
-- 连接池管理
-- 缓存策略
-- 并发控制
-- 资源回收
-
-## 故障排除
-
-### 常见问题
-1. **工具注册失败**: 检查管理器单例和导入路径
-2. **参数验证错误**: 确认参数类型和必需性
-3. **异步调用问题**: 确保正确使用 async/await
-4. **依赖缺失**: 检查模块导入和依赖安装
-
-### 调试技巧
-- 启用详细日志
-- 使用调试工具
-- 单元测试验证
-- 性能分析工具
+| 模块 | 路径 | 功能 | 详细文档 |
+|------|------|------|----------|
+| 音量控制 | `src/mcp/tools/volume/` | 音量设置/查询/状态诊断 | [system.md](system.md) |
+| 应用管理 | `src/mcp/tools/app/` | 应用启动/终止/扫描、运行进程查询 | [system.md](system.md) |
+| 相机 | `src/mcp/tools/camera/` | 拍照、视觉问答 | [camera.md](camera.md) |
+| 截图 | `src/mcp/tools/screenshot/` | 桌面截图、屏幕 OCR、多屏支持 | — |
+| 音乐 | `src/mcp/tools/music/` | 搜索播放、暂停/恢复/停止、歌词、本地歌单 | [music.md](music.md) |
+| 天气 | `src/mcp/tools/weather/` | 天气查询、天气预报（示例工具） | — |

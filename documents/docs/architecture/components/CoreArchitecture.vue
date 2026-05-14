@@ -1,7 +1,7 @@
 <template>
   <div class="chart-container">
     <div ref="architectureChart" class="w-full h-[500px]"></div>
-    <p class="chart-description">核心架构图：展示了应用核心、插件管理器、MCP服务器、通信协议层、音频编解码、音频处理、IoT设备管理等模块的关系及数据流向</p>
+    <p class="chart-description">核心架构图：展示了 ServiceContainer、EventBus、插件管理器、通信协议层、音频编解码、视图层等模块的关系及数据流向</p>
   </div>
 </template>
 
@@ -18,9 +18,7 @@ const createChartOption = (darkMode) => ({
   animation: false,
   backgroundColor: 'transparent',
   color: darkMode ?
-    // 暗色模式：现代科技感配色 - 蓝紫系为主，辅以自然色彩
     ['#818cf8', '#34d399', '#fbbf24', '#fb7185', '#a78bfa', '#60a5fa', '#4ade80', '#fcd34d'] :
-    // 亮色模式：商务专业配色 - 深沉稳重，层次分明
     ['#4338ca', '#059669', '#d97706', '#e11d48', '#7c3aed', '#0369a1', '#16a34a', '#ca8a04'],
   tooltip: {
     trigger: 'item',
@@ -36,7 +34,7 @@ const createChartOption = (darkMode) => ({
     orient: 'vertical',
     right: 10,
     top: 'center',
-    data: ['核心', '主要模块', '子模块'],
+    data: ['核心基础设施', '主要模块', '子模块'],
     textStyle: {
       color: darkMode ? '#f3f4f6' : '#374151'
     },
@@ -50,56 +48,62 @@ const createChartOption = (darkMode) => ({
       type: 'graph',
       layout: 'force',
       data: [
-        { name: '应用核心', value: 'Application', category: 0, symbolSize: 70 },
-        { name: '插件管理器', value: 'Plugin Manager', category: 1, symbolSize: 50 },
-        { name: 'MCP服务器', value: 'MCP Server', category: 1, symbolSize: 50 },
-        { name: '通信协议层', value: 'Protocols', category: 1, symbolSize: 50 },
-        { name: '音频编解码', value: 'Audio Codec', category: 1, symbolSize: 50 },
-        { name: '音频处理', value: 'Audio Processing', category: 1, symbolSize: 50 },
-        { name: 'IoT设备管理', value: 'IoT Management', category: 1, symbolSize: 50 },
-        { name: 'WebSocket', value: 'WebSocket', category: 2, symbolSize: 30 },
-        { name: 'MQTT', value: 'MQTT', category: 2, symbolSize: 30 },
-        { name: 'MCP工具生态', value: 'MCP Tools Ecosystem', category: 2, symbolSize: 30 },
-        { name: 'Opus编解码', value: 'Opus Codec', category: 2, symbolSize: 30 },
-        { name: 'AEC处理器', value: 'AEC Processor', category: 2, symbolSize: 30 },
-        { name: '音频重采样', value: 'Resampling', category: 2, symbolSize: 30 },
-        { name: 'VAD检测', value: 'VAD Detection', category: 2, symbolSize: 30 },
-        { name: '唤醒词检测', value: 'Wakeword Detection', category: 2, symbolSize: 30 },
-        { name: 'UI插件', value: 'UI Plugin', category: 2, symbolSize: 30 },
-        { name: '音频插件', value: 'Audio Plugin', category: 2, symbolSize: 30 },
-        { name: 'Thing抽象', value: 'Thing Abstract', category: 2, symbolSize: 30 },
-        { name: '设备管理器', value: 'Thing Manager', category: 2, symbolSize: 30 }
+        { name: 'ServiceContainer', value: '服务容器', category: 0, symbolSize: 70 },
+        { name: 'EventBus', value: '事件总线', category: 0, symbolSize: 60 },
+        { name: 'ResourcePool', value: '资源池', category: 0, symbolSize: 50 },
+        { name: 'PluginManager', value: '插件管理器', category: 1, symbolSize: 50 },
+        { name: 'ProtocolManager', value: '协议管理器', category: 1, symbolSize: 50 },
+        { name: 'TaskManager', value: '任务管理器', category: 1, symbolSize: 45 },
+        { name: 'StateManager', value: '状态管理器', category: 1, symbolSize: 45 },
+        { name: 'AudioCodec', value: '音频编解码', category: 1, symbolSize: 50 },
+        { name: 'MCP Server', value: 'MCP服务器', category: 1, symbolSize: 50 },
+        { name: 'WebSocket', value: 'WebSocket', category: 2, symbolSize: 35 },
+        { name: 'MQTT', value: 'MQTT', category: 2, symbolSize: 35 },
+        { name: 'AudioPlugin', value: '音频插件', category: 2, symbolSize: 35 },
+        { name: 'UIPlugin', value: 'UI插件', category: 2, symbolSize: 35 },
+        { name: 'ShortcutsPlugin', value: '快捷键插件', category: 2, symbolSize: 35 },
+        { name: 'WakeWordPlugin', value: '唤醒词插件', category: 2, symbolSize: 35 },
+        { name: 'Opus编解码', value: 'Opus', category: 2, symbolSize: 30 },
+        { name: '音频重采样', value: 'SoXR', category: 2, symbolSize: 30 },
+        { name: 'PySide6/QML', value: 'Qt GUI', category: 2, symbolSize: 35 },
+        { name: 'MCP工具', value: 'Tools', category: 2, symbolSize: 35 },
+        { name: 'Quartz/pynput', value: '热键后端', category: 2, symbolSize: 30 }
       ],
       links: [
-        { source: '应用核心', target: '插件管理器' },
-        { source: '应用核心', target: '通信协议层' },
-        { source: '插件管理器', target: 'MCP服务器' },
-        { source: '插件管理器', target: 'UI插件' },
-        { source: '插件管理器', target: '音频插件' },
-        { source: '插件管理器', target: 'IoT设备管理' },
-        { source: '音频插件', target: '音频编解码' },
-        { source: '音频插件', target: '音频处理' },
-        { source: '通信协议层', target: 'WebSocket' },
-        { source: '通信协议层', target: 'MQTT' },
-        { source: 'MCP服务器', target: 'MCP工具生态' },
-        { source: '音频编解码', target: 'Opus编解码' },
-        { source: '音频编解码', target: 'AEC处理器' },
-        { source: '音频编解码', target: '音频重采样' },
-        { source: '音频处理', target: 'VAD检测' },
-        { source: '音频处理', target: '唤醒词检测' },
-        { source: 'IoT设备管理', target: 'Thing抽象' },
-        { source: 'IoT设备管理', target: '设备管理器' }
+        { source: 'ServiceContainer', target: 'EventBus' },
+        { source: 'ServiceContainer', target: 'ResourcePool' },
+        { source: 'ServiceContainer', target: 'PluginManager' },
+        { source: 'ServiceContainer', target: 'ProtocolManager' },
+        { source: 'ServiceContainer', target: 'TaskManager' },
+        { source: 'ServiceContainer', target: 'StateManager' },
+        { source: 'ServiceContainer', target: 'AudioCodec' },
+        { source: 'EventBus', target: 'PluginManager' },
+        { source: 'EventBus', target: 'StateManager' },
+        { source: 'PluginManager', target: 'AudioPlugin' },
+        { source: 'PluginManager', target: 'UIPlugin' },
+        { source: 'PluginManager', target: 'ShortcutsPlugin' },
+        { source: 'PluginManager', target: 'WakeWordPlugin' },
+        { source: 'PluginManager', target: 'MCP Server' },
+        { source: 'ProtocolManager', target: 'WebSocket' },
+        { source: 'ProtocolManager', target: 'MQTT' },
+        { source: 'AudioPlugin', target: 'AudioCodec' },
+        { source: 'AudioCodec', target: 'Opus编解码' },
+        { source: 'AudioCodec', target: '音频重采样' },
+        { source: 'UIPlugin', target: 'PySide6/QML' },
+        { source: 'MCP Server', target: 'MCP工具' },
+        { source: 'ShortcutsPlugin', target: 'Quartz/pynput' },
+        { source: 'ResourcePool', target: 'PluginManager' }
       ],
       categories: [
-        { 
-          name: '核心',
+        {
+          name: '核心基础设施',
           itemStyle: {
             color: '#5470c6',
             borderColor: '#5470c6',
             borderWidth: 2
           }
         },
-        { 
+        {
           name: '主要模块',
           itemStyle: {
             color: '#93cc76',
@@ -107,7 +111,7 @@ const createChartOption = (darkMode) => ({
             borderWidth: 2
           }
         },
-        { 
+        {
           name: '子模块',
           itemStyle: {
             color: '#fac858',
@@ -168,7 +172,6 @@ onMounted(() => {
   initChart();
 });
 
-// 监听主题切换
 watch(isDark, (newValue) => {
   if (chart) {
     chart.setOption(createChartOption(newValue));
@@ -190,4 +193,4 @@ watch(isDark, (newValue) => {
   margin-top: 16px;
   font-size: 14px;
 }
-</style> 
+</style>

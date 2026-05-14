@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "评审清单的 git/commit 段是否成功添加 + 与 git-workflow.md 引用是否双向闭环"}
+{"file": ".trellis/spec/backend/index.md", "reason": "索引是否正确指向新文件"}

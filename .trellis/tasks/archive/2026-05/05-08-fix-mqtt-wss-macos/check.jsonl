@@ -1,0 +1,2 @@
+{"file": ".trellis/tasks/05-08-fix-mqtt-wss-macos/prd.md", "reason": "对比 PRD AC 逐项验证修复"}
+{"file": ".trellis/spec/backend/asyncio-guidelines.md", "reason": "验证无新增 asyncio 反模式"}

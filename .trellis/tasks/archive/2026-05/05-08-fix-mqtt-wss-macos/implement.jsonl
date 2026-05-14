@@ -1,0 +1,2 @@
+{"file": ".trellis/tasks/05-08-fix-mqtt-wss-macos/prd.md", "reason": "任务需求：6 项修复的具体内容"}
+{"file": ".trellis/spec/backend/asyncio-guidelines.md", "reason": "asyncio 规范：避免阻塞调用、TaskManager.spawn"}

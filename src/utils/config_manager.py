@@ -1,15 +1,23 @@
 import json
+import os
+import shutil
 import uuid
 from typing import Any, Dict
 
-from src.utils.logging_config import get_logger
-from src.utils.resource_finder import resource_finder
+from src.logging import get_logger
+from src.utils.resource_finder import (
+    get_config_dir,
+    get_user_cache_dir,
+    get_user_data_dir,
+)
 
-logger = get_logger(__name__)
+logger = get_logger()
 
 
 class ConfigManager:
-    """配置管理器 - 单例模式"""
+    """
+    配置管理器.
+    """
 
     _instance = None
 
@@ -29,13 +37,15 @@ class ConfigManager:
         },
         "WAKE_WORD_OPTIONS": {
             "USE_WAKE_WORD": True,
-            "MODEL_PATH": "models",
-            "NUM_THREADS": 4,
+            "MODEL_PATH": "models/zh",
+            "NUM_THREADS": 5,
             "PROVIDER": "cpu",
             "MAX_ACTIVE_PATHS": 2,
             "KEYWORDS_SCORE": 1.8,
             "KEYWORDS_THRESHOLD": 0.2,
             "NUM_TRAILING_BLANKS": 1,
+            "WAKE_WORD": "你好小智",
+            "WAKE_WORD_LANG": "zh"
         },
         "CAMERA": {
             "camera_index": 0,
@@ -74,6 +84,28 @@ class ConfigManager:
             "output_sample_rate": None,
             "input_channels": None,
             "output_channels": None,
+            "opus_output_sample_rate": 24000,  # Opus 解码采样率：24000(官方) 或 16000(第三方)
+            "frame_duration": 20,  # 音频帧长度(ms)：20(低延迟) / 40(平衡) / 60(低CPU)
+        },
+        "LOGGING": {
+            "LEVEL": "INFO",  # DEBUG, INFO, WARNING, ERROR, CRITICAL
+            "FORMAT_TYPE": "colored",  # colored, json, simple
+            "ENABLE_CONSOLE": True,
+            "ENABLE_FILE": True,
+            "ENABLE_ERROR_FILE": True,
+            "ENABLE_JSON_FILE": False,
+            "ENABLE_ASYNC": False,
+            "ENABLE_SENSITIVE_FILTER": True,
+            "MAX_BYTES": 10485760,  # 10MB
+            "BACKUP_COUNT": 30,
+            "ROTATION_WHEN": "midnight",  # midnight, H, D
+            "THIRD_PARTY_LEVELS": {
+                "urllib3": "WARNING",
+                "websockets": "WARNING",
+                "asyncio": "WARNING",
+                "paho": "WARNING",
+                "PIL": "WARNING",
+            },
         },
     }
 
@@ -106,17 +138,25 @@ class ConfigManager:
     def _init_config_paths(self):
         """
         初始化配置文件路径.
+
+        配置文件存储到用户数据目录，打包后可写。
+        首次运行时从安装目录迁移默认配置。
         """
-        # 使用resource_finder查找或创建配置目录
-        self.config_dir = resource_finder.find_config_dir()
-        if not self.config_dir:
-            # 如果找不到配置目录，在项目根目录下创建
-            project_root = resource_finder.get_project_root()
-            self.config_dir = project_root / "config"
-            self.config_dir.mkdir(parents=True, exist_ok=True)
-            logger.info(f"创建配置目录: {self.config_dir.absolute()}")
+        # 用户数据目录下的 config 子目录
+        self.config_dir = get_user_data_dir() / "config"
+        self.config_dir.mkdir(parents=True, exist_ok=True)
 
         self.config_file = self.config_dir / "config.json"
+
+        # 如果用户目录没有配置文件，尝试从安装目录迁移
+        if not self.config_file.exists():
+            install_config = get_config_dir() / "config.json"
+            if install_config.exists():
+                try:
+                    shutil.copy2(install_config, self.config_file)
+                    logger.info(f"已从安装目录迁移配置: {install_config} -> {self.config_file}")
+                except Exception as e:
+                    logger.warning(f"迁移配置文件失败: {e}，将使用默认配置")
 
         # 记录配置文件路径
         logger.info(f"配置目录: {self.config_dir.absolute()}")
@@ -126,36 +166,18 @@ class ConfigManager:
         """
         确保必要的目录存在.
         """
-        project_root = resource_finder.get_project_root()
-
-        # 创建 models 目录
-        models_dir = project_root / "models"
-        if not models_dir.exists():
-            models_dir.mkdir(parents=True, exist_ok=True)
-            logger.info(f"创建模型目录: {models_dir.absolute()}")
-
-        # 创建 cache 目录
-        cache_dir = project_root / "cache"
-        if not cache_dir.exists():
-            cache_dir.mkdir(parents=True, exist_ok=True)
-            logger.info(f"创建缓存目录: {cache_dir.absolute()}")
+        # models 目录保留在安装目录（只读）
+        # cache 目录使用用户缓存目录（可写）
+        cache_dir = get_user_cache_dir()
+        logger.debug(f"缓存目录: {cache_dir.absolute()}")
 
     def _load_config(self) -> Dict[str, Any]:
         """
         加载配置文件，如果不存在则创建.
         """
         try:
-            # 首先尝试使用resource_finder查找配置文件
-            config_file_path = resource_finder.find_file("config/config.json")
-
-            if config_file_path:
-                logger.debug(f"使用resource_finder找到配置文件: {config_file_path}")
-                config = json.loads(config_file_path.read_text(encoding="utf-8"))
-                return self._merge_configs(self.DEFAULT_CONFIG, config)
-
-            # 如果resource_finder没找到，尝试使用实例变量中的路径
             if self.config_file.exists():
-                logger.debug(f"使用实例路径找到配置文件: {self.config_file}")
+                logger.debug(f"找到配置文件: {self.config_file}")
                 config = json.loads(self.config_file.read_text(encoding="utf-8"))
                 return self._merge_configs(self.DEFAULT_CONFIG, config)
             else:
@@ -169,17 +191,15 @@ class ConfigManager:
             return self.DEFAULT_CONFIG.copy()
 
     def _save_config(self, config: dict) -> bool:
-        """
-        保存配置到文件.
-        """
+        """原子写入配置文件（临时文件 + rename 防写入中断损坏）."""
         try:
-            # 确保配置目录存在
             self.config_dir.mkdir(parents=True, exist_ok=True)
 
-            # 保存配置文件
-            self.config_file.write_text(
+            tmp_file = self.config_file.with_suffix(".tmp")
+            tmp_file.write_text(
                 json.dumps(config, indent=2, ensure_ascii=False), encoding="utf-8"
             )
+            os.replace(tmp_file, self.config_file)
             logger.debug(f"配置已保存到: {self.config_file}")
             return True
 
@@ -262,41 +282,6 @@ class ConfigManager:
                 logger.info(f"已生成新的客户端ID: {client_id}")
             else:
                 logger.error("保存新的客户端ID失败")
-
-    def initialize_device_id_from_fingerprint(self, device_fingerprint):
-        """
-        从设备指纹初始化设备ID.
-        """
-        if not self.get_config("SYSTEM_OPTIONS.DEVICE_ID"):
-            try:
-                # 从efuse.json获取MAC地址作为DEVICE_ID
-                mac_address = device_fingerprint.get_mac_address_from_efuse()
-                if mac_address:
-                    success = self.update_config(
-                        "SYSTEM_OPTIONS.DEVICE_ID", mac_address
-                    )
-                    if success:
-                        logger.info(f"从efuse.json获取DEVICE_ID: {mac_address}")
-                    else:
-                        logger.error("保存DEVICE_ID失败")
-                else:
-                    logger.error("无法从efuse.json获取MAC地址")
-                    # 备用方案：从设备指纹直接获取
-                    fingerprint = device_fingerprint.generate_fingerprint()
-                    mac_from_fingerprint = fingerprint.get("mac_address")
-                    if mac_from_fingerprint:
-                        success = self.update_config(
-                            "SYSTEM_OPTIONS.DEVICE_ID", mac_from_fingerprint
-                        )
-                        if success:
-                            logger.info(
-                                f"使用指纹中的MAC地址作为DEVICE_ID: "
-                                f"{mac_from_fingerprint}"
-                            )
-                        else:
-                            logger.error("保存备用DEVICE_ID失败")
-            except Exception as e:
-                logger.error(f"初始化DEVICE_ID时出错: {e}")
 
     @classmethod
     def get_instance(cls):

@@ -3,33 +3,19 @@ Screenshot camera implementation for capturing desktop screens.
 """
 
 import io
+import json
 import sys
-import threading
 
+from src.logging import get_logger
 from src.mcp.tools.camera.base_camera import BaseCamera
-from src.utils.logging_config import get_logger
 
-logger = get_logger(__name__)
+logger = get_logger()
 
 
 class ScreenshotCamera(BaseCamera):
     """
     桌面截图摄像头实现.
     """
-
-    _instance = None
-    _lock = threading.Lock()
-
-    @classmethod
-    def get_instance(cls):
-        """
-        获取单例实例.
-        """
-        if cls._instance is None:
-            with cls._lock:
-                if cls._instance is None:
-                    cls._instance = cls()
-        return cls._instance
 
     def __init__(self):
         """
@@ -431,44 +417,21 @@ class ScreenshotCamera(BaseCamera):
             logger.error(f"Linux screenshot capture failed: {e}")
             return None
 
-    def analyze(self, question: str) -> str:
-        """分析截图内容.
-
-        Args:
-            question: 用户的问题或分析要求
-
-        Returns:
-            分析结果的JSON字符串
-        """
+    def analyze(self, question: str, image_data: bytes | None = None) -> str:
         try:
             logger.info(f"Analyzing screenshot with question: {question}")
 
-            # 获取现有的摄像头实例来复用分析能力
             from src.mcp.tools.camera import get_camera_instance
 
             camera_instance = get_camera_instance()
-
-            # 将我们的截图数据传递给分析器
-            original_jpeg_data = camera_instance.get_jpeg_data()
-            camera_instance.set_jpeg_data(self.jpeg_data["buf"])
-
-            try:
-                # 使用现有的分析能力
-                result = camera_instance.analyze(question)
-
-                # 恢复原始数据
-                camera_instance.set_jpeg_data(original_jpeg_data["buf"])
-
-                return result
-
-            except Exception as e:
-                # 恢复原始数据
-                camera_instance.set_jpeg_data(original_jpeg_data["buf"])
-                raise e
+            buf = image_data if image_data is not None else self.jpeg_data["buf"]
+            return camera_instance.analyze(question, image_data=buf)
 
         except Exception as e:
             logger.error(f"Error analyzing screenshot: {e}", exc_info=True)
-            return f'{{"success": false, "message": "Failed to analyze screenshot: {str(e)}"}}'
+            return json.dumps(
+                {"success": False, "message": f"Failed to analyze screenshot: {e}"}
+            )
 
     def _capture_single_display_macos(self, display_num):
         """截取macOS单个显示器.
@@ -582,8 +545,8 @@ class ScreenshotCamera(BaseCamera):
             for display in displays:
                 try:
                     os.unlink(display["path"])
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"清理截图临时文件失败: {e}")
 
             if len(displays) == 1:
                 # 单显示器，直接返回

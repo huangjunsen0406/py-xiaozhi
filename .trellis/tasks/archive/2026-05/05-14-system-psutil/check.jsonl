@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/mcp-tool-pattern.md", "reason": "验证工具返回值格式、注册方式是否符合规范"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "验证异常处理是否符合三种模式"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "ruff/black/isort 检查规则"}
+{"file": ".trellis/tasks/05-14-system-psutil/prd.md", "reason": "验证 MCP 接口契约和 Acceptance Criteria"}

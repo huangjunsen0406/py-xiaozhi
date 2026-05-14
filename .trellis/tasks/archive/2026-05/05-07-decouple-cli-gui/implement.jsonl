@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/architecture-principles.md", "reason": "本任务要在末尾加入'前端依赖隔离'段(防回归条目),需要先看现有结构与体例。同时本任务的核心动机就是修复'依赖分层'与'依赖方向'相关的违规"}
+{"file": ".trellis/spec/backend/git-workflow.md", "reason": "本任务的 commit message 必须严格按新规范(chore(deps): + 中文 subject ≤ 25 字 + body 解释 why),作为 git-workflow spec 落地后第一个验证案例"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "评审清单中跨规范禁止项与 architecture / git 段要在改动 pyproject 时对照核查"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "确认 src/ui/gui /cli/gpio 三种模式的边界,避免 main.py 错误提示中给出错误的 mode 名"}

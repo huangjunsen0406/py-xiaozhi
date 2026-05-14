@@ -9,12 +9,12 @@ from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
 from src.constants.constants import AudioConfig
+from src.logging import get_logger
 from src.protocols.protocol import Protocol
 from src.utils.config_manager import ConfigManager
-from src.utils.logging_config import get_logger
 
 # 配置日志
-logger = get_logger(__name__)
+logger = get_logger()
 
 
 class MqttProtocol(Protocol):
@@ -28,12 +28,7 @@ class MqttProtocol(Protocol):
         self.udp_running = False
         self.connected = False
 
-        # 连接状态监控
-        self._is_closing = False
-        self._reconnect_attempts = 0
-        self._max_reconnect_attempts = 0  # 默认不重连
-        self._auto_reconnect_enabled = False  # 默认关闭自动重连
-        self._connection_monitor_task = None
+        # MQTT 连接活动监控（MQTT特有）
         self._last_activity_time = None
         self._keep_alive_interval = 60  # MQTT保活间隔（秒）
         self._connection_timeout = 120  # 连接超时检测（秒）
@@ -103,7 +98,7 @@ class MqttProtocol(Protocol):
             # 尝试从OTA服务器获取MQTT配置
             mqtt_config = self.config.get_config("SYSTEM_OPTIONS.NETWORK.MQTT_INFO")
 
-            print(mqtt_config)
+            logger.debug(f"MQTT配置: {mqtt_config}")
 
             # 更新MQTT配置
             self.endpoint = mqtt_config.get("endpoint")
@@ -163,6 +158,7 @@ class MqttProtocol(Protocol):
         # 根据端口决定是否配置TLS加密连接
         if use_tls:
             try:
+                # ca_certs=None 表示使用系统默认CA证书进行验证
                 self.mqtt_client.tls_set(
                     ca_certs=None,
                     certfile=None,
@@ -313,7 +309,7 @@ class MqttProtocol(Protocol):
                 "transport": "udp",
                 "audio_params": {
                     "format": "opus",
-                    "sample_rate": AudioConfig.OUTPUT_SAMPLE_RATE,
+                    "sample_rate": AudioConfig.INPUT_SAMPLE_RATE,
                     "channels": AudioConfig.CHANNELS,
                     "frame_duration": AudioConfig.FRAME_DURATION,
                 },
@@ -338,6 +334,7 @@ class MqttProtocol(Protocol):
                     self.udp_socket.close()
 
                 self.udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                self.udp_socket.bind(('0.0.0.0', 0))  # 显式绑定端口，确保macOS网络栈正确路由UDP数据包
                 self.udp_socket.settimeout(0.5)
 
                 # 启动UDP接收线程
@@ -387,7 +384,7 @@ class MqttProtocol(Protocol):
                 return
 
             elif msg_type == "hello":
-                print("服务链接返回初始化配置", data)
+                logger.debug(f"服务链接返回初始化配置: {data}")
                 # 处理服务器hello响应
                 transport = data.get("transport")
                 if transport != "udp":
@@ -433,7 +430,7 @@ class MqttProtocol(Protocol):
                         if asyncio.iscoroutinefunction(self._on_incoming_json):
                             coro = self._on_incoming_json(json_data)
                             if coro is not None:
-                                asyncio.create_task(coro)
+                                asyncio.run_coroutine_threadsafe(coro, self.loop)
                         else:
                             self._on_incoming_json(json_data)
 
@@ -488,7 +485,8 @@ class MqttProtocol(Protocol):
                             if asyncio.iscoroutinefunction(self._on_incoming_audio):
                                 coro = self._on_incoming_audio(audio_data)
                                 if coro is not None:
-                                    asyncio.create_task(coro)
+                                    # 在事件循环中安全地创建任务
+                                    asyncio.run_coroutine_threadsafe(coro, self.loop)
                             else:
                                 self._on_incoming_audio(audio_data)
 
@@ -498,7 +496,7 @@ class MqttProtocol(Protocol):
                     logger.error(f"处理音频数据包错误: {e}")
                     continue
 
-            except socket.timeout:
+            except TimeoutError:
                 # 超时是正常的，继续循环
                 pass
             except Exception as e:
@@ -563,8 +561,6 @@ class MqttProtocol(Protocol):
                     f"已发送音频数据包，序列号: {self.local_sequence}，目标: "
                     f"{self.udp_server}:{self.udp_port}"
                 )
-
-            self.local_sequence += 1
             return True
         except Exception as e:
             logger.error(f"发送音频数据失败: {e}")
@@ -674,7 +670,6 @@ class MqttProtocol(Protocol):
                 try:
                     self.mqtt_client.loop_stop()
                     self.mqtt_client.disconnect()
-                    self.mqtt_client.loop_forever()  # 确保断开连接完全完成
                 except Exception as e:
                     logger.error(f"断开MQTT连接失败: {e}")
                 self.mqtt_client = None
@@ -731,195 +726,34 @@ class MqttProtocol(Protocol):
             try:
                 self.mqtt_client.loop_stop()
                 self.mqtt_client.disconnect()
-                self.mqtt_client.loop_forever()  # 确保断开连接完全完成
             except Exception as e:
                 logger.error(f"断开MQTT连接失败: {e}")
 
-    def _start_connection_monitor(self):
+    # ============ 模板方法实现 ============
+
+    @property
+    def _monitor_interval(self) -> float:
+        """MQTT 连接监控检查间隔（秒）."""
+        return 30.0
+
+    def _is_connected(self) -> bool:
+        """检查 MQTT 连接是否存活.
+
+        同时检查 TCP 连接状态和活动超时.
         """
-        启动连接监控任务.
+        if not self.mqtt_client or not self.mqtt_client.is_connected():
+            return False
+        if self._last_activity_time:
+            time_since_activity = time.time() - self._last_activity_time
+            if time_since_activity > self._connection_timeout:
+                return False
+        return True
+
+    async def _do_cleanup(self):
+        """MQTT 协议特定资源清理.
+
+        清理 UDP socket、MQTT 客户端 loop 和连接、活动时间戳.
         """
-        if (
-            self._connection_monitor_task is None
-            or self._connection_monitor_task.done()
-        ):
-            self._connection_monitor_task = asyncio.create_task(
-                self._connection_monitor()
-            )
-
-    async def _connection_monitor(self):
-        """
-        连接健康状态监控.
-        """
-        try:
-            while self.connected and not self._is_closing:
-                await asyncio.sleep(30)  # 每30秒检查一次
-
-                # 检查MQTT连接状态
-                if self.mqtt_client and not self.mqtt_client.is_connected():
-                    logger.warning("检测到MQTT连接已断开")
-                    await self._handle_connection_loss("MQTT连接检测失败")
-                    break
-
-                # 检查最后活动时间（超时检测）
-                if self._last_activity_time:
-                    time_since_activity = time.time() - self._last_activity_time
-                    if time_since_activity > self._connection_timeout:
-                        logger.warning(
-                            f"连接超时，最后活动时间: {time_since_activity:.1f}秒前"
-                        )
-                        await self._handle_connection_loss("连接超时")
-                        break
-
-        except asyncio.CancelledError:
-            logger.debug("MQTT连接监控任务被取消")
-        except Exception as e:
-            logger.error(f"MQTT连接监控异常: {e}")
-
-    async def _handle_connection_loss(self, reason: str):
-        """
-        处理连接丢失.
-        """
-        logger.warning(f"MQTT连接丢失: {reason}")
-
-        # 更新连接状态
-        was_connected = self.connected
-        self.connected = False
-
-        # 通知连接状态变化
-        if self._on_connection_state_changed and was_connected:
-            try:
-                self._on_connection_state_changed(False, reason)
-            except Exception as e:
-                logger.error(f"调用连接状态变化回调失败: {e}")
-
-        # 清理连接
-        await self._cleanup_connection()
-
-        # 通知音频通道关闭
-        if self._on_audio_channel_closed:
-            try:
-                await self._on_audio_channel_closed()
-            except Exception as e:
-                logger.error(f"调用音频通道关闭回调失败: {e}")
-
-        # 只有在启用自动重连且未手动关闭时才尝试重连
-        if (
-            not self._is_closing
-            and self._auto_reconnect_enabled
-            and self._reconnect_attempts < self._max_reconnect_attempts
-        ):
-            await self._attempt_reconnect(reason)
-        else:
-            # 通知网络错误
-            if self._on_network_error:
-                if (
-                    self._auto_reconnect_enabled
-                    and self._reconnect_attempts >= self._max_reconnect_attempts
-                ):
-                    await self._on_network_error(f"MQTT连接丢失且重连失败: {reason}")
-                else:
-                    await self._on_network_error(f"MQTT连接丢失: {reason}")
-
-    async def _attempt_reconnect(self, original_reason: str):
-        """
-        尝试自动重连.
-        """
-        self._reconnect_attempts += 1
-
-        # 通知开始重连
-        if self._on_reconnecting:
-            try:
-                self._on_reconnecting(
-                    self._reconnect_attempts, self._max_reconnect_attempts
-                )
-            except Exception as e:
-                logger.error(f"调用重连回调失败: {e}")
-
-        logger.info(
-            f"尝试MQTT自动重连 ({self._reconnect_attempts}/{self._max_reconnect_attempts})"
-        )
-
-        # 等待一段时间后重连（指数退避）
-        await asyncio.sleep(min(self._reconnect_attempts * 2, 30))
-
-        try:
-            success = await self.connect()
-            if success:
-                logger.info("MQTT自动重连成功")
-                # 通知连接状态变化
-                if self._on_connection_state_changed:
-                    self._on_connection_state_changed(True, "重连成功")
-            else:
-                logger.warning(
-                    f"MQTT自动重连失败 ({self._reconnect_attempts}/{self._max_reconnect_attempts})"
-                )
-                # 如果还能重试，不立即报错
-                if self._reconnect_attempts >= self._max_reconnect_attempts:
-                    if self._on_network_error:
-                        await self._on_network_error(
-                            f"MQTT重连失败，已达到最大重连次数: {original_reason}"
-                        )
-        except Exception as e:
-            logger.error(f"MQTT重连过程中出错: {e}")
-            if self._reconnect_attempts >= self._max_reconnect_attempts:
-                if self._on_network_error:
-                    await self._on_network_error(f"MQTT重连异常: {str(e)}")
-
-    def enable_auto_reconnect(self, enabled: bool = True, max_attempts: int = 5):
-        """启用或禁用自动重连功能.
-
-        Args:
-            enabled: 是否启用自动重连
-            max_attempts: 最大重连尝试次数
-        """
-        self._auto_reconnect_enabled = enabled
-        if enabled:
-            self._max_reconnect_attempts = max_attempts
-            logger.info(f"启用MQTT自动重连，最大尝试次数: {max_attempts}")
-        else:
-            self._max_reconnect_attempts = 0
-            logger.info("禁用MQTT自动重连")
-
-    def get_connection_info(self) -> dict:
-        """获取连接信息.
-
-        Returns:
-            dict: 包含连接状态、重连次数等信息的字典
-        """
-        return {
-            "connected": self.connected,
-            "mqtt_connected": (
-                self.mqtt_client.is_connected() if self.mqtt_client else False
-            ),
-            "is_closing": self._is_closing,
-            "auto_reconnect_enabled": self._auto_reconnect_enabled,
-            "reconnect_attempts": self._reconnect_attempts,
-            "max_reconnect_attempts": self._max_reconnect_attempts,
-            "last_activity_time": self._last_activity_time,
-            "keep_alive_interval": self._keep_alive_interval,
-            "connection_timeout": self._connection_timeout,
-            "mqtt_endpoint": self.endpoint,
-            "udp_server": (
-                f"{self.udp_server}:{self.udp_port}" if self.udp_server else None
-            ),
-            "session_id": self.session_id,
-        }
-
-    async def _cleanup_connection(self):
-        """
-        清理连接相关资源.
-        """
-        self.connected = False
-
-        # 取消连接监控任务
-        if self._connection_monitor_task and not self._connection_monitor_task.done():
-            self._connection_monitor_task.cancel()
-            try:
-                await self._connection_monitor_task
-            except asyncio.CancelledError:
-                pass
-
         # 停止UDP接收线程
         self._stop_udp_receiver()
 
@@ -933,3 +767,28 @@ class MqttProtocol(Protocol):
 
         # 重置时间戳
         self._last_activity_time = None
+
+    def get_connection_info(self) -> dict:
+        """获取 MQTT 连接信息.
+
+        Returns:
+            dict: 包含连接状态、重连次数等信息的字典
+        """
+        info = super().get_connection_info()
+        info.update(
+            {
+                "connected": self.connected,
+                "mqtt_connected": (
+                    self.mqtt_client.is_connected() if self.mqtt_client else False
+                ),
+                "last_activity_time": self._last_activity_time,
+                "keep_alive_interval": self._keep_alive_interval,
+                "connection_timeout": self._connection_timeout,
+                "mqtt_endpoint": self.endpoint,
+                "udp_server": (
+                    f"{self.udp_server}:{self.udp_port}" if self.udp_server else None
+                ),
+                "session_id": self.session_id,
+            }
+        )
+        return info

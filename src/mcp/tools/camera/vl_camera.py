@@ -3,24 +3,23 @@ VL camera implementation using Zhipu AI.
 """
 
 import base64
+import json
 
-import cv2
+import httpx
 from openai import OpenAI
 
+from src.logging import get_logger
 from src.utils.config_manager import ConfigManager
-from src.utils.logging_config import get_logger
 
 from .base_camera import BaseCamera
 
-logger = get_logger(__name__)
+logger = get_logger()
 
 
 class VLCamera(BaseCamera):
     """
     智普AI摄像头实现.
     """
-
-    _instance = None
 
     def __init__(self):
         """
@@ -29,96 +28,34 @@ class VLCamera(BaseCamera):
         super().__init__()
         config = ConfigManager.get_instance()
 
-        # 初始化OpenAI客户端
+        # 初始化OpenAI客户端（设置超时防止 API 无响应时线程池挂起）
         self.client = OpenAI(
             api_key=config.get_config("CAMERA.VLapi_key"),
             base_url=config.get_config(
                 "CAMERA.Local_VL_url",
                 "https://open.bigmodel.cn/api/paas/v4/chat/completions",
             ),
+            timeout=httpx.Timeout(30.0, connect=10.0),
         )
         self.model = config.get_config("CAMERA.models", "glm-4v-plus")
         logger.info(f"VL Camera initialized with model: {self.model}")
 
-    @classmethod
-    def get_instance(cls):
-        """
-        获取单例实例.
-        """
-        if cls._instance is None:
-            with cls._lock:
-                if cls._instance is None:
-                    cls._instance = cls()
-        return cls._instance
-
     def capture(self) -> bool:
         """
-        捕获图像.
+        捕获图像（使用基类的通用实现）.
         """
+        return self.capture_with_cv2()
+
+    def analyze(self, question: str, image_data: bytes | None = None) -> str:
         try:
-            logger.info("Accessing camera...")
-
-            # 尝试打开摄像头
-            cap = cv2.VideoCapture(self.camera_index)
-            if not cap.isOpened():
-                logger.error(f"Cannot open camera at index {self.camera_index}")
-                return False
-
-            # 设置摄像头参数
-            cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.frame_width)
-            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.frame_height)
-
-            # 读取图像
-            ret, frame = cap.read()
-            cap.release()
-
-            if not ret:
-                logger.error("Failed to capture image")
-                return False
-
-            # 获取原始图像尺寸
-            height, width = frame.shape[:2]
-
-            # 计算缩放比例，使最长边为320
-            max_dim = max(height, width)
-            scale = 320 / max_dim if max_dim > 320 else 1.0
-
-            # 等比例缩放图像
-            if scale < 1.0:
-                new_width = int(width * scale)
-                new_height = int(height * scale)
-                frame = cv2.resize(
-                    frame, (new_width, new_height), interpolation=cv2.INTER_AREA
+            buf = image_data if image_data is not None else self.jpeg_data["buf"]
+            if not buf:
+                return json.dumps(
+                    {"success": False, "message": "Camera buffer is empty"}
                 )
 
-            # 直接将图像编码为JPEG字节流
-            success, jpeg_data = cv2.imencode(".jpg", frame)
-
-            if not success:
-                logger.error("Failed to encode image to JPEG")
-                return False
-
-            # 保存字节数据
-            self.set_jpeg_data(jpeg_data.tobytes())
-            logger.info(
-                f"Image captured successfully (size: {self.jpeg_data['len']} bytes)"
-            )
-            return True
-
-        except Exception as e:
-            logger.error(f"Exception during capture: {e}")
-            return False
-
-    def analyze(self, question: str) -> str:
-        """
-        使用智普AI分析图像.
-        """
-        try:
-            if not self.jpeg_data["buf"]:
-                return '{"success": false, "message": "Camera buffer is empty"}'
-
             # 将图像转换为Base64
-            image_base64 = base64.b64encode(self.jpeg_data["buf"]).decode("utf-8")
+            image_base64 = base64.b64encode(buf).decode("utf-8")
 
             # 准备消息
             messages = [
@@ -161,9 +98,11 @@ class VLCamera(BaseCamera):
 
             # 记录响应
             logger.info(f"VL analysis completed, question={question}")
-            return f'{{"success": true, "text": "{result}"}}'
+            return json.dumps(
+                {"success": True, "text": result}, ensure_ascii=False
+            )
 
         except Exception as e:
-            error_msg = f"Failed to analyze image with VL: {str(e)}"
-            logger.error(error_msg)
-            return f'{{"success": false, "message": "{error_msg}"}}'
+            error_msg = f"Failed to analyze image with VL: {e}"
+            logger.error(error_msg, exc_info=True)
+            return json.dumps({"success": False, "message": error_msg})

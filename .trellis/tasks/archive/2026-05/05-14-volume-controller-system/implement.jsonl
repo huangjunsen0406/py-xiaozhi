@@ -1,0 +1,3 @@
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "确认文件放置位置符合目录规范"}
+{"file": ".trellis/spec/backend/python-style.md", "reason": "类型注解现代语法"}
+{"file": ".trellis/tasks/05-14-volume-controller-system/prd.md", "reason": "任务需求"}

@@ -1,40 +1,68 @@
-﻿# Windows-only
-comtypes==1.4.6; sys_platform == "win32"
-pycaw==20240210; sys_platform == "win32"
-pywin32==306; sys_platform == "win32"
+# py-xiaozhi 依赖
+# 推荐使用 uv: uv sync
+# 或者: pip install -r requirements.txt
 
-# 二进制/系统库敏感
-cryptography==44.0.1
-numpy==1.26.4
+# GUI 框架
+PySide6>=6.6.0
+qasync>=0.27.1
+
+# 音频处理
+numpy>=1.26.0
 sounddevice>=0.4.4
-pygame==2.6.1
-PyQt5==5.15.11
-opencv-python-headless==4.11.0.86
-soxr==0.5.0.post1
-psutil==7.0.0
-pillow==11.3.0
-webrtcvad-wheels==2.0.14
-sherpa-onnx==1.12.8
-pendulum==3.1.0
+soxr>=0.5.0
+opuslib>=3.0.1
 
-# 纯 Python 为主
-openai==1.86.0
-opuslib==3.0.1
-paho-mqtt==2.1.0
-pynput==1.8.1
-pyperclip==1.9.0
-pypinyin==0.53.0
-aiohttp==3.12.13
-websockets==11.0.3
-colorlog==6.9.0
-qasync==0.27.1
-py-machineid==0.8.0
-mutagen==1.47.0
-beautifulsoup4==4.12.3
-brotli==1.1.0
-python-dateutil==2.9.0.post0
-lunar_python==1.4.4
-pyinstaller==6.15.0
-rich==14.1.0
-packaging==25.0
-requests==2.32.3
+# 网络通信
+aiohttp>=3.9.0
+websockets>=11.0.3
+paho-mqtt>=2.1.0
+requests>=2.31.0
+
+# AI/ML
+openai>=1.0.0
+sherpa-onnx>=1.12.26
+sherpa-onnx-core>=1.12.26; sys_platform != "win32"
+
+# 图像处理
+opencv-python-headless>=4.9.0
+pillow>=10.0.0
+
+# 加密
+cryptography>=42.0.0
+
+# 工具库
+psutil>=5.9.0
+pendulum>=3.0.0
+py-machineid>=0.6.0
+platformdirs>=4.0.0
+
+# 音乐/媒体
+mutagen>=1.47.0
+
+# 中文处理
+pypinyin>=0.51.0
+lunar_python>=1.3.0
+
+# 剪贴板
+pyperclip>=1.8.0
+
+# 快捷键 (跨平台)
+pynput>=1.7.6
+
+# ============================================================
+# 平台特定依赖
+# ============================================================
+
+# Windows
+comtypes>=1.4.0; sys_platform == "win32"
+pycaw>=20230407; sys_platform == "win32"
+pywin32>=306; sys_platform == "win32"
+
+# macOS
+applescript>=2021.2.9; sys_platform == "darwin"
+pyobjc-framework-Quartz>=10.0; sys_platform == "darwin"
+pyobjc-framework-Cocoa>=10.0; sys_platform == "darwin"
+
+# Linux (GPIO 模式)
+gpiozero>=2.0.1; sys_platform == "linux"
+lgpio>=0.2.2.0; sys_platform == "linux"

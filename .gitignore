@@ -11,8 +11,6 @@ venv/
 cache/
 
 
-/models
-
 # 打包相关
 /build
 /dist
@@ -30,3 +28,17 @@ cache/
 xiaozhi.spec
 
 /installer
+
+.unifypy
+xiaozhi-desktop/
+chakra-qml/
+py-xiaozhi/
+
+# Claude Code 本地私人配置(权限选择等)
+.claude/settings.local.json
+
+# 本地草稿/笔记
+/impl.md
+
+# 项目分析报告（本地查看）
+reports/

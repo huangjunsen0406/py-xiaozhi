@@ -1,0 +1,2 @@
+{"type": "spec", "path": ".trellis/spec/backend/architecture-principles.md", "reason": "error handling patterns reference"}
+{"type": "prd", "path": ".trellis/tasks/05-07-no-audio-device-startup/prd.md", "reason": "task requirements and fix strategy"}

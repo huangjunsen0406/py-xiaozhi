@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "评审清单(General + Python style 段)用于核对删除后没有遗留 import、未使用变量、commit 信息符合规范"}
+{"file": ".trellis/spec/backend/architecture-principles.md", "reason": "校验本次删除是否符合'删除单调用点抽象 / 接触即清理'的原则;确认未越权改动配置/StateManager 等保留范围"}

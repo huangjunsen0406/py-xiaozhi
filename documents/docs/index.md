@@ -12,6 +12,9 @@ hero:
     - theme: alt
       text: 查看源码
       link: https://github.com/huangjunsen0406/py-xiaozhi
+    - theme: alt
+      text: 开发指南
+      link: /guide/开发指南
 
 features:
   - title: AI语音交互
@@ -19,7 +22,7 @@ features:
   - title: 视觉多模态
     details: 支持图像识别和处理，提供多模态交互能力，理解图像内容。集成OpenCV摄像头处理，支持实时视觉分析。
   - title: MCP工具服务器
-    details: 基于JSON-RPC 2.0协议的模块化工具系统，支持日程管理、音乐播放、12306查询、地图服务、菜谱搜索、八字命理等丰富功能，可动态扩展工具插件。
+    details: 基于JSON-RPC 2.0协议的模块化工具系统，内置音乐播放、八字命理等丰富功能，可动态扩展工具插件。
   - title: IoT 设备集成
     details: 采用Thing抽象模式设计，支持智能家居设备控制，包括灯光、音量、温度传感器等，集成Home Assistant智能家居平台，可轻松扩展。
   - title: 高性能音频处理

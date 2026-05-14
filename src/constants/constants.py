@@ -1,11 +1,12 @@
 import platform
+from enum import Enum
 
 from src.utils.config_manager import ConfigManager
 
 config = ConfigManager.get_instance()
 
 
-class ListeningMode:
+class ListeningMode(str, Enum):
     """
     监听模式.
     """
@@ -15,7 +16,7 @@ class ListeningMode:
     MANUAL = "manual"
 
 
-class AbortReason:
+class AbortReason(str, Enum):
     """
     中止原因.
     """
@@ -25,13 +26,12 @@ class AbortReason:
     USER_INTERRUPTION = "user_interruption"
 
 
-class DeviceState:
+class DeviceState(str, Enum):
     """
     设备状态.
     """
 
     IDLE = "idle"
-    CONNECTING = "connecting"
     LISTENING = "listening"
     SPEAKING = "speaking"
 
@@ -46,31 +46,21 @@ class EventType:
     AUDIO_OUTPUT_READY_EVENT = "audio_output_ready_event"
 
 
-def is_official_server(ws_addr: str) -> bool:
-    """判断是否为小智官方的服务器地址.
-
-    Args:
-        ws_addr (str): WebSocket 地址
-
-    Returns:
-        bool: 是否为小智官方的服务器地址
-    """
-    return "api.tenclass.net" in ws_addr
-
-
 def get_frame_duration() -> int:
     """获取设备的帧长度.
 
+    优先从配置读取，无配置时根据设备架构自动检测。
+
     返回:
-        int: 帧长度(毫秒)
+        int: 帧长度(毫秒)，支持 20/40/60
     """
     try:
-        # 检查是否为官方服务器
-        ota_url = config.get_config("SYSTEM_OPTIONS.NETWORK.OTA_VERSION_URL")
-        if not is_official_server(ota_url):
-            return 60
+        # 优先从配置读取
+        configured = config.get_config("AUDIO_DEVICES.frame_duration")
+        if configured in [20, 40, 60]:
+            return configured
 
-        # 检测ARM架构设备（如树莓派）
+        # 无配置时自动检测（保持向后兼容）
         machine = platform.machine().lower()
         arm_archs = ["arm", "aarch64", "armv7l", "armv6l"]
         is_arm_device = any(arch in machine for arch in arm_archs)
@@ -89,24 +79,35 @@ def get_frame_duration() -> int:
 
 class AudioConfig:
     """
-    音频配置类.
+    音频配置类 — 协议层参数，与设备层（DeviceConfig）独立。
+
+    所有值通过 reload() 从 ConfigManager 动态加载，支持运行时热重载。
     """
 
-    # 固定配置
-    INPUT_SAMPLE_RATE = 16000  # 输入采样率16kHz
-    # 输出采样率：官方服务器使用24kHz，其他使用16kHz
-    _ota_url = config.get_config("SYSTEM_OPTIONS.NETWORK.OTA_VERSION_URL")
-    OUTPUT_SAMPLE_RATE = 24000 if is_official_server(_ota_url) else 16000
-    CHANNELS = 1  # 服务端协议要求：单声道
+    # 服务端协议固定值（不随配置变化）
+    INPUT_SAMPLE_RATE = 16000  # 协议要求：输入 16kHz
+    CHANNELS = 1  # 协议要求：单声道
 
-    # 设备声道限制（避免多声道设备性能浪费）
-    MAX_INPUT_CHANNELS = 2  # 最多使用2个输入声道（立体声）
-    MAX_OUTPUT_CHANNELS = 2  # 最多使用2个输出声道（立体声）
+    # 以下为动态值，reload() 时从配置重新读取
+    OUTPUT_SAMPLE_RATE: int = 24000
+    FRAME_DURATION: int = 20
+    INPUT_FRAME_SIZE: int = 320
+    OUTPUT_FRAME_SIZE: int = 480
 
-    # 动态获取帧长度
-    FRAME_DURATION = get_frame_duration()
+    @classmethod
+    def reload(cls):
+        """从 ConfigManager 重新加载协议音频参数，支持运行时热重载。
 
-    # 根据不同采样率计算帧大小
-    INPUT_FRAME_SIZE = int(INPUT_SAMPLE_RATE * (FRAME_DURATION / 1000))
-    # Linux系统使用固定帧大小以减少PCM打印，其他系统动态计算
-    OUTPUT_FRAME_SIZE = int(OUTPUT_SAMPLE_RATE * (FRAME_DURATION / 1000))
+        Settings UI 修改 opus_output_sample_rate / frame_duration 后，
+        调用此方法使新值在下次 initialize/reload_devices 时生效。
+        """
+        cls.OUTPUT_SAMPLE_RATE = config.get_config(
+            "AUDIO_DEVICES.opus_output_sample_rate", 24000
+        )
+        cls.FRAME_DURATION = get_frame_duration()
+        cls.INPUT_FRAME_SIZE = int(cls.INPUT_SAMPLE_RATE * (cls.FRAME_DURATION / 1000))
+        cls.OUTPUT_FRAME_SIZE = int(cls.OUTPUT_SAMPLE_RATE * (cls.FRAME_DURATION / 1000))
+
+
+# 模块加载时初始化默认值
+AudioConfig.reload()

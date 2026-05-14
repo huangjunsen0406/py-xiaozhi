@@ -1,0 +1,5 @@
+AppWindow 1.0 AppWindow.qml
+TitleBar 1.0 TitleBar.qml
+MacTitleBarButtons 1.0 MacTitleBarButtons.qml
+StatusBadge 1.0 StatusBadge.qml
+EmotionDisplay 1.0 EmotionDisplay.qml
