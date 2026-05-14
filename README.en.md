@@ -35,6 +35,10 @@ English | [简体中文](README.md)
 
 py-xiaozhi is a Python-based Xiaozhi voice client, designed to learn coding and experience AI voice interaction without hardware requirements. This repository is ported from [xiaozhi-esp32](https://github.com/78/xiaozhi-esp32).
 
+## Related Projects
+
+- [xiaozhi-desktop](https://github.com/huangjunsen0406/xiaozhi-desktop) — Electron desktop client with AEC echo cancellation, Live2D, floating window modes, and Windows / macOS installers
+
 ## Demo
 
 - [Bilibili Demo Video](https://www.bilibili.com/video/BV1HmPjeSED2/#reply255921347937)

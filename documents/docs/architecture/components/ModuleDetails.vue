@@ -57,7 +57,9 @@ const modules = [
     features: [
       'EventBus 实现组件间解耦通信，支持异步事件处理',
       'StateManager 维护 DeviceState/ListeningMode 状态机',
-      'ProtocolManager 封装协议连接与消息发送'
+      'ProtocolManager 封装协议连接与消息发送',
+      'TaskManager 异步任务生命周期管理',
+      'ResourcePool 统一资源注册与逆序释放'
     ]
   },
   {
@@ -101,8 +103,8 @@ const modules = [
     icon: WrenchIcon,
     features: [
       'McpServer 实现 MCP 规范与 JSON-RPC 2.0',
-      '装饰器模式自动发现并注册工具函数',
-      '音乐播放器通过 EventBus 广播状态与歌词'
+      '@mcp_tool 装饰器自动发现并注册工具函数',
+      '内置工具：音乐/摄像头/截图/应用管理/天气/音量'
     ]
   },
   {
@@ -124,12 +126,21 @@ const modules = [
     ]
   },
   {
+    name: 'src/logging/',
+    icon: DocumentIcon,
+    features: [
+      '独立日志子系统，支持分级过滤和格式化',
+      '自定义 Handler 支持文件轮转和控制台输出',
+      '日志过滤器按模块/级别精细控制'
+    ]
+  },
+  {
     name: 'src/utils/',
     icon: MapIcon,
     features: [
-      'ConfigManager 管理配置文件，支持点记法访问',
+      'ConfigManager 管理配置文件，支持点记法访问和动态更新',
       'ResourceFinder 解析资源路径，AudioDeviceManager 探测设备',
-      '封装跨平台音量、剪贴板等工具函数'
+      'OpusLoader 跨平台 Opus 库加载，优先内置库'
     ]
   }
 ];

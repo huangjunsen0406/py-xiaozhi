@@ -34,7 +34,7 @@ const createChartOption = (darkMode) => ({
     orient: 'vertical',
     right: 10,
     top: 'center',
-    data: ['核心', '主要模块', '子模块'],
+    data: ['核心基础设施', '主要模块', '子模块'],
     textStyle: {
       color: darkMode ? '#f3f4f6' : '#374151'
     },
@@ -50,9 +50,11 @@ const createChartOption = (darkMode) => ({
       data: [
         { name: 'ServiceContainer', value: '服务容器', category: 0, symbolSize: 70 },
         { name: 'EventBus', value: '事件总线', category: 0, symbolSize: 60 },
+        { name: 'ResourcePool', value: '资源池', category: 0, symbolSize: 50 },
         { name: 'PluginManager', value: '插件管理器', category: 1, symbolSize: 50 },
         { name: 'ProtocolManager', value: '协议管理器', category: 1, symbolSize: 50 },
-        { name: 'ViewManager', value: '视图管理器', category: 1, symbolSize: 50 },
+        { name: 'TaskManager', value: '任务管理器', category: 1, symbolSize: 45 },
+        { name: 'StateManager', value: '状态管理器', category: 1, symbolSize: 45 },
         { name: 'AudioCodec', value: '音频编解码', category: 1, symbolSize: 50 },
         { name: 'MCP Server', value: 'MCP服务器', category: 1, symbolSize: 50 },
         { name: 'WebSocket', value: 'WebSocket', category: 2, symbolSize: 35 },
@@ -69,12 +71,14 @@ const createChartOption = (darkMode) => ({
       ],
       links: [
         { source: 'ServiceContainer', target: 'EventBus' },
+        { source: 'ServiceContainer', target: 'ResourcePool' },
         { source: 'ServiceContainer', target: 'PluginManager' },
         { source: 'ServiceContainer', target: 'ProtocolManager' },
-        { source: 'ServiceContainer', target: 'ViewManager' },
+        { source: 'ServiceContainer', target: 'TaskManager' },
+        { source: 'ServiceContainer', target: 'StateManager' },
         { source: 'ServiceContainer', target: 'AudioCodec' },
         { source: 'EventBus', target: 'PluginManager' },
-        { source: 'EventBus', target: 'ViewManager' },
+        { source: 'EventBus', target: 'StateManager' },
         { source: 'PluginManager', target: 'AudioPlugin' },
         { source: 'PluginManager', target: 'UIPlugin' },
         { source: 'PluginManager', target: 'ShortcutsPlugin' },
@@ -85,13 +89,14 @@ const createChartOption = (darkMode) => ({
         { source: 'AudioPlugin', target: 'AudioCodec' },
         { source: 'AudioCodec', target: 'Opus编解码' },
         { source: 'AudioCodec', target: '音频重采样' },
-        { source: 'ViewManager', target: 'PySide6/QML' },
+        { source: 'UIPlugin', target: 'PySide6/QML' },
         { source: 'MCP Server', target: 'MCP工具' },
-        { source: 'ShortcutsPlugin', target: 'Quartz/pynput' }
+        { source: 'ShortcutsPlugin', target: 'Quartz/pynput' },
+        { source: 'ResourcePool', target: 'PluginManager' }
       ],
       categories: [
         {
-          name: '核心',
+          name: '核心基础设施',
           itemStyle: {
             color: '#5470c6',
             borderColor: '#5470c6',
