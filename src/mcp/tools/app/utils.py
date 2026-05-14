@@ -1,6 +1,6 @@
 """应用程序管理通用工具.
 
-提供统一的应用程序匹配、查找和缓存功能
+提供统一的应用程序匹配、查找、缓存和名称清理功能。
 """
 
 import platform
@@ -16,6 +16,29 @@ logger = get_logger()
 _cached_applications: list[dict[str, Any]] | None = None
 _cache_timestamp: float = 0
 _cache_duration = 300  # 缓存5分钟
+
+
+def clean_app_name(name: str) -> str:
+    """清理应用程序名称，移除版本号和特殊字符.
+
+    Args:
+        name: 原始名称
+
+    Returns:
+        str: 清理后的名称
+    """
+    if not name:
+        return ""
+
+    # 移除常见的版本号模式
+    name = re.sub(r"\s+v?\d+[\.\d]*", "", name)
+    name = re.sub(r"\s*\(\d+\)", "", name)
+    name = re.sub(r"\s*\[.*?\]", "", name)
+
+    # 移除多余的空格
+    name = " ".join(name.split())
+
+    return name.strip()
 
 
 class AppMatcher:
@@ -243,8 +266,8 @@ class AppMatcher:
             return False
 
         # 移除所有非字母数字字符进行比较
-        target_clean = re.sub(r"[^a-zA-Z0-9\u4e00-\u9fff]", "", target)
-        candidate_clean = re.sub(r"[^a-zA-Z0-9\u4e00-\u9fff]", "", candidate)
+        target_clean = re.sub(r"[^a-zA-Z0-9一-鿿]", "", target)
+        candidate_clean = re.sub(r"[^a-zA-Z0-9一-鿿]", "", candidate)
 
         return target_clean in candidate_clean or candidate_clean in target_clean
 
@@ -355,14 +378,33 @@ async def find_best_matching_app(
 
 
 def clear_app_cache():
-    """
-    清空应用程序缓存.
-    """
+    """清空应用程序缓存."""
     global _cached_applications, _cache_timestamp
 
     _cached_applications = None
     _cache_timestamp = 0
     logger.info("[AppUtils] 应用程序缓存已清空")
+
+
+def get_system_scanner():
+    """根据当前系统获取对应的扫描器模块."""
+    system = platform.system()
+
+    if system == "Darwin":
+        from . import scanner_mac
+
+        return scanner_mac
+    elif system == "Windows":
+        from . import scanner_windows
+
+        return scanner_windows
+    elif system == "Linux":
+        from . import scanner_linux
+
+        return scanner_linux
+    else:
+        logger.warning(f"[AppUtils] 不支持的系统: {system}")
+        return None
 
 
 def get_cache_info() -> dict[str, Any]:
@@ -380,28 +422,3 @@ def get_cache_info() -> dict[str, Any]:
         "valid": cache_age >= 0 and cache_age < _cache_duration,
         "cache_duration": _cache_duration,
     }
-
-
-def get_system_scanner():
-    """根据当前系统获取对应的扫描器模块.
-
-    Returns:
-        对应系统的扫描器模块
-    """
-    system = platform.system()
-
-    if system == "Darwin":  # macOS
-        from .mac import scanner
-
-        return scanner
-    elif system == "Windows":  # Windows
-        from .windows import scanner
-
-        return scanner
-    elif system == "Linux":  # Linux
-        from .linux import scanner
-
-        return scanner
-    else:
-        logger.warning(f"[AppUtils] 不支持的系统: {system}")
-        return None

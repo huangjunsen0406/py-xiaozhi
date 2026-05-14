@@ -1,63 +1,11 @@
-"""系统级 MCP 工具（装饰器注册）."""
+"""应用管理 MCP 工具（装饰器注册）."""
 
-from src.logging import get_logger
 from src.mcp.decorators import Prop, PropType, mcp_tool
 
-from .app_management.killer import kill_application as _kill_application
-from .app_management.killer import (
-    list_running_applications as _list_running_applications,
-)
-from .app_management.launcher import launch_application as _launch_application
-from .app_management.scanner import (
-    scan_installed_applications as _scan_installed_applications,
-)
-from .tools import get_volume as _get_volume
-from .tools import get_volume_status as _get_volume_status
-from .tools import set_volume as _set_volume
-
-logger = get_logger()
-
-
-@mcp_tool(
-    name="self.audio_speaker.set_volume",
-    description=(
-        "Set the system speaker volume to an absolute value (0-100).\n"
-        "Use when user mentions: volume, sound, louder, quieter, mute, unmute, adjust volume.\n"
-        "Examples: 'set volume to 50', 'turn volume up', 'make it louder', 'mute', "
-        "'音量设为50', '调大声音', '声音小一点', '静音'.\n"
-        "Parameter:\n"
-        "- volume: Integer (0-100) representing the target volume level. Set to 0 for mute."
-    ),
-    props=[Prop("volume", PropType.INT, min_val=0, max_val=100)],
-)
-async def tool_set_volume(args):
-    return await _set_volume(args)
-
-
-@mcp_tool(
-    name="self.audio_speaker.get_volume",
-    description=(
-        "Get the current system speaker volume level.\n"
-        "Use when user asks about: current volume, volume level, how loud, what's the volume.\n"
-        "Examples: 'what is the current volume?', 'how loud is it?', 'check volume level', "
-        "'现在音量多少?', '查看音量', '音量是多少'.\n"
-        "Returns: Integer (0-100) representing the current volume level."
-    ),
-)
-async def tool_get_volume(args):
-    return await _get_volume(args)
-
-
-@mcp_tool(
-    name="self.audio_speaker.get_volume_status",
-    description=(
-        "Get detailed speaker volume status including whether audio output is muted and "
-        "whether the volume controller dependencies are available. Returns a JSON payload "
-        "with fields: volume (0-100), muted (bool), available (bool), reason/error(optional)."
-    ),
-)
-async def tool_get_volume_status(args):
-    return await _get_volume_status(args)
+from .killer import kill_application as _kill_application
+from .killer import list_running_applications as _list_running_applications
+from .launcher import launch_application as _launch_application
+from .scanner import scan_installed_applications as _scan_installed_applications
 
 
 @mcp_tool(

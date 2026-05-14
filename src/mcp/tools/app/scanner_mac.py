@@ -307,4 +307,4 @@ def _extract_app_name(comm: str, command: str) -> str:
     return comm if comm else "Unknown"
 
 
-from src.mcp.tools.system.app_management._utils import clean_app_name
+from .utils import clean_app_name

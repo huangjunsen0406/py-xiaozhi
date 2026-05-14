@@ -528,4 +528,4 @@ def _resolve_shortcut_target(shortcut_path: str) -> Optional[str]:
     return None
 
 
-from src.mcp.tools.system.app_management._utils import clean_app_name
+from .utils import clean_app_name
