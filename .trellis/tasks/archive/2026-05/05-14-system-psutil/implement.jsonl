@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/backend/mcp-tool-pattern.md", "reason": "@mcp_tool 装饰器模式、工具注册约定、返回值要求"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "异常处理三种模式、不引入自定义异常"}
+{"file": ".trellis/spec/backend/python-style.md", "reason": "类型注解、命名、函数签名规范"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "日志级别、敏感信息过滤"}
+{"file": ".trellis/tasks/05-14-system-psutil/prd.md", "reason": "任务需求、接口契约、文件结构规划"}
+{"file": ".trellis/tasks/research/system-management-libs.md", "reason": "psutil API 用法、当前代码安全漏洞清单"}
