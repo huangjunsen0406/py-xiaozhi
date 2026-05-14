@@ -100,6 +100,7 @@ class MusicPlayer:
     ):
         self._audio_codec = audio_codec
         self._event_bus = None
+        self._plugin_ctx = None
 
         self.decoder: MusicDecoder | None = None
         self._music_queue = asyncio.Queue(maxsize=100)
@@ -175,17 +176,18 @@ class MusicPlayer:
         if audio_codec:
             logger.info("AudioCodec 已设置到 MusicPlayer")
 
-    def set_event_bus(self, event_bus) -> None:
+    def set_event_bus(self, event_bus, plugin_ctx=None) -> None:
         """设置事件总线并订阅控制事件.
 
         Args:
             event_bus: EventBus 实例
+            plugin_ctx: PluginContextAdapter 实例（可选，用于检查设备状态）
         """
         from src.core.event_bus import Events
 
         self._event_bus = event_bus
+        self._plugin_ctx = plugin_ctx
         if event_bus:
-            # 订阅控制事件
             event_bus.on(Events.MUSIC_PAUSE_REQUEST, self._on_pause_request)
             event_bus.on(Events.MUSIC_RESUME_REQUEST, self._on_resume_request)
             logger.info("MusicPlayer 已连接到 EventBus")
@@ -829,7 +831,13 @@ class MusicPlayer:
             position_info = f" from {start_position:.1f}s" if start_position > 0 else ""
             logger.info(f"开始播放: {self.current_song}{position_info}")
 
-            await self._emit_state_change("playing", self.current_song, start_position)
+            # 如果当前设备正在说话（TTS），立即暂停音乐等 TTS 结束
+            if self._plugin_ctx and self._plugin_ctx.is_speaking():
+                logger.info("检测到 TTS 正在播放，音乐自动暂停等待")
+                await self.pause(source="tts")
+            else:
+                await self._emit_state_change("playing", self.current_song, start_position)
+
             asyncio.create_task(self._lyrics_update_task())
 
             return True

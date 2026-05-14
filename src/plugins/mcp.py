@@ -45,7 +45,7 @@ class McpPlugin(Plugin):
             from src.mcp.tools.music.music_player import get_music_player_instance
 
             music_player = get_music_player_instance()
-            music_player.set_event_bus(ctx.event_bus)
+            music_player.set_event_bus(ctx.event_bus, ctx)
             logger.info("MusicPlayer EventBus 已注入")
         except Exception as e:
             logger.warning(f"设置 MusicPlayer EventBus 失败: {e}")
