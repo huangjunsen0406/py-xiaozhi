@@ -40,10 +40,9 @@ async def tool_music_search(args):
 @mcp_tool(
     name="music_player.pause",
     description=(
-        "暂停当前正在播放的音乐。调用此工具会立即停止音乐播放，保持当前位置。"
-        "用户可以稍后调用 resume 恢复播放。"
-        "注意：不要在 TTS 说话时主动调用此工具，TTS 会自动临时暂停音乐。"
-        "只有当用户明确说'暂停'、'暂停音乐'、'先停一下'等时才调用。"
+        "暂停当前正在播放的音乐，保持播放位置，之后可用 resume 恢复。"
+        "当用户说'暂停音乐'、'先停一下音乐'、'音乐暂停'时，必须调用此工具。"
+        "重要：回复用户之前先调用此工具，否则 TTS 结束后音乐会自动恢复。"
     ),
 )
 async def tool_music_pause(args):
@@ -54,9 +53,10 @@ async def tool_music_pause(args):
 @mcp_tool(
     name="music_player.resume",
     description=(
-        "恢复播放之前暂停的音乐。从暂停的位置继续播放。"
-        "只有当音乐处于'已暂停'状态（用户主动暂停）时才调用此工具。"
-        "如果音乐只是被 TTS 临时打断，TTS 结束后会自动恢复，无需调用此工具。"
+        "恢复播放之前暂停的音乐，从暂停位置继续。"
+        "当用户说'继续播放'、'恢复音乐'、'把音乐打开'时调用。"
+        "注意：TTS 说话时音乐会自动暂停，说完自动恢复，无需调用此工具。"
+        "只有用户主动暂停后要求恢复时才需要调用。"
     ),
 )
 async def tool_music_resume(args):
@@ -67,9 +67,9 @@ async def tool_music_resume(args):
 @mcp_tool(
     name="music_player.stop",
     description=(
-        "完全停止音乐播放。停止当前歌曲并重置播放位置到开头。"
-        "与 pause（暂停）的区别：stop 是完全结束播放，pause 是临时暂停。"
-        "用于用户说'停止音乐'、'关闭音乐'、'别放了'等明确要求结束播放的场景。"
+        "完全停止并关闭音乐播放，重置到开头。"
+        "当用户说'关闭音乐'、'停止音乐'、'不听了'、'别放了'、'关掉音乐'时，必须调用此工具。"
+        "与 pause 的区别：stop 是彻底关闭，pause 是临时暂停可恢复。"
     ),
 )
 async def tool_music_stop(args):

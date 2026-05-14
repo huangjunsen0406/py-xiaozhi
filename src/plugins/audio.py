@@ -103,27 +103,17 @@ class AudioPlugin(Plugin):
                 logger.debug(f"写入音频数据失败: {e}")
 
     async def _pause_music_for_tts(self):
-        """
-        TTS 开始时暂停音乐.
-        """
+        """TTS 开始时暂停音乐（不清空 output_buffer，避免丢弃 TTS 帧）."""
         try:
-            if self.codec:
-                await self.codec.clear_audio_queue()
-                logger.debug("TTS 开始，已清空音频队列")
+            from src.core.event_bus import Events
+            from src.mcp.tools.music.events import MusicControlRequest
 
-            # 通过事件总线发送暂停请求
-            try:
-                from src.core.event_bus import Events
-                from src.mcp.tools.music.events import MusicControlRequest
-
-                logger.info("TTS 开始，发送音乐暂停请求")
-                await self._ctx.event_bus.emit(
-                    Events.MUSIC_PAUSE_REQUEST, MusicControlRequest(source="tts")
-                )
-            except Exception as e:
-                logger.warning(f"发送音乐暂停请求失败: {e}")
+            logger.info("TTS 开始，发送音乐暂停请求")
+            await self._ctx.event_bus.emit(
+                Events.MUSIC_PAUSE_REQUEST, MusicControlRequest(source="tts")
+            )
         except Exception as e:
-            logger.error(f"TTS 开始处理失败: {e}", exc_info=True)
+            logger.warning(f"发送音乐暂停请求失败: {e}")
 
     async def _resume_music_after_tts(self):
         """TTS 结束后恢复音乐"""

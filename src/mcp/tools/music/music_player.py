@@ -501,8 +501,6 @@ class MusicPlayer:
                 await self.decoder.stop()
                 self.decoder = None
 
-            await asyncio.sleep(0.05)
-
             cleared = await self._clear_music_queue()
 
             logger.info(
