@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 24
+- **Total Sessions**: 25
 - **Last Active**: 2026-05-14
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~810 | Active |
+| `journal-1.md` | ~843 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 25 | 2026-05-14 | 删除 bazi + 拆分 system 为 volume 和 app | `0a9809b` | `feature/new_architecture` |
 | 24 | 2026-05-14 | 重写 MCP 开发指南文档 | `6aa6082` | `feature/new_architecture` |
 | 23 | 2026-05-14 | 完善 Linux 音频依赖安装文档 | `0e61112` | `feature/new_architecture` |
 | 22 | 2026-05-14 | 迁移 volume_controller 到 system 工具模块 | `39368ed` | `feature/new_architecture` |
