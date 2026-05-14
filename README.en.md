@@ -24,6 +24,9 @@
   <a href="https://huangjunsen0406.github.io/py-xiaozhi/guide/00_%E6%96%87%E6%A1%A3%E7%9B%AE%E5%BD%95.html">
     <img alt="Usage Docs" src="https://img.shields.io/badge/Usage Docs-View-blue?labelColor=2d2d2d" />
   </a>
+  <a href="https://atomgit.com/huangjunsen0406/py-xiaozhi">
+    <img src="./assets/AtomGit.svg" alt="AtomGit" height="20"/>
+  </a>
 </p>
 
 English | [简体中文](README.md)
@@ -40,70 +43,57 @@ py-xiaozhi is a Python-based Xiaozhi voice client, designed to learn coding and 
 
 ## Features
 
-### 🎯 Core AI Capabilities
+### Core AI Capabilities
 
 - **AI Voice Interaction**: Supports voice input and recognition, enabling intelligent human-computer interaction with natural conversation flow
 - **Visual Multimodal**: Supports image recognition and processing, providing multimodal interaction capabilities and image content understanding
 - **Intelligent Wake-up**: Supports multiple wake word activation for hands-free interaction (configurable)
 - **Continuous Dialogue Mode**: Implements seamless conversation experience, enhancing user interaction fluidity
 
-### 🔧 MCP Tools Ecosystem
+### MCP Tools Ecosystem
 
-- **System Control Tools**: System status monitoring, application management, volume control, device management
-- **Calendar Management Tools**: Full-featured calendar system with create, query, update, delete events, intelligent categorization and reminders
-- **Timer Tools**: Countdown timer functionality with delayed MCP tool execution and parallel task management
 - **Music Player Tools**: Online music search and playback with playback controls, lyrics display, and local cache management
-- **12306 Query Tools**: 12306 railway ticket query with train tickets, transfer queries, and route information
-- **Search Tools**: Web search and content retrieval with Bing search integration and intelligent content parsing
-- **Recipe Tools**: Rich recipe database with search, category browsing, and intelligent recommendations
-- **Map Tools**: Amap services with geocoding, route planning, nearby search, and weather queries
-- **Bazi Fortune Tools**: Traditional Chinese fortune-telling with Bazi calculation, marriage analysis, and lunar calendar queries
 - **Camera Tools**: Image capture and AI analysis with photo recognition and intelligent Q&A
+- **Screenshot Tools**: Screen capture and AI analysis
+- **App Management Tools**: Application launching, closing, and process management
+- **Weather Tools**: Weather information query
+- **Volume Control Tools**: System volume control
 
-### 🏠 IoT Device Integration
+### Audio Processing
 
-- **Device Management Architecture**: Unified device management based on Thing pattern with asynchronous property and method calls
-- **Smart Home Control**: Supports lighting, volume, temperature sensors, and other device control
-- **State Synchronization**: Real-time status monitoring with incremental updates and concurrent state retrieval
-- **Extensible Design**: Modular device drivers, easy to add new device types
-
-### 🎵 Advanced Audio Processing
-
-- **Multi-level Audio Processing**: Supports Opus codec and real-time resampling
-- **Voice Activity Detection**: VAD detector for intelligent interruption with real-time voice activity monitoring
+- **Opus Codec**: Supports Opus audio encoding/decoding and real-time resampling
 - **Wake Word Detection**: Sherpa-ONNX-based offline speech recognition with multiple wake words and pinyin matching
 - **Audio Stream Management**: Independent input/output streams with stream rebuild and error recovery
-- **Audio Echo Cancellation**: Integrated WebRTC audio processing module providing high-quality echo cancellation
-- **System Audio Recording**: Supports system audio recording with audio loopback processing
 
-### 🖥️ User Interface
+### User Interface
 
-- **Graphical Interface**: Modern PyQt5-based GUI with Xiaozhi expressions and text display for enhanced visual experience
-- **Command Line Mode**: CLI support suitable for embedded devices or GUI-less environments
+- **Graphical Interface**: Modern PySide6 + QML based GUI with Xiaozhi expressions and text display
+- **Command Line Mode**: CLI support suitable for GUI-less environments
+- **GPIO Mode**: Supports GPIO interaction for embedded devices like Raspberry Pi
 - **System Tray**: Background operation support with integrated system tray functionality
 - **Global Hotkeys**: Global hotkey support for improved usability
 - **Settings Interface**: Complete settings management interface with configuration customization
 
-### 🔒 Security & Stability
+### Security & Stability
 
 - **Encrypted Audio Transmission**: WSS protocol support ensuring audio data security and preventing information leakage
 - **Device Activation System**: Dual v1/v2 protocol activation with automatic verification code and device fingerprint handling
 - **Error Recovery**: Complete error handling and recovery mechanisms with reconnection support
 
-### 🌐 Cross-platform Support
+### Cross-platform Support
 
 - **System Compatibility**: Compatible with Windows 10+, macOS 10.15+, and Linux systems
 - **Protocol Support**: WebSocket and MQTT dual protocol communication support
-- **Multi-environment Deployment**: GUI and CLI dual modes adapting to different deployment environments
+- **Multi-environment Deployment**: Supports GUI, CLI, and GPIO modes adapting to different deployment environments
 - **Platform Optimization**: Audio and system control optimization for different platforms
 
-### 🔧 Developer Friendly
+### Developer Friendly
 
 - **Modular Architecture**: Clean code structure with clear responsibility separation for secondary development
+- **Plugin System**: Audio, UI, MCP, wake word and other components loaded via plugin mechanism
 - **Async First**: Event-driven architecture based on asyncio for high-performance concurrent processing
 - **Configuration Management**: Hierarchical configuration system with dot notation access and dynamic updates
 - **Logging System**: Complete logging and debugging support
-- **API Documentation**: Detailed code documentation and usage guides
 
 ## System Requirements
 
@@ -138,16 +128,16 @@ py-xiaozhi is a Python-based Xiaozhi voice client, designed to learn coding and 
 ### Core Architecture Design
 
 - **Event-Driven Architecture**: Based on asyncio asynchronous event loop, supporting high-concurrency processing
-- **Layered Design**: Clear separation of application layer, protocol layer, device layer, and UI layer
-- **Singleton Pattern**: Core components use singleton pattern to ensure unified resource management
-- **Plugin System**: MCP tool system and IoT devices support plugin-based extension
+- **Layered Design**: Clear separation of application layer, protocol layer, and UI layer
+- **Dependency Injection**: Component lifecycle managed via bootstrap container
+- **Plugin System**: Audio, UI, MCP tools and other components loaded via plugin system
 
 ### Key Technical Components
 
-- **Audio Processing**: Opus codec, WebRTC echo cancellation, real-time resampling, system audio recording
-- **Speech Recognition**: Sherpa-ONNX offline models, voice activity detection, wake word recognition
+- **Audio Processing**: Opus codec, real-time resampling
+- **Speech Recognition**: Sherpa-ONNX offline models, wake word recognition
 - **Protocol Communication**: WebSocket/MQTT dual protocol support, encrypted transmission, auto-reconnection
-- **Configuration System**: Hierarchical configuration, dot notation access, dynamic updates, JSON/YAML support
+- **Configuration System**: Hierarchical configuration, dot notation access, dynamic updates
 
 ### Performance Optimization
 
@@ -169,40 +159,34 @@ py-xiaozhi is a Python-based Xiaozhi voice client, designed to learn coding and 
 
 ```
 py-xiaozhi/
-├── main.py                     # Application main entry (CLI argument handling)
+├── main.py                     # Application entry point
 ├── src/
-│   ├── application.py          # Application core logic
+│   ├── activation/             # Device activation
 │   ├── audio_codecs/           # Audio codecs
-│   │   ├── aec_processor.py    # Audio echo cancellation processor
-│   │   ├── audio_codec.py      # Audio codec base class
-│   │   └── system_audio_recorder.py  # System audio recorder
-│   ├── audio_processing/       # Audio processing modules
-│   │   ├── vad_detector.py     # Voice activity detection
-│   │   └── wake_word_detect.py # Wake word detection
-│   ├── core/                   # Core components
-│   │   ├── ota.py             # Over-the-air update module
-│   │   └── system_initializer.py # System initializer
-│   ├── display/                # Display interface abstraction layer
-│   ├── iot/                    # IoT device management
-│   │   ├── thing.py           # Device base class
-│   │   ├── thing_manager.py   # Device manager
-│   │   └── things/            # Concrete device implementations
+│   ├── audio_processing/       # Wake word detection
+│   ├── bootstrap/              # Application bootstrap & dependency injection
+│   ├── constants/              # Constants
+│   ├── core/                   # Core infrastructure (event bus, state management, task management, etc.)
+│   ├── logging/                # Logging subsystem
 │   ├── mcp/                    # MCP tool system
-│   │   ├── mcp_server.py      # MCP server
-│   │   └── tools/             # Various tool modules
-│   ├── protocols/              # Communication protocols
-│   ├── utils/                  # Utility functions
-│   └── ui/                     # UI view components
+│   │   ├── mcp_server.py       # MCP server
+│   │   └── tools/              # Tool modules (music/camera/screenshot/app/weather/volume)
+│   ├── plugins/                # Plugin system (audio, UI, MCP, wake word, shortcuts)
+│   ├── protocols/              # Communication protocols (WebSocket/MQTT)
+│   ├── ui/                     # User interface
+│   │   ├── gui/                # PySide6 + QML graphical interface
+│   │   ├── cli/                # Command line interface
+│   │   └── gpio/               # GPIO embedded interface
+│   └── utils/                  # Utility functions
 ├── libs/                       # Third-party native libraries
-│   ├── libopus/               # Opus audio codec library
-│   ├── webrtc_apm/            # WebRTC audio processing module
-│   └── SystemAudioRecorder/   # System audio recording tool
-├── config/                     # Configuration file directory
-├── models/                     # Speech model files
-├── assets/                     # Static resource files
+│   ├── libopus/                # Opus audio codec library
+│   └── webrtc_apm/             # WebRTC audio processing module
+├── models/                     # Wake word models
+├── assets/                     # Static resources
 ├── scripts/                    # Auxiliary scripts
-├── requirements.txt            # Python dependency package list
-└── build.json                  # Build configuration file
+├── documents/                  # VitePress documentation site
+├── pyproject.toml              # Project configuration
+└── build.json                  # Build configuration
 ```
 
 ### Development Environment Setup
@@ -247,9 +231,8 @@ python main.py --protocol mqtt       # MQTT protocol
 ### Extension Development
 
 - **Add MCP Tools**: Create new tool modules in `src/mcp/tools/` directory
-- **Add IoT Devices**: Inherit from `Thing` base class to implement new devices
 - **Add Protocols**: Implement `Protocol` abstract base class
-- **Add Interfaces**: Extend `BaseDisplay` to implement new UI components
+- **Add Plugins**: Extend the plugin system via `src/plugins/`
 
 ### State Transition Diagram
 
