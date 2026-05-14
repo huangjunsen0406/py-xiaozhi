@@ -874,3 +874,41 @@ opus_loader 加载顺序改为内置优先、系统兜底，删除死代码（pa
 ### Next Steps
 
 - None - task complete
+
+
+## Session 27: 音乐播放器 API 替换与竞态修复
+
+**Date**: 2026-05-15
+**Task**: 音乐播放器 API 替换与竞态修复
+**Branch**: `feature/new_architecture`
+
+### Summary
+
+替换已关停的 TuneFree API，改用酷我搜索+Huibq直链+酷我歌词三接口组合；新增独立音乐设置Tab；修复TTS与音乐竞态、FFmpeg seek科学计数法、退出时子进程残留等问题
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `6ed9d30` | (see git log) |
+| `28bcaf4` | (see git log) |
+| `771389c` | (see git log) |
+| `fc2b877` | (see git log) |
+| `3570f28` | (see git log) |
+| `93b8f0b` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
