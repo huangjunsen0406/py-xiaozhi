@@ -206,6 +206,60 @@ class SettingsModel(BaseModel):
         str, _get_windowSizeMode, _set_windowSizeMode, notify=settingsChanged
     )
 
+    # 音乐配置
+    def _get_musicSearchUrl(self) -> str:
+        return self._get_value("MUSIC.SEARCH_URL", "")
+
+    def _set_musicSearchUrl(self, value: str):
+        self._set_value("MUSIC.SEARCH_URL", value)
+
+    musicSearchUrl = Property(
+        str, _get_musicSearchUrl, _set_musicSearchUrl, notify=settingsChanged
+    )
+
+    def _get_musicUrlApi(self) -> str:
+        return self._get_value("MUSIC.URL_API", "")
+
+    def _set_musicUrlApi(self, value: str):
+        self._set_value("MUSIC.URL_API", value)
+
+    musicUrlApi = Property(
+        str, _get_musicUrlApi, _set_musicUrlApi, notify=settingsChanged
+    )
+
+    def _get_musicUrlApiKey(self) -> str:
+        return self._get_value("MUSIC.URL_API_KEY", "")
+
+    def _set_musicUrlApiKey(self, value: str):
+        self._set_value("MUSIC.URL_API_KEY", value)
+
+    musicUrlApiKey = Property(
+        str, _get_musicUrlApiKey, _set_musicUrlApiKey, notify=settingsChanged
+    )
+
+    def _get_musicDefaultPlatform(self) -> str:
+        return self._get_value("MUSIC.DEFAULT_PLATFORM", "kw")
+
+    def _set_musicDefaultPlatform(self, value: str):
+        self._set_value("MUSIC.DEFAULT_PLATFORM", value)
+
+    musicDefaultPlatform = Property(
+        str,
+        _get_musicDefaultPlatform,
+        _set_musicDefaultPlatform,
+        notify=settingsChanged,
+    )
+
+    def _get_musicDefaultQuality(self) -> str:
+        return self._get_value("MUSIC.DEFAULT_QUALITY", "320k")
+
+    def _set_musicDefaultQuality(self, value: str):
+        self._set_value("MUSIC.DEFAULT_QUALITY", value)
+
+    musicDefaultQuality = Property(
+        str, _get_musicDefaultQuality, _set_musicDefaultQuality, notify=settingsChanged
+    )
+
     # MQTT 配置
     def _get_mqttEndpoint(self) -> str:
         return self._get_value("SYSTEM_OPTIONS.NETWORK.MQTT_INFO.endpoint", "")

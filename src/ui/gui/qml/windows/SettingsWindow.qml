@@ -22,7 +22,8 @@ AppWindow {
         { name: "唤醒词", component: "WakeWordTab.qml" },
         { name: "摄像头", component: "CameraTab.qml" },
         { name: "音频设备", component: "AudioDeviceTab.qml" },
-        { name: "快捷键", component: "ShortcutsTab.qml" }
+        { name: "快捷键", component: "ShortcutsTab.qml" },
+        { name: "音乐", component: "MusicTab.qml" }
     ]
 
     // 直接使用 ColumnLayout，不需要额外的 Rectangle 层
@@ -147,6 +148,9 @@ AppWindow {
 
                             // 快捷键
                             ShortcutsTab {}
+
+                            // 音乐
+                            MusicTab {}
                         }
                     }
                 }
