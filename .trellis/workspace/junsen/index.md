@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 22
+- **Total Sessions**: 23
 - **Last Active**: 2026-05-14
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~744 | Active |
+| `journal-1.md` | ~777 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 23 | 2026-05-14 | 完善 Linux 音频依赖安装文档 | `0e61112` | `feature/new_architecture` |
 | 22 | 2026-05-14 | 迁移 volume_controller 到 system 工具模块 | `39368ed` | `feature/new_architecture` |
 | 21 | 2026-05-14 | 重构 MCP 模块：JSON 注入修复 + system 工具 psutil 重构 | `42f96bd`, `02c6899` | `feature/new_architecture` |
 | 20 | 2026-05-14 | 修复 MCP 模块 JSON 注入、发现容错、相机代码优化 | `42f96bd` | `feature/new_architecture` |
