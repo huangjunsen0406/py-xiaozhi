@@ -33,7 +33,6 @@ export default defineConfig({
         text: "MCP",
         items: [
           { text: "开发指南", link: "/mcp/" },
-          { text: "八字 (Bazi)", link: "/mcp/bazi" },
           { text: "相机 (Camera)", link: "/mcp/camera" },
           { text: "Home Assistant (HA)", link: "/mcp/ha" },
           { text: "音乐 (Music)", link: "/mcp/music" },
