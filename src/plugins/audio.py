@@ -150,9 +150,11 @@ class AudioPlugin(Plugin):
 
                     try:
                         music_player = get_music_player_instance()
+                        if music_player.is_playing:
+                            await music_player.stop()
                         music_player.set_audio_codec(None)
                     except Exception as e:
-                        logger.debug(f"清理音乐播放器音频编码器失败: {e}")
+                        logger.debug(f"清理音乐播放器失败: {e}")
                 except Exception:
                     pass
                 await codec.close()
