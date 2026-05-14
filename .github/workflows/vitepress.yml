@@ -15,15 +15,15 @@ jobs:
     steps:
       # 拉取代码
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
         with: 
           fetch-depth: 0
 
       # 设置 Node.js 版本
       - name: Setup Node.js environment
-        uses: actions/setup-node@v1
+        uses: actions/setup-node@v4
         with:
-          node-version: "18.20.3"
+          node-version: "20"
       # 安装yarn
       - name: Install yarn
         run: npm i yarn -g
