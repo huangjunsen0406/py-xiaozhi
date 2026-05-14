@@ -192,11 +192,11 @@ return json.dumps({"status": "success", "data": result}, ensure_ascii=False)
 
 ## 现有工具模块
 
-| 模块 | 路径 | 功能 |
-|------|------|------|
-| 系统工具 | `src/mcp/tools/system/` | 音量控制、应用启动/终止/扫描、运行进程查询 |
-| 相机 | `src/mcp/tools/camera/` | 拍照、视觉问答 |
-| 截图 | `src/mcp/tools/screenshot/` | 桌面截图、屏幕 OCR、多屏支持 |
-| 音乐 | `src/mcp/tools/music/` | 搜索播放、暂停/恢复/停止、歌词、本地歌单 |
-| 天气 | `src/mcp/tools/weather/` | 天气查询、天气预报（示例工具） |
-| 八字 | `src/mcp/tools/bazi/` | 八字命理、黄历、婚姻分析 |
+| 模块 | 路径 | 功能 | 详细文档 |
+|------|------|------|----------|
+| 音量控制 | `src/mcp/tools/volume/` | 音量设置/查询/状态诊断 | [system.md](system.md) |
+| 应用管理 | `src/mcp/tools/app/` | 应用启动/终止/扫描、运行进程查询 | [system.md](system.md) |
+| 相机 | `src/mcp/tools/camera/` | 拍照、视觉问答 | [camera.md](camera.md) |
+| 截图 | `src/mcp/tools/screenshot/` | 桌面截图、屏幕 OCR、多屏支持 | — |
+| 音乐 | `src/mcp/tools/music/` | 搜索播放、暂停/恢复/停止、歌词、本地歌单 | [music.md](music.md) |
+| 天气 | `src/mcp/tools/weather/` | 天气查询、天气预报（示例工具） | — |

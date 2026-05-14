@@ -233,19 +233,18 @@ await mcp_server.call_tool("self.application.kill", {
 
 ## 技术架构
 
-### 音量控制
+### 音量控制 (`src/mcp/tools/volume/`)
 
-- **VolumeController**: 抽象所有平台的音量设置/查询行为，同时提供依赖检测
+- **VolumeController**: 跨平台音量控制（Windows: pycaw, macOS: applescript, Linux: pactl/wpctl/amixer）
 - **异步封装**: 通过 `asyncio.to_thread` 把阻塞调用移到线程池
 - **容错策略**: 依赖缺失时返回默认音量并在状态接口中标记 `available=False`
 
-### 应用管理
+### 应用管理 (`src/mcp/tools/app/`)
 
-- **模块化实现**: `app_management` 目录下按系统拆分 `windows/mac/linux`
-- **应用扫描**: `scanner` 通过系统目录、注册表或 `.app`/`.desktop` 等入口构建应用索引
-- **统一匹配**: `utils.AppMatcher` 负责模糊匹配（中文、英文、大小写、别名）
-- **启动/关闭**: `launcher` 与 `killer` 根据平台选择最合适的命令（如 `open`, `start`, `wmic`, `osascript`）
-- **冗余策略**: Windows 启动支持 UWP、快捷方式、可执行文件多种路径，关闭支持分组 kill
+- **进程管理**: `process_manager.py` 基于 psutil，统一三平台进程列表和终止
+- **应用扫描**: `scanner.py` + 平台文件（`scanner_mac.py` / `scanner_windows.py` / `scanner_linux.py`）
+- **应用启动**: `launcher.py` + 平台文件（`launcher_mac.py` / `launcher_windows.py` / `launcher_linux.py`）
+- **统一匹配**: `utils.py` 中 `AppMatcher` 负责模糊匹配（中文、英文、大小写、别名）
 
 ## 数据结构
 
