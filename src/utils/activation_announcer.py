@@ -1,6 +1,4 @@
-# -*- coding: utf-8 -*-
-"""
-激活验证码播报模块.
+"""激活验证码播报模块.
 
 使用预录制音频播报激活验证码，仅在设备激活流程中使用。
 """
@@ -8,7 +6,6 @@
 import subprocess
 import threading
 from pathlib import Path
-from typing import List, Optional
 
 import numpy as np
 import sounddevice as sd
@@ -27,11 +24,11 @@ class ActivationAnnouncer:
 
     def __init__(self, locale: str = "zh-CN"):
         self._locale = locale
-        self._process: Optional[subprocess.Popen] = None
+        self._process: subprocess.Popen | None = None
         self._stop_flag = threading.Event()
-        self._play_thread: Optional[threading.Thread] = None
+        self._play_thread: threading.Thread | None = None
 
-    def _get_sound_path(self, name: str) -> Optional[Path]:
+    def _get_sound_path(self, name: str) -> Path | None:
         """获取音效文件路径."""
         sound_file = _ASSETS_DIR / self._locale / f"{name}.ogg"
         if sound_file.exists():
@@ -43,7 +40,7 @@ class ActivationAnnouncer:
                 return fallback
         return None
 
-    def _decode_with_ffmpeg(self, file_path: Path) -> Optional[np.ndarray]:
+    def _decode_with_ffmpeg(self, file_path: Path) -> np.ndarray | None:
         """使用 ffmpeg 解码音频文件."""
         try:
             cmd = [
@@ -85,7 +82,7 @@ class ActivationAnnouncer:
 
         return None
 
-    def _play_sounds(self, names: List[str]):
+    def _play_sounds(self, names: list[str]):
         """播放音效序列（在工作线程中执行）."""
         sample_rate = 24000
 
@@ -167,7 +164,7 @@ class ActivationAnnouncer:
 
 
 # 全局实例
-_announcer: Optional[ActivationAnnouncer] = None
+_announcer: ActivationAnnouncer | None = None
 
 
 def announce_activation_code(code: str, locale: str = "zh-CN"):

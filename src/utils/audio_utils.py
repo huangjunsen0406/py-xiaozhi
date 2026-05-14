@@ -74,6 +74,7 @@ def suppress_alsa_errors():
     """返回 ALSA 错误抑制器上下文管理器."""
     return ALSAErrorSuppressor()
 
+
 # 可选：屏蔽常见虚拟/聚合设备（默认不选它们）
 _VIRTUAL_PATTERNS = [
     r"blackhole",
