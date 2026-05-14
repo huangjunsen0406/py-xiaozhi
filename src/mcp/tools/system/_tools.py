@@ -1,6 +1,4 @@
-"""
-System-level MCP tools registered via decorators.
-"""
+"""系统级 MCP 工具（装饰器注册）."""
 
 from src.logging import get_logger
 from src.mcp.decorators import Prop, PropType, mcp_tool
@@ -10,9 +8,6 @@ from .app_management.killer import (
     list_running_applications as _list_running_applications,
 )
 from .app_management.launcher import launch_application as _launch_application
-from .app_management.scanner import (
-    list_running_applications as _scanner_list_running_apps,
-)
 from .app_management.scanner import (
     scan_installed_applications as _scan_installed_applications,
 )
@@ -159,9 +154,4 @@ async def tool_kill_application(args):
     props=[Prop("filter_name", PropType.STR, default="")],
 )
 async def tool_list_running(args):
-    # Prefer killer's richer implementation; fallback to scanner if needed.
-    try:
-        return await _list_running_applications(args)
-    except Exception:  # pragma: no cover - fallback path
-        logger.warning("Fallback to scanner-based running app list")
-        return await _scanner_list_running_apps(args)
+    return await _list_running_applications(args)

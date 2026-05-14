@@ -6,14 +6,14 @@
 import platform
 import re
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from src.logging import get_logger
 
 logger = get_logger()
 
 # 全局应用缓存
-_cached_applications: Optional[List[Dict[str, Any]]] = None
+_cached_applications: list[dict[str, Any]] | None = None
 _cache_timestamp: float = 0
 _cache_duration = 300  # 缓存5分钟
 
@@ -151,7 +151,7 @@ class AppMatcher:
         return normalized
 
     @classmethod
-    def match_application(cls, target_name: str, app_info: Dict[str, Any]) -> int:
+    def match_application(cls, target_name: str, app_info: dict[str, Any]) -> int:
         """匹配应用程序，返回匹配度分数.
 
         Args:
@@ -249,7 +249,7 @@ class AppMatcher:
         return target_clean in candidate_clean or candidate_clean in target_clean
 
 
-async def get_cached_applications(force_refresh: bool = False) -> List[Dict[str, Any]]:
+async def get_cached_applications(force_refresh: bool = False) -> list[dict[str, Any]]:
     """获取缓存的应用程序列表.
 
     Args:
@@ -305,7 +305,7 @@ async def get_cached_applications(force_refresh: bool = False) -> List[Dict[str,
 
 async def find_best_matching_app(
     app_name: str, app_type: str = "any"
-) -> Optional[Dict[str, Any]]:
+) -> dict[str, Any] | None:
     """查找最佳匹配的应用程序.
 
     Args:
@@ -318,17 +318,11 @@ async def find_best_matching_app(
     try:
         if app_type == "running":
             # 获取正在运行的应用程序
-            import json
+            import asyncio
 
-            from .scanner import list_running_applications
+            from .process_manager import list_running_applications as list_running_sync
 
-            result_json = await list_running_applications({})
-            result = json.loads(result_json)
-
-            if not result.get("success", False):
-                return None
-
-            applications = result.get("applications", [])
+            applications = await asyncio.to_thread(list_running_sync)
         else:
             # 获取已安装的应用程序
             applications = await get_cached_applications()
@@ -371,7 +365,7 @@ def clear_app_cache():
     logger.info("[AppUtils] 应用程序缓存已清空")
 
 
-def get_cache_info() -> Dict[str, Any]:
+def get_cache_info() -> dict[str, Any]:
     """
     获取缓存信息.
     """

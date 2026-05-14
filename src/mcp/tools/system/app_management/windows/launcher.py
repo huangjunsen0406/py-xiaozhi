@@ -1,15 +1,19 @@
 """Windows系统应用程序启动器.
 
-提供Windows平台下的应用程序启动功能
+提供Windows平台下的应用程序启动功能。
+所有 subprocess 调用均使用列表形式，不使用 shell=True。
 """
 
+import base64
 import os
 import subprocess
-from typing import Optional
 
 from src.logging import get_logger
 
 logger = get_logger()
+
+# Windows 进程创建标志（仅在 Windows 上可用）
+_DETACHED_PROCESS = 0x00000008
 
 
 def launch_application(app_name: str) -> bool:
@@ -27,7 +31,6 @@ def launch_application(app_name: str) -> bool:
         # 按优先级尝试不同的启动方法
         launch_methods = [
             ("PowerShell Start-Process", _try_powershell_start),
-            ("start命令", _try_start_command),
             ("os.startfile", _try_os_startfile),
             ("注册表查找", _try_registry_launch),
             ("常见路径", _try_common_paths),
@@ -64,8 +67,10 @@ def launch_uwp_app_by_path(uwp_path: str) -> bool:
     """
     try:
         if uwp_path.startswith("shell:AppsFolder\\"):
-            # 使用explorer启动UWP应用
-            subprocess.Popen(["explorer.exe", uwp_path])
+            subprocess.Popen(
+                ["explorer.exe", uwp_path],
+                creationflags=_DETACHED_PROCESS,
+            )
             logger.info(f"[WindowsLauncher] UWP应用启动成功: {uwp_path}")
             return True
         else:
@@ -94,28 +99,13 @@ def launch_shortcut(shortcut_path: str) -> bool:
 
 
 def _try_powershell_start(app_name: str) -> bool:
-    """
-    尝试使用PowerShell Start-Process启动应用程序.
-    """
+    """尝试使用 PowerShell Start-Process 启动应用程序."""
     try:
-        escaped_name = app_name.replace('"', '""').replace("'", "''")
-        powershell_cmd = f"powershell -Command \"Start-Process '{escaped_name}'\""
         result = subprocess.run(
-            powershell_cmd, shell=True, capture_output=True, text=True, timeout=10
-        )
-        return result.returncode == 0
-    except Exception:
-        return False
-
-
-def _try_start_command(app_name: str) -> bool:
-    """
-    尝试使用start命令启动应用程序.
-    """
-    try:
-        start_cmd = f'start "" "{app_name}"'
-        result = subprocess.run(
-            start_cmd, shell=True, capture_output=True, text=True, timeout=10
+            ["powershell", "-Command", "Start-Process", "-FilePath", app_name],
+            capture_output=True,
+            text=True,
+            timeout=10,
         )
         return result.returncode == 0
     except Exception:
@@ -123,9 +113,7 @@ def _try_start_command(app_name: str) -> bool:
 
 
 def _try_os_startfile(app_name: str) -> bool:
-    """
-    尝试使用os.startfile启动应用程序.
-    """
+    """尝试使用os.startfile启动应用程序."""
     try:
         os.startfile(app_name)
         return True
@@ -134,35 +122,38 @@ def _try_os_startfile(app_name: str) -> bool:
 
 
 def _try_registry_launch(app_name: str) -> bool:
-    """
-    尝试通过注册表查找并启动应用程序.
-    """
+    """尝试通过注册表查找并启动应用程序."""
     try:
         executable_path = _find_executable_in_registry(app_name)
         if executable_path:
-            subprocess.Popen([executable_path])
+            subprocess.Popen(
+                [executable_path],
+                creationflags=_DETACHED_PROCESS,
+            )
             return True
     except Exception as e:
-        logger.debug(f"注册表查找应用失败: {e}")
+        logger.debug(f"[WindowsLauncher] 注册表查找应用失败: {e}")
     return False
 
 
 def _try_common_paths(app_name: str) -> bool:
-    """
-    尝试常见的应用程序路径.
-    """
+    """尝试常见的应用程序路径."""
+    username = os.getenv("USERNAME", "")
     common_paths = [
         f"C:\\Program Files\\{app_name}\\{app_name}.exe",
         f"C:\\Program Files (x86)\\{app_name}\\{app_name}.exe",
-        f"C:\\Users\\{os.getenv('USERNAME')}\\AppData\\Local\\Programs\\{app_name}\\{app_name}.exe",
-        f"C:\\Users\\{os.getenv('USERNAME')}\\AppData\\Local\\{app_name}\\{app_name}.exe",
-        f"C:\\Users\\{os.getenv('USERNAME')}\\AppData\\Roaming\\{app_name}\\{app_name}.exe",
+        f"C:\\Users\\{username}\\AppData\\Local\\Programs\\{app_name}\\{app_name}.exe",
+        f"C:\\Users\\{username}\\AppData\\Local\\{app_name}\\{app_name}.exe",
+        f"C:\\Users\\{username}\\AppData\\Roaming\\{app_name}\\{app_name}.exe",
     ]
 
     for path in common_paths:
         if os.path.exists(path):
             try:
-                subprocess.Popen([path])
+                subprocess.Popen(
+                    [path],
+                    creationflags=_DETACHED_PROCESS,
+                )
                 return True
             except Exception:
                 continue
@@ -170,34 +161,36 @@ def _try_common_paths(app_name: str) -> bool:
 
 
 def _try_where_command(app_name: str) -> bool:
-    """
-    尝试使用where命令查找并启动应用程序.
-    """
+    """尝试使用where命令查找并启动应用程序."""
     try:
         result = subprocess.run(
-            f"where {app_name}", shell=True, capture_output=True, text=True, timeout=5
+            ["where", app_name],
+            capture_output=True,
+            text=True,
+            timeout=5,
         )
         if result.returncode == 0:
-            exe_path = result.stdout.strip().split("\n")[0]  # 取第一个结果
+            exe_path = result.stdout.strip().split("\n")[0]
             if exe_path and os.path.exists(exe_path):
-                subprocess.Popen([exe_path])
+                subprocess.Popen(
+                    [exe_path],
+                    creationflags=_DETACHED_PROCESS,
+                )
                 return True
     except Exception as e:
-        logger.debug(f"where.exe 查找应用失败: {e}")
+        logger.debug(f"[WindowsLauncher] where.exe 查找应用失败: {e}")
     return False
 
 
 def _try_uwp_launch(app_name: str) -> bool:
-    """
-    尝试启动UWP应用程序.
-    """
+    """尝试启动UWP应用程序."""
     try:
         return _launch_uwp_app(app_name)
     except Exception:
         return False
 
 
-def _find_executable_in_registry(app_name: str) -> Optional[str]:
+def _find_executable_in_registry(app_name: str) -> str | None:
     """通过注册表查找应用程序的可执行文件路径.
 
     Args:
@@ -209,7 +202,6 @@ def _find_executable_in_registry(app_name: str) -> Optional[str]:
     try:
         import winreg
 
-        # 查找注册表中的卸载信息
         registry_paths = [
             r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
             r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall",
@@ -234,8 +226,7 @@ def _find_executable_in_registry(app_name: str) -> Optional[str]:
                                             if install_location and os.path.exists(
                                                 install_location
                                             ):
-                                                # 查找主执行文件
-                                                for root, dirs, files in os.walk(
+                                                for root, _dirs, files in os.walk(
                                                     install_location
                                                 ):
                                                     for file in files:
@@ -283,33 +274,48 @@ def _find_executable_in_registry(app_name: str) -> Optional[str]:
 
 
 def _launch_uwp_app(app_name: str) -> bool:
-    """尝试启动UWP（Windows Store）应用程序.
+    """尝试启动 UWP（Windows Store）应用程序.
+
+    通过 $env:_APP_QUERY 环境变量传递应用名称，
+    避免将用户输入直接拼接到 PowerShell 脚本中。
 
     Args:
         app_name: 应用程序名称
 
     Returns:
-        bool: 启动是否成功
+        启动是否成功
     """
     try:
-        # 使用PowerShell查找和启动UWP应用
-        powershell_script = f"""
-        $app = Get-AppxPackage | Where-Object {{$_.Name -like "*{app_name}*" -or $_.PackageFullName -like "*{app_name}*"}} | Select-Object -First 1
-        if ($app) {{
-            $manifest = Get-AppxPackageManifest $app.PackageFullName
-            $appId = $manifest.Package.Applications.Application.Id
-            if ($appId) {{
-                Start-Process "shell:AppsFolder\\$($app.PackageFullName)!$appId"
-                Write-Output "Success"
-            }}
-        }}
-        """
+        # 脚本从环境变量读取查询字符串，不含用户输入
+        powershell_script = (
+            "$q = $env:_APP_QUERY\n"
+            "$app = Get-AppxPackage "
+            '| Where-Object {$_.Name -like "*$q*" '
+            '-or $_.PackageFullName -like "*$q*"} '
+            "| Select-Object -First 1\n"
+            "if ($app) {\n"
+            "    $manifest = Get-AppxPackageManifest $app.PackageFullName\n"
+            "    $appId = $manifest.Package.Applications.Application.Id\n"
+            "    if ($appId) {\n"
+            '        Start-Process "shell:AppsFolder\\$($app.PackageFullName)!$appId"\n'
+            '        Write-Output "Success"\n'
+            "    }\n"
+            "}"
+        )
+
+        encoded = base64.b64encode(powershell_script.encode("utf-16-le")).decode(
+            "ascii"
+        )
+
+        env = os.environ.copy()
+        env["_APP_QUERY"] = app_name
 
         result = subprocess.run(
-            ["powershell", "-Command", powershell_script],
+            ["powershell", "-EncodedCommand", encoded],
             capture_output=True,
             text=True,
             timeout=15,
+            env=env,
         )
 
         if result.returncode == 0 and "Success" in result.stdout:

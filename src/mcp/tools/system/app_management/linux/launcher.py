@@ -1,6 +1,7 @@
 """Linux系统应用程序启动器.
 
-提供Linux平台下的应用程序启动功能
+提供Linux平台下的应用程序启动功能。
+所有 subprocess 调用均使用列表形式，不使用 shell=True。
 """
 
 import os
@@ -25,7 +26,10 @@ def launch_application(app_name: str) -> bool:
 
         # 方法1: 直接使用应用程序名称
         try:
-            subprocess.Popen([app_name])
+            subprocess.Popen(
+                [app_name],
+                start_new_session=True,
+            )
             logger.info(f"[LinuxLauncher] 直接启动成功: {app_name}")
             return True
         except (OSError, subprocess.SubprocessError):
@@ -33,10 +37,18 @@ def launch_application(app_name: str) -> bool:
 
         # 方法2: 使用which查找应用程序路径
         try:
-            result = subprocess.run(["which", app_name], capture_output=True, text=True)
+            result = subprocess.run(
+                ["which", app_name],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
             if result.returncode == 0:
                 app_path = result.stdout.strip()
-                subprocess.Popen([app_path])
+                subprocess.Popen(
+                    [app_path],
+                    start_new_session=True,
+                )
                 logger.info(f"[LinuxLauncher] 通过which启动成功: {app_name}")
                 return True
         except (OSError, subprocess.SubprocessError):
@@ -44,7 +56,10 @@ def launch_application(app_name: str) -> bool:
 
         # 方法3: 使用xdg-open（适用于桌面环境）
         try:
-            subprocess.Popen(["xdg-open", app_name])
+            subprocess.Popen(
+                ["xdg-open", app_name],
+                start_new_session=True,
+            )
             logger.info(f"[LinuxLauncher] 使用xdg-open启动成功: {app_name}")
             return True
         except (OSError, subprocess.SubprocessError):
@@ -60,7 +75,10 @@ def launch_application(app_name: str) -> bool:
 
         for path in common_paths:
             if os.path.exists(path):
-                subprocess.Popen([path])
+                subprocess.Popen(
+                    [path],
+                    start_new_session=True,
+                )
                 logger.info(
                     f"[LinuxLauncher] 通过常见路径启动成功: {app_name} ({path})"
                 )
@@ -76,7 +94,10 @@ def launch_application(app_name: str) -> bool:
         for desktop_dir in desktop_dirs:
             desktop_file = os.path.join(desktop_dir, f"{app_name}.desktop")
             if os.path.exists(desktop_file):
-                subprocess.Popen(["gtk-launch", f"{app_name}.desktop"])
+                subprocess.Popen(
+                    ["gtk-launch", f"{app_name}.desktop"],
+                    start_new_session=True,
+                )
                 logger.info(f"[LinuxLauncher] 通过desktop文件启动成功: {app_name}")
                 return True
 
