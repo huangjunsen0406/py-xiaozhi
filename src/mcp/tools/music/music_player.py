@@ -4,6 +4,7 @@
 """
 
 import asyncio
+import re
 import shutil
 import tempfile
 import time
@@ -702,13 +703,23 @@ class MusicPlayer:
 
             logger.info(f"搜索歌曲: {song_name}")
 
-            response = await asyncio.to_thread(
-                requests.get,
-                search_url,
-                headers=self.config["HEADERS"],
-                timeout=10,
-            )
-            response.raise_for_status()
+            response = None
+            for attempt in range(3):
+                try:
+                    response = await asyncio.to_thread(
+                        requests.get,
+                        search_url,
+                        headers=self.config["HEADERS"],
+                        timeout=10,
+                    )
+                    response.raise_for_status()
+                    break
+                except requests.exceptions.Timeout:
+                    if attempt < 2:
+                        logger.warning(f"搜索超时，重试 ({attempt + 1}/2)")
+                        continue
+                    logger.error(f"搜索歌曲超时，已重试 2 次: {song_name}")
+                    return "", ""
 
             data = response.json()
 
@@ -999,7 +1010,7 @@ class MusicPlayer:
             data = response.json()
 
             if data.get("status") != 200:
-                logger.warning(f"歌词 API 返回非 200 状态: {data.get('status')}")
+                logger.info("该歌曲暂无歌词")
                 return
 
             lrc_list = data.get("data", {}).get("lrclist", [])
@@ -1016,7 +1027,20 @@ class MusicPlayer:
                 "演唱",
                 "原唱",
                 "翻唱",
+                "词：",
+                "曲：",
+                "词:",
+                "曲:",
+                "混音",
+                "母带",
+                "录音",
+                "吉他",
+                "贝斯",
+                "鼓：",
+                "和声",
+                "合声",
             )
+            _ROLE_LABEL_RE = re.compile(r"^.{1,4}[：:]$")
 
             for item in lrc_list:
                 time_str = item.get("time", "")
@@ -1030,7 +1054,7 @@ class MusicPlayer:
                 except (ValueError, TypeError):
                     continue
 
-                if text.startswith(_METADATA_PREFIXES):
+                if text.startswith(_METADATA_PREFIXES) or _ROLE_LABEL_RE.match(text):
                     filtered_count += 1
                     continue
 
