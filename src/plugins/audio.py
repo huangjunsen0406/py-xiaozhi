@@ -145,6 +145,8 @@ class AudioPlugin(Plugin):
 
             async def _cleanup():
                 """音频编解码器完整清理"""
+                import gc
+
                 try:
                     from src.mcp.tools.music.music_player import get_music_player_instance
 
@@ -152,11 +154,15 @@ class AudioPlugin(Plugin):
                         music_player = get_music_player_instance()
                         if music_player.is_playing:
                             await music_player.stop()
+                        if music_player.decoder:
+                            await music_player.decoder.stop()
+                            music_player.decoder = None
                         music_player.set_audio_codec(None)
                     except Exception as e:
                         logger.debug(f"清理音乐播放器失败: {e}")
                 except Exception:
                     pass
+                gc.collect()
                 await codec.close()
 
             pool.register("audio.codec", _cleanup)

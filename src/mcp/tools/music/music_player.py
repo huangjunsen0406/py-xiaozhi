@@ -4,7 +4,6 @@
 """
 
 import asyncio
-import re
 import shutil
 import tempfile
 import time
@@ -1027,20 +1026,7 @@ class MusicPlayer:
                 "演唱",
                 "原唱",
                 "翻唱",
-                "词：",
-                "曲：",
-                "词:",
-                "曲:",
-                "混音",
-                "母带",
-                "录音",
-                "吉他",
-                "贝斯",
-                "鼓：",
-                "和声",
-                "合声",
             )
-            _ROLE_LABEL_RE = re.compile(r"^.{1,4}[：:]$")
 
             for item in lrc_list:
                 time_str = item.get("time", "")
@@ -1054,7 +1040,7 @@ class MusicPlayer:
                 except (ValueError, TypeError):
                     continue
 
-                if text.startswith(_METADATA_PREFIXES) or _ROLE_LABEL_RE.match(text):
+                if text.startswith(_METADATA_PREFIXES):
                     filtered_count += 1
                     continue
 
