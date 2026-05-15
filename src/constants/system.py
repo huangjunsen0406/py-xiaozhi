@@ -21,7 +21,7 @@ class SystemConstants:
     # 应用信息
     APP_NAME = "py-xiaozhi"  # 程序标识名（用于目录、配置等）
     APP_DISPLAY_NAME = "py-xiaozhi"  # 显示名称（用于窗口标题、UI等）
-    APP_VERSION = "2.0.1"
+    APP_VERSION = "2.0.2"
     BOARD_TYPE = "bread-compact-wifi"
 
     # 默认超时设置
