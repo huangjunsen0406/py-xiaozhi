@@ -11,6 +11,9 @@ venv/
 cache/
 
 
+# CI 注入的 FFmpeg 二进制（不进仓库）
+libs/ffmpeg/
+
 # 打包相关
 /build
 /dist
