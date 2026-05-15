@@ -2,7 +2,7 @@ name: Build & Upload Release Assets
 
 on:
   push:
-    tags: ['v*.*.*']
+    tags: ["v*.*.*"]
 
 permissions:
   contents: write
@@ -90,7 +90,8 @@ jobs:
           uv run --no-sync unifypy . \
             --config build.json \
             --version ${{ steps.version.outputs.version }} \
-            --verbose
+            --verbose \
+            --clean
 
       - name: Rename artifact with platform suffix
         shell: bash
