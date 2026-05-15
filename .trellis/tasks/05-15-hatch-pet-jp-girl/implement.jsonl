@@ -1,0 +1,4 @@
+{"file":".trellis/workflow.md","reason":"Follow Trellis task lifecycle and required planning/start steps for this asset-generation task."}
+{"file":"/Users/junsen/.codex/skills/hatch-pet/SKILL.md","reason":"Authoritative workflow for Codex-compatible pet run preparation, generation, validation, packaging, and QA."}
+{"file":"/Users/junsen/.codex/skills/.system/imagegen/SKILL.md","reason":"Required image generation routing rules and fallback behavior for visual asset creation."}
+{"file":".trellis/tasks/05-15-hatch-pet-jp-girl/prd.md","reason":"Defines the requested Japanese cute-girl pet style and expected deliverables."}

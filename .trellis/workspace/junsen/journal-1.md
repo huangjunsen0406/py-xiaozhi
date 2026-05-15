@@ -912,3 +912,36 @@ opus_loader 加载顺序改为内置优先、系统兜底，删除死代码（pa
 ### Next Steps
 
 - None - task complete
+
+
+## Session 28: fix: 音乐下载阻塞 UI + macOS Metal shader 崩溃
+
+**Date**: 2026-05-15
+**Task**: fix: 音乐下载阻塞 UI + macOS Metal shader 崩溃
+**Branch**: `feature/new_architecture`
+
+### Summary
+
+诊断并修复两个打包后问题：(1) _download_file 中 iter_content 阻塞事件循环导致 UI 卡顿，将下载+写入+move 整体移入 asyncio.to_thread；(2) macOS Sequoia adhoc 签名 app Metal shader 缓存写入被拒，设置 QSG_RHI_BACKEND=opengl 绕过。已提 PR #275 合入 main。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `362aece` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
