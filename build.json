@@ -57,7 +57,7 @@
         "deb"
       ],
       "deb": {
-        "package": "小智",
+        "package": "xiaozhi",
         "section": "utils",
         "priority": "optional",
         "desktop_entry": true,
@@ -66,7 +66,9 @@
         ]
       },
       "rpm": {
-        "name": "小智",
+        "name": "xiaozhi",
+        "summary": "小智 AI Assistant",
+        "license": "MIT",
         "group": "Applications/Utilities"
       },
       "appimage": {
