@@ -100,8 +100,16 @@ jobs:
           DEST="libs/ffmpeg/${PLAT}/${ARCH}"
           mkdir -p "$DEST"
           if [ "$RUNNER_OS" = "Windows" ]; then
-            cp "$(which ffmpeg.exe)" "$DEST/ffmpeg.exe"
-            cp "$(which ffprobe.exe)" "$DEST/ffprobe.exe"
+            # Chocolatey shim (~384KB) 不是真实二进制，需要找到实际安装路径
+            CHOCO_FFMPEG="C:/ProgramData/chocolatey/lib/ffmpeg/tools/ffmpeg/bin"
+            if [ -f "$CHOCO_FFMPEG/ffmpeg.exe" ]; then
+              cp "$CHOCO_FFMPEG/ffmpeg.exe" "$DEST/ffmpeg.exe"
+              cp "$CHOCO_FFMPEG/ffprobe.exe" "$DEST/ffprobe.exe"
+            else
+              echo "WARNING: Chocolatey FFmpeg bin not found at $CHOCO_FFMPEG, falling back to shim"
+              cp "$(which ffmpeg.exe)" "$DEST/ffmpeg.exe"
+              cp "$(which ffprobe.exe)" "$DEST/ffprobe.exe"
+            fi
           else
             cp "$(which ffmpeg)" "$DEST/ffmpeg"
             cp "$(which ffprobe)" "$DEST/ffprobe"
