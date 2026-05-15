@@ -165,7 +165,7 @@ class ActivationService:
             return result
 
         except Exception as e:
-            self.logger.error(f"系统初始化失败: {e}")
+            self.logger.error(f"系统初始化失败: {type(e).__name__}: {e}", exc_info=True)
             return ActivationResult(
                 success=False,
                 need_activation_ui=False,

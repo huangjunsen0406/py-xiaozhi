@@ -67,11 +67,13 @@ class WebsocketProtocol(Protocol):
                     uri=self.WEBSOCKET_URL,
                     ssl=current_ssl_context,
                     additional_headers=self.HEADERS,
-                    ping_interval=20,  # 使用websockets自己的心跳，20秒间隔
-                    ping_timeout=20,  # ping超时20秒
-                    close_timeout=10,  # 关闭超时10秒
-                    max_size=10 * 1024 * 1024,  # 最大消息10MB
-                    compression=None,  # 禁用压缩以提高稳定性
+                    ping_interval=20,
+                    ping_timeout=20,
+                    close_timeout=10,
+                    open_timeout=5,
+                    max_size=10 * 1024 * 1024,
+                    compression=None,
+                    proxy=None,
                 )
             except TypeError:
                 # 旧的写法 (在较早的Python版本中)
@@ -79,11 +81,12 @@ class WebsocketProtocol(Protocol):
                     self.WEBSOCKET_URL,
                     ssl=current_ssl_context,
                     extra_headers=self.HEADERS,
-                    ping_interval=20,  # 使用websockets自己的心跳
-                    ping_timeout=20,  # ping超时20秒
-                    close_timeout=10,  # 关闭超时10秒
-                    max_size=10 * 1024 * 1024,  # 最大消息10MB
-                    compression=None,  # 禁用压缩
+                    ping_interval=20,
+                    ping_timeout=20,
+                    close_timeout=10,
+                    open_timeout=5,
+                    max_size=10 * 1024 * 1024,
+                    compression=None,
                 )
 
             # 启动消息处理循环（保存任务引用，关闭时可取消）
