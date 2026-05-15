@@ -116,13 +116,11 @@ class WakeWordDetector:
         try:
             import sherpa_onnx
 
-        # Check required files
             encoder_path = self._model_dir / "encoder.onnx"
             decoder_path = self._model_dir / "decoder.onnx"
             joiner_path = self._model_dir / "joiner.onnx"
             tokens_path = self._model_dir / "tokens.txt"
 
-            # keywords.txt 优先使用用户目录下的自定义文件
             lang = ConfigManager.get_instance().get_config("WAKE_WORD_OPTIONS.WAKE_WORD_LANG", "zh")
             keywords_path = get_user_keywords_path(lang)
 
@@ -132,9 +130,13 @@ class WakeWordDetector:
                     logger.error(f"模型文件不存在: {file_path}")
                     return False
 
+            # Windows: sherpa-onnx C++ 用 std::ifstream(narrow_char*) 读取 tokens.txt，
+            # 路径含非 ASCII 字符时 GBK 代码页会吞掉反斜杠导致打开失败。
+            # 将 tokens.txt 复制到 ASCII 安全路径的用户目录下。
+            tokens_path = self._ensure_ascii_path(tokens_path, lang)
+
             logger.info(f"加载 KeywordSpotter 模型: {self._model_dir}")
 
-            # Create KeywordSpotter（加锁保护，与 _release_model/_process_audio 一致）
             with self._onnx_lock:
                 self._keyword_spotter = sherpa_onnx.KeywordSpotter(
                     tokens=str(tokens_path),
@@ -161,6 +163,30 @@ class WakeWordDetector:
         except Exception as e:
             logger.error(f"加载模型失败: {e}", exc_info=True)
             return False
+
+    @staticmethod
+    def _ensure_ascii_path(file_path: Path, lang: str) -> Path:
+        """On Windows, copy file to an ASCII-safe path if needed.
+
+        sherpa-onnx reads tokens.txt via std::ifstream with narrow char paths.
+        Under GBK code page, UTF-8 encoded non-ASCII directory names corrupt
+        the path (certain trailing bytes consume the backslash separator).
+        """
+        import sys
+
+        if sys.platform != "win32":
+            return file_path
+
+        if str(file_path).isascii():
+            return file_path
+
+        import shutil
+
+        safe_dir = get_user_keywords_path(lang).parent
+        safe_path = safe_dir / file_path.name
+        shutil.copy2(file_path, safe_path)
+        logger.debug(f"已复制 {file_path.name} 到 ASCII 安全路径: {safe_path}")
+        return safe_path
 
     def _release_model(self):
         if not self._model_loaded:
@@ -281,7 +307,6 @@ class WakeWordDetector:
                 except asyncio.QueueEmpty:
                     break
             self._audio_queue = None
-
 
         self._stopping = False
         logger.info("唤醒词检测器已停止")
