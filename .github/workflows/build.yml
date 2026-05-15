@@ -75,7 +75,8 @@ jobs:
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Build package
-        run: uv run unifypy . --config build.json --version ${{ steps.version.outputs.version }} --verbose
+        shell: bash
+        run: uv run unifypy . --config build.json --version ${{ steps.version.outputs.version }} --verbose 2>&1
 
       - name: Rename artifact with platform suffix
         shell: bash
