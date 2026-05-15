@@ -18,7 +18,7 @@ logger = get_logger()
 class WakeWordPlugin(Plugin):
     name = "wake_word"
     priority = 30
-    requires = ["audio"]  # 声明依赖 AudioPlugin
+    requires = ["audio"]
 
     def __init__(self) -> None:
         super().__init__()
@@ -31,30 +31,9 @@ class WakeWordPlugin(Plugin):
 
     async def setup(self, ctx: "PluginContext", cmd: "PluginCommands") -> None:
         await super().setup(ctx, cmd)
-        try:
-            from src.audio_processing.wake_word_detect import WakeWordDetector
-
-            self.detector = WakeWordDetector()
-
-            # 初始化检测器（加载模型）
-            if not await self.detector.initialize():
-                logger.info("唤醒词检测器未启用或初始化失败")
-                self.detector = None
-                return
-
-            self.detector.on_detected(self._on_detected)
-            self.detector.on_error = self._on_error
-
-            # 订阅配置变更事件
-            from src.core.event_bus import Events
-            ctx.event_bus.on(Events.CONFIG_CHANGED, self._on_config_changed)
-
-        except ImportError as e:
-            logger.error(f"无法导入唤醒词检测器: {e}")
-            self.detector = None
-        except Exception as e:
-            logger.error(f"唤醒词插件初始化失败: {e}", exc_info=True)
-            self.detector = None
+        # 订阅配置变更事件（轻量，不加载模型）
+        from src.core.event_bus import Events
+        ctx.event_bus.on(Events.CONFIG_CHANGED, self._on_config_changed)
 
     async def _on_config_changed(self, data=None):
         """配置变更时重新加载唤醒词模型."""
@@ -62,13 +41,26 @@ class WakeWordPlugin(Plugin):
         await self.reload_model()
 
     async def start(self) -> None:
-        if not self.detector:
-            return
         try:
+            # 延迟加载模型到 start() 阶段，避免 setup() 时与 PortAudio DLL 冲突
+            if self.detector is None:
+                from src.audio_processing.wake_word_detect import WakeWordDetector
+
+                self.detector = WakeWordDetector()
+                if not await self.detector.initialize():
+                    logger.info("唤醒词检测器未启用或初始化失败")
+                    self.detector = None
+                    return
+                self.detector.on_detected(self._on_detected)
+                self.detector.on_error = self._on_error
+
             if not self._audio_plugin or not self._audio_plugin.codec:
                 logger.warning("未找到 audio_codec，无法启动唤醒词检测")
                 return
             await self.detector.start(self._audio_plugin.codec)
+        except ImportError as e:
+            logger.error(f"无法导入唤醒词检测器: {e}")
+            self.detector = None
         except Exception as e:
             logger.error(f"启动唤醒词检测器失败: {e}", exc_info=True)
 
