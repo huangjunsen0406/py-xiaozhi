@@ -59,7 +59,13 @@ jobs:
 
       - name: Install system dependencies (Windows)
         if: runner.os == 'Windows'
-        run: choco install ffmpeg innosetup -y
+        shell: cmd
+        run: choco install ffmpeg innosetup -y --no-progress
+
+      - name: Add Inno Setup to PATH (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: echo "C:/Program Files (x86)/Inno Setup 6" >> $GITHUB_PATH
 
       - name: Install Python dependencies
         run: uv sync --extra gui --group dev
@@ -74,30 +80,18 @@ jobs:
           VERSION=${GITHUB_REF#refs/tags/v}
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
-      - name: Debug unifypy import (Windows only)
+      - name: Verify Inno Setup (Windows)
         if: runner.os == 'Windows'
-        shell: bash
-        run: |
-          uv run python -c "
-          import sys, traceback
-          try:
-              from unifypy.cli import main
-              sys.argv = ['unifypy', '.', '--config', 'build.json', '--version', '${{ steps.version.outputs.version }}', '--verbose']
-              main()
-          except SystemExit as e:
-              print(f'SystemExit: {e.code}')
-              if e.code != 0:
-                  traceback.print_exc()
-                  sys.exit(e.code)
-          except Exception:
-              traceback.print_exc()
-              sys.exit(1)
-          "
+        shell: cmd
+        run: ISCC.exe /? || echo "ISCC not found"
 
       - name: Build package
-        if: runner.os != 'Windows'
         shell: bash
-        run: uv run unifypy . --config build.json --version ${{ steps.version.outputs.version }} --verbose
+        run: |
+          uv run unifypy . \
+            --config build.json \
+            --version ${{ steps.version.outputs.version }} \
+            --verbose
 
       - name: Rename artifact with platform suffix
         shell: bash
