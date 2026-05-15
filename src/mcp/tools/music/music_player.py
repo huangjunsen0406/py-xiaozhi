@@ -834,7 +834,9 @@ class MusicPlayer:
                 logger.info("检测到 TTS 正在播放，音乐自动暂停等待")
                 await self.pause(source="tts")
             else:
-                await self._emit_state_change("playing", self.current_song, start_position)
+                await self._emit_state_change(
+                    "playing", self.current_song, start_position
+                )
 
             asyncio.create_task(self._lyrics_update_task())
 
@@ -949,6 +951,21 @@ class MusicPlayer:
             logger.error(f"解析播放 URL 失败: {e}")
             return None
 
+    def _sync_download_file(
+        self, download_url: str, headers: dict, temp_path: Path, cache_path: Path
+    ) -> Path:
+        """同步下载文件并移入缓存（在线程中执行，避免阻塞事件循环）"""
+        response = requests.get(download_url, headers=headers, stream=True, timeout=30)
+        response.raise_for_status()
+
+        with open(temp_path, "wb") as f:
+            for chunk in response.iter_content(chunk_size=8192):
+                if chunk:
+                    f.write(chunk)
+
+        shutil.move(str(temp_path), str(cache_path))
+        return cache_path
+
     async def _download_file(self, url: str, filename: str) -> Path | None:
         """下载文件到缓存目录"""
         temp_path = None
@@ -958,26 +975,18 @@ class MusicPlayer:
                 return None
 
             temp_path = self.temp_cache_dir / f"temp_{int(time.time())}_{filename}"
-
-            response = await asyncio.to_thread(
-                requests.get,
-                download_url,
-                headers=self.config["HEADERS"],
-                stream=True,
-                timeout=30,
-            )
-            response.raise_for_status()
-
-            with open(temp_path, "wb") as f:
-                for chunk in response.iter_content(chunk_size=8192):
-                    if chunk:
-                        f.write(chunk)
-
             cache_path = self.cache_dir / filename
-            shutil.move(str(temp_path), str(cache_path))
 
-            logger.info(f"音乐下载完成并缓存: {cache_path}")
-            return cache_path
+            result = await asyncio.to_thread(
+                self._sync_download_file,
+                download_url,
+                self.config["HEADERS"],
+                temp_path,
+                cache_path,
+            )
+
+            logger.info(f"音乐下载完成并缓存: {result}")
+            return result
 
         except Exception as e:
             logger.error(f"下载失败: {e}")
