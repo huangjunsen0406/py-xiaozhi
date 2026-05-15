@@ -1,8 +1,17 @@
 import argparse
 import asyncio
+import locale
 import os
 import signal
 import sys
+
+# Windows: 强制 C/C++ 运行时使用 UTF-8，解决 sherpa-onnx 读取声调拼音文件乱码
+if sys.platform == "win32":
+    os.environ["PYTHONIOENCODING"] = "utf-8"
+    try:
+        locale.setlocale(locale.LC_ALL, ".UTF-8")
+    except locale.Error:
+        pass
 
 os.environ["QSG_RHI_BACKEND"] = "opengl"
 # 强制 qasync 使用 PySide6
