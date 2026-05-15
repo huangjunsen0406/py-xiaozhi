@@ -76,7 +76,7 @@ jobs:
 
       - name: Build package
         shell: bash
-        run: uv run unifypy . --config build.json --version ${{ steps.version.outputs.version }} --verbose 2>&1
+        run: uv run python -m unifypy . --config build.json --version ${{ steps.version.outputs.version }} --verbose
 
       - name: Rename artifact with platform suffix
         shell: bash
