@@ -121,6 +121,15 @@ jobs:
             --verbose \
             --clean
 
+      - name: Embed UTF-8 manifest into Windows exe
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: |
+          for /r dist %%f in (xiaozhi.exe) do (
+            echo Embedding manifest into %%f
+            mt.exe -manifest assets\xiaozhi.manifest -outputresource:"%%f;#1"
+          )
+
       - name: Rename artifact with platform suffix
         shell: bash
         run: |
