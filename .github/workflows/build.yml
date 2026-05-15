@@ -16,9 +16,6 @@ jobs:
           - os: macos-latest
             platform: macos-arm64
             artifact: "dist/installer/*.dmg"
-          - os: macos-13
-            platform: macos-x64
-            artifact: "dist/installer/*.dmg"
           - os: windows-latest
             platform: windows-x64
             artifact: "dist/installer/*.exe"
@@ -71,7 +68,7 @@ jobs:
         run: uv sync --extra gui --group dev
 
       - name: Install unifypy
-        run: uv pip install unifypy
+        run: uv pip install "unifypy>=2.0.10"
 
       - name: Extract version from tag
         id: version
