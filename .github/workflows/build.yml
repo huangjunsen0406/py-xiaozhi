@@ -82,8 +82,8 @@ jobs:
 
       - name: Verify Inno Setup (Windows)
         if: runner.os == 'Windows'
-        shell: cmd
-        run: ISCC.exe /? || echo "ISCC not found"
+        shell: bash
+        run: where.exe ISCC.exe && echo "Inno Setup found"
 
       - name: Build package
         shell: bash
