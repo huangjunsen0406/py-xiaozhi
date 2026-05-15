@@ -945,3 +945,43 @@ opus_loader 加载顺序改为内置优先、系统兜底，删除死代码（pa
 ### Next Steps
 
 - None - task complete
+
+
+## Session 29: feat(ci): 多平台自动打包 workflow + Windows 调试修复
+
+**Date**: 2026-05-15
+**Task**: feat(ci): 多平台自动打包 workflow + Windows 调试修复
+**Branch**: `feature/new_architecture`
+
+### Summary
+
+创建 .github/workflows/build.yml 实现 tag push 时 5 平台并行打包（macOS arm64/x64、Windows x64、Linux x64/arm64）。使用 uv + unifypy。迭代修复 Windows CI 问题：ISCC.exe 退出码、uv run --no-sync 防卸载、PYTHONIOENCODING=utf-8 修复 rich 编码崩溃。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `bf5faee` | (see git log) |
+| `cce58eb` | (see git log) |
+| `38b45fb` | (see git log) |
+| `6b8383a` | (see git log) |
+| `fc72780` | (see git log) |
+| `01f2a9a` | (see git log) |
+| `f491d54` | (see git log) |
+| `d6d830a` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 28
+- **Total Sessions**: 29
 - **Last Active**: 2026-05-15
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~947 | Active |
+| `journal-1.md` | ~987 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 29 | 2026-05-15 | feat(ci): 多平台自动打包 workflow + Windows 调试修复 | `bf5faee`, `cce58eb`, `38b45fb`, `6b8383a`, `fc72780`, `01f2a9a`, `f491d54`, `d6d830a` | `feature/new_architecture` |
 | 28 | 2026-05-15 | fix: 音乐下载阻塞 UI + macOS Metal shader 崩溃 | `362aece` | `feature/new_architecture` |
 | 27 | 2026-05-15 | 音乐播放器 API 替换与竞态修复 | `6ed9d30`, `28bcaf4`, `771389c`, `fc2b877`, `3570f28`, `93b8f0b` | `feature/new_architecture` |
 | 26 | 2026-05-14 | opus_loader 优先内置库 + utils 清理 | `eaf7b1e` | `feature/new_architecture` |
