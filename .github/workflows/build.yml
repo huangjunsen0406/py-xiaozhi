@@ -1,0 +1,98 @@
+name: Build & Upload Release Assets
+
+on:
+  push:
+    tags: ['v*.*.*']
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            platform: macos-arm64
+            artifact: "dist/installer/*.dmg"
+          - os: macos-13
+            platform: macos-x64
+            artifact: "dist/installer/*.dmg"
+          - os: windows-latest
+            platform: windows-x64
+            artifact: "dist/installer/*.exe"
+          - os: ubuntu-24.04
+            platform: linux-x64
+            artifact: "dist/installer/*.deb"
+          - os: ubuntu-24.04-arm
+            platform: linux-arm64
+            artifact: "dist/installer/*.deb"
+
+    runs-on: ${{ matrix.os }}
+    name: Build (${{ matrix.platform }})
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Install system dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: brew install portaudio opus ffmpeg
+
+      - name: Install system dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            portaudio19-dev libportaudio2 \
+            ffmpeg libopus0 libopus-dev \
+            libasound-dev \
+            libxcb-xinerama0 libxkbcommon-x11-0 libegl1 \
+            build-essential \
+            dpkg-dev fakeroot
+
+      - name: Install system dependencies (Windows)
+        if: runner.os == 'Windows'
+        run: choco install ffmpeg innosetup -y
+
+      - name: Install Python dependencies
+        run: uv sync --extra gui --group dev
+
+      - name: Install unifypy
+        run: uv pip install unifypy
+
+      - name: Extract version from tag
+        id: version
+        shell: bash
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Build package
+        run: uv run unifypy . --config build.json --version ${{ steps.version.outputs.version }} --verbose
+
+      - name: Rename artifact with platform suffix
+        shell: bash
+        run: |
+          mkdir -p dist/release
+          for f in ${{ matrix.artifact }}; do
+            if [ -f "$f" ]; then
+              ext="${f##*.}"
+              base="${f%.*}"
+              name="$(basename "$base")"
+              cp "$f" "dist/release/${name}-${{ matrix.platform }}.${ext}"
+            fi
+          done
+
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/release/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
