@@ -51,8 +51,12 @@ jobs:
             ffmpeg libopus0 libopus-dev \
             libasound-dev \
             libxcb-xinerama0 libxkbcommon-x11-0 libegl1 \
-            build-essential \
-            dpkg-dev fakeroot
+            build-essential python3-dev \
+            libopenblas-dev liblapack-dev gfortran \
+            libatlas-base-dev libssl-dev \
+            patchelf autoconf automake libtool cmake \
+            dpkg-dev fakeroot \
+            meson ninja-build
 
       - name: Install system dependencies (Windows)
         if: runner.os == 'Windows'

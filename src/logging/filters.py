@@ -10,6 +10,7 @@ import logging
 import re
 from typing import Optional
 
+
 class SensitiveDataFilter(logging.Filter):
     """
     敏感数据过滤器，自动脱敏敏感信息.
