@@ -1,5 +1,6 @@
 import asyncio
 import subprocess
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -9,6 +10,10 @@ from src.logging import get_logger
 from src.utils.resource_finder import get_ffmpeg_path, get_ffprobe_path
 
 logger = get_logger()
+
+_SUBPROCESS_KW = (
+    {"creationflags": subprocess.CREATE_NO_WINDOW} if sys.platform == "win32" else {}
+)
 
 
 class MusicDecoder:
@@ -31,6 +36,7 @@ class MusicDecoder:
                     "-version",
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
+                    **_SUBPROCESS_KW,
                 )
             except FileNotFoundError:
                 logger.warning("ffprobe 未安装，无法获取音频时长")
@@ -49,7 +55,7 @@ class MusicDecoder:
             ]
 
             process = await asyncio.create_subprocess_exec(
-                *cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+                *cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, **_SUBPROCESS_KW
             )
 
             stdout, stderr = await process.communicate()
@@ -92,6 +98,7 @@ class MusicDecoder:
                     "-version",
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
+                    **_SUBPROCESS_KW,
                 )
                 await result.wait()
             except FileNotFoundError:
@@ -120,7 +127,7 @@ class MusicDecoder:
             )
 
             self._process = await asyncio.create_subprocess_exec(
-                *cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+                *cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, **_SUBPROCESS_KW
             )
 
             # 启动读取任务
