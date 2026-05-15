@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/backend/git-workflow.md", "reason": "Git/CI conventions and branch model"}
+{"file": ".trellis/tasks/research/research/pyside6-linux-arm64-feasibility.md", "reason": "PySide6 arm64 availability and GitHub Actions runner info"}
