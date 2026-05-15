@@ -15,16 +15,16 @@ jobs:
         include:
           - os: macos-latest
             platform: macos-arm64
-            artifact: "dist/installer/*.dmg"
+            artifact: "installer/*.dmg"
           - os: windows-latest
             platform: windows-x64
-            artifact: "dist/installer/*.exe"
+            artifact: "installer/*.exe"
           - os: ubuntu-24.04
             platform: linux-x64
-            artifact: "dist/installer/*.deb"
+            artifact: "installer/*.deb"
           - os: ubuntu-24.04-arm
             platform: linux-arm64
-            artifact: "dist/installer/*.deb"
+            artifact: "installer/*.deb"
 
     runs-on: ${{ matrix.os }}
     name: Build (${{ matrix.platform }})
