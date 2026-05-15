@@ -127,12 +127,10 @@ class AudioCodec:
             return
 
         try:
-            # indata 已经是 float32，范围 [-1.0, 1.0]
-            audio_float32 = indata.flatten()
-
             # 1. 格式转换（下混 + 重采样）
+            # 保留 indata 的 (frames, channels) 形状，让 downmix_to_mono 正确下混
             audio_converted = self.converter.convert_input(
-                audio_float32, AudioConfig.INPUT_FRAME_SIZE
+                indata, AudioConfig.INPUT_FRAME_SIZE
             )
             if audio_converted is None:
                 return  # 数据不足，等待下一帧

@@ -24,7 +24,7 @@ class Protocol:
         self._is_closing = False
         self._reconnect_attempts = 0
         self._max_reconnect_attempts = 5  # 默认重连5次
-        self._auto_reconnect_enabled = True  # 默认启用自动重连
+        self._auto_reconnect_enabled = False  # 默认禁用自动重连
         self._connection_monitor_task = None
 
     def on_incoming_json(self, callback):
