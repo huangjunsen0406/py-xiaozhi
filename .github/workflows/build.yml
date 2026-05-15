@@ -87,6 +87,8 @@ jobs:
 
       - name: Build package
         shell: bash
+        env:
+          PYTHONIOENCODING: utf-8
         run: |
           uv run --no-sync unifypy . \
             --config build.json \
