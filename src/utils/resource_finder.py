@@ -31,10 +31,8 @@ import platform as plat
 import sys
 from functools import lru_cache
 from pathlib import Path
-from typing import Optional
 
 import platformdirs
-
 
 from src.constants.system import SystemConstants
 
@@ -127,7 +125,7 @@ def get_platform_info() -> tuple[str, str]:
         return "linux", "arm64" if is_arm else "x64"
 
 
-def get_lib_path(lib_name: str) -> Optional[Path]:
+def get_lib_path(lib_name: str) -> Path | None:
     """获取动态库路径.
 
     Args:
@@ -163,12 +161,42 @@ def get_lib_path(lib_name: str) -> Optional[Path]:
     return None
 
 
-def get_lib_dir(lib_name: str) -> Optional[Path]:
+def get_lib_dir(lib_name: str) -> Path | None:
     """
     获取动态库所在目录.
     """
     lib_path = get_lib_path(lib_name)
     return lib_path.parent if lib_path else None
+
+
+def get_ffmpeg_path() -> str:
+    """获取 ffmpeg 可执行文件路径.
+
+    搜索顺序：内置 libs/ffmpeg/ → 系统 PATH
+    """
+    import shutil
+
+    plat_dir, arch = get_platform_info()
+    ext = ".exe" if sys.platform == "win32" else ""
+    bundled = get_app_root() / "libs" / "ffmpeg" / plat_dir / arch / f"ffmpeg{ext}"
+    if bundled.exists():
+        return str(bundled)
+    return shutil.which("ffmpeg") or "ffmpeg"
+
+
+def get_ffprobe_path() -> str:
+    """获取 ffprobe 可执行文件路径.
+
+    搜索顺序：内置 libs/ffmpeg/ → 系统 PATH
+    """
+    import shutil
+
+    plat_dir, arch = get_platform_info()
+    ext = ".exe" if sys.platform == "win32" else ""
+    bundled = get_app_root() / "libs" / "ffmpeg" / plat_dir / arch / f"ffprobe{ext}"
+    if bundled.exists():
+        return str(bundled)
+    return shutil.which("ffprobe") or "ffprobe"
 
 
 def get_models_dir() -> Path:

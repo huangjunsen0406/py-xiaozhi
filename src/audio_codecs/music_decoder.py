@@ -1,12 +1,12 @@
 import asyncio
 import subprocess
 from pathlib import Path
-from typing import Optional
 
 import numpy as np
 
 from src.constants.constants import AudioConfig
 from src.logging import get_logger
+from src.utils.resource_finder import get_ffmpeg_path, get_ffprobe_path
 
 logger = get_logger()
 
@@ -23,10 +23,11 @@ class MusicDecoder:
             时长（秒），失败返回 0
         """
         try:
+            ffprobe = get_ffprobe_path()
             # 检查 ffprobe 是否可用
             try:
                 await asyncio.create_subprocess_exec(
-                    "ffprobe",
+                    ffprobe,
                     "-version",
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
@@ -37,7 +38,7 @@ class MusicDecoder:
 
             # 使用 ffprobe 获取时长
             cmd = [
-                "ffprobe",
+                ffprobe,
                 "-v",
                 "error",  # 只显示错误
                 "-show_entries",
@@ -70,8 +71,8 @@ class MusicDecoder:
     def __init__(self, sample_rate: int = 24000, channels: int = 1):
         self.sample_rate = sample_rate
         self.channels = channels
-        self._process: Optional[subprocess.Process] = None
-        self._decode_task: Optional[asyncio.Task] = None
+        self._process: subprocess.Process | None = None
+        self._decode_task: asyncio.Task | None = None
         self._stopped = False
 
     async def start_decode(
@@ -84,9 +85,10 @@ class MusicDecoder:
         self._stopped = False
 
         try:
+            ffmpeg = get_ffmpeg_path()
             try:
                 result = await asyncio.create_subprocess_exec(
-                    "ffmpeg",
+                    ffmpeg,
                     "-version",
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
@@ -96,7 +98,7 @@ class MusicDecoder:
                 logger.error("FFmpeg 未安装或不在 PATH 中")
                 return False
 
-            cmd = ["ffmpeg"]
+            cmd = [ffmpeg]
 
             if start_position > 0.1:
                 cmd.extend(["-ss", f"{start_position:.3f}"])

@@ -86,6 +86,30 @@ jobs:
         shell: bash
         run: where.exe ISCC.exe && echo "Inno Setup found"
 
+      - name: Bundle FFmpeg into libs/
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            PLAT="mac"; ARCH="arm64"
+          elif [ "$RUNNER_OS" = "Windows" ]; then
+            PLAT="win"; ARCH="x64"
+          else
+            PLAT="linux"
+            if [ "$(uname -m)" = "aarch64" ]; then ARCH="arm64"; else ARCH="x64"; fi
+          fi
+          DEST="libs/ffmpeg/${PLAT}/${ARCH}"
+          mkdir -p "$DEST"
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            cp "$(which ffmpeg.exe)" "$DEST/ffmpeg.exe"
+            cp "$(which ffprobe.exe)" "$DEST/ffprobe.exe"
+          else
+            cp "$(which ffmpeg)" "$DEST/ffmpeg"
+            cp "$(which ffprobe)" "$DEST/ffprobe"
+            chmod +x "$DEST/ffmpeg" "$DEST/ffprobe"
+          fi
+          echo "Bundled FFmpeg to $DEST:"
+          ls -lh "$DEST"
+
       - name: Build package
         shell: bash
         env:
