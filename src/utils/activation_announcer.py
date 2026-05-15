@@ -53,10 +53,17 @@ class ActivationAnnouncer:
                 "-"
             ]
 
+            import sys
+
+            popen_kw = {}
+            if sys.platform == "win32":
+                popen_kw["creationflags"] = subprocess.CREATE_NO_WINDOW
+
             self._process = subprocess.Popen(
                 cmd,
                 stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE
+                stderr=subprocess.PIPE,
+                **popen_kw,
             )
 
             stdout, stderr = self._process.communicate(timeout=10)
