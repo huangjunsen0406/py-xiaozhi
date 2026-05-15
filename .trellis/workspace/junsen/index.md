@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 27
+- **Total Sessions**: 28
 - **Last Active**: 2026-05-15
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~914 | Active |
+| `journal-1.md` | ~947 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 28 | 2026-05-15 | fix: 音乐下载阻塞 UI + macOS Metal shader 崩溃 | `362aece` | `feature/new_architecture` |
 | 27 | 2026-05-15 | 音乐播放器 API 替换与竞态修复 | `6ed9d30`, `28bcaf4`, `771389c`, `fc2b877`, `3570f28`, `93b8f0b` | `feature/new_architecture` |
 | 26 | 2026-05-14 | opus_loader 优先内置库 + utils 清理 | `eaf7b1e` | `feature/new_architecture` |
 | 25 | 2026-05-14 | 删除 bazi + 拆分 system 为 volume 和 app | `0a9809b` | `feature/new_architecture` |

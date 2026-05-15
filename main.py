@@ -4,6 +4,7 @@ import os
 import signal
 import sys
 
+os.environ["QSG_RHI_BACKEND"] = "opengl"
 # 强制 qasync 使用 PySide6
 os.environ["QT_API"] = "pyside6"
 # 使用 Basic 样式以支持自定义控件
