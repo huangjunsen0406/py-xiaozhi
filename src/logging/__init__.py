@@ -2,14 +2,13 @@ import inspect
 import logging
 import sys
 from pathlib import Path
-from typing import Any, Optional, Union
 
-from .log_config import LoggingConfig, LoggingConfigManager
 from .filters import (
     DuplicateFilter,
     SensitiveDataFilter,
 )
 from .formatters import ColoredFormatter, JsonFormatter, SimpleFormatter
+from .log_config import LoggingConfig, LoggingConfigManager
 from .log_handlers import (
     AsyncHandler,
     TimeSizeRotatingFileHandler,
@@ -44,15 +43,15 @@ __all__ = [
 
 
 def setup_logging(
-    level: Optional[str] = None,
-    log_dir: Union[str, Path, None] = None,
+    level: str | None = None,
+    log_dir: str | Path | None = None,
     enable_console: bool = True,
     enable_file: bool = True,
     enable_json: bool = False,
     enable_async: bool = False,
     enable_sensitive_filter: bool = True,
-    config: Optional[LoggingConfig] = None,
-) -> Optional[Path]:
+    config: LoggingConfig | None = None,
+) -> Path | None:
     """初始化日志系统.
 
     Args:
@@ -100,10 +99,12 @@ def setup_logging(
             handler.close()
             root_logger.removeHandler(handler)
 
-    # 创建过滤器
-    filters = [DuplicateFilter(suppress_seconds=3.0)]
-    if config.enable_sensitive_filter:
-        filters.append(SensitiveDataFilter(patterns=config.sensitive_patterns))
+    def _make_filters() -> list[logging.Filter]:
+        """每个 handler 需要独立的 filter 实例，避免共享状态导致日志丢失."""
+        result: list[logging.Filter] = [DuplicateFilter(suppress_seconds=3.0)]
+        if config.enable_sensitive_filter:
+            result.append(SensitiveDataFilter(patterns=config.sensitive_patterns))
+        return result
 
     # 创建处理器列表
     handlers: list[logging.Handler] = []
@@ -119,7 +120,7 @@ def setup_logging(
                 show_thread=True,
             )
         )
-        for f in filters:
+        for f in _make_filters():
             console_handler.addFilter(f)
         handlers.append(console_handler)
 
@@ -143,7 +144,7 @@ def setup_logging(
                 include_trace_id=True,
             )
         )
-        for f in filters:
+        for f in _make_filters():
             file_handler.addFilter(f)
         handlers.append(file_handler)
 
@@ -166,7 +167,7 @@ def setup_logging(
                 include_trace_id=True,
             )
         )
-        for f in filters:
+        for f in _make_filters():
             error_handler.addFilter(f)
         handlers.append(error_handler)
 
@@ -184,7 +185,7 @@ def setup_logging(
         )
         json_handler.setLevel(getattr(logging, config.level, logging.INFO))
         json_handler.setFormatter(JsonFormatter())
-        for f in filters:
+        for f in _make_filters():
             json_handler.addFilter(f)
         handlers.append(json_handler)
 
@@ -213,7 +214,7 @@ def setup_logging(
     return log_file
 
 
-def get_logger(name: Optional[str] = None) -> logging.Logger:
+def get_logger(name: str | None = None) -> logging.Logger:
     """获取配置好的日志记录器.
 
     Args:
@@ -257,61 +258,3 @@ def shutdown_logging() -> None:
 
     logging.shutdown()
     _initialized = False
-
-
-# 便捷函数：创建带上下文的 logger
-class ContextLogger:
-    """
-    带上下文支持的 Logger 包装器.
-    """
-
-    def __init__(self, logger: logging.Logger) -> None:
-        self._logger = logger
-
-    def _log_with_context(
-        self, level: int, msg: str, *args: Any, **kwargs: Any
-    ) -> None:
-        """
-        带上下文信息记录日志.
-        """
-        extra = kwargs.pop("extra", {})
-        extra.update(get_all_context())
-        kwargs["extra"] = extra
-        self._logger.log(level, msg, *args, **kwargs)
-
-    def debug(self, msg: str, *args: Any, **kwargs: Any) -> None:
-        self._log_with_context(logging.DEBUG, msg, *args, **kwargs)
-
-    def info(self, msg: str, *args: Any, **kwargs: Any) -> None:
-        self._log_with_context(logging.INFO, msg, *args, **kwargs)
-
-    def warning(self, msg: str, *args: Any, **kwargs: Any) -> None:
-        self._log_with_context(logging.WARNING, msg, *args, **kwargs)
-
-    def error(self, msg: str, *args: Any, **kwargs: Any) -> None:
-        self._log_with_context(logging.ERROR, msg, *args, **kwargs)
-
-    def critical(self, msg: str, *args: Any, **kwargs: Any) -> None:
-        self._log_with_context(logging.CRITICAL, msg, *args, **kwargs)
-
-    def exception(self, msg: str, *args: Any, **kwargs: Any) -> None:
-        kwargs["exc_info"] = True
-        self._log_with_context(logging.ERROR, msg, *args, **kwargs)
-
-
-def get_context_logger(name: Optional[str] = None) -> ContextLogger:
-    """获取带上下文支持的日志记录器.
-
-    Args:
-        name: 日志记录器名称。如果不传，自动使用调用者的模块名。
-
-    Returns:
-        带上下文支持的日志记录器
-    """
-    if name is None:
-        frame = inspect.currentframe()
-        if frame and frame.f_back:
-            name = frame.f_back.f_globals.get("__name__", "__main__")
-        else:
-            name = "__main__"
-    return ContextLogger(get_logger(name))

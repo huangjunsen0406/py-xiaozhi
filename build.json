@@ -51,27 +51,10 @@
       }
     },
     "linux": {
-      "formats": [
-        "rpm",
-        "appimage",
-        "deb"
-      ],
       "deb": {
         "package": "xiaozhi",
         "section": "utils",
         "priority": "optional",
-        "desktop_entry": true,
-        "categories": [
-          "Utility"
-        ]
-      },
-      "rpm": {
-        "name": "xiaozhi",
-        "summary": "小智 AI Assistant",
-        "license": "MIT",
-        "group": "Applications/Utilities"
-      },
-      "appimage": {
         "desktop_entry": true,
         "categories": [
           "Utility"
