@@ -985,3 +985,45 @@ opus_loader 加载顺序改为内置优先、系统兜底，删除死代码（pa
 ### Next Steps
 
 - None - task complete
+
+
+## Session 30: feat: CI 打包 FFmpeg + 日志修复 + CI 迭代完善
+
+**Date**: 2026-05-15
+**Task**: feat: CI 打包 FFmpeg + 日志修复 + CI 迭代完善
+**Branch**: `feature/new_architecture`
+
+### Summary
+
+1. CI 打包 FFmpeg 到应用内，解决启动台找不到 ffmpeg 的问题；2. 修复 DuplicateFilter 共享实例导致文件日志丢失的 bug；3. CI workflow 多轮迭代修复（Windows Inno Setup PATH、uv run --no-sync、PYTHONIOENCODING、产物路径、Linux 编译依赖）；4. build.json name 改为 ASCII 避免路径编码问题。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `0fdada1` | (see git log) |
+| `c0a26b5` | (see git log) |
+| `cb0643e` | (see git log) |
+| `ad4905c` | (see git log) |
+| `9a1d623` | (see git log) |
+| `03f7e26` | (see git log) |
+| `d6d830a` | (see git log) |
+| `f491d54` | (see git log) |
+| `01f2a9a` | (see git log) |
+| `fc72780` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
