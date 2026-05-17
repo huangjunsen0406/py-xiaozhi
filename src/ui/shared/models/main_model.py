@@ -25,7 +25,7 @@ class MainModel(BaseModel):
         self._connected = False
         self._auto_mode = False
         self._mode_text = "手动对话"
-        self._button_text = "按住说话"
+        self._button_text = "按住后说话"
 
     # ========== Properties ==========
 
@@ -85,8 +85,10 @@ class MainModel(BaseModel):
         if self._auto_mode != auto:
             self._auto_mode = auto
             self._mode_text = "自动对话" if auto else "手动对话"
+            self._button_text = "开始对话" if auto else "按住后说话"
             self.autoModeChanged.emit()
             self.modeTextChanged.emit()
+            self.buttonTextChanged.emit()
 
     def set_button_text(self, text: str):
         if self._button_text != text:
