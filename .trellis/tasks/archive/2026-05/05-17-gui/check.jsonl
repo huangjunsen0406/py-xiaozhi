@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/backend/pyside6-guidelines.md", "reason": "校验 PySide6 信号 emit 模式与按钮文本绑定是否符合规范"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "代码质量与一致性检查（常量统一、状态机变更不留死代码）"}

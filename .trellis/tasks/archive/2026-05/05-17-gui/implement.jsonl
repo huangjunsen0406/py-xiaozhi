@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/backend/pyside6-guidelines.md", "reason": "PySide6 Property/Signal 写法，set_auto_mode 中按需同步 emit buttonTextChanged 的模式"}
+{"file": ".trellis/spec/backend/python-style.md", "reason": "Python 编码约定，命名/缩进/类型注解风格"}
