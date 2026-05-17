@@ -1027,3 +1027,36 @@ opus_loader 加载顺序改为内置优先、系统兜底，删除死代码（pa
 ### Next Steps
 
 - None - task complete
+
+
+## Session 31: GUI 切换自动对话按钮文案不同步修复
+
+**Date**: 2026-05-17
+**Task**: GUI 切换自动对话按钮文案不同步修复
+**Branch**: `feature/new_architecture`
+
+### Summary
+
+MainModel.set_auto_mode 切换模式时同步刷新 _button_text 并 emit buttonTextChanged，修复 QML manualBtn/autoBtn 共享 buttonText 在切换自动模式后仍显示"按住后说话"的问题；统一默认值为"按住后说话"。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `8d97ffa` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
