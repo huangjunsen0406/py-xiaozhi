@@ -123,6 +123,7 @@ jobs:
         env:
           PYTHONIOENCODING: utf-8
         run: |
+          rm -f *.spec
           uv run --no-sync unifypy . \
             --config build.json \
             --version ${{ steps.version.outputs.version }} \
