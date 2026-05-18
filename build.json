@@ -1,8 +1,8 @@
 {
   "entry": "main.py",
-  "name": "xiaozhi",
+  "name": "py-xiaozhi",
   "display_name": "小智",
-  "version": "1.1.9",
+  "version": "2.0.3",
   "icon": "assets/icon.png",
   "pyinstaller": {
     "onefile": false,
@@ -19,7 +19,7 @@
   },
   "platforms": {
     "macos": {
-      "bundle_identifier": "com.company.小智",
+      "bundle_identifier": "com.py-xiaozhi.app",
       "minimum_system_version": "10.13",
       "category": "public.app-category.productivity",
       "microphone_usage_description": "此应用需要访问麦克风以实现录音功能",
@@ -52,7 +52,7 @@
     },
     "linux": {
       "deb": {
-        "package": "xiaozhi",
+        "package": "py-xiaozhi",
         "section": "utils",
         "priority": "optional",
         "desktop_entry": true,
