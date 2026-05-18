@@ -31,8 +31,9 @@
 
 ## 项目简介
 
-py-xiaozhi 是一个使用 Python 实现的小智语音客户端，旨在通过代码学习和在没有硬件条件下体验 AI 小智的语音功能。
-本仓库是基于 [xiaozhi-esp32](https://github.com/78/xiaozhi-esp32) 移植。
+py-xiaozhi 是一个轻量级、跨平台的多模态 AI 交互主控框架，基于 Python 异步架构，支持实时语音、视觉识别和 IoT 设备控制。可部署于 Windows / macOS / Linux 桌面以及 Raspberry Pi、RDK 等 ARM 嵌入式平台，向下对接具身智能硬件，向上接入大语言模型，开箱即用。
+
+> 本项目从 [xiaozhi-esp32](https://github.com/78/xiaozhi-esp32) 移植演进而来，已被 [D-Robotics 官方生态 (xiaozhi-in-rdk)](https://github.com/D-Robotics/xiaozhi-in-rdk) 深度适配。
 
 > **重要提示**
 >

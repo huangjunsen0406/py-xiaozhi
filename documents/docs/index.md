@@ -4,7 +4,7 @@ layout: home
 
 hero:
   name: "PY-XIAOZHI"
-  tagline: py-xiaozhi 是一个使用 Python 实现的小智语音客户端，旨在通过代码学习和在没有硬件条件下体验 AI 小智的语音功能。
+  tagline: 轻量级、跨平台的多模态 AI 交互主控框架。支持实时语音、视觉识别和 IoT 设备控制，可部署于桌面及 ARM 嵌入式平台。
   actions:
     - theme: brand
       text: 开始使用
