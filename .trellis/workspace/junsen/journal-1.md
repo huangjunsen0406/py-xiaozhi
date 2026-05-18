@@ -1093,3 +1093,37 @@ MainModel.set_auto_mode 切换模式时同步刷新 _button_text 并 emit button
 ### Next Steps
 
 - None - task complete
+
+
+## Session 33: feat: system.py 唯一真相源 + release.py 自动发版 + 配置文档更新
+
+**Date**: 2026-05-18
+**Task**: feat: system.py 唯一真相源 + release.py 自动发版 + 配置文档更新
+**Branch**: `feature/new_architecture`
+
+### Summary
+
+system.py 为版本/名称唯一真相源，新建 release.py 替代 release.js 实现交互式发版；build.json 从 system.py 动态生成；APP_DISPLAY_NAME 改为小智；更新配置说明文档指向用户数据目录
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b1bb5c8` | (see git log) |
+| `e8dffb3` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
