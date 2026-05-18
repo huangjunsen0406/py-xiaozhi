@@ -1160,3 +1160,36 @@ system.py 为版本/名称唯一真相源，新建 release.py 替代 release.js 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 35: fix: 自动对话模式 tts.stop 清缓冲区防回声 + v2.0.5 发布
+
+**Date**: 2026-05-18
+**Task**: fix: 自动对话模式 tts.stop 清缓冲区防回声 + v2.0.5 发布
+**Branch**: `feature/new_architecture`
+
+### Summary
+
+自动对话模式 tts.stop 切 LISTENING 前清空 output_buffer 和 resampler 缓冲区，防止麦克风录到残留 TTS 音频；手动模式不受影响；已合并 main 并发布 v2.0.5
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `555f114` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
