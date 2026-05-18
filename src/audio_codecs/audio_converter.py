@@ -167,6 +167,10 @@ class AudioConverter:
 
         return audio
 
+    def clear_output_buffer(self):
+        """只清空输出缓冲区（用于 TTS 停止时防回声，不影响输入管线）"""
+        self._output_buffer.clear()
+
     def clear_buffers(self):
         """清空缓冲区"""
         self._input_buffer.clear()
