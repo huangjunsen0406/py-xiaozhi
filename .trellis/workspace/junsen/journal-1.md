@@ -1127,3 +1127,36 @@ system.py 为版本/名称唯一真相源，新建 release.py 替代 release.js 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 34: docs: 升级项目定位 + README 专业化 + PyInstaller spec
+
+**Date**: 2026-05-18
+**Task**: docs: 升级项目定位 + README 专业化 + PyInstaller spec
+**Branch**: `feature/new_architecture`
+
+### Summary
+
+项目定位从语音客户端升级为跨平台多模态 AI 交互主控框架；英文 README 重写突出 embodied AI / edge computing；VitePress tagline 同步；添加 py-xiaozhi.spec
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `492320e` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

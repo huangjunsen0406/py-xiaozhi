@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 33
+- **Total Sessions**: 34
 - **Last Active**: 2026-05-18
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1129 | Active |
+| `journal-1.md` | ~1162 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 34 | 2026-05-18 | docs: 升级项目定位 + README 专业化 + PyInstaller spec | `492320e` | `feature/new_architecture` |
 | 33 | 2026-05-18 | feat: system.py 唯一真相源 + release.py 自动发版 + 配置文档更新 | `b1bb5c8`, `e8dffb3` | `feature/new_architecture` |
 | 32 | 2026-05-18 | fix: Opus 帧时长自动检测 + 输出回调循环取 chunk | `c48ea3c` | `feature/new_architecture` |
 | 31 | 2026-05-17 | GUI 切换自动对话按钮文案不同步修复 | `8d97ffa` | `feature/new_architecture` |
