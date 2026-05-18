@@ -1160,3 +1160,36 @@ system.py 为版本/名称唯一真相源，新建 release.py 替代 release.js 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 35: fix: tts_stop 只清输出缓冲区防一轮游
+
+**Date**: 2026-05-18
+**Task**: fix: tts_stop 只清输出缓冲区防一轮游
+**Branch**: `main`
+
+### Summary
+
+tts_stop 的 clear_audio_queue 改用 clear_output_buffer 不清输入缓冲区 + 异常保护确保状态切换一定执行，修复自动对话模式一轮游卡死
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `4d36e8c` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

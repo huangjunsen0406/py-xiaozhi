@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 34
+- **Total Sessions**: 35
 - **Last Active**: 2026-05-18
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1162 | Active |
+| `journal-1.md` | ~1195 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 35 | 2026-05-18 | fix: tts_stop 只清输出缓冲区防一轮游 | `4d36e8c` | `main` |
 | 34 | 2026-05-18 | docs: 升级项目定位 + README 专业化 + PyInstaller spec | `492320e` | `feature/new_architecture` |
 | 33 | 2026-05-18 | feat: system.py 唯一真相源 + release.py 自动发版 + 配置文档更新 | `b1bb5c8`, `e8dffb3` | `feature/new_architecture` |
 | 32 | 2026-05-18 | fix: Opus 帧时长自动检测 + 输出回调循环取 chunk | `c48ea3c` | `feature/new_architecture` |
