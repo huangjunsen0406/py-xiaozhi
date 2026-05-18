@@ -92,7 +92,6 @@ class AudioConfig:
     OUTPUT_SAMPLE_RATE: int = 24000
     FRAME_DURATION: int = 20
     INPUT_FRAME_SIZE: int = 320
-    OUTPUT_FRAME_SIZE: int = 480
 
     @classmethod
     def reload(cls):
@@ -106,7 +105,6 @@ class AudioConfig:
         )
         cls.FRAME_DURATION = get_frame_duration()
         cls.INPUT_FRAME_SIZE = int(cls.INPUT_SAMPLE_RATE * (cls.FRAME_DURATION / 1000))
-        cls.OUTPUT_FRAME_SIZE = int(cls.OUTPUT_SAMPLE_RATE * (cls.FRAME_DURATION / 1000))
 
 
 # 模块加载时初始化默认值

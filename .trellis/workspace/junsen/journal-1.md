@@ -1027,3 +1027,103 @@ opus_loader 加载顺序改为内置优先、系统兜底，删除死代码（pa
 ### Next Steps
 
 - None - task complete
+
+
+## Session 31: GUI 切换自动对话按钮文案不同步修复
+
+**Date**: 2026-05-17
+**Task**: GUI 切换自动对话按钮文案不同步修复
+**Branch**: `feature/new_architecture`
+
+### Summary
+
+MainModel.set_auto_mode 切换模式时同步刷新 _button_text 并 emit buttonTextChanged，修复 QML manualBtn/autoBtn 共享 buttonText 在切换自动模式后仍显示"按住后说话"的问题；统一默认值为"按住后说话"。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `8d97ffa` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 32: fix: Opus 帧时长自动检测 + 输出回调循环取 chunk
+
+**Date**: 2026-05-18
+**Task**: fix: Opus 帧时长自动检测 + 输出回调循环取 chunk
+**Branch**: `feature/new_architecture`
+
+### Summary
+
+解析 Opus TOC 字节自动检测服务端帧时长，解决 buffer too small 和非整除采样率卡顿；output_callback 改为循环取 chunk + drain 剩余数据避免整帧静音
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c48ea3c` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 33: feat: system.py 唯一真相源 + release.py 自动发版 + 配置文档更新
+
+**Date**: 2026-05-18
+**Task**: feat: system.py 唯一真相源 + release.py 自动发版 + 配置文档更新
+**Branch**: `feature/new_architecture`
+
+### Summary
+
+system.py 为版本/名称唯一真相源，新建 release.py 替代 release.js 实现交互式发版；build.json 从 system.py 动态生成；APP_DISPLAY_NAME 改为小智；更新配置说明文档指向用户数据目录
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b1bb5c8` | (see git log) |
+| `e8dffb3` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

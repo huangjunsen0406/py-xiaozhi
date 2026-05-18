@@ -17,6 +17,62 @@ from src.logging import get_logger  # noqa: E402
 logger = get_logger()
 
 
+_OPUS_BANDWIDTHS = {
+    "NB": "8kHz", "MB": "12kHz", "WB": "16kHz",
+    "SWB": "24kHz", "FB": "48kHz",
+}
+
+
+def parse_opus_toc(opus_data: bytes) -> dict:
+    """从 Opus 包的 TOC 字节解析编码参数。
+
+    根据 RFC 6716 Section 3.1 解析：
+    - TOC 高 5 位 = config（决定模式/带宽/单帧时长）
+    - TOC 低 2 位 = code（决定帧数量）
+
+    Returns:
+        dict with keys: duration_ms, frame_ms, num_frames, bandwidth, mode
+        空包返回 None
+    """
+    if not opus_data:
+        return None
+
+    toc = opus_data[0]
+    config = (toc >> 3) & 0x1F
+    code = toc & 0x03
+
+    # config → 模式 + 带宽 + 单帧时长
+    if config < 12:
+        mode = "SILK"
+        bandwidth = ("NB", "MB", "WB")[config // 4]
+        frame_ms = (10, 20, 40, 60)[config % 4]
+    elif config < 16:
+        mode = "Hybrid"
+        bandwidth = ("SWB", "FB")[(config - 12) // 2]
+        frame_ms = (10, 20)[config % 2]
+    else:
+        mode = "CELT"
+        bandwidth = ("NB", "WB", "SWB", "FB")[(config - 16) // 4]
+        frame_ms = (2.5, 5, 10, 20)[config % 4]
+
+    # code → 帧数量
+    if code == 0:
+        num_frames = 1
+    elif code <= 2:
+        num_frames = 2
+    else:
+        num_frames = (opus_data[1] & 0x3F) if len(opus_data) >= 2 else 1
+
+    return {
+        "duration_ms": frame_ms * num_frames,
+        "frame_ms": frame_ms,
+        "num_frames": num_frames,
+        "bandwidth": bandwidth,
+        "bandwidth_hz": _OPUS_BANDWIDTHS[bandwidth],
+        "mode": mode,
+    }
+
+
 class OpusCodec:
     """Opus 编解码器
 

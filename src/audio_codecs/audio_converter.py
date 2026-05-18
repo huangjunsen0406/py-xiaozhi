@@ -148,6 +148,25 @@ class AudioConverter:
 
         return audio
 
+    def drain_output_buffer(self, target_frames: int) -> Optional[np.ndarray]:
+        """排出 resampler 缓冲区中的剩余数据（带上混）。
+
+        用于队列耗尽但缓冲区差少量样本时，避免整帧静音。
+        """
+        available = min(len(self._output_buffer), target_frames)
+        if available == 0:
+            return None
+
+        frame_data = [self._output_buffer.popleft() for _ in range(available)]
+        audio = np.array(frame_data, dtype=np.float32)
+
+        if self.needs_output_upmix:
+            audio = upmix_mono_to_channels(audio, self.output_channels)
+        else:
+            audio = audio.reshape(-1, 1)
+
+        return audio
+
     def clear_buffers(self):
         """清空缓冲区"""
         self._input_buffer.clear()

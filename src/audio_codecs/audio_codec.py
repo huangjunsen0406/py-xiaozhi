@@ -5,7 +5,7 @@ import numpy as np
 
 from src.audio_codecs.audio_buffer import AudioBuffer
 from src.audio_codecs.audio_converter import AudioConverter
-from src.audio_codecs.opus_codec import OpusCodec
+from src.audio_codecs.opus_codec import OpusCodec, parse_opus_toc
 from src.audio_codecs.stream_manager import AudioStreamManager
 from src.constants.constants import AudioConfig
 from src.logging import get_logger
@@ -64,6 +64,7 @@ class AudioCodec:
         # 状态标记
         self._is_closing = False
         self._closed = False
+        self._server_opus_logged = False
 
     async def initialize(self):
         """初始化所有组件
@@ -161,6 +162,10 @@ class AudioCodec:
 
         数据流：队列 → 重采样 → 上混 → 设备
 
+        循环从队列取 chunk 喂给 convert_output，直到 resampler
+        内部缓冲区凑够 frames 或队列耗尽。解决采样率非整除
+        （如 16kHz→44100Hz）或服务器帧时长不匹配时的卡顿问题。
+
         Args:
             outdata: float32 输出缓冲区，shape (frames, channels)
             frames: 帧数
@@ -171,19 +176,18 @@ class AudioCodec:
             logger.warning(f"输出流状态: {status}")
 
         try:
-            # 从缓冲区获取 float32 数据
-            audio_data = self.output_buffer.get_nowait()
+            audio_converted = None
 
-            if audio_data is None:
-                # 无数据时输出静音
-                outdata.fill(0.0)
-                return
+            while audio_converted is None:
+                audio_data = self.output_buffer.get_nowait()
+                if audio_data is None:
+                    break
+                audio_converted = self.converter.convert_output(audio_data, frames)
 
-            # 格式转换（重采样 + 上混）
-            audio_converted = self.converter.convert_output(audio_data, frames)
+            if audio_converted is None:
+                audio_converted = self.converter.drain_output_buffer(frames)
 
             if audio_converted is None or len(audio_converted) < frames:
-                # 数据不足，填充静音
                 outdata.fill(0.0)
                 if audio_converted is not None and len(audio_converted) > 0:
                     outdata[: len(audio_converted)] = audio_converted
@@ -253,16 +257,30 @@ class AudioCodec:
     async def write_audio(self, opus_data: bytes):
         """解码并播放音频（Opus → 扬声器）
 
+        自动从 Opus TOC 字节检测帧时长，无需依赖客户端配置。
+
         Args:
             opus_data: Opus 编码数据
         """
         try:
-            # Opus 解码为 float32
-            audio_float32 = self.opus_codec.decode(
-                opus_data, AudioConfig.OUTPUT_FRAME_SIZE
-            )
+            toc_info = parse_opus_toc(opus_data)
+            if toc_info is None:
+                return
 
-            # 放入播放队列
+            if not self._server_opus_logged:
+                self._server_opus_logged = True
+                logger.info(
+                    f"服务端 Opus 参数: "
+                    f"{toc_info['mode']} {toc_info['bandwidth_hz']} | "
+                    f"帧时长 {toc_info['duration_ms']}ms "
+                    f"({toc_info['frame_ms']}ms×{toc_info['num_frames']})"
+                )
+
+            frame_size = int(
+                AudioConfig.OUTPUT_SAMPLE_RATE * toc_info["duration_ms"] / 1000
+            )
+            audio_float32 = self.opus_codec.decode(opus_data, frame_size)
+
             await self.output_buffer.put(audio_float32, replace_oldest=True)
 
         except Exception as e:
@@ -278,6 +296,7 @@ class AudioCodec:
 
     async def clear_audio_queue(self):
         """清空音频队列"""
+        self._server_opus_logged = False
         count = await self.output_buffer.clear()
         if count > 0:
             logger.info(f"清空音频队列，丢弃 {count} 帧")
