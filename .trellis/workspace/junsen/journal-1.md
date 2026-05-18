@@ -1060,3 +1060,36 @@ MainModel.set_auto_mode 切换模式时同步刷新 _button_text 并 emit button
 ### Next Steps
 
 - None - task complete
+
+
+## Session 32: fix: Opus 帧时长自动检测 + 输出回调循环取 chunk
+
+**Date**: 2026-05-18
+**Task**: fix: Opus 帧时长自动检测 + 输出回调循环取 chunk
+**Branch**: `feature/new_architecture`
+
+### Summary
+
+解析 Opus TOC 字节自动检测服务端帧时长，解决 buffer too small 和非整除采样率卡顿；output_callback 改为循环取 chunk + drain 剩余数据避免整帧静音
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c48ea3c` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

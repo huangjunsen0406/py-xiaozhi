@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 31
-- **Last Active**: 2026-05-17
+- **Total Sessions**: 32
+- **Last Active**: 2026-05-18
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1062 | Active |
+| `journal-1.md` | ~1095 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 32 | 2026-05-18 | fix: Opus 帧时长自动检测 + 输出回调循环取 chunk | `c48ea3c` | `feature/new_architecture` |
 | 31 | 2026-05-17 | GUI 切换自动对话按钮文案不同步修复 | `8d97ffa` | `feature/new_architecture` |
 | 30 | 2026-05-15 | feat: CI 打包 FFmpeg + 日志修复 + CI 迭代完善 | `0fdada1`, `c0a26b5`, `cb0643e`, `ad4905c`, `9a1d623`, `03f7e26`, `d6d830a`, `f491d54`, `01f2a9a`, `fc72780` | `feature/new_architecture` |
 | 29 | 2026-05-15 | feat(ci): 多平台自动打包 workflow + Windows 调试修复 | `bf5faee`, `cce58eb`, `38b45fb`, `6b8383a`, `fc72780`, `01f2a9a`, `f491d54`, `d6d830a` | `feature/new_architecture` |
