@@ -37,7 +37,7 @@ py-xiaozhi is a Python-based Xiaozhi voice client, designed to learn coding and 
 
 ## Related Projects
 
-- [xiaozhi-desktop](https://github.com/huangjunsen0406/xiaozhi-desktop) — Electron desktop client with AEC echo cancellation, Live2D, floating window modes, and Windows / macOS installers
+- [xiaozhi-desktop](https://xiaozhi.junsen.online) — Electron desktop client with AEC echo cancellation, Live2D, floating window modes, and Windows / macOS installers
 
 ## Demo
 
