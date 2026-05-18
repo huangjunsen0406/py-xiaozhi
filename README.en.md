@@ -31,9 +31,11 @@
 
 English | [简体中文](README.md)
 
-## Project Introduction
+## About
 
-py-xiaozhi is a Python-based Xiaozhi voice client, designed to learn coding and experience AI voice interaction without hardware requirements. This repository is ported from [xiaozhi-esp32](https://github.com/78/xiaozhi-esp32).
+py-xiaozhi is a lightweight, cross-platform multi-modal AI interaction framework built on Python's async architecture. It supports real-time voice streaming, vision-language tasks, and IoT device control. Deployable across Windows, macOS, Linux desktops, and ARM embedded platforms (Raspberry Pi, Horizon Robotics RDK, Jetson Nano), it bridges the gap between Large Language Models and physical hardware — out of the box.
+
+> Evolved from the [xiaozhi-esp32](https://github.com/78/xiaozhi-esp32) firmware project. Officially adopted by [D-Robotics (xiaozhi-in-rdk)](https://github.com/D-Robotics/xiaozhi-in-rdk) as an upstream dependency.
 
 ## Related Projects
 
@@ -45,59 +47,17 @@ py-xiaozhi is a Python-based Xiaozhi voice client, designed to learn coding and 
 
 ![Image](./documents/docs/guide/images/系统界面.png)
 
-## Features
+## Key Features
 
-### Core AI Capabilities
-
-- **AI Voice Interaction**: Supports voice input and recognition, enabling intelligent human-computer interaction with natural conversation flow
-- **Visual Multimodal**: Supports image recognition and processing, providing multimodal interaction capabilities and image content understanding
-- **Intelligent Wake-up**: Supports multiple wake word activation for hands-free interaction (configurable)
-- **Continuous Dialogue Mode**: Implements seamless conversation experience, enhancing user interaction fluidity
-
-### MCP Tools Ecosystem
-
-- **Music Player Tools**: Online music search and playback with playback controls, lyrics display, and local cache management
-- **Camera Tools**: Image capture and AI analysis with photo recognition and intelligent Q&A
-- **Screenshot Tools**: Screen capture and AI analysis
-- **App Management Tools**: Application launching, closing, and process management
-- **Weather Tools**: Weather information query
-- **Volume Control Tools**: System volume control
-
-### Audio Processing
-
-- **Opus Codec**: Supports Opus audio encoding/decoding and real-time resampling
-- **Wake Word Detection**: Sherpa-ONNX-based offline speech recognition with multiple wake words and pinyin matching
-- **Audio Stream Management**: Independent input/output streams with stream rebuild and error recovery
-
-### User Interface
-
-- **Graphical Interface**: Modern PySide6 + QML based GUI with Xiaozhi expressions and text display
-- **Command Line Mode**: CLI support suitable for GUI-less environments
-- **GPIO Mode**: Supports GPIO interaction for embedded devices like Raspberry Pi
-- **System Tray**: Background operation support with integrated system tray functionality
-- **Global Hotkeys**: Global hotkey support for improved usability
-- **Settings Interface**: Complete settings management interface with configuration customization
-
-### Security & Stability
-
-- **Encrypted Audio Transmission**: WSS protocol support ensuring audio data security and preventing information leakage
-- **Device Activation System**: Dual v1/v2 protocol activation with automatic verification code and device fingerprint handling
-- **Error Recovery**: Complete error handling and recovery mechanisms with reconnection support
-
-### Cross-platform Support
-
-- **System Compatibility**: Compatible with Windows 10+, macOS 10.15+, and Linux systems
-- **Protocol Support**: WebSocket and MQTT dual protocol communication support
-- **Multi-environment Deployment**: Supports GUI, CLI, and GPIO modes adapting to different deployment environments
-- **Platform Optimization**: Audio and system control optimization for different platforms
-
-### Developer Friendly
-
-- **Modular Architecture**: Clean code structure with clear responsibility separation for secondary development
-- **Plugin System**: Audio, UI, MCP, wake word and other components loaded via plugin mechanism
-- **Async First**: Event-driven architecture based on asyncio for high-performance concurrent processing
-- **Configuration Management**: Hierarchical configuration system with dot notation access and dynamic updates
-- **Logging System**: Complete logging and debugging support
+- **Real-time Voice AI** — Opus codec with auto frame detection (RFC 6716 TOC parsing), async streaming, sub-20ms latency
+- **Multi-modal Vision** — Camera capture + vision-language model integration for image understanding and scene perception
+- **MCP Tool Ecosystem** — Modular JSON-RPC 2.0 tool server: music player, camera, screenshot, app management, weather, volume control
+- **Cross-platform Deployment** — Windows 10+ / macOS 10.15+ / Linux (x86_64 & ARM), optimized for Raspberry Pi and edge boards
+- **Multiple UI Modes** — PySide6 + QML GUI / CLI / GPIO, adapting to desktop, headless server, and embedded environments
+- **Offline Wake Word** — Sherpa-ONNX based on-device keyword spotting with custom wake word support
+- **IoT & Embodied AI Ready** — GPIO interface for robotics control, hardware actuation, and sensor integration
+- **WebSocket / MQTT** — Dual protocol communication with WSS/TLS encrypted transmission and auto-reconnection
+- **Plugin Architecture** — Event-driven async design, clean dependency injection, extensible plugin system
 
 ## System Requirements
 
