@@ -72,7 +72,7 @@ jobs:
         run: uv sync --extra gui --group dev
 
       - name: Install unifypy
-        run: uv pip install "unifypy>=2.0.10"
+        run: uv pip install unifypy
 
       - name: Extract version from tag
         id: version
