@@ -387,6 +387,7 @@ class ServiceContainer:
 
     async def _handle_tts_stop(self) -> None:
         if self.state.keep_listening:
+            await self.audio_codec.clear_audio_queue()
             await self.state.set_device_state(DeviceState.LISTENING)
             if not (
                 self.state.listening_mode == ListeningMode.REALTIME

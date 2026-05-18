@@ -297,6 +297,7 @@ class AudioCodec:
     async def clear_audio_queue(self):
         """清空音频队列"""
         self._server_opus_logged = False
+        self.converter.clear_buffers()
         count = await self.output_buffer.clear()
         if count > 0:
             logger.info(f"清空音频队列，丢弃 {count} 帧")
