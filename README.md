@@ -1,3 +1,5 @@
+# py-xiaozhi
+
 <p align="center" class="trendshift">
   <a href="https://trendshift.io/repositories/14130" target="_blank">
     <img src="https://trendshift.io/api/badge/repositories/14130" alt="Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/>
@@ -20,158 +22,243 @@
     <img src="https://img.shields.io/badge/Gitee-FF5722?style=flat-square&logo=gitee" alt="Gitee"/>
   </a>
   <a href="https://huangjunsen0406.github.io/py-xiaozhi/guide/00_%E6%96%87%E6%A1%A3%E7%9B%AE%E5%BD%95.html">
-    <img alt="使用文档" src="https://img.shields.io/badge/使用文档-点击查看-blue?labelColor=2d2d2d" />
+    <img alt="Usage Docs" src="https://img.shields.io/badge/Usage Docs-View-blue?labelColor=2d2d2d" />
   </a>
   <a href="https://atomgit.com/huangjunsen0406/py-xiaozhi">
     <img src="./assets/AtomGit.svg" alt="AtomGit" height="20"/>
   </a>
 </p>
 
-简体中文 | [English](README.en.md)
+English | [简体中文](README.zh.md)
 
-## 项目简介
+## About
 
-py-xiaozhi 是一个轻量级、跨平台的多模态 AI 交互主控框架，基于 Python 异步架构，支持实时语音、视觉识别和 IoT 设备控制。可部署于 Windows / macOS / Linux 桌面以及 Raspberry Pi、RDK 等 ARM 嵌入式平台，向下对接具身智能硬件，向上接入大语言模型，开箱即用。
+py-xiaozhi is a lightweight, cross-platform multi-modal AI interaction framework built on Python's async architecture. It supports real-time voice streaming, vision-language tasks, and IoT device control. Deployable across Windows, macOS, Linux desktops, and ARM embedded platforms (Raspberry Pi, Horizon Robotics RDK, Jetson Nano), it bridges the gap between Large Language Models and physical hardware — out of the box.
 
-> 本项目从 [xiaozhi-esp32](https://github.com/78/xiaozhi-esp32) 移植演进而来，已被 [D-Robotics 官方生态 (xiaozhi-in-rdk)](https://github.com/D-Robotics/xiaozhi-in-rdk) 深度适配。
+> Evolved from the [xiaozhi-esp32](https://github.com/78/xiaozhi-esp32) firmware project. Officially adopted by [D-Robotics (xiaozhi-in-rdk)](https://github.com/D-Robotics/xiaozhi-in-rdk) as an upstream dependency.
 
-> **重要提示**
->
-> - 请先阅读 [项目文档](https://huangjunsen0406.github.io/py-xiaozhi/)，启动教程和配置说明都在里面
-> - main 是最新代码，每次更新后请重新安装 pip 依赖
-> - **如果你已经基于本项目进行了二次开发，请不要直接合并最新代码**，新版本架构已大幅重构，强行合并会导致大量冲突。建议以旧版本为基础继续维护，或参考新架构重新适配
-> - [从零开始使用小智客户端（视频教程）](https://www.bilibili.com/video/BV1dWQhYEEmq/)
+## Related Projects
 
-## 演示
+- [xiaozhi-desktop](https://xiaozhi.junsen.online) — Electron desktop client with AEC echo cancellation, Live2D, floating window modes, and Windows / macOS installers
 
-- [Bilibili 演示视频](https://www.bilibili.com/video/BV1HmPjeSED2/)
+## Demo
 
-![系统界面](./documents/docs/guide/images/系统界面.png)
+- [Bilibili Demo Video](https://www.bilibili.com/video/BV1HmPjeSED2/#reply255921347937)
 
-## 功能特点
+![Image](./documents/docs/guide/images/系统界面.png)
 
-- **AI 语音交互** — 语音输入与识别，自然流畅的对话体验
-- **视觉多模态** — 图像识别和处理，理解图像内容
-- **智能唤醒** — 多种唤醒词激活，免手动操作（可配置）
-- **自动对话模式** — 连续对话，提升交互流畅度
-- **MCP 工具生态** — 音乐播放、摄像头、截图、应用管理、天气查询、音量控制
-- **Opus 编解码** — 音频编解码和实时重采样
-- **唤醒词检测** — 基于 Sherpa-ONNX 离线识别，支持多唤醒词和拼音匹配
-- **多界面模式** — GUI（PySide6 + QML）/ CLI / GPIO，适应不同环境
-- **系统托盘 & 全局快捷键** — 后台运行，快捷操作
-- **WebSocket / MQTT** — 双协议通信，支持 WSS 加密传输
-- **设备激活** — v1/v2 双协议，自动验证码和设备指纹
-- **跨平台** — Windows 10+ / macOS 10.15+ / Linux
+## Key Features
 
-## 相关项目
+- **Real-time Voice AI** — Opus codec with auto frame detection (RFC 6716 TOC parsing), async streaming, sub-20ms latency
+- **Multi-modal Vision** — Camera capture + vision-language model integration for image understanding and scene perception
+- **MCP Tool Ecosystem** — Modular JSON-RPC 2.0 tool server: music player, camera, screenshot, app management, weather, volume control
+- **Cross-platform Deployment** — Windows 10+ / macOS 10.15+ / Linux (x86_64 & ARM), optimized for Raspberry Pi and edge boards
+- **Multiple UI Modes** — PySide6 + QML GUI / CLI / GPIO, adapting to desktop, headless server, and embedded environments
+- **Offline Wake Word** — Sherpa-ONNX based on-device keyword spotting with custom wake word support
+- **IoT & Embodied AI Ready** — GPIO interface for robotics control, hardware actuation, and sensor integration
+- **WebSocket / MQTT** — Dual protocol communication with WSS/TLS encrypted transmission and auto-reconnection
+- **Plugin Architecture** — Event-driven async design, clean dependency injection, extensible plugin system
 
-- [xiaozhi-desktop](https://xiaozhi.junsen.online) — Electron 桌面版，支持 AEC 回声消除、Live2D、悬浮窗等显示模式，提供 Windows / macOS 安装包
+## System Requirements
 
-## 快速开始
+### Basic Requirements
 
-**环境要求**：Python >= 3.10，麦克风和扬声器，稳定网络连接
+- **Python Version**: 3.9 - 3.12
+- **Operating System**: Windows 10+, macOS 10.15+, Linux
+- **Audio Devices**: Microphone and speaker devices
+- **Network Connection**: Stable internet connection (for AI services and online features)
 
-```bash
-# 克隆项目
-git clone https://github.com/huangjunsen0406/py-xiaozhi.git
-cd py-xiaozhi
+### Recommended Configuration
 
-# 基础安装（CLI / GPIO 模式）
-uv sync                        # 推荐
-# 或: pip install -e .
+- **Memory**: At least 4GB RAM (8GB+ recommended)
+- **Processor**: Modern CPU with AVX instruction set support
+- **Storage**: At least 2GB available disk space (for model files and cache)
+- **Audio**: Audio devices supporting 16kHz sampling rate
 
-# GUI 模式（额外安装 PySide6 + qasync）
-uv sync --extra gui            # 推荐
-# 或: pip install -e '.[gui]'
+### Optional Feature Requirements
 
-# 运行
-python main.py                 # GUI 模式（默认）
-python main.py --mode cli      # CLI 模式
-python main.py --protocol mqtt # MQTT 协议
-```
+- **Voice Wake-up**: Requires downloading Sherpa-ONNX speech recognition models
+- **Camera Features**: Requires camera device and OpenCV support
 
-## 项目结构
+## Read This First
+
+- Carefully read [项目文档](https://huangjunsen0406.github.io/py-xiaozhi/) for startup tutorials and file descriptions
+- The main branch has the latest code; manually reinstall pip dependencies after each update to ensure you have new dependencies
+
+[Zero to Xiaozhi Client (Video Tutorial)](https://www.bilibili.com/video/BV1dWQhYEEmq/?vd_source=2065ec11f7577e7107a55bbdc3d12fce)
+
+## Technical Architecture
+
+### Core Architecture Design
+
+- **Event-Driven Architecture**: Based on asyncio asynchronous event loop, supporting high-concurrency processing
+- **Layered Design**: Clear separation of application layer, protocol layer, and UI layer
+- **Dependency Injection**: Component lifecycle managed via bootstrap container
+- **Plugin System**: Audio, UI, MCP tools and other components loaded via plugin system
+
+### Key Technical Components
+
+- **Audio Processing**: Opus codec, real-time resampling
+- **Speech Recognition**: Sherpa-ONNX offline models, wake word recognition
+- **Protocol Communication**: WebSocket/MQTT dual protocol support, encrypted transmission, auto-reconnection
+- **Configuration System**: Hierarchical configuration, dot notation access, dynamic updates
+
+### Performance Optimization
+
+- **Async First**: Full system asynchronous architecture, avoiding blocking operations
+- **Memory Management**: Smart caching, garbage collection
+- **Audio Optimization**: 5ms low-latency processing, queue management, streaming transmission
+- **Concurrency Control**: Task pool management, semaphore control, thread safety
+
+### Security Mechanisms
+
+- **Encrypted Communication**: WSS/TLS encryption, certificate verification
+- **Device Authentication**: Dual protocol activation, device fingerprint recognition
+- **Access Control**: Tool permission management, API access control
+- **Error Isolation**: Exception isolation, fault recovery, graceful degradation
+
+## Development Guide
+
+### Project Structure
 
 ```
 py-xiaozhi/
-├── main.py                     # 应用程序主入口
+├── main.py                     # Application entry point
 ├── src/
-│   ├── bootstrap/              # 应用引导与依赖注入
-│   ├── core/                   # 核心基础设施（事件总线、状态管理等）
-│   ├── plugins/                # 插件系统（音频、UI、MCP、唤醒词、快捷键）
-│   ├── protocols/              # 通信协议（WebSocket / MQTT）
-│   ├── audio_codecs/           # 音频编解码
-│   ├── audio_processing/       # 唤醒词检测
-│   ├── activation/             # 设备激活
-│   ├── mcp/                    # MCP 工具系统
-│   │   └── tools/              # 工具模块（music/camera/screenshot/app/weather/volume）
-│   ├── ui/                     # 用户界面
-│   │   ├── gui/                # PySide6 + QML 图形界面
-│   │   ├── cli/                # 命令行界面
-│   │   └── gpio/               # GPIO 嵌入式界面
-│   └── utils/                  # 工具函数
-├── libs/                       # 第三方原生库（libopus / webrtc_apm）
-├── models/                     # 语音唤醒模型
-├── documents/                  # VitePress 文档站
-└── pyproject.toml              # 项目配置
+│   ├── activation/             # Device activation
+│   ├── audio_codecs/           # Audio codecs
+│   ├── audio_processing/       # Wake word detection
+│   ├── bootstrap/              # Application bootstrap & dependency injection
+│   ├── constants/              # Constants
+│   ├── core/                   # Core infrastructure (event bus, state management, task management, etc.)
+│   ├── logging/                # Logging subsystem
+│   ├── mcp/                    # MCP tool system
+│   │   ├── mcp_server.py       # MCP server
+│   │   └── tools/              # Tool modules (music/camera/screenshot/app/weather/volume)
+│   ├── plugins/                # Plugin system (audio, UI, MCP, wake word, shortcuts)
+│   ├── protocols/              # Communication protocols (WebSocket/MQTT)
+│   ├── ui/                     # User interface
+│   │   ├── gui/                # PySide6 + QML graphical interface
+│   │   ├── cli/                # Command line interface
+│   │   └── gpio/               # GPIO embedded interface
+│   └── utils/                  # Utility functions
+├── libs/                       # Third-party native libraries
+│   ├── libopus/                # Opus audio codec library
+│   └── webrtc_apm/             # WebRTC audio processing module
+├── models/                     # Wake word models
+├── assets/                     # Static resources
+├── scripts/                    # Auxiliary scripts
+├── documents/                  # VitePress documentation site
+├── pyproject.toml              # Project configuration
+└── build.json                  # Build configuration
 ```
 
-## 状态流转
+### Development Environment Setup
+
+```bash
+# Clone project
+git clone https://github.com/huangjunsen0406/py-xiaozhi.git
+cd py-xiaozhi
+
+# Base install (CLI / GPIO mode)
+uv sync                                    # Recommended (uv users)
+# or: pip install -e .                    # pip users
+
+# GUI mode (extra: PySide6 + qasync)
+uv sync --extra gui                        # Recommended (uv users)
+# or: pip install -e '.[gui]'             # pip users
+
+# Full development environment (GUI + test / packaging tools)
+uv sync --extra gui --group dev
+
+# Code formatting
+./format_code.sh
+
+# Run program - GUI mode (default; requires gui extra)
+python main.py
+
+# Run program - CLI mode (base install is enough)
+python main.py --mode cli
+
+# Specify communication protocol
+python main.py --protocol websocket  # WebSocket (default)
+python main.py --protocol mqtt       # MQTT protocol
+```
+
+### Core Development Patterns
+
+- **Async First**: Use `async/await` syntax, avoid blocking operations
+- **Error Handling**: Complete exception handling and logging
+- **Configuration Management**: Use `ConfigManager` for unified configuration access
+- **Test-Driven**: Write unit tests to ensure code quality
+
+### Extension Development
+
+- **Add MCP Tools**: Create new tool modules in `src/mcp/tools/` directory
+- **Add Protocols**: Implement `Protocol` abstract base class
+- **Add Plugins**: Extend the plugin system via `src/plugins/`
+
+### State Transition Diagram
 
 ```
-                    +----------------+
-                    |                |
-                    v                |
-+------+  唤醒/按钮  +------------+  |   +------------+
-| IDLE | ---------> | CONNECTING | -+-> | LISTENING  |
-+------+            +------------+      +------------+
-   ^                                          |
-   |                                          | 语音识别完成
-   |        +------------+                    v
-   +------- |  SPEAKING  | <-----------------+
-    完成播放 +------------+
+                        +----------------+
+                        |                |
+                        v                |
++------+  Wake/Button  +------------+   |   +------------+
+| IDLE | -----------> | CONNECTING | --+-> | LISTENING  |
++------+              +------------+       +------------+
+   ^                                            |
+   |                                            | Voice Recognition Complete
+   |          +------------+                    v
+   +--------- |  SPEAKING  | <-----------------+
+     Playback +------------+
+     Complete
 ```
 
-## 贡献指南
+## Contribution Guidelines
 
-欢迎提交 Issue 和 PR，请确保：
+We welcome issue reports and code contributions. Please ensure you follow these specifications:
 
-1. 代码风格符合 PEP8 规范
-2. PR 包含适当的测试
-3. 更新相关文档
+1. Code style complies with PEP8 standards
+2. PR submissions include appropriate tests
+3. Update relevant documentation
 
-## 感谢
+## Community and Support
 
-> 排名不分前后
+### Thanks to the Following Open Source Contributors
+>
+> In no particular order
 
 [Xiaoxia](https://github.com/78)
 [zhh827](https://github.com/zhh827)
-[四博智联-李洪刚](https://github.com/SmartArduino)
+[SmartArduino-Li Honggang](https://github.com/SmartArduino)
 [HonestQiao](https://github.com/HonestQiao)
 [vonweller](https://github.com/vonweller)
-[孙卫公](https://space.bilibili.com/416954647)
+[Sun Weigong](https://space.bilibili.com/416954647)
 [isamu2025](https://github.com/isamu2025)
 [Rain120](https://github.com/Rain120)
 [kejily](https://github.com/kejily)
-[电波bilibili君](https://space.bilibili.com/119751)
-[赛搏智能](https://shop115087494.m.taobao.com/?refer=https%3A%2F%2Fm.tb.cn%2F)
+[Radio bilibili Jun](https://space.bilibili.com/119751)
+[Cyber Intelligence](https://shop115087494.m.taobao.com/?refer=https%3A%2F%2Fm.tb.cn%2F&ut_sk=1.WMelxbgDQWkDAJ1Rq9Pn7DCD_21380790_1757337352472.Copy.shop&suid=0E25E948-651D-46E0-8E89-5C8CB03B4F56&shop_navi=shopindex&sourceType=shop&shareUniqueId=33038752403&un=d22c5ceda82844ab8bd7bab98ffeb263&share_crt_v=1&un_site=0&spm=a2159r.13376460.0.0&sp_tk=dkRKUjRKUWo2ZHY%3D&bc_fl_src=share-1041250486811064-2-1&cpp=1&shareurl=true&short_name=h.SaBKVHytsCKIPNS&bxsign=scdGtSe264e_qkFQBh0rXCkF-Mrb_s6t35EnpVBBU5dsrd-J24c-_rn_PhJiXRk0hg2hjGoAm0L7j2UQg27OIH_6gZkbhKDyLziD2cy4pDf8sC3KmqrF55TXP3USZaPTw_-&app=weixin)
 
-## 赞助支持
+### Sponsorship Support
 
 <div align="center">
-  <p>感谢所有赞助者的支持，无论是接口资源、设备兼容测试还是资金支持，每一份帮助都让项目更加完善</p>
+  <h3>Thanks to All Sponsors ❤️</h3>
+  <p>Whether it's API resources, device compatibility testing, or financial support, every contribution makes the project more complete</p>
+  
   <a href="https://huangjunsen0406.github.io/py-xiaozhi/sponsors/" target="_blank">
-    <img src="https://img.shields.io/badge/查看-赞助者名单-brightgreen?style=for-the-badge&logo=github" alt="赞助者名单">
+    <img src="https://img.shields.io/badge/View-Sponsors-brightgreen?style=for-the-badge&logo=github" alt="View Sponsors">
   </a>
   <a href="https://huangjunsen0406.github.io/py-xiaozhi/sponsors/" target="_blank">
-    <img src="https://img.shields.io/badge/成为-项目赞助者-orange?style=for-the-badge&logo=heart" alt="成为赞助者">
+    <img src="https://img.shields.io/badge/Become-Sponsor-orange?style=for-the-badge&logo=heart" alt="Become a Sponsor">
   </a>
 </div>
 
-## 项目统计
+## Project Statistics
 
 [![Star History Chart](https://api.star-history.com/svg?repos=huangjunsen0406/py-xiaozhi&type=Date)](https://www.star-history.com/#huangjunsen0406/py-xiaozhi&Date)
 
-## 许可证
+## License
 
 [MIT License](LICENSE)
