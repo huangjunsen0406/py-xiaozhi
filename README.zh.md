@@ -132,13 +132,19 @@ py-xiaozhi/
     完成播放 +------------+
 ```
 
-## 贡献指南
+## 参与贡献
 
-欢迎提交 Issue 和 PR，请确保：
+- 仓库贡献入口请先阅读 [CONTRIBUTING.md](./CONTRIBUTING.md)
+- 中文版本请查看 [CONTRIBUTING_ZH.md](./CONTRIBUTING_ZH.md)
+- 详细文档请查看 [贡献指南](https://huangjunsen0406.github.io/py-xiaozhi/contributing)
 
-1. 代码风格符合 PEP8 规范
-2. PR 包含适当的测试
-3. 更新相关文档
+## Maintainer Workflow
+
+- 先将新提交归类为 `bug`、`feature`、`docs`、`refactor` 或 `maintenance`
+- 优先审核范围清晰、验证步骤明确、上下文完整的 Pull Request
+- 影响行为、配置或公共接口的改动需要同步更新文档
+- 在 CI 通过且审核意见处理完成后再合并
+- 合并后按正常发布流程进入版本，不承诺立即发布
 
 ## 感谢
 

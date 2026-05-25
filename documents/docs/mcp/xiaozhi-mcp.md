@@ -1,70 +1,70 @@
-# 小智MCP外挂接入指南
+# XiaoZhi External MCP Integration Guide
 
-本文档介绍如何将外部MCP服务接入小智系统，实现功能扩展和第三方工具集成。
+This document describes how to integrate external MCP services into the XiaoZhi system for feature extension and third-party tool integration.
 
-## 概述
+## Overview
 
-小智系统除了内置的MCP工具外，还支持接入外部MCP服务器，实现：
-- 第三方工具集成
-- 远程服务调用
-- 分布式工具部署
-- 社区工具共享
+In addition to built-in MCP tools, the XiaoZhi system also supports connecting to external MCP servers, enabling:
+- Third-party tool integration
+- Remote service invocation
+- Distributed tool deployment
+- Community tool sharing
 
-## 架构说明
+## Architecture
 
-### 外挂式MCP架构
+### External MCP Architecture
 ```
-小智AI平台        xiaozhi-mcphub        外部MCP服务器        第三方工具
-┌─────────────┐   ┌─────────────────┐   ┌─────────────────┐   ┌─────────────┐
-│             │   │                 │   │                 │   │             │
-│ MCP客户端   │◄──┤ MCP服务器/代理   │◄──┤ MCP服务器       │◄──┤ 实际工具    │
-│             │   │                 │   │                 │   │             │
-└─────────────┘   └─────────────────┘   └─────────────────┘   └─────────────┘
+XiaoZhi AI Platform     xiaozhi-mcphub          External MCP Server       Third-Party Tools
+┌─────────────┐        ┌─────────────────┐      ┌─────────────────┐      ┌─────────────┐
+│             │        │                 │      │                 │      │             │
+│ MCP Client  │◄───────┤ MCP Server/Proxy│◄─────┤ MCP Server      │◄─────┤ Actual Tools│
+│             │        │                 │      │                 │      │             │
+└─────────────┘        └─────────────────┘      └─────────────────┘      └─────────────┘
 ```
 
-### 连接方式
-1. **标准输入输出 (stdio)**: 启动子进程，通过stdin/stdout管道进行进程间通信，适用于本地CLI工具如Playwright、高德地图等
-2. **服务器推送事件 (SSE)**: 基于HTTP长连接的事件流通信，提供类似WebSocket的实时双向通信能力
-3. **流式HTTP (streamable-http)**: 基于TCP的HTTP协议封装，支持流式数据传输，适用于远程API服务和微服务
-4. **OpenAPI**: 基于标准REST API规范的连接方式，自动解析OpenAPI规范并生成工具接口，适用于标准化的第三方API服务
+### Connection Methods
+1. **Standard Input/Output (stdio)**: Launches a subprocess and communicates via stdin/stdout pipes for inter-process communication. Suitable for local CLI tools such as Playwright, Amap, etc.
+2. **Server-Sent Events (SSE)**: HTTP long-connection based event stream communication, providing real-time bidirectional communication similar to WebSocket
+3. **Streamable HTTP (streamable-http)**: HTTP protocol encapsulation over TCP, supporting streaming data transmission. Suitable for remote API services and microservices
+4. **OpenAPI**: Connection based on standard REST API specifications, automatically parsing OpenAPI specifications and generating tool interfaces. Suitable for standardized third-party API services
 
-## 相关开源项目
-社区开发的小智客户端项目，提供不同平台的接入方式
+## Related Open-Source Projects
+Community-developed XiaoZhi client projects providing integration methods for different platforms
 
-### xiaozhi-mcphub （本项目配套）
+### xiaozhi-mcphub (Companion Project)
 
-**小智MCP Hub** 是专为小智AI平台优化的智能MCP工具桥接系统，基于优秀的MCPHub项目开发，增加了小智平台集成和智能工具同步功能。
+**XiaoZhi MCP Hub** is an intelligent MCP tool bridge system optimized for the XiaoZhi AI platform, built on the excellent MCPHub project with added XiaoZhi platform integration and intelligent tool synchronization features.
 
-- **项目地址**: [xiaozhi-mcphub](https://huangjunsen0406.github.io/xiaozhi-mcphub/)
+- **Project Site**: [xiaozhi-mcphub](https://huangjunsen0406.github.io/xiaozhi-mcphub/)
 - **GitHub**: [xiaozhi-mcphub](https://github.com/huangjunsen0406/xiaozhi-mcphub)
-- **核心功能**: 
-  - **小智AI平台集成**: WebSocket自动工具同步，实时状态更新，协议桥接
-  - **增强的MCP管理**: 支持stdio、SSE、HTTP协议，热插拔配置，集中控制台
-  - **智能工具路由**: 基于向量的智能工具搜索和分组管理
-  - **安全认证机制**: JWT+bcrypt用户管理，角色权限控制
-  - **内置mcp商店**: 多种mcp工具在线安装无需重启支持热更新 
-  
+- **Core Features**: 
+  - **XiaoZhi AI Platform Integration**: WebSocket automatic tool synchronization, real-time status updates, protocol bridging
+  - **Enhanced MCP Management**: Supports stdio, SSE, HTTP protocols, hot-swap configuration, centralized console
+  - **Smart Tool Routing**: Vector-based intelligent tool search and group management
+  - **Security Authentication**: JWT + bcrypt user management, role-based access control
+  - **Built-in MCP Store**: Various MCP tools available for online installation with hot updates, no restart required
+
 ### xiaozhi-client
-- **项目地址**: [xiaozhi-client](https://github.com/shenjingnan/xiaozhi-client)
-- **功能**: 小智 AI 客户端，专门用于 MCP 的对接和聚合
-- **核心特性**: 
-  - **多接入点支持**: 可配置多个小智接入点，实现多设备共享一个MCP配置
-  - **MCP Server聚合**: 通过标准方式聚合多个MCP Server，统一管理
-  - **动态工具控制**: 控制MCP Server工具的可见性，避免工具过多导致的异常
-  - **多种集成方式**: 支持作为普通MCP Server集成到Cursor/Cherry Studio等客户端
-  - **Web可视化配置**: 现代化的Web UI界面，支持远程配置和管理
-  - **ModelScope集成**: 支持ModelScope托管的远程MCP服务
+- **Project Repository**: [xiaozhi-client](https://github.com/shenjingnan/xiaozhi-client)
+- **Function**: XiaoZhi AI client, specifically designed for MCP integration and aggregation
+- **Core Features**: 
+  - **Multi-Endpoint Support**: Configurable multiple XiaoZhi endpoints, enabling multiple devices to share a single MCP configuration
+  - **MCP Server Aggregation**: Aggregates multiple MCP Servers through standard methods for unified management
+  - **Dynamic Tool Control**: Controls MCP Server tool visibility to avoid issues caused by too many tools
+  - **Multiple Integration Methods**: Supports integration as a regular MCP Server into clients like Cursor/Cherry Studio
+  - **Web Visual Configuration**: Modern web UI interface supporting remote configuration and management
+  - **ModelScope Integration**: Supports ModelScope-hosted remote MCP services
 
 ### HyperChat
-- **项目地址**: [HyperChat](https://github.com/BigSweetPotatoStudio/HyperChat)
-- **功能**: 下一代 AI 工作空间，首创"AI as Code"理念的多平台智能协作平台
-- **核心特性**: 
-  - **AI as Code**: 配置驱动的AI能力管理，支持版本控制和团队协作
-  - **工作区驱动**: 以项目为核心的AI环境隔离和管理
-  - **MCP生态深度集成**: 完整支持MCP协议，丰富的内置工具和动态加载
-  - **多平台统一**: Web应用、Electron桌面、CLI命令行、VSCode插件
-- **技术亮点**:
-  - 配置化AI智能体系统，支持专业化Agent定制
-  - 多模型并行对比测试（Claude、OpenAI、Gemini等）
-  - 智能内容渲染（Artifacts、Mermaid、数学公式）
-  - 定时任务和工作流自动化
+- **Project Site**: [HyperChat](https://github.com/BigSweetPotatoStudio/HyperChat)
+- **Function**: Next-generation AI workspace, pioneering the "AI as Code" concept for a multi-platform intelligent collaboration platform
+- **Core Features**: 
+  - **AI as Code**: Configuration-driven AI capability management, supporting version control and team collaboration
+  - **Workspace-Driven**: Project-centric AI environment isolation and management
+  - **MCP Ecosystem Deep Integration**: Full MCP protocol support, rich built-in tools, and dynamic loading
+  - **Multi-Platform Unified**: Web application, Electron desktop, CLI command-line, VSCode extension
+- **Technical Highlights**:
+  - Configurable AI agent system with specialized Agent customization
+  - Multi-model parallel comparison testing (Claude, OpenAI, Gemini, etc.)
+  - Intelligent content rendering (Artifacts, Mermaid, mathematical formulas)
+  - Scheduled tasks and workflow automation

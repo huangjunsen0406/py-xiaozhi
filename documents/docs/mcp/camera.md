@@ -1,146 +1,146 @@
-# 摄像头工具 (Camera Tools)
+# Camera Tools
 
-摄像头工具是一个智能视觉识别 MCP 工具，提供了图像捕获、视觉分析和图像理解等功能。
+The camera tool is an intelligent vision recognition MCP tool, providing image capture, visual analysis, and image understanding capabilities.
 
-### 常见使用场景
+### Common Use Cases
 
-**图像识别分析:**
-- "帮我拍张照片看看这是什么"
-- "拍照识别一下这个物体"
-- "用摄像头看看我面前是什么东西"
-- "看看这个东西是什么"
-- "识别一下这个是什么"
-- "帮我看看这个"
-- "拍照分析这个物品"
+**Image Recognition and Analysis:**
+- "Take a photo and tell me what this is"
+- "Take a photo to identify this object"
+- "Use the camera to see what's in front of me"
+- "See what this thing is"
+- "Identify what this is"
+- "Help me look at this"
+- "Take a photo to analyze this item"
 
-**场景理解:**
-- "拍照描述一下现在的场景"
-- "用摄像头看看房间里有什么"
-- "拍照分析一下这个环境"
-- "看看周围的情况"
-- "描述一下这个场景"
-- "分析一下这里的环境"
+**Scene Understanding:**
+- "Take a photo and describe the current scene"
+- "Use the camera to see what's in the room"
+- "Take a photo to analyze this environment"
+- "Look at the surroundings"
+- "Describe this scene"
+- "Analyze the environment here"
 
-**文字识别:**
-- "拍照识别这个文档上的文字"
-- "用摄像头读取这个标签上的信息"
-- "拍照翻译这段英文"
-- "读取这个文字"
-- "识别文字内容"
-- "帮我读一下这个"
-- "翻译这段文字"
-- "提取文字信息"
+**Text Recognition:**
+- "Take a photo to recognize the text on this document"
+- "Use the camera to read the information on this label"
+- "Take a photo to translate this English text"
+- "Read this text"
+- "Recognize text content"
+- "Help me read this"
+- "Translate this text"
+- "Extract text information"
 
-**问题解答:**
-- "拍照帮我看看这道题怎么做"
-- "用摄像头分析这个图表"
-- "拍照解释这个标志是什么意思"
-- "这道题怎么解"
-- "分析这个图表"
-- "解释这个标志"
-- "帮我解答这个问题"
+**Problem Solving:**
+- "Take a photo to help me solve this problem"
+- "Use the camera to analyze this chart"
+- "Take a photo to explain what this sign means"
+- "How to solve this problem"
+- "Analyze this chart"
+- "Explain this sign"
+- "Help me answer this question"
 
-**生活助手:**
-- "拍照识别这个植物的品种"
-- "用摄像头看看这个菜谱"
-- "拍照帮我识别这个商品"
-- "这是什么植物"
-- "识别这个花"
-- "看看这个菜谱"
-- "这个商品是什么"
-- "帮我看看这个产品"
+**Daily Life Assistant:**
+- "Take a photo to identify the species of this plant"
+- "Use the camera to look at this recipe"
+- "Take a photo to help me identify this product"
+- "What plant is this"
+- "Identify this flower"
+- "Look at this recipe"
+- "What product is this"
+- "Help me check this product"
 
-### 使用提示
+### Usage Tips
 
-1. **确保光线充足**: 良好的光线条件有助于提高识别准确率
-2. **保持稳定**: 拍照时尽量保持设备稳定，避免模糊
-3. **明确问题**: 详细描述您想了解的内容，如"识别这个植物"而不是"这是什么"
-4. **合适距离**: 保持适当的拍摄距离，确保目标物体清晰可见
+1. **Ensure Adequate Lighting**: Good lighting conditions help improve recognition accuracy
+2. **Keep Steady**: Keep the device as steady as possible when taking photos to avoid blur
+3. **Be Specific**: Describe in detail what you want to know, e.g., "Identify this plant" rather than "What is this"
+4. **Appropriate Distance**: Maintain an appropriate shooting distance to ensure the target object is clearly visible
 
-AI 助手会根据您的需求自动调用摄像头工具，捕获图像并进行智能分析。
+The AI assistant will automatically invoke the camera tool based on your needs, capturing images and performing intelligent analysis.
 
-## 功能概览
+## Feature Overview
 
-### 图像捕获功能
-- **智能拍照**: 自动调节摄像头参数，捕获清晰图像
-- **尺寸优化**: 自动调整图像尺寸，提高处理效率
-- **格式转换**: 将图像转换为标准JPEG格式
+### Image Capture Features
+- **Smart Photo Capture**: Automatically adjust camera parameters to capture clear images
+- **Size Optimization**: Automatically resize images to improve processing efficiency
+- **Format Conversion**: Convert images to standard JPEG format
 
-### 视觉分析功能
-- **物体识别**: 识别图像中的物体和场景
-- **文字识别**: 提取图像中的文字内容
-- **场景理解**: 分析图像内容并提供描述
-- **问题解答**: 基于图像内容回答用户问题
+### Visual Analysis Features
+- **Object Recognition**: Identify objects and scenes in images
+- **Text Recognition**: Extract text content from images
+- **Scene Understanding**: Analyze image content and provide descriptions
+- **Problem Solving**: Answer user questions based on image content
 
-### 设备管理功能
-- **摄像头配置**: 自动检测和配置摄像头设备
-- **参数调节**: 支持分辨率、帧率等参数设置
-- **错误处理**: 完善的错误处理和恢复机制
+### Device Management Features
+- **Camera Configuration**: Automatically detect and configure camera devices
+- **Parameter Adjustment**: Support resolution, frame rate, and other parameter settings
+- **Error Handling**: Comprehensive error handling and recovery mechanisms
 
-## 工具列表
+## Tool List
 
-### 1. 图像捕获与分析工具
+### 1. Image Capture and Analysis Tool
 
-#### take_photo - 拍照并分析
-捕获图像并进行智能分析。
+#### take_photo - Take Photo and Analyze
+Capture an image and perform intelligent analysis.
 
-**参数:**
-- `question` (可选): 对图像的具体问题或分析需求
+**Parameters:**
+- `question` (optional): A specific question or analysis requirement about the image
 
-**使用场景:**
-- 物体识别
-- 场景分析
-- 文字识别
-- 问题解答
-- 生活助手
+**Use Cases:**
+- Object recognition
+- Scene analysis
+- Text recognition
+- Problem solving
+- Daily life assistant
 
-## 使用示例
+## Usage Examples
 
-### 基础拍照分析示例
+### Basic Photo Analysis Examples
 
 ```python
-# 简单拍照分析
+# Simple photo analysis
 result = await mcp_server.call_tool("take_photo", {
-    "question": "这是什么物体？"
+    "question": "What object is this?"
 })
 
-# 场景描述
+# Scene description
 result = await mcp_server.call_tool("take_photo", {
-    "question": "描述一下这个场景"
+    "question": "Describe this scene"
 })
 
-# 文字识别
+# Text recognition
 result = await mcp_server.call_tool("take_photo", {
-    "question": "识别图片中的文字内容"
+    "question": "Recognize the text content in the image"
 })
 
-# 问题解答
+# Problem solving
 result = await mcp_server.call_tool("take_photo", {
-    "question": "这道数学题怎么解？"
+    "question": "How to solve this math problem?"
 })
 ```
 
-## 技术架构
+## Technical Architecture
 
-### 摄像头管理
-- **单例模式**: 确保全局只有一个摄像头实例
-- **线程安全**: 支持多线程环境下的安全访问
-- **资源管理**: 自动管理摄像头资源的开启和释放
+### Camera Management
+- **Singleton Pattern**: Ensures only one global camera instance exists
+- **Thread Safety**: Supports safe access in multi-threaded environments
+- **Resource Management**: Automatically manages camera resource acquisition and release
 
-### 图像处理
-- **OpenCV集成**: 使用OpenCV进行图像捕获和处理
-- **智能缩放**: 自动调整图像尺寸，保持最佳效果
-- **格式优化**: 转换为JPEG格式，减少传输负载
+### Image Processing
+- **OpenCV Integration**: Uses OpenCV for image capture and processing
+- **Smart Scaling**: Automatically adjusts image dimensions for optimal results
+- **Format Optimization**: Converts to JPEG format to reduce transmission load
 
-### 视觉服务
-- **远程分析**: 支持连接远程视觉分析服务
-- **身份验证**: 支持Token和设备ID验证
-- **错误处理**: 完善的网络错误处理机制
+### Vision Service
+- **Remote Analysis**: Supports connecting to remote visual analysis services
+- **Authentication**: Supports Token and device ID verification
+- **Error Handling**: Comprehensive network error handling mechanisms
 
-## 配置说明
+## Configuration
 
-### 摄像头配置
-摄像头相关配置位于配置文件中：
+### Camera Configuration
+Camera-related settings are located in the configuration file:
 
 ```json
 {
@@ -152,132 +152,132 @@ result = await mcp_server.call_tool("take_photo", {
 }
 ```
 
-**配置项说明:**
-- `camera_index`: 摄像头设备索引，默认0
-- `frame_width`: 图像宽度，默认640
-- `frame_height`: 图像高度，默认480
+**Configuration Items:**
+- `camera_index`: Camera device index, default 0
+- `frame_width`: Image width, default 640
+- `frame_height`: Image height, default 480
 
-### 视觉服务配置
-视觉分析服务需要配置：
-- **服务URL**: 视觉分析服务的接口地址
-- **身份验证**: Token或API密钥
-- **设备信息**: 设备ID和客户端ID
+### Vision Service Configuration
+The visual analysis service requires configuration of:
+- **Service URL**: The interface address of the visual analysis service
+- **Authentication**: Token or API key
+- **Device Information**: Device ID and client ID
 
-## 数据结构
+## Data Structures
 
-### 图像数据格式
+### Image Data Format
 ```python
 {
-    "buf": bytes,      # JPEG图像字节数据
-    "len": int         # 数据长度
+    "buf": bytes,      # JPEG image byte data
+    "len": int         # Data length
 }
 ```
 
-### 分析结果格式
+### Analysis Result Format
 ```python
 {
-    "success": bool,           # 是否成功
-    "message": str,            # 结果信息或错误信息
-    "analysis": {              # 分析结果（成功时）
-        "objects": [...],      # 识别的物体
-        "text": str,           # 提取的文字
-        "description": str,    # 场景描述
-        "answer": str          # 问题答案
+    "success": bool,           # Whether the operation was successful
+    "message": str,            # Result message or error message
+    "analysis": {              # Analysis result (on success)
+        "objects": [...],      # Recognized objects
+        "text": str,           # Extracted text
+        "description": str,    # Scene description
+        "answer": str          # Answer to question
     }
 }
 ```
 
-## 图像处理流程
+## Image Processing Flow
 
-### 1. 图像捕获
-1. 初始化摄像头设备
-2. 设置捕获参数（分辨率、帧率等）
-3. 捕获单帧图像
-4. 释放摄像头资源
+### 1. Image Capture
+1. Initialize camera device
+2. Set capture parameters (resolution, frame rate, etc.)
+3. Capture a single frame
+4. Release camera resources
 
-### 2. 图像预处理
-1. 获取图像尺寸信息
-2. 计算缩放比例（最长边不超过320像素）
-3. 等比例缩放图像
-4. 转换为JPEG格式
+### 2. Image Preprocessing
+1. Obtain image dimensions
+2. Calculate scaling ratio (longest edge not exceeding 320 pixels)
+3. Scale image proportionally
+4. Convert to JPEG format
 
-### 3. 视觉分析
-1. 准备请求头信息
-2. 构建多媒体请求
-3. 发送到视觉分析服务
-4. 解析分析结果
+### 3. Visual Analysis
+1. Prepare request headers
+2. Build multimedia request
+3. Send to visual analysis service
+4. Parse analysis results
 
-## 最佳实践
+## Best Practices
 
-### 1. 图像质量优化
-- 确保充足的光线条件
-- 保持摄像头清洁
-- 避免过度曝光或阴暗
-- 保持拍摄对象清晰
+### 1. Image Quality Optimization
+- Ensure adequate lighting conditions
+- Keep the camera lens clean
+- Avoid overexposure or darkness
+- Keep the subject clear
 
-### 2. 问题描述技巧
-- 使用具体明确的问题
-- 避免模糊不清的表述
-- 提供上下文信息
-- 指明分析重点
+### 2. Question Description Tips
+- Use specific and clear questions
+- Avoid vague expressions
+- Provide contextual information
+- Indicate the focus of analysis
 
-### 3. 性能优化
-- 合理设置图像分辨率
-- 避免频繁拍照
-- 及时释放资源
-- 处理网络超时
+### 3. Performance Optimization
+- Set appropriate image resolution
+- Avoid frequent photo capture
+- Release resources promptly
+- Handle network timeouts
 
-### 4. 错误处理
-- 检查摄像头可用性
-- 处理网络连接错误
-- 验证分析结果
-- 提供用户友好的错误信息
+### 4. Error Handling
+- Check camera availability
+- Handle network connection errors
+- Validate analysis results
+- Provide user-friendly error messages
 
-## 支持的分析类型
+## Supported Analysis Types
 
-### 物体识别
-- 日常用品识别
-- 动植物识别
-- 食物识别
-- 商品识别
+### Object Recognition
+- Everyday item recognition
+- Animal and plant recognition
+- Food recognition
+- Product recognition
 
-### 文字识别
-- 印刷文字识别
-- 手写文字识别
-- 多语言文字识别
-- 文档内容提取
+### Text Recognition
+- Printed text recognition
+- Handwritten text recognition
+- Multi-language text recognition
+- Document content extraction
 
-### 场景理解
-- 室内场景分析
-- 户外环境描述
-- 人物动作识别
-- 活动场景理解
+### Scene Understanding
+- Indoor scene analysis
+- Outdoor environment description
+- Human action recognition
+- Activity scene understanding
 
-### 问题解答
-- 数学题解答
-- 图表分析
-- 标志解释
-- 技术问题
+### Problem Solving
+- Math problem solving
+- Chart analysis
+- Sign explanation
+- Technical problems
 
-## 注意事项
+## Notes
 
-1. **隐私保护**: 拍照功能涉及隐私，请谨慎使用
-2. **网络依赖**: 视觉分析需要网络连接
-3. **设备权限**: 需要摄像头访问权限
-4. **处理时间**: 图像分析可能需要一定时间
+1. **Privacy Protection**: The photo capture feature involves privacy; please use with caution
+2. **Network Dependency**: Visual analysis requires a network connection
+3. **Device Permissions**: Camera access permission is required
+4. **Processing Time**: Image analysis may take some time
 
-## 故障排除
+## Troubleshooting
 
-### 常见问题
-1. **摄像头无法打开**: 检查设备连接和权限
-2. **图像模糊**: 检查光线条件和对焦
-3. **分析失败**: 检查网络连接和服务状态
-4. **结果不准确**: 优化图像质量和问题描述
+### Common Issues
+1. **Camera Cannot Open**: Check device connection and permissions
+2. **Blurry Image**: Check lighting conditions and focus
+3. **Analysis Failed**: Check network connection and service status
+4. **Inaccurate Results**: Optimize image quality and question description
 
-### 调试方法
-1. 检查摄像头设备状态
-2. 验证网络连接
-3. 查看日志错误信息
-4. 测试不同的拍摄条件
+### Debugging Methods
+1. Check camera device status
+2. Verify network connection
+3. View log error messages
+4. Test different shooting conditions
 
-通过摄像头工具，您可以轻松实现智能视觉识别和图像分析，为日常生活和工作提供便利。
+With the camera tool, you can easily achieve intelligent visual recognition and image analysis, bringing convenience to daily life and work.

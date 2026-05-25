@@ -1,225 +1,225 @@
-# 音乐播放工具 (Music Tools)
+# Music Playback Tools
 
-音乐播放工具是一个功能丰富的 MCP 音乐播放器，支持在线搜索播放、本地音乐管理、歌词显示等功能。
+The music playback tool is a feature-rich MCP music player that supports online search and playback, local music management, lyrics display, and more.
 
-### 常见使用场景
+### Common Use Cases
 
-**搜索播放在线音乐:**
+**Search and Play Online Music:**
 
-- "播放周杰伦的青花瓷"
-- "我想听邓紫棋的歌"
-- "放一首轻音乐"
-- "播放最新的流行歌曲"
+- "Play Blue and White Porcelain by Jay Chou"
+- "I want to listen to G.E.M.'s songs"
+- "Play some light music"
+- "Play the latest pop songs"
 
-**播放控制:**
+**Playback Control:**
 
-- "暂停音乐"
-- "继续播放"
-- "停止播放"
-- "音乐播放到一半了"
+- "Pause the music"
+- "Resume playback"
+- "Stop playback"
+- "The music is halfway through"
 
-**本地音乐管理:**
+**Local Music Management:**
 
-- "查看本地音乐"
-- "播放本地的那首歌"
-- "在本地音乐中搜索周杰伦"
+- "View local music"
+- "Play that local song"
+- "Search for Jay Chou in local music"
 
-**播放状态查询（AI 会根据内部状态回答，暂无独立工具）:**
+**Playback Status Queries (AI answers based on internal state; no standalone tool yet):**
 
-- "现在播放的是什么歌"
-- "播放进度怎么样"
-- "这首歌还有多长时间"
+- "What song is currently playing"
+- "How is the playback progress"
+- "How much time is left on this song"
 
-**歌词功能:**
+**Lyrics Features:**
 
-- "显示歌词"
-- "当前歌词是什么"
-- "有歌词吗"
+- "Show lyrics"
+- "What are the current lyrics"
+- "Are there lyrics available"
 
-**高级功能:**
+**Advanced Features:**
 
-- "跳转到1分30秒"
-- "快进到高潮部分"
-- "回到开头"
+- "Skip to 1 minute 30 seconds"
+- "Fast forward to the chorus"
+- "Go back to the beginning"
 
-### 使用提示
+### Usage Tips
 
-1. **明确歌曲信息**: 提供歌名、歌手名或专辑名有助于更准确的搜索
-2. **网络连接**: 在线搜索和播放需要稳定的网络连接
-3. **本地缓存**: 播放过的歌曲会自动缓存，下次播放更快
-4. **音量控制**: 可以要求调整音量或静音
-5. **歌词同步**: 支持实时歌词显示，增强听歌体验
+1. **Specify Song Information Clearly**: Providing song title, artist name, or album name helps with more accurate search
+2. **Network Connection**: Online search and playback require a stable network connection
+3. **Local Cache**: Played songs are automatically cached for faster playback next time
+4. **Volume Control**: You can request to adjust volume or mute
+5. **Lyrics Sync**: Supports real-time lyrics display to enhance the listening experience
 
-AI 助手会根据您的需求自动调用音乐播放工具，为您提供流畅的音乐体验。
+The AI assistant will automatically invoke the music playback tool based on your needs, providing you with a smooth music experience.
 
-## 功能概览
+## Feature Overview
 
-### 在线音乐功能
+### Online Music Features
 
-- **智能搜索**: 支持歌名、歌手、专辑等多种搜索方式
-- **高品质播放**: 支持高品质音频流播放
-- **歌词显示**: 实时同步歌词显示
-- **自动缓存**: 播放过的歌曲自动缓存到本地
+- **Smart Search**: Supports searching by song title, artist, album, and more
+- **High-Quality Playback**: Supports high-quality audio streaming
+- **Lyrics Display**: Real-time synchronized lyrics display
+- **Auto-Caching**: Played songs are automatically cached locally
 
-### 本地音乐管理
+### Local Music Management
 
-- **本地扫描**: 自动扫描本地音乐文件
-- **元数据提取**: 自动提取歌曲标题、艺术家、专辑等信息
-- **格式支持**: 支持MP3、M4A、FLAC、WAV、OGG等多种格式
-- **智能搜索**: 在本地音乐中快速搜索
+- **Local Scanning**: Automatically scans local music files
+- **Metadata Extraction**: Automatically extracts song title, artist, album, and other information
+- **Format Support**: Supports MP3, M4A, FLAC, WAV, OGG, and other formats
+- **Smart Search**: Quickly search within local music
 
-### 播放控制功能
+### Playback Control Features
 
-- **基础控制**: 播放、暂停、停止
-- **进度控制**: 跳转到指定时间位置
-- **状态同步**: 通过控制工具返回值与事件推送同步播放进度
-- **错误处理**: 完善的错误处理和恢复机制
+- **Basic Control**: Play, pause, stop
+- **Progress Control**: Skip to a specified time position
+- **Status Sync**: Synchronizes playback progress via control tool return values and event push
+- **Error Handling**: Comprehensive error handling and recovery mechanisms
 
-### 用户体验功能
+### User Experience Features
 
-- **UI集成**: 与应用界面无缝集成
-- **实时反馈**: 实时显示播放状态和歌词
-- **智能缓存**: 优化存储空间使用
-- **后台播放**: 支持后台持续播放
+- **UI Integration**: Seamless integration with the application interface
+- **Real-Time Feedback**: Real-time display of playback status and lyrics
+- **Smart Caching**: Optimizes storage space usage
+- **Background Playback**: Supports continuous background playback
 
-## 工具列表
+## Tool List
 
-### 1. 在线音乐工具
+### 1. Online Music Tool
 
-#### music_player.search_and_play - 搜索并播放在线音乐
+#### music_player.search_and_play - Search and Play Online Music
 
-根据歌名、歌手或关键词调用在线音乐接口，下载并播放目标歌曲。若当前正在播放，会先停止再播放新歌。
+Calls the online music API based on song title, artist, or keywords to download and play the target song. If currently playing, it will stop first before playing the new song.
 
-**参数:**
+**Parameters:**
 
-- `song_name` (必需): 要搜索的歌曲名称、歌手或关键词
+- `song_name` (required): The song title, artist, or keywords to search for
 
-**使用场景:**
+**Use Cases:**
 
-- 播放指定歌曲
-- 搜索歌手的全部或最新歌曲
-- 让 AI 推荐或播放流行歌曲
+- Play a specific song
+- Search for all or latest songs by an artist
+- Let the AI recommend or play popular songs
 
-### 2. 播放控制工具
+### 2. Playback Control Tools
 
-#### music_player.pause - 暂停播放
+#### music_player.pause - Pause Playback
 
-暂停当前歌曲并保留当前位置，适用于手动暂停或用户主动要求暂定的情况。
+Pauses the current song and retains the current position. Suitable for manual pause or when the user actively requests pausing.
 
-**参数:**
-无
+**Parameters:**
+None
 
-**使用场景:**
+**Use Cases:**
 
-- 暂停当前播放
-- 与 TTS 播报配合，提前手动暂停
-- 需要暂时静音的场景
+- Pause current playback
+- Coordinate with TTS playback for early manual pause
+- Scenarios requiring temporary mute
 
-#### music_player.resume - 恢复播放
+#### music_player.resume - Resume Playback
 
-从暂停位置继续播放，仅在手动暂停后才会触发，避免与 TTS 的自动暂停冲突。
+Continues playback from the paused position. Only triggers after a manual pause to avoid conflict with automatic TTS pause.
 
-**参数:**
-无
+**Parameters:**
+None
 
-**使用场景:**
+**Use Cases:**
 
-- 用户说“继续播放”“恢复播放”
-- TTS 自动暂停后需要人工恢复
-- 确认音乐已经手动暂停
+- User says "resume playback" or "continue playing"
+- Manual resume required after automatic TTS pause
+- Confirming that music has been manually paused
 
-#### music_player.stop - 停止播放
+#### music_player.stop - Stop Playback
 
-结束当前歌曲并重置播放进度，属于彻底停止操作。
+Ends the current song and resets the playback progress. This is a complete stop operation.
 
-**参数:**
-无
+**Parameters:**
+None
 
-**使用场景:**
+**Use Cases:**
 
-- 用户明确要求“停止/关闭音乐”
-- 切换会话或场景时需要清空播放状态
-- 避免后台继续播放
+- User explicitly requests "stop/close the music"
+- Need to clear playback state when switching sessions or scenes
+- Avoid background continuing playback
 
-#### music_player.seek - 跳转播放位置
+#### music_player.seek - Seek Playback Position
 
-跳转到歌曲的指定秒数位置，内部会重启解码器确保播放同步。
+Skips to a specified second position in the song. Internally restarts the decoder to ensure playback synchronization.
 
-**参数:**
+**Parameters:**
 
-- `position` (必需): 跳转位置（秒，>=0 的整数）
+- `position` (required): The seek position (in seconds, integer >= 0)
 
-**使用场景:**
+**Use Cases:**
 
-- 快进到指定时间点
-- 回到歌曲开头或副歌
-- 按用户要求定位到特定片段
+- Fast forward to a specific time point
+- Go back to the beginning or chorus of the song
+- Navigate to a specific segment as requested by the user
 
-### 3. 歌词工具
+### 3. Lyrics Tool
 
-#### music_player.get_lyrics - 获取当前歌曲歌词
+#### music_player.get_lyrics - Get Current Song Lyrics
 
-返回带有时间戳的歌词文本列表，若无歌词则给出提示信息。
+Returns a list of lyrics text with timestamps. If no lyrics are available, a notification message is returned.
 
-**参数:**
-无
+**Parameters:**
+None
 
-**使用场景:**
+**Use Cases:**
 
-- 用户想查看或跟唱歌词
-- 展示当前播放句子
-- 检查歌词是否可用
+- User wants to view or sing along with lyrics
+- Display the currently playing line
+- Check if lyrics are available
 
-> 提示：播放器内部仍维护播放进度、暂停来源等状态，但 MCP 目前仅暴露控制类工具和歌词查询。
+> Note: The player internally maintains playback progress, pause source, and other states, but MCP currently only exposes control tools and lyrics queries.
 
-### 4. 本地音乐工具
+### 4. Local Music Tool
 
-#### music_player.get_local_playlist - 获取本地缓存歌单
+#### music_player.get_local_playlist - Get Local Cached Playlist
 
-扫描本地缓存目录，返回已下载歌曲列表。结果中的每一项形如“歌名 - 歌手”，可再次传给 `music_player.search_and_play` 播放。
+Scans the local cache directory and returns a list of downloaded songs. Each item in the result is in the format "Song Title - Artist" and can be passed back to `music_player.search_and_play` for playback.
 
-**参数:**
+**Parameters:**
 
-- `force_refresh` (可选): 是否强制重新扫描缓存目录，默认 false
+- `force_refresh` (optional): Whether to force re-scan the cache directory, default false
 
-**使用场景:**
+**Use Cases:**
 
-- 查看本地缓存内容
-- 根据缓存歌曲快速发起播放
-- 调试或验证缓存状态
+- View local cache contents
+- Quickly initiate playback based on cached songs
+- Debug or verify cache status
 
-## 使用示例
+## Usage Examples
 
-### 在线音乐播放示例
+### Online Music Playback Examples
 
 ```python
-# 搜索并播放歌曲
+# Search and play a song
 result = await mcp_server.call_tool("music_player.search_and_play", {
-    "song_name": "周杰伦 青花瓷"
+    "song_name": "Jay Chou Blue and White Porcelain"
 })
 
-# 暂停与恢复
+# Pause and resume
 await mcp_server.call_tool("music_player.pause", {})
 await mcp_server.call_tool("music_player.resume", {})
 
-# 停止播放
+# Stop playback
 await mcp_server.call_tool("music_player.stop", {})
 
-# 跳转到指定位置（单位：秒）
+# Seek to a specific position (in seconds)
 await mcp_server.call_tool("music_player.seek", {
     "position": 90
 })
 ```
 
-### 本地音乐管理示例
+### Local Music Management Examples
 
 ```python
-# 获取本地音乐列表
+# Get local music list
 playlist = await mcp_server.call_tool("music_player.get_local_playlist", {
     "force_refresh": True
 })
 
-# 从本地歌单中选择歌曲再次播放
+# Select a song from the local playlist and play again
 if playlist.get("playlist"):
     first_song = playlist["playlist"][0].split(" - ")[0]
     await mcp_server.call_tool("music_player.search_and_play", {
@@ -227,104 +227,104 @@ if playlist.get("playlist"):
     })
 ```
 
-### 歌词查询示例
+### Lyrics Query Example
 
 ```python
 lyrics = await mcp_server.call_tool("music_player.get_lyrics", {})
 ```
 
-> 当前 MCP 接口尚未暴露独立的状态查询工具，播放进度类问题依赖 AI 助手维护的上下文和事件回调。
+> The current MCP interface does not yet expose a standalone status query tool. Playback progress-related questions rely on context and event callbacks maintained by the AI assistant.
 
-## 技术架构
+## Technical Architecture
 
-### 音乐播放器核心
+### Music Player Core
 
-- **单例模式**: 通过 `get_music_player_instance()` 提供全局唯一实例，避免并发创建多个播放器。
-- **FFmpeg + AudioCodec**: 使用 `MusicDecoder`(FFmpeg) 解码音频，再交给统一的 `AudioCodec` 播放链路，保证采样率与声道配置一致。
-- **异步任务队列**: 解码后的 PCM 数据通过 `asyncio.Queue` 传递给播放循环，避免阻塞主线程。
-- **事件驱动控制**: 内置 EventBus 订阅暂停/恢复事件，AI 或系统可通过事件实现自动让路与恢复。
+- **Singleton Pattern**: Provides a globally unique instance via `get_music_player_instance()`, avoiding concurrent creation of multiple players.
+- **FFmpeg + AudioCodec**: Uses `MusicDecoder` (FFmpeg) to decode audio, then passes it through the unified `AudioCodec` playback pipeline, ensuring consistent sample rate and channel configuration.
+- **Async Task Queue**: Decoded PCM data is passed to the playback loop through an `asyncio.Queue`, avoiding blocking the main thread.
+- **Event-Driven Control**: Built-in EventBus subscribes to pause/resume events, allowing AI or system to achieve automatic yielding and recovery through events.
 
-### 音频处理
+### Audio Processing
 
-- **高精度解码**: `MusicDecoder` 按需拉起 FFmpeg 解码器，支持 MP3/M4A/FLAC/WAV/OGG 等主流格式。
-- **时间轴维护**: 通过 `ffprobe` + 歌词时间戳获取准确时长，并在跳转/恢复时重新初始化解码器。
-- **PCM 规范化**: 解码输出保持 float32，并在写入 `AudioCodec` 前统一处理多声道为单声道。
-- **歌词同步**: 独立的歌词任务根据当前时间动态推送歌词事件，保证显示同步。
+- **High-Precision Decoding**: `MusicDecoder` launches the FFmpeg decoder on demand, supporting mainstream formats such as MP3/M4A/FLAC/WAV/OGG.
+- **Timeline Maintenance**: Obtains accurate duration via `ffprobe` + lyrics timestamps, and re-initializes the decoder during seeking/resuming.
+- **PCM Normalization**: Decoded output is kept as float32 and unified to mono before writing to `AudioCodec`.
+- **Lyrics Sync**: A dedicated lyrics task dynamically pushes lyrics events based on the current time, ensuring display synchronization.
 
-### 在线服务集成
+### Online Service Integration
 
-- **TuneFree API**: 统一通过 `https://music-dl.sayqz.com/api/` 访问在线搜索、播放链接、歌词与歌曲信息。
-- **多平台支持**: `DEFAULT_SOURCE` 可配置为 kuwo、netease 等平台，`SEARCH_LIMIT` 控制搜索数量。
-- **高码率播放**: 默认 `DEFAULT_BR=320k`，也可切换为 flac 等更高音质。
-- **网络稳健性**: 请求封装为 `asyncio.to_thread` + `requests`，内置超时与错误日志。
+- **TuneFree API**: Uniformly accesses online search, playback links, lyrics, and song information via `https://music-dl.sayqz.com/api/`.
+- **Multi-Platform Support**: `DEFAULT_SOURCE` can be configured for platforms like kuwo, netease, etc. `SEARCH_LIMIT` controls the number of search results.
+- **High Bitrate Playback**: Default `DEFAULT_BR=320k`, can also switch to flac or other higher quality options.
+- **Network Robustness**: Requests are wrapped with `asyncio.to_thread` + `requests`, with built-in timeout and error logging.
 
-### 本地音乐管理
+### Local Music Management
 
-- **缓存目录**: 自动在 `get_user_cache_dir()/music` 下创建缓存与临时目录。
-- **定期扫描**: 至少每 5 分钟刷新一次缓存索引，必要时可通过 `force_refresh` 强制扫描。
-- **元数据提取**: 如果安装了 Mutagen，会自动读取标题、艺术家、专辑及时长。
-- **播放复用**: 下载到缓存的歌曲再次播放时会直接命中本地文件，减少网络请求。
+- **Cache Directory**: Automatically creates cache and temporary directories under `get_user_cache_dir()/music`.
+- **Periodic Scanning**: Refreshes the cache index at least every 5 minutes; can force a scan via `force_refresh` when needed.
+- **Metadata Extraction**: If Mutagen is installed, automatically reads title, artist, album, and duration.
+- **Playback Reuse**: Downloaded songs in the cache are served directly from local files for replay, reducing network requests.
 
-## 数据结构
+## Data Structures
 
-### 搜索播放响应
+### Search Playback Response
 
 ```python
 {
     "status": "success",
-    "message": "正在播放: 青花瓷 - 周杰伦",
-    "song": "青花瓷 - 周杰伦",
+    "message": "Now playing: Blue and White Porcelain - Jay Chou",
+    "song": "Blue and White Porcelain - Jay Chou",
     "duration": "03:57",
     "total_seconds": 237.5
 }
 ```
 
-### 本地歌单响应
+### Local Playlist Response
 
 ```python
 {
     "status": "success",
-    "message": "找到 12 首本地音乐",
+    "message": "Found 12 local songs",
     "playlist": [
-        "青花瓷 - 周杰伦",
-        "光年之外 - 邓紫棋"
+        "Blue and White Porcelain - Jay Chou",
+        "Light Years Away - G.E.M."
     ],
     "total_count": 12
 }
 ```
 
-### 音乐元数据（内部使用）
+### Music Metadata (Internal Use)
 
 ```python
 {
     "file_id": "song_123",
-    "title": "青花瓷",
-    "artist": "周杰伦",
-    "album": "我很忙",
+    "title": "Blue and White Porcelain",
+    "artist": "Jay Chou",
+    "album": "On the Run",
     "duration": "03:57",
     "file_size": 5242880,
     "format": "mp3"
 }
 ```
 
-### 歌词数据
+### Lyrics Data
 
 ```python
 {
     "status": "success",
     "lyrics": [
-        "[00:12] 素胚勾勒出青花笔锋浓转淡",
-        "[00:18] 瓶身描绘的牡丹一如你初妆",
-        "[00:24] 冉冉檀香透过窗心事我了然"
+        "[00:12] The blue and white pattern is outlined with varying brush density",
+        "[00:18] The peony on the vase is just like your first makeup",
+        "[00:24] The sandalwood incense drifts through the window, I know what's on my mind"
     ]
 }
 ```
 
-## 配置说明
+## Configuration
 
-### 音频配置
+### Audio Configuration
 
-音频播放相关配置：
+Audio playback related configuration:
 
 ```python
 AudioConfig = {
@@ -334,9 +334,9 @@ AudioConfig = {
 }
 ```
 
-### 缓存配置
+### Cache Configuration
 
-缓存目录配置：
+Cache directory configuration:
 
 ```python
 from src.utils.resource_finder import get_user_cache_dir
@@ -345,9 +345,9 @@ cache_dir = get_user_cache_dir() / "music"
 temp_cache_dir = cache_dir / "temp"
 ```
 
-### API配置
+### API Configuration
 
-在线音乐服务配置：
+Online music service configuration:
 
 ```python
 config = {
@@ -364,70 +364,70 @@ config = {
 }
 ```
 
-## 支持的音频格式
+## Supported Audio Formats
 
-### 播放格式
+### Playback Formats
 
-- **MP3**: 最常见的音频格式
-- **M4A**: Apple音频格式
-- **FLAC**: 无损音频格式
-- **WAV**: 未压缩音频格式
-- **OGG**: 开源音频格式
+- **MP3**: The most common audio format
+- **M4A**: Apple audio format
+- **FLAC**: Lossless audio format
+- **WAV**: Uncompressed audio format
+- **OGG**: Open-source audio format
 
-### 元数据支持
+### Metadata Support
 
-- **ID3 v1/v2**: MP3元数据标准
-- **MP4**: M4A文件元数据
-- **Vorbis**: OGG文件元数据
-- **FLAC**: FLAC文件元数据
+- **ID3 v1/v2**: MP3 metadata standard
+- **MP4**: M4A file metadata
+- **Vorbis**: OGG file metadata
+- **FLAC**: FLAC file metadata
 
-## 最佳实践
+## Best Practices
 
-### 1. 搜索优化
+### 1. Search Optimization
 
-- 使用具体的歌名和歌手名
-- 避免使用过于模糊的关键词
-- 可以包含专辑名增加准确性
+- Use specific song titles and artist names
+- Avoid overly vague keywords
+- Include album names to increase accuracy
 
-### 2. 缓存管理
+### 2. Cache Management
 
-- 定期清理不需要的缓存文件
-- 监控缓存目录大小
-- 使用强制刷新获取最新音乐列表
+- Periodically clean up unnecessary cache files
+- Monitor cache directory size
+- Use forced refresh to get the latest music list
 
-### 3. 网络优化
+### 3. Network Optimization
 
-- 确保网络连接稳定
-- 在网络不佳时优先使用本地音乐
-- 设置合适的超时时间
+- Ensure a stable network connection
+- Prioritize local music when the network is poor
+- Set appropriate timeout values
 
-### 4. 用户体验
+### 4. User Experience
 
-- 提供清晰的播放状态反馈
-- 支持快速响应的控制操作
-- 优雅处理播放错误
+- Provide clear playback status feedback
+- Support fast-response control operations
+- Gracefully handle playback errors
 
-## 故障排除
+## Troubleshooting
 
-### 常见问题
+### Common Issues
 
-1. **无法搜索歌曲**: 检查网络连接和API可用性
-2. **播放失败**: 检查音频设备和文件格式
-3. **歌词不显示**: 检查歌词服务和歌曲ID
-4. **本地音乐不显示**: 检查文件权限和格式支持
+1. **Cannot Search for Songs**: Check network connection and API availability
+2. **Playback Failed**: Check audio device and file format
+3. **Lyrics Not Displaying**: Check lyrics service and song ID
+4. **Local Music Not Showing**: Check file permissions and format support
 
-### 调试方法
+### Debugging Methods
 
-1. 查看日志输出获取详细错误信息
-2. 测试网络连接和API响应
-3. 验证音频文件完整性
-4. 检查缓存目录权限
+1. View log output for detailed error information
+2. Test network connection and API response
+3. Verify audio file integrity
+4. Check cache directory permissions
 
-### 性能优化
+### Performance Optimization
 
-1. 合理设置缓存策略
-2. 优化网络请求频率
-3. 使用异步操作避免阻塞
-4. 定期清理临时文件
+1. Set reasonable caching policies
+2. Optimize network request frequency
+3. Use async operations to avoid blocking
+4. Periodically clean up temporary files
 
-通过音乐播放工具，您可以享受丰富的音乐体验，包括在线搜索、本地播放、歌词显示等功能。
+With the music playback tool, you can enjoy a rich music experience including online search, local playback, lyrics display, and more.

@@ -4,31 +4,31 @@ layout: home
 
 hero:
   name: "PY-XIAOZHI"
-  tagline: 轻量级、跨平台的多模态 AI 交互主控框架。支持实时语音、视觉识别和 IoT 设备控制，可部署于桌面及 ARM 嵌入式平台。
+  tagline: Lightweight, cross-platform multimodal AI interaction framework. Supports real-time voice, vision recognition, and IoT device control, deployable on desktop and ARM embedded platforms.
   actions:
     - theme: brand
-      text: 开始使用
+      text: Get Started
       link: /guide/文档目录
     - theme: alt
-      text: 查看源码
+      text: View Source
       link: https://github.com/huangjunsen0406/py-xiaozhi
     - theme: alt
-      text: 开发指南
+      text: Dev Guide
       link: /guide/开发指南
 
 features:
-  - title: AI语音交互
-    details: 支持语音输入与识别，实现智能人机交互，提供自然流畅的对话体验。采用异步架构设计，支持实时音频处理和低延迟响应。
-  - title: 视觉多模态
-    details: 支持图像识别和处理，提供多模态交互能力，理解图像内容。集成OpenCV摄像头处理，支持实时视觉分析。
-  - title: MCP工具服务器
-    details: 基于JSON-RPC 2.0协议的模块化工具系统，内置音乐播放、八字命理等丰富功能，可动态扩展工具插件。
-  - title: IoT 设备集成
-    details: 采用Thing抽象模式设计，支持智能家居设备控制，包括灯光、音量、温度传感器等，集成Home Assistant智能家居平台，可轻松扩展。
-  - title: 高性能音频处理
-    details: 基于Opus编解码的实时音频传输，支持智能重采样技术，5ms音频帧间隔处理，确保低延迟高质量的音频体验。
-  - title: 跨平台支持
-    details: 兼容Windows 10+、macOS 10.15+和Linux系统，支持GUI和CLI双模式运行，自适应不同平台的音频设备和系统接口。
+  - title: AI Voice Interaction
+    details: Supports voice input and recognition for intelligent human-computer interaction with natural conversation flow. Built with async architecture for real-time audio processing and low-latency responses.
+  - title: Vision Multimodal
+    details: Supports image recognition and processing for multimodal interaction, understanding image content. Integrates OpenCV camera processing for real-time visual analysis.
+  - title: MCP Tool Server
+    details: Modular tool system based on JSON-RPC 2.0 protocol, with built-in music playback, Bazi fortune-telling, and more. Dynamically extensible tool plugins.
+  - title: IoT Device Integration
+    details: Designed with Thing abstraction pattern, supports smart home device control including lights, volume, temperature sensors. Integrates Home Assistant platform for easy expansion.
+  - title: High-Performance Audio
+    details: Real-time audio transmission based on Opus codec, intelligent resampling, 5ms audio frame interval processing for low-latency, high-quality audio experience.
+  - title: Cross-Platform
+    details: Compatible with Windows 10+, macOS 10.15+, and Linux. Supports GUI and CLI dual modes, adapts to platform-specific audio devices and system interfaces.
 ---
 
 <style>
@@ -112,7 +112,7 @@ features:
   .developers-actions {
     flex-direction: column;
   }
-  
+
   .contributors-wrapper {
     margin: 1.5rem auto;
   }

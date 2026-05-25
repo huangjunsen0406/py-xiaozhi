@@ -1,31 +1,31 @@
-# MCP 工具开发指南
+# MCP Tool Development Guide
 
-本文档说明如何为 py-xiaozhi 开发内置 MCP 工具。外部 MCP 服务接入请参考 [外挂 MCP 接入指南](xiaozhi-mcp.md)。
+This document explains how to develop built-in MCP tools for py-xiaozhi. For external MCP service integration, refer to the [External MCP Integration Guide](xiaozhi-mcp.md).
 
-## 工作原理
+## How It Works
 
-1. 启动时，`McpServer.add_common_tools()` 调用 `discover_tool_modules()` 自动扫描 `src/mcp/tools/` 下的所有子包
-2. 扫描会 import 每个子包的 `__init__.py`，以及子包内的 `_tools.py`（如果存在）
-3. import 过程中，`@mcp_tool` 装饰器将工具函数注册到全局注册表
-4. 注册完成后，工具通过 JSON-RPC 2.0 协议对外暴露
+1. On startup, `McpServer.add_common_tools()` calls `discover_tool_modules()` to automatically scan all sub-packages under `src/mcp/tools/`
+2. Scanning imports each sub-package's `__init__.py`, as well as the sub-package's `_tools.py` (if it exists)
+3. During import, the `@mcp_tool` decorator registers tool functions into a global registry
+4. After registration, tools are exposed externally via the JSON-RPC 2.0 protocol
 
-**你只需要写工具函数并加装饰器，不需要修改 `mcp_server.py`。**
+**You only need to write tool functions and add decorators -- no modification to `mcp_server.py` required.**
 
-## 快速上手：开发一个灯控工具
+## Quick Start: Developing a Light Control Tool
 
-### 第 1 步：创建目录
+### Step 1: Create the Directory
 
 ```
 src/mcp/tools/light/
-├── __init__.py      # 导入 _tools 触发装饰器注册
-├── _tools.py        # 工具注册（@mcp_tool 装饰器）
-└── light_manager.py # 业务逻辑（可选，简单工具可直接写在 _tools.py）
+├── __init__.py      # Imports _tools to trigger decorator registration
+├── _tools.py        # Tool registration (@mcp_tool decorator)
+└── light_manager.py # Business logic (optional; simple tools can be written directly in _tools.py)
 ```
 
-### 第 2 步：编写业务逻辑 (`light_manager.py`)
+### Step 2: Write Business Logic (`light_manager.py`)
 
 ```python
-"""灯光控制业务逻辑."""
+"""Light control business logic."""
 
 from src.logging import get_logger
 
@@ -39,22 +39,22 @@ class LightManager:
 
     def turn_on(self) -> str:
         self._on = True
-        logger.info("[Light] 灯已打开")
-        return "灯已打开"
+        logger.info("[Light] Light turned on")
+        return "Light turned on"
 
     def turn_off(self) -> str:
         self._on = False
-        logger.info("[Light] 灯已关闭")
-        return "灯已关闭"
+        logger.info("[Light] Light turned off")
+        return "Light turned off"
 
     def set_brightness(self, level: int) -> str:
         self._brightness = max(0, min(100, level))
-        logger.info(f"[Light] 亮度设为 {self._brightness}%")
-        return f"亮度已设为 {self._brightness}%"
+        logger.info(f"[Light] Brightness set to {self._brightness}%")
+        return f"Brightness set to {self._brightness}%"
 
     def get_status(self) -> str:
-        state = "开" if self._on else "关"
-        return f"灯状态: {state}, 亮度: {self._brightness}%"
+        state = "on" if self._on else "off"
+        return f"Light status: {state}, brightness: {self._brightness}%"
 
 
 _light = LightManager()
@@ -64,10 +64,10 @@ def get_light_manager() -> LightManager:
     return _light
 ```
 
-### 第 3 步：注册 MCP 工具 (`_tools.py`)
+### Step 3: Register MCP Tools (`_tools.py`)
 
 ```python
-"""灯光 MCP 工具注册."""
+"""Light MCP tool registration."""
 
 from src.mcp.decorators import Prop, PropType, mcp_tool
 
@@ -76,7 +76,7 @@ from .light_manager import get_light_manager
 
 @mcp_tool(
     name="self.light.turn_on",
-    description="打开灯。当用户说'开灯'、'打开灯'时调用。",
+    description="Turn on the light. Call when user says 'turn on the light', 'switch on the light'.",
 )
 async def tool_light_on(args):
     return get_light_manager().turn_on()
@@ -84,7 +84,7 @@ async def tool_light_on(args):
 
 @mcp_tool(
     name="self.light.turn_off",
-    description="关闭灯。当用户说'关灯'、'把灯关了'时调用。",
+    description="Turn off the light. Call when user says 'turn off the light', 'switch off the light'.",
 )
 async def tool_light_off(args):
     return get_light_manager().turn_off()
@@ -92,7 +92,7 @@ async def tool_light_off(args):
 
 @mcp_tool(
     name="self.light.set_brightness",
-    description="设置灯的亮度。参数: brightness (0-100)。",
+    description="Set the light brightness. Parameter: brightness (0-100).",
     props=[Prop("brightness", PropType.INT, min_val=0, max_val=100)],
 )
 async def tool_set_brightness(args):
@@ -102,37 +102,37 @@ async def tool_set_brightness(args):
 
 @mcp_tool(
     name="self.light.get_status",
-    description="查看灯的当前状态（开/关、亮度）。",
+    description="View the current state of the light (on/off, brightness).",
 )
 async def tool_light_status(args):
     return get_light_manager().get_status()
 ```
 
-### 第 4 步：编写 `__init__.py`
+### Step 4: Write `__init__.py`
 
 ```python
-"""灯光控制工具."""
+"""Light control tools."""
 
-# 导入 _tools 触发 @mcp_tool 装饰器注册
+# Import _tools to trigger @mcp_tool decorator registration
 from . import _tools  # noqa: F401
 ```
 
-**完成。** 重启应用后，4 个灯控工具自动可用。
+**Done.** After restarting the application, all 4 light control tools are automatically available.
 
-## API 参考
+## API Reference
 
-### `@mcp_tool` 装饰器
+### `@mcp_tool` Decorator
 
 ```python
 from src.mcp.decorators import Prop, PropType, mcp_tool
 
 @mcp_tool(
-    name="self.module.action",   # 工具名称（全局唯一）
-    description="工具描述，AI 根据此判断何时调用",
-    props=[                      # 参数列表（可选，无参数时省略）
-        Prop("city", PropType.STR),                              # 必填字符串
-        Prop("days", PropType.INT, default=3, min_val=1, max_val=7),  # 可选整数，带范围
-        Prop("verbose", PropType.BOOL, default=False),           # 可选布尔值
+    name="self.module.action",   # Tool name (globally unique)
+    description="Tool description; the AI uses this to decide when to call",
+    props=[                      # Parameter list (optional; omit if no parameters)
+        Prop("city", PropType.STR),                              # Required string
+        Prop("days", PropType.INT, default=3, min_val=1, max_val=7),  # Optional integer with range
+        Prop("verbose", PropType.BOOL, default=False),           # Optional boolean
     ],
 )
 async def tool_function(args: dict) -> str:
@@ -141,62 +141,62 @@ async def tool_function(args: dict) -> str:
     return json.dumps({"city": city, "days": days}, ensure_ascii=False)
 ```
 
-### 参数类型
+### Parameter Types
 
-| 类型 | 用法 | 说明 |
+| Type | Usage | Description |
 |------|------|------|
-| `PropType.STR` | `Prop("name", PropType.STR)` | 字符串 |
-| `PropType.INT` | `Prop("count", PropType.INT, min_val=0, max_val=100)` | 整数，可选范围限制 |
-| `PropType.BOOL` | `Prop("flag", PropType.BOOL, default=False)` | 布尔值 |
+| `PropType.STR` | `Prop("name", PropType.STR)` | String |
+| `PropType.INT` | `Prop("count", PropType.INT, min_val=0, max_val=100)` | Integer, with optional range limit |
+| `PropType.BOOL` | `Prop("flag", PropType.BOOL, default=False)` | Boolean |
 
-- 不带 `default` 的参数为**必填**
-- 带 `default` 的参数为**可选**
-- `min_val` / `max_val` 仅对 `INT` 有效
+- Parameters without `default` are **required**
+- Parameters with `default` are **optional**
+- `min_val` / `max_val` only apply to `INT`
 
-### 返回值
+### Return Values
 
-工具函数必须返回 **`str`** 类型。返回结构化数据时使用 `json.dumps()`：
+Tool functions must return a **`str`** type. Use `json.dumps()` when returning structured data:
 
 ```python
-# 简单文本
-return "操作成功"
+# Simple text
+return "Operation successful"
 
-# 结构化 JSON
+# Structured JSON
 return json.dumps({"status": "success", "data": result}, ensure_ascii=False)
 ```
 
-**不要返回 `dict`**，MCP 协议要求文本内容。
+**Do not return `dict`**; the MCP protocol requires text content.
 
-## 自动发现规则
+## Auto-Discovery Rules
 
-`discover_tool_modules()` 的扫描顺序：
+`discover_tool_modules()` scan order:
 
-1. `src/mcp/tools/*.py` — 根目录下的独立文件（跳过 `_` 开头的）
-2. `src/mcp/tools/<name>/` — 每个子包的 `__init__.py`
-3. `src/mcp/tools/<name>/_tools.py` — 子包内的 `_tools.py`（如果存在）
+1. `src/mcp/tools/*.py` -- standalone files in the root directory (skips files starting with `_`)
+2. `src/mcp/tools/<name>/` -- `__init__.py` of each sub-package
+3. `src/mcp/tools/<name>/_tools.py` -- `_tools.py` inside the sub-package (if it exists)
 
-**关键点**：
-- `__init__.py` 必须 import `_tools` 或工具模块，否则装饰器不会触发
-- `_` 开头的文件名会被跳过（`_tools.py` 是唯一例外，会被显式拉取）
-- 单个模块 import 失败只会 warning，不影响其他工具加载
+**Key Points**:
+- `__init__.py` must import `_tools` or tool modules, otherwise the decorator will not trigger
+- Files starting with `_` are skipped (`_tools.py` is the only exception; it is explicitly loaded)
+- A single module import failure only produces a warning and does not affect loading of other tools
 
-## 开发规范
+## Development Conventions
 
-| 规则 | 说明 |
+| Rule | Description |
 |------|------|
-| 命名 | 工具名格式 `self.module.action`，全局唯一 |
-| 异步 | 工具函数用 `async def`；阻塞操作用 `asyncio.to_thread()` 包裹 |
-| 超时 | 外部 API 调用必须设 `timeout` |
-| 日志 | 用 `from src.logging import get_logger`，加 `[ToolName]` 前缀 |
-| 错误处理 | try/except 捕获异常，返回用户可读的错误信息，`logger.error(..., exc_info=True)` 记录堆栈 |
+| Naming | Tool name format: `self.module.action`, globally unique |
+| Async | Tool functions use `async def`; wrap blocking operations with `asyncio.to_thread()` |
+| Timeout | External API calls must set a `timeout` |
+| Logging | Use `from src.logging import get_logger`, prefix with `[ToolName]` |
+| Error Handling | Catch exceptions with try/except, return user-readable error messages, log stack traces with `logger.error(..., exc_info=True)` |
 
-## 现有工具模块
+## Existing Tool Modules
 
-| 模块 | 路径 | 功能 | 详细文档 |
+| Module | Path | Function | Detailed Docs |
 |------|------|------|----------|
-| 音量控制 | `src/mcp/tools/volume/` | 音量设置/查询/状态诊断 | [system.md](system.md) |
-| 应用管理 | `src/mcp/tools/app/` | 应用启动/终止/扫描、运行进程查询 | [system.md](system.md) |
-| 相机 | `src/mcp/tools/camera/` | 拍照、视觉问答 | [camera.md](camera.md) |
-| 截图 | `src/mcp/tools/screenshot/` | 桌面截图、屏幕 OCR、多屏支持 | — |
-| 音乐 | `src/mcp/tools/music/` | 搜索播放、暂停/恢复/停止、歌词、本地歌单 | [music.md](music.md) |
-| 天气 | `src/mcp/tools/weather/` | 天气查询、天气预报（示例工具） | — |
+| Volume Control | `src/mcp/tools/volume/` | Volume set/query/status diagnostics | [system.md](system.md) |
+| App Management | `src/mcp/tools/app/` | App launch/kill/scan, running process query | [system.md](system.md) |
+| Camera | `src/mcp/tools/camera/` | Photo capture, visual Q&A | [camera.md](camera.md) |
+| Screenshot | `src/mcp/tools/screenshot/` | Desktop screenshot, screen OCR, multi-monitor support | — |
+| Music | `src/mcp/tools/music/` | Search & play, pause/resume/stop, lyrics, local playlist | [music.md](music.md) |
+| Weather | `src/mcp/tools/weather/` | Weather query, weather forecast (example tool) | — |

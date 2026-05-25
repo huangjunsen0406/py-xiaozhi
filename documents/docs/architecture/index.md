@@ -1,6 +1,6 @@
 ---
-title: Py-Xiaozhi 项目架构
-description: 基于 Python 实现的小智语音客户端，采用模块化设计，支持多种通信协议和设备集成
+title: Py-Xiaozhi Project Architecture
+description: A Python-based Xiaozhi voice assistant client with modular design, supporting multiple communication protocols and device integrations
 sidebar: false,
 pageClass: architecture-page-class
 ---
@@ -13,23 +13,23 @@ import ArchitectureFeatures from './components/ArchitectureFeatures.vue'
 
 <div class="architecture-page">
 
-# Py-Xiaozhi 项目架构
+# Py-Xiaozhi Project Architecture
 
-<p class="page-description">基于 Python 实现的小智语音客户端，采用模块化设计，支持多种通信协议和设备集成</p>
+<p class="page-description">A Python-based Xiaozhi voice assistant client with modular design, supporting multiple communication protocols and device integrations</p>
 
-## 核心架构
+## Core Architecture
 
 <CoreArchitecture/>
 
-## 模块详情
+## Module Details
 
 <ModuleDetails/>
 
-## 技术栈
+## Technology Stack
 
 <TechnologyStack/>
 
-## 架构特点
+## Architecture Features
 
 <ArchitectureFeatures/>
 </div>

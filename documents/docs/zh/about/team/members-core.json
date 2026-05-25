@@ -1,0 +1,104 @@
+[
+  {
+    "name": "Junsen Huang",
+    "title": "py-xiaozhi发起者 & 核心开发者",
+    "company": "南方电网人工智能有限公司 前端开发工程师",
+    "location": "中国",
+    "languages": ["中文"],
+    "projects": [
+      {
+        "label": "py-xiaozhi",
+        "url": "https://github.com/huangjunsen0406/py-xiaozhi"
+      },
+      {
+        "label": "UnifyPy",
+        "url": "https://github.com/huangjunsen0406/UnifyPy"
+      },
+      {
+        "label": "xiaozhi-esp32-server",
+        "url": "https://github.com/xinnan-tech/xiaozhi-esp32-server"
+      },
+      {
+        "label": "xiaozhi-mcphub",
+        "url": "https://github.com/huangjunsen0406/xiaozhi-mcphub"
+      }
+    ],
+    "socials": {
+      "github": "huangjunsen0406"
+    },
+    "website": {
+      "label": "https://junsen.online",
+      "url": "https://junsen.online"
+    }
+  },
+  {
+    "name": "ASLant",
+    "title": "核心开发者、PyQt5界面开发、嵌入式兼容",
+    "company": "山东青橙数字科技有限公司 嵌入式软件工程师",
+    "location": "中国",
+    "languages": ["中文"],
+    "projects": [
+    ],
+    "socials": {
+      "github": "Y-ASLant"
+    },
+    "website": {
+      "label": "aslant.top",
+      "url": "https://aslant.top/"
+    }
+  },
+  {
+    "name": "fengzai6",
+    "title": "前期核心开发者",
+    "company": "中山华定科技有限公司 前端开发工程师",
+    "location": "中国",
+    "languages": ["中文"],
+    "projects": [
+    ],
+    "socials": {
+      "github": "fengzai6"
+    }
+  },
+  {
+    "name": "Cal And Nong",
+    "title": "文档贡献者",
+    "company": "腾讯 前端开发工程师",
+    "location": "中国",
+    "languages": ["中文"],
+    "projects": [
+    ],
+    "socials": {
+      "github": "calandnong"
+    }
+  },
+  {
+    "name": "vonweller",
+    "title": "视觉功能贡献者",
+    "projects": [],
+    "location": "中国",
+    "languages": ["中文"],
+    "socials": {
+      "github": "vonweller"
+    }
+  },
+  {
+    "name": "gaochuang",
+    "company": "诺基亚通信技术 高级平台开发工程师",
+    "projects": [],
+    "location": "中国",
+    "languages": ["中文"],
+    "socials": {
+      "github": "gaochuang"
+    }
+  },
+  {
+    "name": "wupengya",
+    "company": "南方电网人工智能有限公司 后端工程师",
+    "projects": [],
+    "location": "中国",
+    "languages": ["中文"],
+    "socials": {
+      "github": "wupengya"
+    }
+  }
+]

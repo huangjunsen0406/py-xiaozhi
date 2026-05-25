@@ -1,6 +1,6 @@
 ---
 page: true
-title: Py-xiaozhi团队
+title: Py-xiaozhi Team
 layout: home
 ---
 

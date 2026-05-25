@@ -63,7 +63,7 @@ py-xiaozhi is a lightweight, cross-platform multi-modal AI interaction framework
 
 ### Basic Requirements
 
-- **Python Version**: 3.9 - 3.12
+- **Python Version**: 3.10 - 3.12
 - **Operating System**: Windows 10+, macOS 10.15+, Linux
 - **Audio Devices**: Microphone and speaker devices
 - **Network Connection**: Stable internet connection (for AI services and online features)
@@ -215,13 +215,19 @@ python main.py --protocol mqtt       # MQTT protocol
      Complete
 ```
 
-## Contribution Guidelines
+## Contributing
 
-We welcome issue reports and code contributions. Please ensure you follow these specifications:
+- Start with [CONTRIBUTING.md](./CONTRIBUTING.md) for the repository workflow
+- Chinese version: [CONTRIBUTING_ZH.md](./CONTRIBUTING_ZH.md)
+- Detailed docs: [Contribution Guide](https://huangjunsen0406.github.io/py-xiaozhi/en/contributing)
 
-1. Code style complies with PEP8 standards
-2. PR submissions include appropriate tests
-3. Update relevant documentation
+## Maintainer Workflow
+
+- Triage incoming work as `bug`, `feature`, `docs`, `refactor`, or `maintenance`
+- Prefer focused pull requests with clear validation steps and linked context
+- Require docs updates when behavior, configuration, or public APIs change
+- Merge after CI passes and review feedback is resolved
+- Release through the normal release flow; merge does not imply immediate shipping
 
 ## Community and Support
 
