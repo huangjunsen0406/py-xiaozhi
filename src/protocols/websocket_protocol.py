@@ -128,14 +128,14 @@ class WebsocketProtocol(Protocol):
                 logger.error("等待服务器hello响应超时")
                 await self._do_cleanup()
                 if self._on_network_error:
-                    self._on_network_error("等待响应超时")
+                    await self._on_network_error("等待响应超时")
                 return False
 
         except Exception as e:
             logger.error(f"WebSocket连接失败: {e}")
             await self._do_cleanup()
             if self._on_network_error:
-                self._on_network_error(f"无法连接服务: {str(e)}")
+                await self._on_network_error(f"无法连接服务: {str(e)}")
             return False
 
     # ============ 模板方法实现 ============
@@ -338,7 +338,7 @@ class WebsocketProtocol(Protocol):
         except Exception as e:
             logger.error(f"处理服务器 hello 消息时出错: {e}")
             if self._on_network_error:
-                self._on_network_error(f"处理服务器响应失败: {str(e)}")
+                await self._on_network_error(f"处理服务器响应失败: {str(e)}")
 
     async def close_audio_channel(self):
         """

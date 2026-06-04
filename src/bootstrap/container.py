@@ -388,7 +388,9 @@ class ServiceContainer:
     async def _handle_tts_stop(self) -> None:
         if self.state.keep_listening:
             try:
-                await self.audio_codec.clear_audio_queue()
+                audio_plugin = self.plugins.get_plugin("audio")
+                if audio_plugin and audio_plugin.codec:
+                    await audio_plugin.codec.clear_audio_queue()
             except Exception as e:
                 logger.warning(f"清空音频队列失败: {e}")
             await self.state.set_device_state(DeviceState.LISTENING)

@@ -255,7 +255,9 @@ class MqttProtocol(Protocol):
                         ):
                             error_msg += " (重连失败)"
                         self.loop.call_soon_threadsafe(
-                            lambda: self._on_network_error(error_msg)
+                            lambda: asyncio.create_task(
+                                self._on_network_error(error_msg)
+                            )
                         )
 
             except Exception as e:
