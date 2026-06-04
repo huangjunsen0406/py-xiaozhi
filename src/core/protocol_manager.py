@@ -60,10 +60,10 @@ class ProtocolTransport:
         self._protocol.on_audio_channel_opened(self._on_audio_channel_opened)
         self._protocol.on_audio_channel_closed(self._on_audio_channel_closed)
 
-    def _on_network_error(self, error_message: str = None) -> None:
+    async def _on_network_error(self, error_message: str = None) -> None:
         if error_message:
             logger.error(f"网络错误: {error_message}")
-        asyncio.create_task(self._event_bus.emit(Events.NETWORK_ERROR, error_message))
+        await self._event_bus.emit(Events.NETWORK_ERROR, error_message)
 
     def _on_incoming_json(self, json_data: dict) -> None:
         asyncio.create_task(self._event_bus.emit(Events.INCOMING_JSON, json_data))
