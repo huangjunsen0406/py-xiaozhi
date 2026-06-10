@@ -8,6 +8,8 @@ import threading
 from pathlib import Path
 
 import numpy as np
+
+from src.utils.resource_finder import get_ffmpeg_path
 import sounddevice as sd
 
 from src.logging import get_logger
@@ -44,7 +46,7 @@ class ActivationAnnouncer:
         """使用 ffmpeg 解码音频文件."""
         try:
             cmd = [
-                "ffmpeg",
+                get_ffmpeg_path(),
                 "-i", str(file_path),
                 "-f", "s16le",      # 16位小端 PCM
                 "-ar", "24000",     # 采样率

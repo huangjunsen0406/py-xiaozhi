@@ -83,8 +83,8 @@ class AudioDeviceManager:
             if not output_info:
                 raise RuntimeError("无法找到可用的输出设备")
 
-        # 3. 使用设备报告的声道数（不再限制，避免 9997 错误）
-        input_channels = input_info["channels"]
+        # 3. 输入固定单声道（协议要求 + 避免阵列驱动延迟），输出保持设备声道数
+        input_channels = 1
         output_channels = output_info["channels"]
 
         device_input_sample_rate = input_info["sample_rate"]
