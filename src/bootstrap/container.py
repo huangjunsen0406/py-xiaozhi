@@ -347,19 +347,6 @@ class ServiceContainer:
 
     async def _on_audio_channel_closed(self, _=None) -> None:
         await self.state.set_device_state(DeviceState.IDLE)
-        await self._stop_music_on_disconnect()
-
-    async def _stop_music_on_disconnect(self) -> None:
-        """连接断开时停止音乐播放，防止解码器无限输出超时日志."""
-        try:
-            from src.mcp.tools.music.music_player import get_music_player_instance
-
-            music_player = get_music_player_instance()
-            if music_player.is_playing:
-                await music_player.stop()
-                logger.debug("连接断开，已停止音乐播放")
-        except Exception as e:
-            logger.debug(f"连接断开时停止音乐失败: {e}")
 
     async def _on_network_error(self, error_message: str = None) -> None:
         self.state.set_keep_listening(False)
