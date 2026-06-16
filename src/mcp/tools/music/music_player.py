@@ -802,6 +802,21 @@ class MusicPlayer:
         try:
             self._current_file_path = file_path
 
+            # 先停止旧 decoder，防止残留任务继续写入队列
+            if self.decoder:
+                await self.decoder.stop()
+                self.decoder = None
+
+            # 取消旧的播放循环，防止多个 loop 并发读取同一队列
+            if self._playback_task and not self._playback_task.done():
+                self._playback_task.cancel()
+                try:
+                    await self._playback_task
+                except asyncio.CancelledError:
+                    pass
+                finally:
+                    self._playback_task = None
+
             cleared = await self._clear_music_queue()
             if cleared > 0:
                 logger.debug(f"开始播放前清空 {cleared} 帧音乐数据")
@@ -1082,6 +1097,15 @@ class MusicPlayer:
             if self.decoder:
                 await self.decoder.stop()
                 self.decoder = None
+
+            if self._playback_task and not self._playback_task.done():
+                self._playback_task.cancel()
+                try:
+                    await self._playback_task
+                except asyncio.CancelledError:
+                    pass
+                finally:
+                    self._playback_task = None
 
             self.is_playing = False
             self.paused = False

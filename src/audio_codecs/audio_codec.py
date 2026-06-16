@@ -292,7 +292,9 @@ class AudioCodec:
         Args:
             pcm_float32: float32 PCM 数据
         """
-        await self.output_buffer.put(pcm_float32, replace_oldest=False)
+        # replace_oldest=True：输出队列满时丢弃旧帧而非阻塞，
+        # 防止播放回路卡死在 put() 导致 decoder 超时刷屏
+        await self.output_buffer.put(pcm_float32, replace_oldest=True)
 
     async def clear_audio_queue(self):
         """清空音频队列"""
