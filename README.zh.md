@@ -29,6 +29,26 @@
 
 简体中文 | [English](README.md)
 
+## ❤️赞助商
+
+> [想出现在这里？](mailto:huangjunsen0406@gmail.com)
+
+<details open>
+<summary>点击折叠</summary>
+
+[**GitDo.net**](https://gitdo.net/)
+
+感谢 GitDo.net 赞助了本项目！GitDo.net 是一个 AI API 聚合中转平台，一个 API Key 即可调用 **Claude、Gemini、GPT** 等主流模型，国内直连、无需魔法、稳定高效，是企业级 AI 编程和应用的理想选择。**[点击访问 GitDo.net](https://gitdo.net/)**
+
+---
+
+| | |
+|---|---|
+| [**Token能量站**](https://factory.pub/register?aff=3rXc) | 感谢 Token能量站 赞助了本项目！提供 **GPT、Grok、Claude** 等主流模型的 API 中转服务，稳定可靠，价格实惠。**[点击注册](https://factory.pub/register?aff=3rXc)** |
+| [**良心AI**](https://www.openailaozu.com/register?aff=5Y7JEH5HBTXS) | 感谢 良心AI 赞助了本项目！提供 **GPT、Claude、Gemini** 等主流模型的 API 中转服务，国内直连，稳定高速。**[点击注册](https://www.openailaozu.com/register?aff=5Y7JEH5HBTXS)** |
+
+</details>
+
 ## 项目简介
 
 py-xiaozhi 是一个轻量级、跨平台的多模态 AI 交互主控框架，基于 Python 异步架构，支持实时语音、视觉识别和 IoT 设备控制。可部署于 Windows / macOS / Linux 桌面以及 Raspberry Pi、RDK 等 ARM 嵌入式平台，向下对接具身智能硬件，向上接入大语言模型，开箱即用。
@@ -161,18 +181,6 @@ py-xiaozhi/
 [kejily](https://github.com/kejily)
 [电波bilibili君](https://space.bilibili.com/119751)
 [赛搏智能](https://shop115087494.m.taobao.com/?refer=https%3A%2F%2Fm.tb.cn%2F)
-
-## 赞助支持
-
-<div align="center">
-  <p>感谢所有赞助者的支持，无论是接口资源、设备兼容测试还是资金支持，每一份帮助都让项目更加完善</p>
-  <a href="https://huangjunsen0406.github.io/py-xiaozhi/sponsors/" target="_blank">
-    <img src="https://img.shields.io/badge/查看-赞助者名单-brightgreen?style=for-the-badge&logo=github" alt="赞助者名单">
-  </a>
-  <a href="https://huangjunsen0406.github.io/py-xiaozhi/sponsors/" target="_blank">
-    <img src="https://img.shields.io/badge/成为-项目赞助者-orange?style=for-the-badge&logo=heart" alt="成为赞助者">
-  </a>
-</div>
 
 ## 项目统计
 

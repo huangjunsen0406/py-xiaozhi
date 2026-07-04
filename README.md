@@ -31,6 +31,26 @@
 
 English | [简体中文](README.zh.md)
 
+## ❤️ Sponsors
+
+> [Want to appear here?](mailto:huangjunsen0406@gmail.com)
+
+<details open>
+<summary>Click to collapse</summary>
+
+[**GitDo.net**](https://gitdo.net/)
+
+Thanks to GitDo.net for sponsoring this project! GitDo.net is an AI API aggregation platform — one API Key for **Claude, Gemini, GPT** and other major models. Direct connection, no proxy needed, stable and efficient. An ideal choice for enterprise-grade AI programming. **[Visit GitDo.net](https://gitdo.net/)**
+
+---
+
+| | |
+|---|---|
+| [**Token能量站**](https://factory.pub/register?aff=3rXc) | Thanks to Token能量站 (Factory.pub) for sponsoring this project! Providing API relay for **GPT, Grok, Claude** and other major models — stable, reliable, and affordable. **[Register here](https://factory.pub/register?aff=3rXc)** |
+| [**良心AI**](https://www.openailaozu.com/register?aff=5Y7JEH5HBTXS) | Thanks to 良心AI for sponsoring this project! Providing API relay for **GPT, Claude, Gemini** and other major models — direct connection, stable and high-speed. **[Register here](https://www.openailaozu.com/register?aff=5Y7JEH5HBTXS)** |
+
+</details>
+
 ## About
 
 py-xiaozhi is a lightweight, cross-platform multi-modal AI interaction framework built on Python's async architecture. It supports real-time voice streaming, vision-language tasks, and IoT device control. Deployable across Windows, macOS, Linux desktops, and ARM embedded platforms (Raspberry Pi, Horizon Robotics RDK, Jetson Nano), it bridges the gap between Large Language Models and physical hardware — out of the box.
@@ -246,20 +266,6 @@ python main.py --protocol mqtt       # MQTT protocol
 [kejily](https://github.com/kejily)
 [Radio bilibili Jun](https://space.bilibili.com/119751)
 [Cyber Intelligence](https://shop115087494.m.taobao.com/?refer=https%3A%2F%2Fm.tb.cn%2F&ut_sk=1.WMelxbgDQWkDAJ1Rq9Pn7DCD_21380790_1757337352472.Copy.shop&suid=0E25E948-651D-46E0-8E89-5C8CB03B4F56&shop_navi=shopindex&sourceType=shop&shareUniqueId=33038752403&un=d22c5ceda82844ab8bd7bab98ffeb263&share_crt_v=1&un_site=0&spm=a2159r.13376460.0.0&sp_tk=dkRKUjRKUWo2ZHY%3D&bc_fl_src=share-1041250486811064-2-1&cpp=1&shareurl=true&short_name=h.SaBKVHytsCKIPNS&bxsign=scdGtSe264e_qkFQBh0rXCkF-Mrb_s6t35EnpVBBU5dsrd-J24c-_rn_PhJiXRk0hg2hjGoAm0L7j2UQg27OIH_6gZkbhKDyLziD2cy4pDf8sC3KmqrF55TXP3USZaPTw_-&app=weixin)
-
-### Sponsorship Support
-
-<div align="center">
-  <h3>Thanks to All Sponsors ❤️</h3>
-  <p>Whether it's API resources, device compatibility testing, or financial support, every contribution makes the project more complete</p>
-  
-  <a href="https://huangjunsen0406.github.io/py-xiaozhi/sponsors/" target="_blank">
-    <img src="https://img.shields.io/badge/View-Sponsors-brightgreen?style=for-the-badge&logo=github" alt="View Sponsors">
-  </a>
-  <a href="https://huangjunsen0406.github.io/py-xiaozhi/sponsors/" target="_blank">
-    <img src="https://img.shields.io/badge/Become-Sponsor-orange?style=for-the-badge&logo=heart" alt="Become a Sponsor">
-  </a>
-</div>
 
 ## Project Statistics
 
