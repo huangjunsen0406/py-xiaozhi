@@ -1193,3 +1193,36 @@ tts_stop 的 clear_audio_queue 改用 clear_output_buffer 不清输入缓冲区 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 36: 可移植 FFmpeg 打包 + 激活 WAV 播报
+
+**Date**: 2026-07-18
+**Task**: 可移植 FFmpeg 打包 + 激活 WAV 播报
+**Branch**: `main`
+
+### Summary
+
+修复安装包在无系统 FFmpeg 机器上的解码/激活问题：CI 与 scripts/bundle_ffmpeg.sh 注入 redistributable ffmpeg（BtbN lgpl win/linux，mac 用 static-ffmpeg，禁止 brew/apt/choco 动态拷贝）；激活音效改为预置 24kHz WAV，ActivationAnnouncer 不再依赖 ffmpeg；文档补充安装包用户无需系统 FFmpeg 与本地打包注入步骤。Mac 本地 unifypy 验证激活/语音/音乐正常。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `48fcd1e` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
