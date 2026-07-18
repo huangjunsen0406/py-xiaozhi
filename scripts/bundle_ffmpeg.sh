@@ -213,18 +213,27 @@ bundle_mac() {
   local ffmpeg_src="" ffprobe_src=""
 
   if py_run "import static_ffmpeg" 2>/dev/null; then
-    # Direct API returns package bin paths (not PATH/which)
-    eval "$(py_script - <<'PY'
+    # Write paths to a side-channel file. static_ffmpeg may print
+    # "Downloading ..." to stdout on cold cache; never eval that stdout.
+    local sf_paths="$TMP/sf_paths"
+    if py_script - <<PY
 from static_ffmpeg.run import get_or_fetch_platform_executables_else_raise
+
 ffmpeg, ffprobe = get_or_fetch_platform_executables_else_raise()
-print(f"export _SF_FFMPEG={ffmpeg!r}")
-print(f"export _SF_FFPROBE={ffprobe!r}")
+with open(r"$sf_paths", "w", encoding="utf-8") as f:
+    f.write(ffmpeg + "\n" + ffprobe + "\n")
 PY
-)"
-    ffmpeg_src="${_SF_FFMPEG:-}"
-    ffprobe_src="${_SF_FFPROBE:-}"
-    echo "    static_ffmpeg: ffmpeg=$ffmpeg_src"
-    echo "    static_ffmpeg: ffprobe=$ffprobe_src"
+    then
+      # Read only the two path lines written by Python (ignore any download logs)
+      {
+        IFS= read -r ffmpeg_src || true
+        IFS= read -r ffprobe_src || true
+      } <"$sf_paths"
+      echo "    static_ffmpeg: ffmpeg=$ffmpeg_src"
+      echo "    static_ffmpeg: ffprobe=$ffprobe_src"
+    else
+      echo "    static_ffmpeg: get_or_fetch failed (will try fallbacks)" >&2
+    fi
   fi
 
   # Fallback: imageio_ffmpeg (often ffmpeg only)
