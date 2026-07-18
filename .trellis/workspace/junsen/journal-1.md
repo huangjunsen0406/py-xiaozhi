@@ -1226,3 +1226,37 @@ tts_stop 的 clear_audio_queue 改用 clear_output_buffer 不清输入缓冲区 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 37: 修复 CI mac bundle_ffmpeg eval + 发版 v2.0.8
+
+**Date**: 2026-07-18
+**Task**: 修复 CI mac bundle_ffmpeg eval + 发版 v2.0.8
+**Branch**: `main`
+
+### Summary
+
+修复 static-ffmpeg 冷下载 stdout 被 eval 导致 mac CI exit 127；合并 #313；发版 v2.0.8 重跑全平台构建。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `8b67dca` | (see git log) |
+| `3d441a4` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
