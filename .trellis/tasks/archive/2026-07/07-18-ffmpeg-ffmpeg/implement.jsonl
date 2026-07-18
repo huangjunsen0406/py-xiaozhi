@@ -1,0 +1,7 @@
+{"file": ".trellis/spec/backend/python-style.md", "reason": "Python style for announcer/scripts changes"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Decode/play failure handling without crash"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "User-facing vs debug logs for missing decoder"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Where scripts/assets/libs live"}
+{"file": ".trellis/tasks/07-18-ffmpeg-ffmpeg/research/portable-ffmpeg-sources.md", "reason": "Per-platform redistributable FFmpeg download strategy"}
+{"file": ".trellis/tasks/07-18-ffmpeg-ffmpeg/research/pyinstaller-ffmpeg-bundling.md", "reason": "PyInstaller libs path, +x, DLL, quarantine, smoke"}
+{"file": ".trellis/tasks/07-18-ffmpeg-ffmpeg/prd.md", "reason": "Accepted requirements and AC"}

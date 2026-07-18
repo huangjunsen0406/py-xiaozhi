@@ -31,15 +31,22 @@ class MusicDecoder:
             ffprobe = get_ffprobe_path()
             # 检查 ffprobe 是否可用
             try:
-                await asyncio.create_subprocess_exec(
+                check = await asyncio.create_subprocess_exec(
                     ffprobe,
                     "-version",
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
                     **_SUBPROCESS_KW,
                 )
+                await check.wait()
             except FileNotFoundError:
-                logger.warning("ffprobe 未安装，无法获取音频时长")
+                logger.warning(
+                    "ffprobe 不可用（未找到内置 libs/ffmpeg 且系统 PATH 无 ffprobe），"
+                    f"无法获取音频时长。尝试路径: {ffprobe}"
+                )
+                return 0
+            except OSError as e:
+                logger.warning(f"ffprobe 启动失败: {ffprobe}: {e}")
                 return 0
 
             # 使用 ffprobe 获取时长
@@ -101,8 +108,27 @@ class MusicDecoder:
                     **_SUBPROCESS_KW,
                 )
                 await result.wait()
+                if result.returncode not in (0, None):
+                    logger.error(
+                        f"FFmpeg 无法启动（退出码 {result.returncode}）: {ffmpeg}。"
+                        "安装包应内置可移植二进制；若仍失败请反馈版本与平台。"
+                        "源码运行请执行 ./scripts/bundle_ffmpeg.sh 或安装系统 ffmpeg"
+                    )
+                    return False
             except FileNotFoundError:
-                logger.error("FFmpeg 未安装或不在 PATH 中")
+                logger.error(
+                    "FFmpeg 不可用：未找到内置 libs/ffmpeg/<plat>/<arch>/ffmpeg，"
+                    f"且系统 PATH 中也没有。尝试路径: {ffmpeg}。"
+                    "安装包用户无需单独安装系统 FFmpeg；若使用安装包仍失败，"
+                    "请重新下载完整安装包。源码运行请安装 ffmpeg 或执行 "
+                    "./scripts/bundle_ffmpeg.sh"
+                )
+                return False
+            except OSError as e:
+                logger.error(
+                    f"FFmpeg 启动失败（可能缺少动态库）: {ffmpeg}: {e}",
+                    exc_info=True,
+                )
                 return False
 
             cmd = [ffmpeg]

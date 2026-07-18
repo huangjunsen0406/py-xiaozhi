@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Quality bar for check pass"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "No crash on missing ffmpeg for music; activation without ffmpeg"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Clear logs when bundled ffmpeg fails smoke"}
+{"file": ".trellis/tasks/07-18-ffmpeg-ffmpeg/research/portable-ffmpeg-sources.md", "reason": "Verify CI sources match recommended portable builds"}
+{"file": ".trellis/tasks/07-18-ffmpeg-ffmpeg/research/pyinstaller-ffmpeg-bundling.md", "reason": "Verify packaging smoke and path layout"}
+{"file": ".trellis/tasks/07-18-ffmpeg-ffmpeg/prd.md", "reason": "Acceptance criteria checklist"}

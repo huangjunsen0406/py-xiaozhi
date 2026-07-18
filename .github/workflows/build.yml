@@ -40,7 +40,7 @@ jobs:
 
       - name: Install system dependencies (macOS)
         if: runner.os == 'macOS'
-        run: brew install portaudio opus ffmpeg
+        run: brew install portaudio opus
 
       - name: Install system dependencies (Linux)
         if: runner.os == 'Linux'
@@ -48,7 +48,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             portaudio19-dev libportaudio2 \
-            ffmpeg libopus0 libopus-dev \
+            libopus0 libopus-dev \
             libasound-dev \
             libxcb-xinerama0 libxkbcommon-x11-0 libegl1 \
             build-essential python3-dev \
@@ -61,7 +61,7 @@ jobs:
       - name: Install system dependencies (Windows)
         if: runner.os == 'Windows'
         shell: cmd
-        run: choco install ffmpeg innosetup -y --no-progress
+        run: choco install innosetup -y --no-progress
 
       - name: Add Inno Setup to PATH (Windows)
         if: runner.os == 'Windows'
@@ -86,37 +86,25 @@ jobs:
         shell: bash
         run: where.exe ISCC.exe && echo "Inno Setup found"
 
-      - name: Bundle FFmpeg into libs/
+      # 注入可移植 ffmpeg/ffprobe（禁止 brew/apt/choco 动态链接副本）
+      # libs/ffmpeg/ 已 gitignore，仅 CI / 本地打包前注入
+      - name: Bundle portable FFmpeg into libs/
         shell: bash
         run: |
+          chmod +x scripts/bundle_ffmpeg.sh
           if [ "$RUNNER_OS" = "macOS" ]; then
-            PLAT="mac"; ARCH="arm64"
+            # mac 无官方多架构 static CDN；从 static-ffmpeg 提取，禁止 Homebrew
+            uv pip install static-ffmpeg
+            ./scripts/bundle_ffmpeg.sh mac arm64
           elif [ "$RUNNER_OS" = "Windows" ]; then
-            PLAT="win"; ARCH="x64"
+            ./scripts/bundle_ffmpeg.sh win x64
           else
-            PLAT="linux"
-            if [ "$(uname -m)" = "aarch64" ]; then ARCH="arm64"; else ARCH="x64"; fi
-          fi
-          DEST="libs/ffmpeg/${PLAT}/${ARCH}"
-          mkdir -p "$DEST"
-          if [ "$RUNNER_OS" = "Windows" ]; then
-            # Chocolatey shim (~384KB) 不是真实二进制，需要找到实际安装路径
-            CHOCO_FFMPEG="C:/ProgramData/chocolatey/lib/ffmpeg/tools/ffmpeg/bin"
-            if [ -f "$CHOCO_FFMPEG/ffmpeg.exe" ]; then
-              cp "$CHOCO_FFMPEG/ffmpeg.exe" "$DEST/ffmpeg.exe"
-              cp "$CHOCO_FFMPEG/ffprobe.exe" "$DEST/ffprobe.exe"
+            if [ "$(uname -m)" = "aarch64" ]; then
+              ./scripts/bundle_ffmpeg.sh linux arm64
             else
-              echo "WARNING: Chocolatey FFmpeg bin not found at $CHOCO_FFMPEG, falling back to shim"
-              cp "$(which ffmpeg.exe)" "$DEST/ffmpeg.exe"
-              cp "$(which ffprobe.exe)" "$DEST/ffprobe.exe"
+              ./scripts/bundle_ffmpeg.sh linux x64
             fi
-          else
-            cp "$(which ffmpeg)" "$DEST/ffmpeg"
-            cp "$(which ffprobe)" "$DEST/ffprobe"
-            chmod +x "$DEST/ffmpeg" "$DEST/ffprobe"
           fi
-          echo "Bundled FFmpeg to $DEST:"
-          ls -lh "$DEST"
 
       - name: Build package
         shell: bash
