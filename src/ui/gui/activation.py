@@ -28,11 +28,14 @@ class GUIActivation(QObject, BaseActivation):
         self._engine: QQmlApplicationEngine | None = None
         self._model = ActivationModel()
         self._completion_future: asyncio.Future | None = None
+        self._loop: asyncio.AbstractEventLoop | None = None
+        self._activation_task: asyncio.Task | None = None
 
     async def run(self) -> bool:
         """运行激活流程."""
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         self._completion_future = loop.create_future()
+        self._loop = loop
 
         self._setup_ui()
         self._update_device_info()
@@ -89,7 +92,15 @@ class GUIActivation(QObject, BaseActivation):
             self._model.set_status_not_activated()
 
     def _start_activation(self):
-        asyncio.ensure_future(self._run_activation())
+        """从 Qt timer 回调进入 asyncio（必须用 running loop 上的 create_task）."""
+        try:
+            loop = self._loop or asyncio.get_running_loop()
+            self._activation_task = loop.create_task(
+                self._run_activation(), name="gui:activation"
+            )
+        except RuntimeError as e:
+            logger.error(f"GUIActivation: 无法调度激活协程: {e}", exc_info=True)
+            self._complete(False)
 
     async def _run_activation(self):
         try:

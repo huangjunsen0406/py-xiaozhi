@@ -291,3 +291,12 @@ class ConfigManager:
         if cls._instance is None:
             cls._instance = cls()
         return cls._instance
+
+    @classmethod
+    def reset_instance(cls) -> None:
+        """丢弃单例（仅测试/完整重启用）.
+
+        ConfigManager 仍是进程级权威配置源；应用运行中不要调用。
+        下次 get_instance() 会重新加载配置文件。
+        """
+        cls._instance = None

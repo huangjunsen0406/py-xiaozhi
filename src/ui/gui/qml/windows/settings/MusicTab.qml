@@ -102,7 +102,7 @@ ScrollView {
             Text {
                 text: "搜索 API 使用酷我官方接口，直链 API 用于获取播放地址（需配合 API Key）"
                 font.pixelSize: Theme.fontSizeXs
-                color: Theme.textTertiary
+                color: Theme.textPlaceholder
                 wrapMode: Text.WordWrap
                 Layout.fillWidth: true
             }

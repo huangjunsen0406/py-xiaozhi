@@ -48,7 +48,10 @@ class EventBridge(QObject):
                 task_name = f"bridge:{event.split('.')[-1]}" if '.' in event else f"bridge:{event}"
                 self._task_manager.spawn(self._event_bus.emit(event, data), name=task_name)
             except Exception as e:
-                logger.warning(f"EventBridge: 发射事件 {event} 失败: {e}")
+                logger.warning(
+                    f"EventBridge: 发射事件 {event} 失败: {e}",
+                    exc_info=True,
+                )
 
         # 使用 QTimer.singleShot 确保在 Qt 事件循环中执行
         QTimer.singleShot(0, do_emit)
@@ -140,7 +143,7 @@ class EventBridge(QObject):
             else:
                 logger.warning("EventBridge: 未配置激活 URL")
         except Exception as e:
-            logger.error(f"EventBridge: 打开激活页面失败: {e}")
+            logger.error(f"EventBridge: 打开激活页面失败: {e}", exc_info=True)
 
     def set_activation_code_getter(self, getter: Callable[[], str]):
         """设置激活码获取函数."""

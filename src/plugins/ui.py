@@ -1,6 +1,6 @@
 """UI 插件.
 
-管理 CLI/GUI 显示界面。
+管理 CLI/GUI 显示界面。通过 ViewManager facade 更新 UI，不触达 main_model 私有字段。
 """
 
 from typing import TYPE_CHECKING, Optional
@@ -11,6 +11,7 @@ from src.plugins.base import Plugin
 
 if TYPE_CHECKING:
     from src.bootstrap.protocols import PluginCommands, PluginContext
+    from src.core.task_manager import TaskManager
 
 logger = get_logger()
 
@@ -27,11 +28,15 @@ class UIPlugin(Plugin):
         DeviceState.SPEAKING: "说话中...",
     }
 
-    def __init__(self, mode: Optional[str] = None) -> None:
+    def __init__(
+        self,
+        mode: Optional[str] = None,
+        task_manager: Optional["TaskManager"] = None,
+    ) -> None:
         super().__init__()
         self.mode = (mode or "cli").lower()
+        self._task_manager = task_manager
         self.view_manager = None
-        self._is_gui = False
         self.is_first = True
         self._manual_recording = False  # 手动录音状态
 
@@ -40,26 +45,65 @@ class UIPlugin(Plugin):
         self._create_view_manager()
 
     def _create_view_manager(self):
-        """创建 ViewManager 实例."""
+        """创建 ViewManager 实例（注入容器 TaskManager）."""
         if self.mode == "gui":
             from src.ui.gui import ViewManager
 
-            self._is_gui = True
-            self.view_manager = ViewManager(event_bus=self._ctx.event_bus)
+            self.view_manager = ViewManager(
+                event_bus=self._ctx.event_bus,
+                task_manager=self._task_manager,
+            )
         elif self.mode == "gpio":
             # GPIO 模式：仅支持 Linux（树莓派）
             from src.ui.gpio import GPIOViewManager
 
-            self._is_gui = False
-            self.view_manager = GPIOViewManager(event_bus=self._ctx.event_bus)
+            self.view_manager = GPIOViewManager(
+                event_bus=self._ctx.event_bus,
+                task_manager=self._task_manager,
+            )
             logger.info("GPIO 模式，使用 GPIOViewManager")
         else:
             # CLI 模式使用 CLIViewManager
             from src.ui.cli import CLIViewManager
 
-            self._is_gui = False
-            self.view_manager = CLIViewManager(event_bus=self._ctx.event_bus)
+            self.view_manager = CLIViewManager(
+                event_bus=self._ctx.event_bus,
+                task_manager=self._task_manager,
+            )
             logger.info("CLI 模式，使用 CLIViewManager")
+
+    def _view_set_tts_text(self, text: str) -> None:
+        if self.view_manager:
+            self.view_manager.set_tts_text(text)
+
+    def _view_set_emotion(self, emotion: str) -> None:
+        if self.view_manager:
+            self.view_manager.set_emotion(emotion)
+
+    def _view_set_status(self, status: str, connected: bool = True) -> None:
+        if self.view_manager:
+            self.view_manager.set_status(status, connected)
+
+    def _view_set_button_text(self, text: str) -> None:
+        if not self.view_manager:
+            return
+        # CLI/GPIO 可能无按钮文案 API
+        setter = getattr(self.view_manager, "set_button_text", None)
+        if callable(setter):
+            setter(text)
+
+    def _view_toggle_auto_mode(self) -> bool:
+        """切换自动模式，返回切换后是否为自动."""
+        if not self.view_manager:
+            return False
+        if hasattr(self.view_manager, "toggle_auto_mode"):
+            result = self.view_manager.toggle_auto_mode()
+            if isinstance(result, bool):
+                return result
+        if hasattr(self.view_manager, "is_auto_mode"):
+            return bool(self.view_manager.is_auto_mode())
+        # 兼容旧 CLI：读 _auto_mode
+        return bool(getattr(self.view_manager, "_auto_mode", False))
 
     async def start(self) -> None:
         # 订阅事件
@@ -73,7 +117,7 @@ class UIPlugin(Plugin):
         # 订阅用户操作事件（从 View 发出）
         self._ctx.event_bus.on(Events.UI_BUTTON_PRESS, self._press)
         self._ctx.event_bus.on(Events.UI_BUTTON_RELEASE, self._release)
-        self._ctx.event_bus.on(Events.UI_MANUAL_TOGGLE, self._manual_toggle)  # 新增 toggle 事件
+        self._ctx.event_bus.on(Events.UI_MANUAL_TOGGLE, self._manual_toggle)
         self._ctx.event_bus.on(Events.UI_AUTO_TOGGLE, self._auto_toggle)
         self._ctx.event_bus.on(Events.UI_AUTO_START, self._auto_start)
         self._ctx.event_bus.on(Events.UI_ABORT_REQUEST, self._abort)
@@ -96,19 +140,10 @@ class UIPlugin(Plugin):
 
         if msg_type in ("tts", "stt"):
             if text := message.get("text"):
-                if self.view_manager:
-                    if self._is_gui:
-                        self.view_manager.main_model.set_tts_text(text)
-                    else:
-                        self.view_manager.set_tts_text(text)
+                self._view_set_tts_text(text)
         elif msg_type == "llm":
             if emotion := message.get("emotion"):
-                if self.view_manager:
-                    if self._is_gui:
-                        url = self.view_manager._emotion_service.get_emotion_url(emotion)
-                        self.view_manager.main_model.set_emotion_url(url)
-                    else:
-                        self.view_manager.set_emotion(emotion)
+                self._view_set_emotion(emotion)
 
     async def on_device_state_changed(self, state) -> None:
         if self.is_first:
@@ -121,28 +156,16 @@ class UIPlugin(Plugin):
         # 如果状态不是 LISTENING，重置手动录音标志
         if state != DeviceState.LISTENING and self._manual_recording:
             self._manual_recording = False
-            if self._is_gui:
-                self.view_manager.main_model.set_button_text("按住后说话")
+            self._view_set_button_text("按住后说话")
 
         # 更新状态文本
         if status_text := self.STATE_TEXT_MAP.get(state):
-            if self._is_gui:
-                # GUI 模式：更新表情为 neutral
-                url = self.view_manager._emotion_service.get_emotion_url("neutral")
-                self.view_manager.main_model.set_emotion_url(url)
-                self.view_manager.main_model.set_status(status_text, connected=True)
-            else:
-                # CLI 模式
-                self.view_manager.set_emotion("neutral")
-                self.view_manager.set_status(status_text, connected=True)
+            self._view_set_emotion("neutral")
+            self._view_set_status(status_text, connected=True)
 
     async def _on_network_error(self, error_message: str = None) -> None:
         """处理网络错误事件，更新 UI 状态."""
-        if self.view_manager:
-            if self._is_gui:
-                self.view_manager.main_model.set_status("未连接", connected=False)
-            else:
-                self.view_manager.set_status("未连接", connected=False)
+        self._view_set_status("未连接", connected=False)
 
     def register_resources(self, pool) -> None:
         view_manager = self.view_manager
@@ -194,10 +217,7 @@ class UIPlugin(Plugin):
             # 开始录音
             self._manual_recording = True
             logger.debug("手动模式：开始录音")
-
-            # 更新按钮文本
-            if self.view_manager and self._is_gui:
-                self.view_manager.main_model.set_button_text("发送")
+            self._view_set_button_text("发送")
 
             await self._cmd.connect_protocol()
             from src.constants.constants import ListeningMode
@@ -206,10 +226,7 @@ class UIPlugin(Plugin):
             # 停止录音并发送
             self._manual_recording = False
             logger.debug("手动模式：停止录音并发送")
-
-            # 更新按钮文本
-            if self.view_manager and self._is_gui:
-                self.view_manager.main_model.set_button_text("按住后说话")
+            self._view_set_button_text("按住后说话")
 
             await self._cmd.stop_listening()
 
@@ -222,15 +239,7 @@ class UIPlugin(Plugin):
         if not self.view_manager:
             return
 
-        # 只切换模式状态，不开始监听
-        if self._is_gui:
-            current_auto = self.view_manager.main_model._auto_mode
-            new_auto = not current_auto
-            self.view_manager.main_model.set_auto_mode(new_auto)
-        else:
-            # CLI 模式：调用 toggle_auto_mode
-            self.view_manager.toggle_auto_mode()
-            new_auto = self.view_manager._auto_mode
+        new_auto = self._view_toggle_auto_mode()
         logger.debug(f"模式切换: {'自动' if new_auto else '手动'}")
 
     async def _auto_start(self):
@@ -272,11 +281,7 @@ class UIPlugin(Plugin):
             }
 
             if text := state_text_map.get(data.state):
-                if self.view_manager:
-                    if self._is_gui:
-                        self.view_manager.main_model.set_tts_text(text)
-                    else:
-                        self.view_manager.set_tts_text(text)
+                self._view_set_tts_text(text)
                 logger.debug(f"UI 更新音乐状态: {data.state}")
         except Exception as e:
             logger.error(f"处理音乐状态变化失败: {e}", exc_info=True)
@@ -290,10 +295,6 @@ class UIPlugin(Plugin):
                 logger.warning(f"收到非法的歌词数据: {type(data)}")
                 return
 
-            if self.view_manager:
-                if self._is_gui:
-                    self.view_manager.main_model.set_tts_text(data.text)
-                else:
-                    self.view_manager.set_tts_text(data.text)
+            self._view_set_tts_text(data.text)
         except Exception as e:
             logger.error(f"处理歌词更新失败: {e}", exc_info=True)

@@ -17,29 +17,73 @@ logger = get_logger()
 class McpServer:
     """
     MCP服务器实现.
+
+    正常路径由 ServiceContainer 创建并 bind_instance；
+    get_instance 作为工具/插件兼容入口。
     """
 
     _instance = None
+    _bound = False
+
+    @classmethod
+    def bind_instance(cls, instance: "McpServer") -> None:
+        """由容器绑定权威实例."""
+        if cls._instance is not None and cls._instance is not instance:
+            try:
+                cls._instance.detach()
+            except Exception:
+                pass
+        cls._instance = instance
+        cls._bound = True
+        logger.info("McpServer 已绑定容器实例")
+
+    @classmethod
+    def unbind_instance(cls) -> None:
+        """容器关闭：detach 并清空绑定."""
+        if cls._instance is not None:
+            try:
+                cls._instance.detach()
+            except Exception:
+                pass
+        cls._instance = None
+        cls._bound = False
+        logger.debug("McpServer 已解除容器绑定")
 
     @classmethod
     def get_instance(cls):
         """
-        获取单例实例.
+        获取实例：优先返回容器绑定；否则惰性创建回退单例.
         """
         if cls._instance is None:
             cls._instance = McpServer()
+            cls._bound = False
+            logger.info("McpServer 创建回退实例（容器未绑定）")
         return cls._instance
+
+    @classmethod
+    def is_bound(cls) -> bool:
+        return bool(cls._bound and cls._instance is not None)
+
+    @classmethod
+    def reset_instance(cls) -> None:
+        """丢弃实例（测试 / 完整重启用）."""
+        cls.unbind_instance()
 
     def __init__(self):
         self.tools: list[McpTool] = []
         self._send_callback: Callable | None = None
         self._camera = None
 
-    def set_send_callback(self, callback: Callable):
+    def set_send_callback(self, callback: Callable | None):
         """
-        设置发送消息的回调函数.
+        设置发送消息的回调函数；传 None 表示解绑。
         """
         self._send_callback = callback
+
+    def detach(self) -> None:
+        """容器关闭时解绑运行时依赖，保留工具列表便于同进程再启动."""
+        self._send_callback = None
+        self._camera = None
 
     def add_tool(
         self, tool: McpTool | tuple[str, str, PropertyList, Callable]

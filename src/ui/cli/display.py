@@ -166,9 +166,20 @@ class CLIDisplay:
         if not self._initialized:
             return
         try:
-            asyncio.create_task(self._safe_render())
+            task = asyncio.create_task(self._safe_render(), name="cli:render")
+
+            def _on_done(t: asyncio.Task):
+                if t.cancelled():
+                    return
+                exc = t.exception()
+                if exc:
+                    logging.getLogger(__name__).error(
+                        f"CLI 渲染任务异常: {exc}", exc_info=exc
+                    )
+
+            task.add_done_callback(_on_done)
         except Exception as e:
-            logging.getLogger(__name__).error(f"创建渲染任务失败: {e}")
+            logging.getLogger(__name__).error(f"创建渲染任务失败: {e}", exc_info=True)
 
     async def _safe_render(self):
         """安全渲染（带锁）."""

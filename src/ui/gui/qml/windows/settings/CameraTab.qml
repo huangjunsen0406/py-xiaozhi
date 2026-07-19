@@ -13,12 +13,16 @@ ScrollView {
     property bool cameraTesting: false
     property string testResult: ""
 
-    // 初始化时加载摄像头列表
+    // 进入摄像头页时再扫描（启动阶段不扫 OpenCV，避免冷启动卡顿）
     Component.onCompleted: {
         if (settingsModel) {
-            cameraCombo.model = settingsModel.getCameras()
-            // model 设置后重新同步 currentIndex
-            cameraCombo.currentIndex = settingsModel.selectedCameraIndex
+            var list = settingsModel.getCameras()
+            if (list.length === 0) {
+                settingsModel.refreshCameras()
+            } else {
+                cameraCombo.model = list
+                cameraCombo.currentIndex = settingsModel.selectedCameraIndex
+            }
         }
     }
 

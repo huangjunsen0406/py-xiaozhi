@@ -45,6 +45,9 @@ class SettingsModel(BaseModel):
 
         # 摄像头设备
         self._cameras: list[dict] = []
+        self._cameras_loading = False
+        self._cameras_loaded_once = False
+        self._audio_devices_loaded = False
 
         # 测试状态
         self._testing_input = False
@@ -55,11 +58,10 @@ class SettingsModel(BaseModel):
         self._wake_word_lang: str = "zh"
         self._wake_word_preview: str = ""
 
-        # 加载数据
+        # 启动仅读配置；音频/摄像头/唤醒词预览延后到打开设置时再处理，
+        # 避免冷启动时 OpenCV 枚举与额外 import 阻塞首屏。
         self._load_config()
-        self._load_audio_devices()
-        self._load_cameras()
-        self._load_wake_word()
+        self._load_wake_word(update_preview=False)
 
     # ========== 配置读写 ==========
 
@@ -115,10 +117,11 @@ class SettingsModel(BaseModel):
 
     @Slot()
     def reload(self):
-        """重新加载配置."""
+        """重新加载配置（打开设置窗口时调用；此时才枚举设备）."""
         self._load_config()
-        self._load_audio_devices()
-        self._load_cameras()
+        self._load_audio_devices(force=True)
+        self._load_cameras(force=True)
+        self._load_wake_word()
         self.settingsChanged.emit()
         logger.info("设置已重新加载")
 
@@ -381,11 +384,18 @@ class SettingsModel(BaseModel):
     )
 
     # 唤醒词文本
-    def _load_wake_word(self):
-        """从配置加载唤醒词."""
+    def _load_wake_word(self, update_preview: bool = True):
+        """从配置加载唤醒词.
+
+        Args:
+            update_preview: 是否立即转换拼音预览（转换可能触发额外 import）
+        """
         self._wake_word = self._get_value("WAKE_WORD_OPTIONS.WAKE_WORD", "")
         self._wake_word_lang = self._get_value("WAKE_WORD_OPTIONS.WAKE_WORD_LANG", "zh")
-        self._update_wake_word_preview()
+        if update_preview:
+            self._update_wake_word_preview()
+        else:
+            self._wake_word_preview = ""
 
     def _update_wake_word_preview(self):
         """更新唤醒词预览."""
@@ -528,8 +538,14 @@ class SettingsModel(BaseModel):
 
     # ========== 音频设备设置 ==========
 
-    def _load_audio_devices(self):
-        """加载可用的音频设备列表."""
+    def _load_audio_devices(self, force: bool = False):
+        """加载可用的音频设备列表.
+
+        Args:
+            force: True 时强制重新枚举（刷新/打开设置）
+        """
+        if self._audio_devices_loaded and not force:
+            return
         try:
             devices = list(sd.query_devices())
             self._input_devices = []
@@ -568,29 +584,32 @@ class SettingsModel(BaseModel):
                         }
                     )
 
+            self._audio_devices_loaded = True
             logger.debug(
                 f"加载了 {len(self._input_devices)} 个输入设备, {len(self._output_devices)} 个输出设备"
             )
             self.devicesChanged.emit()
         except Exception as e:
-            logger.error(f"加载音频设备失败: {e}")
+            logger.error(f"加载音频设备失败: {e}", exc_info=True)
             self._input_devices = []
             self._output_devices = []
 
     @Slot(result=list)
     def getInputDevices(self) -> list:
-        """获取输入设备列表."""
+        """获取输入设备列表（首次调用时再枚举）."""
+        self._load_audio_devices()
         return [d["name"] for d in self._input_devices]
 
     @Slot(result=list)
     def getOutputDevices(self) -> list:
-        """获取输出设备列表."""
+        """获取输出设备列表（首次调用时再枚举）."""
+        self._load_audio_devices()
         return [d["name"] for d in self._output_devices]
 
     @Slot()
     def refreshDevices(self):
         """刷新设备列表."""
-        self._load_audio_devices()
+        self._load_audio_devices(force=True)
         self.statusMessage.emit("设备列表已刷新")
 
     def _get_selectedInputIndex(self) -> int:
@@ -947,41 +966,107 @@ class SettingsModel(BaseModel):
 
     # ========== 摄像头设备列表 ==========
 
-    def _load_cameras(self):
-        """在后台线程加载摄像头列表，避免阻塞 Qt 主线程."""
-        thread = threading.Thread(target=self._do_load_cameras)
-        thread.daemon = True
+    # 最多探测到该 index（含）；连续失败达到阈值则提前结束
+    _CAMERA_MAX_INDEX = 5
+    _CAMERA_MAX_CONSECUTIVE_FAIL = 2
+
+    def _load_cameras(self, force: bool = False):
+        """在后台线程加载摄像头列表，避免阻塞 Qt 主线程.
+
+        不在应用启动时调用；仅在打开设置 / 刷新 / 摄像头页时触发。
+        """
+        if self._cameras_loading:
+            return
+        if self._cameras_loaded_once and not force and self._cameras:
+            return
+
+        self._cameras_loading = True
+        thread = threading.Thread(
+            target=self._do_load_cameras, name="settings:scan_cameras", daemon=True
+        )
         thread.start()
 
     def _do_load_cameras(self):
-        """执行摄像头扫描（在后台线程）."""
-        cameras = []
+        """执行摄像头扫描（后台线程；早停 + 压低 OpenCV 日志噪声）."""
+        cameras: list[dict] = []
         try:
+            import os
+
+            # 压低 OpenCV 对无效 index 的 stderr 刷屏
+            os.environ.setdefault("OPENCV_LOG_LEVEL", "ERROR")
             import cv2
 
-            for i in range(10):
-                cap = cv2.VideoCapture(i)
-                if cap.isOpened():
-                    cameras.append({"index": i, "name": f"摄像头 {i}"})
-                    cap.release()
+            try:
+                # OpenCV 4.x
+                if hasattr(cv2, "setLogLevel"):
+                    cv2.setLogLevel(0)
+                if hasattr(cv2, "utils") and hasattr(cv2.utils, "logging"):
+                    cv2.utils.logging.setLogLevel(cv2.utils.logging.LOG_LEVEL_ERROR)
+            except Exception:
+                pass
+
+            preferred = int(self._get_value("CAMERA.camera_index", 0) or 0)
+            preferred = max(0, min(preferred, self._CAMERA_MAX_INDEX))
+            # 先试配置中的 index，再扫其余；连续失败则停
+            order = [preferred] + [
+                i for i in range(self._CAMERA_MAX_INDEX + 1) if i != preferred
+            ]
+
+            consecutive_fail = 0
+            seen_ok = 0
+            for i in order:
+                try:
+                    cap = cv2.VideoCapture(i)
+                    opened = bool(cap.isOpened())
+                    if opened:
+                        cameras.append({"index": i, "name": f"摄像头 {i}"})
+                        cap.release()
+                        consecutive_fail = 0
+                        seen_ok += 1
+                    else:
+                        consecutive_fail += 1
+                        try:
+                            cap.release()
+                        except Exception:
+                            pass
+                        # 已有成功设备后，连续失败达到阈值则认为后面没有了
+                        # 一个都没有时，也在连续失败达到阈值后放弃（避免 0–9 全扫）
+                        if consecutive_fail >= self._CAMERA_MAX_CONSECUTIVE_FAIL:
+                            break
+                except Exception as e:
+                    consecutive_fail += 1
+                    logger.debug(f"探测摄像头 index={i} 失败: {e}")
+                    if consecutive_fail >= self._CAMERA_MAX_CONSECUTIVE_FAIL:
+                        break
+
+            logger.info(
+                f"摄像头扫描完成: 找到 {len(cameras)} 个 "
+                f"(探测上限 index≤{self._CAMERA_MAX_INDEX}, 连续失败早停)"
+            )
         except ImportError:
             logger.warning("cv2 未安装，无法扫描摄像头")
         except Exception as e:
             logger.error(f"扫描摄像头失败: {e}", exc_info=True)
-
-        self._cameras = cameras
-        self.devicesChanged.emit()
-        self.statusMessage.emit("摄像头列表已刷新")
+        finally:
+            self._cameras = cameras
+            self._cameras_loaded_once = True
+            self._cameras_loading = False
+            self.devicesChanged.emit()
+            self.statusMessage.emit(
+                f"摄像头列表已刷新（{len(cameras)} 个）"
+                if cameras
+                else "未检测到摄像头"
+            )
 
     @Slot(result=list)
     def getCameras(self) -> list:
-        """获取摄像头列表."""
+        """获取摄像头列表（不自动触发扫描；由设置页/刷新触发）."""
         return [c["name"] for c in self._cameras]
 
     @Slot()
     def refreshCameras(self):
         """刷新摄像头列表（非阻塞）."""
-        self._load_cameras()
+        self._load_cameras(force=True)
 
     def _get_selectedCameraIndex(self) -> int:
         """获取当前选中的摄像头索引."""

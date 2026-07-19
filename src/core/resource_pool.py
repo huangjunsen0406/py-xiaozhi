@@ -52,7 +52,7 @@ class ResourcePool:
                 if asyncio.iscoroutine(result):
                     await result
             except Exception as e:
-                logger.error(f"释放资源失败 [{name}]: {e}")
+                logger.error(f"释放资源失败 [{name}]: {e}", exc_info=True)
 
         self._resources.clear()
-        logger.debug(f"资源池已清空")
+        logger.debug("资源池已清空")

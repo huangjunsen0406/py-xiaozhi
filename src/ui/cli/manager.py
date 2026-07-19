@@ -13,7 +13,7 @@ from src.logging import get_logger
 from .display import CLIDisplay
 
 if TYPE_CHECKING:
-    pass
+    from src.core.task_manager import TaskManager
 
 logger = get_logger()
 
@@ -24,8 +24,13 @@ class CLIViewManager:
     管理 CLI 模式下的终端界面，提供与 GUI ViewManager 一致的接口。
     """
 
-    def __init__(self, event_bus: EventBus):
+    def __init__(
+        self,
+        event_bus: EventBus,
+        task_manager: Optional["TaskManager"] = None,
+    ):
         self._event_bus = event_bus
+        self._task_manager = task_manager
         self._display = CLIDisplay()
         self._running = False
         self._loop: Optional[asyncio.AbstractEventLoop] = None
@@ -126,16 +131,48 @@ class CLIViewManager:
             self._safe_emit(Events.UI_SEND_TEXT, {"text": cmd})
 
     def _safe_emit(self, event: str, data=None):
-        """安全地发送事件."""
-        if self._loop and self._loop.is_running():
+        """安全地发送事件.
+
+        优先经 TaskManager.schedule_nowait（线程安全 + 可追踪）；
+        否则回退 run_coroutine_threadsafe。
+        """
+        def _start_emit():
             if data is None:
-                self._loop.call_soon_threadsafe(
-                    lambda: asyncio.create_task(self._event_bus.emit(event))
+                return self._event_bus.emit(event)
+            return self._event_bus.emit(event, data)
+
+        if self._task_manager is not None:
+            try:
+                self._task_manager.schedule_nowait(_start_emit)
+                return
+            except Exception as e:
+                logger.error(
+                    f"CLIViewManager 经 TaskManager 调度事件 {event} 失败: {e}",
+                    exc_info=True,
                 )
-            else:
-                self._loop.call_soon_threadsafe(
-                    lambda e=event, d=data: asyncio.create_task(self._event_bus.emit(e, d))
-                )
+
+        if not self._loop or not self._loop.is_running():
+            return
+        coro = _start_emit()
+        try:
+            fut = asyncio.run_coroutine_threadsafe(coro, self._loop)
+
+            def _done(f):
+                try:
+                    exc = f.exception()
+                except Exception:
+                    return
+                if exc:
+                    logger.error(
+                        f"CLIViewManager 发射事件 {event} 失败: {exc}",
+                        exc_info=exc,
+                    )
+
+            fut.add_done_callback(_done)
+        except Exception as e:
+            logger.error(f"CLIViewManager 调度事件 {event} 失败: {e}", exc_info=True)
+            if asyncio.iscoroutine(coro):
+                coro.close()
 
     # ========== 公共 API ==========
 
@@ -164,6 +201,13 @@ class CLIViewManager:
         self._auto_mode = auto_mode
         self._display.update_auto_mode(auto_mode)
 
+    def set_button_text(self, text: str):
+        """CLI 无实体按钮，保留 facade 兼容."""
+        logger.debug(f"CLI set_button_text: {text}")
+
+    def is_auto_mode(self) -> bool:
+        return bool(self._auto_mode)
+
     # ========== 兼容 GUI ViewManager 的属性 ==========
 
     @property
@@ -171,7 +215,8 @@ class CLIViewManager:
         """返回自身作为 model 代理."""
         return self
 
-    def toggle_auto_mode(self):
-        """切换自动模式."""
+    def toggle_auto_mode(self) -> bool:
+        """切换自动模式，返回切换后是否为自动."""
         self._auto_mode = not self._auto_mode
         self._display.update_auto_mode(self._auto_mode)
+        return self._auto_mode

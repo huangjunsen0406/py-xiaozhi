@@ -105,6 +105,7 @@ class MusicPlayer:
         self.decoder: MusicDecoder | None = None
         self._music_queue = asyncio.Queue(maxsize=100)
         self._playback_task: asyncio.Task | None = None
+        self._lyrics_task: asyncio.Task | None = None
 
         self.current_song = ""
         self.current_url = ""
@@ -185,12 +186,35 @@ class MusicPlayer:
         """
         from src.core.event_bus import Events
 
+        # 先解绑旧总线，避免重复订阅
+        self._unsubscribe_event_bus()
+
         self._event_bus = event_bus
         self._plugin_ctx = plugin_ctx
         if event_bus:
             event_bus.on(Events.MUSIC_PAUSE_REQUEST, self._on_pause_request)
             event_bus.on(Events.MUSIC_RESUME_REQUEST, self._on_resume_request)
             logger.info("MusicPlayer 已连接到 EventBus")
+
+    def _unsubscribe_event_bus(self) -> None:
+        """从当前 EventBus 移除控制事件订阅."""
+        if not self._event_bus:
+            return
+        try:
+            from src.core.event_bus import Events
+
+            self._event_bus.off(Events.MUSIC_PAUSE_REQUEST, self._on_pause_request)
+            self._event_bus.off(Events.MUSIC_RESUME_REQUEST, self._on_resume_request)
+        except Exception as e:
+            logger.debug(f"MusicPlayer 取消 EventBus 订阅失败: {e}")
+
+    def detach(self) -> None:
+        """容器关闭时解绑 codec / EventBus，避免持有已释放资源."""
+        self._unsubscribe_event_bus()
+        self._event_bus = None
+        self._plugin_ctx = None
+        self._audio_codec = None
+        logger.debug("MusicPlayer 已 detach 运行时绑定")
 
     def _get_audio_codec(self) -> "AudioCodec | None":
         if self._audio_codec is None:
@@ -443,6 +467,48 @@ class MusicPlayer:
             logger.error(f"搜索播放失败: {e}")
             return {"status": "error", "message": f"操作失败: {str(e)}"}
 
+    async def _cancel_task(self, task: asyncio.Task | None) -> None:
+        """取消并等待任务结束（忽略 CancelledError）."""
+        if task is None or task.done():
+            return
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:
+            logger.debug(f"等待任务结束时异常: {e}")
+
+    async def _cancel_lyrics_task(self) -> None:
+        await self._cancel_task(self._lyrics_task)
+        self._lyrics_task = None
+
+    async def _cancel_playback_task(self) -> None:
+        await self._cancel_task(self._playback_task)
+        self._playback_task = None
+
+    def _spawn_lyrics_task(self) -> None:
+        """启动可追踪的歌词任务（替换旧实例）."""
+        # 同步路径：若旧任务仍在跑，先 cancel（不等待，避免在非 async 场景阻塞）
+        if self._lyrics_task and not self._lyrics_task.done():
+            self._lyrics_task.cancel()
+
+        task = asyncio.create_task(
+            self._lyrics_update_task(), name="music:lyrics_update"
+        )
+
+        def _on_done(t: asyncio.Task) -> None:
+            if self._lyrics_task is t:
+                self._lyrics_task = None
+            if t.cancelled():
+                return
+            exc = t.exception()
+            if exc:
+                logger.error(f"歌词更新任务异常结束: {exc}", exc_info=exc)
+
+        task.add_done_callback(_on_done)
+        self._lyrics_task = task
+
     async def stop(self) -> dict:
         try:
             if not self.is_playing:
@@ -454,14 +520,8 @@ class MusicPlayer:
                 await self.decoder.stop()
                 self.decoder = None
 
-            if self._playback_task and not self._playback_task.done():
-                self._playback_task.cancel()
-                try:
-                    await self._playback_task
-                except asyncio.CancelledError:
-                    pass
-                finally:
-                    self._playback_task = None
+            await self._cancel_playback_task()
+            await self._cancel_lyrics_task()
 
             cleared = await self._clear_music_queue()
             logger.debug(f"停止时清空 {cleared} 帧音乐数据")
@@ -476,7 +536,7 @@ class MusicPlayer:
             return {"status": "success", "message": "已停止"}
 
         except Exception as e:
-            logger.error(f"停止播放失败: {e}")
+            logger.error(f"停止播放失败: {e}", exc_info=True)
             return {"status": "error", "message": f"停止失败: {str(e)}"}
 
     async def pause(self, source: str = "manual") -> dict:
@@ -545,24 +605,24 @@ class MusicPlayer:
                 logger.error("重启解码器失败")
                 return {"status": "error", "message": "恢复播放失败"}
 
-            if self._playback_task and not self._playback_task.done():
-                self._playback_task.cancel()
-                try:
-                    await self._playback_task
-                except asyncio.CancelledError:
-                    pass
-
-            self._playback_task = asyncio.create_task(self._playback_loop())
+            await self._cancel_playback_task()
+            self._playback_task = asyncio.create_task(
+                self._playback_loop(), name="music:playback"
+            )
 
             self.paused = False
             self._pause_source = None
             self.start_play_time = time.time() - self.current_position
 
+            # 歌词任务在 pause 时仍存活（is_playing=True）；若已退出则重启
+            if self._lyrics_task is None or self._lyrics_task.done():
+                self._spawn_lyrics_task()
+
             await self._emit_state_change("playing", self.current_song)
             return {"status": "success", "message": "已恢复播放"}
 
         except Exception as e:
-            logger.error(f"恢复播放失败: {e}")
+            logger.error(f"恢复播放失败: {e}", exc_info=True)
             return {"status": "error", "message": f"恢复失败: {str(e)}"}
 
     async def seek(self, position: float) -> dict:
@@ -807,15 +867,9 @@ class MusicPlayer:
                 await self.decoder.stop()
                 self.decoder = None
 
-            # 取消旧的播放循环，防止多个 loop 并发读取同一队列
-            if self._playback_task and not self._playback_task.done():
-                self._playback_task.cancel()
-                try:
-                    await self._playback_task
-                except asyncio.CancelledError:
-                    pass
-                finally:
-                    self._playback_task = None
+            # 取消旧的播放/歌词循环，防止多个 loop 并发
+            await self._cancel_playback_task()
+            await self._cancel_lyrics_task()
 
             cleared = await self._clear_music_queue()
             if cleared > 0:
@@ -833,7 +887,9 @@ class MusicPlayer:
                 logger.error("启动音频解码器失败")
                 return False
 
-            self._playback_task = asyncio.create_task(self._playback_loop())
+            self._playback_task = asyncio.create_task(
+                self._playback_loop(), name="music:playback"
+            )
 
             self.is_playing = True
             self.paused = False
@@ -853,12 +909,12 @@ class MusicPlayer:
                     "playing", self.current_song, start_position
                 )
 
-            asyncio.create_task(self._lyrics_update_task())
+            self._spawn_lyrics_task()
 
             return True
 
         except Exception as e:
-            logger.error(f"启动播放失败: {e}")
+            logger.error(f"启动播放失败: {e}", exc_info=True)
             return False
 
     async def _playback_loop(self):
@@ -1098,14 +1154,13 @@ class MusicPlayer:
                 await self.decoder.stop()
                 self.decoder = None
 
+            # 播放循环可能是调用方自身；只清引用避免自 cancel 死锁感
             if self._playback_task and not self._playback_task.done():
-                self._playback_task.cancel()
-                try:
-                    await self._playback_task
-                except asyncio.CancelledError:
-                    pass
-                finally:
+                if self._playback_task is not asyncio.current_task():
+                    await self._cancel_playback_task()
+                else:
                     self._playback_task = None
+            await self._cancel_lyrics_task()
 
             self.is_playing = False
             self.paused = False
@@ -1140,8 +1195,11 @@ class MusicPlayer:
                     await self._display_current_lyric(current_index)
 
                 await asyncio.sleep(0.2)
+        except asyncio.CancelledError:
+            logger.debug("歌词更新任务已取消")
+            raise
         except Exception as e:
-            logger.error(f"歌词更新任务异常: {e}")
+            logger.error(f"歌词更新任务异常: {e}", exc_info=True)
 
     def _find_current_lyric_index(self, current_time: float) -> int:
         """查找当前时间对应的歌词索引"""
@@ -1284,14 +1342,57 @@ class MusicPlayer:
             logger.debug(f"__del__ 清理临时缓存失败: {e}")
 
 
-# 全局音乐播放器实例
-_music_player_instance = None
+# 进程内共享实例：优先由 ServiceContainer.bind 注入；工具侧仍走 get_* 兼容入口
+_music_player_instance: MusicPlayer | None = None
+_music_player_bound: bool = False
+
+
+def bind_music_player(player: MusicPlayer) -> None:
+    """由容器绑定权威 MusicPlayer 实例（覆盖未绑定的回退单例）."""
+    global _music_player_instance, _music_player_bound
+    if (
+        _music_player_instance is not None
+        and _music_player_instance is not player
+    ):
+        try:
+            _music_player_instance.detach()
+        except Exception as e:
+            logger.debug(f"替换 MusicPlayer 时 detach 旧实例失败: {e}")
+    _music_player_instance = player
+    _music_player_bound = True
+    logger.info("[MusicPlayer] 已绑定容器实例")
+
+
+def unbind_music_player() -> None:
+    """容器关闭：detach 并清空绑定，避免脏状态跨会话残留."""
+    global _music_player_instance, _music_player_bound
+    if _music_player_instance is not None:
+        try:
+            _music_player_instance.detach()
+        except Exception as e:
+            logger.debug(f"unbind MusicPlayer detach 失败: {e}")
+    _music_player_instance = None
+    _music_player_bound = False
+    logger.debug("[MusicPlayer] 已解除容器绑定")
 
 
 def get_music_player_instance() -> MusicPlayer:
-    """获取音乐播放器单例"""
+    """获取 MusicPlayer。
+
+    正常运行路径由容器 bind；若容器未绑定（脚本/单测），惰性创建回退实例。
+    """
     global _music_player_instance
     if _music_player_instance is None:
         _music_player_instance = MusicPlayer()
-        logger.info("[MusicPlayer] 创建音乐播放器单例实例")
+        logger.info("[MusicPlayer] 创建回退实例（容器未绑定）")
     return _music_player_instance
+
+
+def is_music_player_bound() -> bool:
+    """当前实例是否由容器绑定."""
+    return _music_player_bound and _music_player_instance is not None
+
+
+def reset_music_player_instance() -> None:
+    """丢弃实例（测试 / 完整重启用）."""
+    unbind_music_player()

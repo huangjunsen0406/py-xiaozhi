@@ -145,7 +145,10 @@ class EventBus:
             try:
                 tasks.append(self._safe_call(handler, data))
             except Exception as e:
-                logger.error(f"EventBus: 创建任务失败 {handler.__name__}: {e}")
+                logger.error(
+                    f"EventBus: 创建任务失败 {handler.__name__}: {e}",
+                    exc_info=True,
+                )
 
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
@@ -175,7 +178,10 @@ class EventBus:
             else:
                 await handler(data)
         except Exception as e:
-            logger.error(f"EventBus: 处理器 {handler.__name__} 执行异常: {e}")
+            logger.error(
+                f"EventBus: 处理器 {handler.__name__} 执行异常: {e}",
+                exc_info=True,
+            )
 
     def has_handlers(self, event: str) -> bool:
         """

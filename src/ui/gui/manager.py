@@ -10,7 +10,7 @@ from src.core.task_manager import TaskManager
 from src.logging import get_logger
 from src.ui.gui.services import EmotionService, TrayService
 from src.ui.shared.bridge import EventBridge
-from src.ui.shared.models import ActivationModel, MainModel, SettingsModel
+from src.ui.shared.models import ActivationModel, MainModel
 
 logger = get_logger()
 
@@ -18,26 +18,27 @@ logger = get_logger()
 class ViewManager(QObject):
     """视图管理器 - 管理所有 UI 组件的生命周期."""
 
-    def __init__(self, event_bus: EventBus):
+    def __init__(self, event_bus: EventBus, task_manager: TaskManager | None = None):
         super().__init__()
         self._event_bus = event_bus
         self._engine: QQmlApplicationEngine | None = None
         self._running = False
 
-        # 任务管理
-        self._tasks = TaskManager()
-        self._tasks.initialize()
+        # 优先使用容器注入的 TaskManager，便于统一 cancel / 追踪
+        self._owns_tasks = task_manager is None
+        if task_manager is not None:
+            self._tasks = task_manager
+        else:
+            self._tasks = TaskManager()
+            self._tasks.initialize()
 
         # 桥接层
         self._bridge = EventBridge(event_bus, task_manager=self._tasks)
 
-        # Models
+        # Models（SettingsModel 懒加载：避免插件 setup 阶段 import sounddevice/cv2）
         self._activation_model = ActivationModel()
         self._main_model = MainModel()
-        self._settings_model = SettingsModel()
-
-        # 监听设置保存信号
-        self._settings_model.configSaved.connect(self._on_config_saved)
+        self._settings_model = None
 
         # Services
         self._emotion_service = EmotionService()
@@ -51,6 +52,16 @@ class ViewManager(QObject):
 
         # 订阅事件
         self._subscribe_events()
+
+    def _ensure_settings_model(self):
+        """懒创建 SettingsModel（首次注入 QML / 打开设置时）."""
+        if self._settings_model is None:
+            from src.ui.shared.models import SettingsModel
+
+            self._settings_model = SettingsModel()
+            self._settings_model.configSaved.connect(self._on_config_saved)
+            logger.debug("ViewManager: SettingsModel 已懒加载")
+        return self._settings_model
 
     def _subscribe_events(self):
         """订阅 EventBus 事件."""
@@ -131,7 +142,7 @@ class ViewManager(QObject):
         ctx.setContextProperty("eventBridge", self._bridge)
         ctx.setContextProperty("activationModel", self._activation_model)
         ctx.setContextProperty("mainModel", self._main_model)
-        ctx.setContextProperty("settingsModel", self._settings_model)
+        ctx.setContextProperty("settingsModel", self._ensure_settings_model())
         ctx.setContextProperty("emotionService", self._emotion_service)
         logger.debug("ViewManager: 已注入 QML 上下文对象")
 
@@ -186,7 +197,7 @@ class ViewManager(QObject):
 
         logger.info("ViewManager: 已关闭")
 
-    # ========== 公共 API ==========
+    # ========== 公共 API（与 CLI/GPIO ViewManager 对齐的 facade） ==========
 
     @property
     def activation_model(self) -> ActivationModel:
@@ -195,7 +206,7 @@ class ViewManager(QObject):
 
     @property
     def main_model(self) -> MainModel:
-        """获取主窗口模型."""
+        """获取主窗口模型（QML 绑定用；插件层请用 facade 方法）."""
         return self._main_model
 
     @property
@@ -203,10 +214,39 @@ class ViewManager(QObject):
         """是否正在运行."""
         return self._running
 
+    def set_tts_text(self, text: str) -> None:
+        """设置 TTS / 状态文本显示."""
+        self._main_model.set_tts_text(text)
+
+    def set_emotion(self, emotion: str) -> None:
+        """按表情名更新显示（内部解析 gif URL）."""
+        url = self._emotion_service.get_emotion_url(emotion)
+        self._main_model.set_emotion_url(url)
+
+    def set_status(self, status: str, connected: bool = True) -> None:
+        """设置连接/设备状态文案."""
+        self._main_model.set_status(status, connected)
+
+    def set_button_text(self, text: str) -> None:
+        """设置主按钮文案（手动录音等）."""
+        self._main_model.set_button_text(text)
+
+    def set_auto_mode(self, auto_mode: bool) -> None:
+        """设置自动/手动模式（不额外发事件）."""
+        self._main_model.set_auto_mode(auto_mode)
+
+    def is_auto_mode(self) -> bool:
+        """当前是否自动对话模式."""
+        return bool(self._main_model._auto_mode)
+
+    def toggle_auto_mode(self) -> bool:
+        """切换自动/手动模式，返回切换后是否为自动模式."""
+        self._main_model.toggle_auto_mode()
+        return self.is_auto_mode()
+
     @Slot()
     def toggle_mode(self):
-        """切换对话模式."""
-        self._main_model.toggle_auto_mode()
+        """请求切换对话模式：只发事件，由 UIPlugin 统一改 model，避免双重切换."""
         self._tasks.spawn(self._event_bus.emit(Events.UI_AUTO_TOGGLE), name="ui:auto_toggle")
 
     @Slot()
@@ -221,22 +261,26 @@ class ViewManager(QObject):
                 self._show_window()
 
     def open_settings(self):
-        """打开设置窗口 - 通过信号通知 QML."""
+        """打开设置窗口 - 通过信号通知 QML.
+
+        此时才枚举音频设备 / 摄像头（见 SettingsModel.reload），
+        避免应用冷启动时 OpenCV 扫 0–9 拖慢首屏。
+        """
         if not self._engine:
             logger.warning("ViewManager: 引擎未初始化，无法打开设置")
             return
 
-        # 重新加载配置
-        self._settings_model.reload()
+        # 重新加载配置并按需枚举设备
+        self._ensure_settings_model().reload()
 
         # 通过 EventBridge 信号通知 QML 显示设置窗口
         self._bridge.showSettingsWindow.emit()
         logger.debug("ViewManager: 已发送打开设置窗口信号")
 
     @property
-    def settings_model(self) -> SettingsModel:
-        """获取设置模型."""
-        return self._settings_model
+    def settings_model(self):
+        """获取设置模型（懒加载）."""
+        return self._ensure_settings_model()
 
     # ========== 激活相关 ==========
 

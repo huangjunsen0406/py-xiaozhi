@@ -1,10 +1,6 @@
 import platform
 from enum import Enum
 
-from src.utils.config_manager import ConfigManager
-
-config = ConfigManager.get_instance()
-
 
 class ListeningMode(str, Enum):
     """
@@ -50,13 +46,17 @@ def get_frame_duration() -> int:
     """获取设备的帧长度.
 
     优先从配置读取，无配置时根据设备架构自动检测。
+    ConfigManager 仅在调用时懒加载，避免 import constants 时产生 IO 副作用。
 
     返回:
         int: 帧长度(毫秒)，支持 20/40/60
     """
     try:
-        # 优先从配置读取
-        configured = config.get_config("AUDIO_DEVICES.frame_duration")
+        from src.utils.config_manager import ConfigManager
+
+        configured = ConfigManager.get_instance().get_config(
+            "AUDIO_DEVICES.frame_duration"
+        )
         if configured in [20, 40, 60]:
             return configured
 
@@ -81,7 +81,8 @@ class AudioConfig:
     """
     音频配置类 — 协议层参数，与设备层（DeviceConfig）独立。
 
-    所有值通过 reload() 从 ConfigManager 动态加载，支持运行时热重载。
+    默认值在类体中声明；通过 reload() 从 ConfigManager 动态加载。
+    不再在 import 时强制 reload，避免 constants 模块副作用。
     """
 
     # 服务端协议固定值（不随配置变化）
@@ -100,12 +101,15 @@ class AudioConfig:
         Settings UI 修改 opus_output_sample_rate / frame_duration 后，
         调用此方法使新值在下次 initialize/reload_devices 时生效。
         """
-        cls.OUTPUT_SAMPLE_RATE = config.get_config(
-            "AUDIO_DEVICES.opus_output_sample_rate", 24000
-        )
+        try:
+            from src.utils.config_manager import ConfigManager
+
+            config = ConfigManager.get_instance()
+            cls.OUTPUT_SAMPLE_RATE = config.get_config(
+                "AUDIO_DEVICES.opus_output_sample_rate", 24000
+            )
+        except Exception:
+            # 配置不可用时保留当前/默认值
+            pass
         cls.FRAME_DURATION = get_frame_duration()
         cls.INPUT_FRAME_SIZE = int(cls.INPUT_SAMPLE_RATE * (cls.FRAME_DURATION / 1000))
-
-
-# 模块加载时初始化默认值
-AudioConfig.reload()

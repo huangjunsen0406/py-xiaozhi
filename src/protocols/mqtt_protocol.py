@@ -27,11 +27,58 @@ class MqttProtocol(Protocol):
         self.udp_thread = None
         self.udp_running = False
         self.connected = False
+        # 线程侧调度的 Future，避免 fire-and-forget create_task
+        self._pending_futures: set = set()
 
         # MQTT 连接活动监控（MQTT特有）
         self._last_activity_time = None
         self._keep_alive_interval = 60  # MQTT保活间隔（秒）
         self._connection_timeout = 120  # 连接超时检测（秒）
+
+    def _schedule_coro(self, coro, name: str = "mqtt") -> None:
+        """从任意线程安全调度协程到 event loop，并记录异常.
+
+        使用 run_coroutine_threadsafe / create_task + done callback，
+        避免裸 create_task 与 lambda 闭包延迟绑定问题。
+        """
+        try:
+            running_loop = asyncio.get_running_loop()
+        except RuntimeError:
+            running_loop = None
+
+        def _track_future(fut) -> None:
+            self._pending_futures.add(fut)
+
+            def _done(f) -> None:
+                self._pending_futures.discard(f)
+                try:
+                    exc = f.exception()
+                except (asyncio.CancelledError, Exception):
+                    return
+                if exc:
+                    logger.error(f"MQTT 调度任务 {name} 异常: {exc}", exc_info=exc)
+
+            fut.add_done_callback(_done)
+
+        if running_loop is self.loop:
+            # 已在 loop 线程
+            try:
+                task = self.loop.create_task(coro, name=f"mqtt:{name}")
+                _track_future(task)
+            except Exception as e:
+                logger.error(f"MQTT 创建任务失败 {name}: {e}", exc_info=True)
+                if asyncio.iscoroutine(coro):
+                    coro.close()
+            return
+
+        # 跨线程
+        try:
+            fut = asyncio.run_coroutine_threadsafe(coro, self.loop)
+            _track_future(fut)
+        except Exception as e:
+            logger.error(f"MQTT 跨线程调度失败 {name}: {e}", exc_info=True)
+            if asyncio.iscoroutine(coro):
+                coro.close()
 
         # MQTT配置
         self.endpoint = None
@@ -110,7 +157,7 @@ class MqttProtocol(Protocol):
 
             logger.info(f"已从OTA服务器获取MQTT配置: {self.endpoint}")
         except Exception as e:
-            logger.warning(f"从OTA服务器获取MQTT配置失败: {e}")
+            logger.warning(f"从OTA服务器获取MQTT配置失败: {e}", exc_info=True)
 
         # 验证MQTT配置
         if (
@@ -135,7 +182,7 @@ class MqttProtocol(Protocol):
                 self.mqtt_client.loop_stop()
                 self.mqtt_client.disconnect()
             except Exception as e:
-                logger.warning(f"断开MQTT客户端连接时出错: {e}")
+                logger.warning(f"断开MQTT客户端连接时出错: {e}", exc_info=True)
 
         # 解析endpoint，提取主机和端口
         try:
@@ -146,7 +193,7 @@ class MqttProtocol(Protocol):
                 f"解析endpoint: {self.endpoint} -> 主机: {host}, 端口: {port}, 使用TLS: {use_tls}"
             )
         except ValueError as e:
-            logger.error(f"解析endpoint失败: {e}")
+            logger.error(f"解析endpoint失败: {e}", exc_info=True)
             if self._on_network_error:
                 await self._on_network_error(f"解析endpoint失败: {e}")
             return False
@@ -168,7 +215,7 @@ class MqttProtocol(Protocol):
                 )
                 logger.info("已配置TLS加密连接")
             except Exception as e:
-                logger.error(f"TLS配置失败，无法安全连接到MQTT服务器: {e}")
+                logger.error(f"TLS配置失败，无法安全连接到MQTT服务器: {e}", exc_info=True)
                 if self._on_network_error:
                     await self._on_network_error(f"TLS配置失败: {str(e)}")
                 return False
@@ -197,7 +244,7 @@ class MqttProtocol(Protocol):
                 payload = msg.payload.decode("utf-8")
                 self._handle_mqtt_message(payload)
             except Exception as e:
-                logger.error(f"处理MQTT消息时出错: {e}")
+                logger.error(f"处理MQTT消息时出错: {e}", exc_info=True)
 
         def on_disconnect_callback(client, userdata, rc):
             """MQTT断开连接回调.
@@ -233,17 +280,17 @@ class MqttProtocol(Protocol):
                     and self._auto_reconnect_enabled
                     and self._reconnect_attempts < self._max_reconnect_attempts
                 ):
-                    # 在事件循环中安排重连
-                    self.loop.call_soon_threadsafe(
-                        lambda: asyncio.create_task(
-                            self._attempt_reconnect(f"MQTT断开(rc={rc})")
-                        )
+                    # 默认参数绑定 rc，避免闭包延迟取值
+                    self._schedule_coro(
+                        self._attempt_reconnect(f"MQTT断开(rc={rc})"),
+                        name=f"reconnect:rc={rc}",
                     )
                 else:
                     # 通知音频通道关闭
                     if self._on_audio_channel_closed:
-                        asyncio.run_coroutine_threadsafe(
-                            self._on_audio_channel_closed(), self.loop
+                        self._schedule_coro(
+                            self._on_audio_channel_closed(),
+                            name="audio_channel_closed",
                         )
 
                     # 通知网络错误
@@ -254,14 +301,13 @@ class MqttProtocol(Protocol):
                             and self._reconnect_attempts >= self._max_reconnect_attempts
                         ):
                             error_msg += " (重连失败)"
-                        self.loop.call_soon_threadsafe(
-                            lambda: asyncio.create_task(
-                                self._on_network_error(error_msg)
-                            )
+                        self._schedule_coro(
+                            self._on_network_error(error_msg),
+                            name="network_error",
                         )
 
             except Exception as e:
-                logger.error(f"处理MQTT断开连接失败: {e}")
+                logger.error(f"处理MQTT断开连接失败: {e}", exc_info=True)
 
         def on_publish_callback(client, userdata, mid):
             """
@@ -358,13 +404,13 @@ class MqttProtocol(Protocol):
 
                 return True
             except Exception as e:
-                logger.error(f"创建UDP套接字失败: {e}")
+                logger.error(f"创建UDP套接字失败: {e}", exc_info=True)
                 if self._on_network_error:
                     await self._on_network_error(f"创建UDP连接失败: {e}")
                 return False
 
         except Exception as e:
-            logger.error(f"连接MQTT服务器失败: {e}")
+            logger.error(f"连接MQTT服务器失败: {e}", exc_info=True)
             if self._on_network_error:
                 await self._on_network_error(f"连接MQTT服务器失败: {e}")
             return False
@@ -420,8 +466,9 @@ class MqttProtocol(Protocol):
 
                 # 触发音频通道打开回调
                 if self._on_audio_channel_opened:
-                    self.loop.call_soon_threadsafe(
-                        lambda: asyncio.create_task(self._on_audio_channel_opened())
+                    self._schedule_coro(
+                        self._on_audio_channel_opened(),
+                        name="audio_channel_opened",
                     )
 
             else:
@@ -440,7 +487,7 @@ class MqttProtocol(Protocol):
         except json.JSONDecodeError:
             logger.error(f"无效的JSON数据: {payload}")
         except Exception as e:
-            logger.error(f"处理MQTT消息时出错: {e}")
+            logger.error(f"处理MQTT消息时出错: {e}", exc_info=True)
 
     def _udp_receive_thread(self):
         """UDP接收线程.
@@ -495,14 +542,14 @@ class MqttProtocol(Protocol):
                         self.loop.call_soon_threadsafe(process_audio)
 
                 except Exception as e:
-                    logger.error(f"处理音频数据包错误: {e}")
+                    logger.error(f"处理音频数据包错误: {e}", exc_info=True)
                     continue
 
             except TimeoutError:
                 # 超时是正常的，继续循环
                 pass
             except Exception as e:
-                logger.error(f"UDP接收线程错误: {e}")
+                logger.error(f"UDP接收线程错误: {e}", exc_info=True)
                 if not self.udp_running:
                     break
                 time.sleep(0.1)  # 避免在错误情况下过度消耗CPU
@@ -522,7 +569,7 @@ class MqttProtocol(Protocol):
             result.wait_for_publish()
             return True
         except Exception as e:
-            logger.error(f"发送MQTT消息失败: {e}")
+            logger.error(f"发送MQTT消息失败: {e}", exc_info=True)
             if self._on_network_error:
                 await self._on_network_error(f"发送MQTT消息失败: {e}")
             return False
@@ -565,9 +612,12 @@ class MqttProtocol(Protocol):
                 )
             return True
         except Exception as e:
-            logger.error(f"发送音频数据失败: {e}")
+            logger.error(f"发送音频数据失败: {e}", exc_info=True)
             if self._on_network_error:
-                asyncio.create_task(self._on_network_error(f"发送音频数据失败: {e}"))
+                self._schedule_coro(
+                    self._on_network_error(f"发送音频数据失败: {e}"),
+                    name="send_audio_network_error",
+                )
             return False
 
     async def open_audio_channel(self):
@@ -594,7 +644,7 @@ class MqttProtocol(Protocol):
             await self._handle_goodbye()
 
         except Exception as e:
-            logger.error(f"关闭音频通道时出错: {e}")
+            logger.error(f"关闭音频通道时出错: {e}", exc_info=True)
             # 确保即使出错也调用回调
             if self._on_audio_channel_closed:
                 await self._on_audio_channel_closed()
@@ -664,7 +714,7 @@ class MqttProtocol(Protocol):
                 try:
                     self.udp_socket.close()
                 except Exception as e:
-                    logger.error(f"关闭UDP套接字失败: {e}")
+                    logger.error(f"关闭UDP套接字失败: {e}", exc_info=True)
                 self.udp_socket = None
 
             # 停止MQTT客户端
@@ -673,7 +723,7 @@ class MqttProtocol(Protocol):
                     self.mqtt_client.loop_stop()
                     self.mqtt_client.disconnect()
                 except Exception as e:
-                    logger.error(f"断开MQTT连接失败: {e}")
+                    logger.error(f"断开MQTT连接失败: {e}", exc_info=True)
                 self.mqtt_client = None
 
             # 重置所有状态
@@ -691,7 +741,7 @@ class MqttProtocol(Protocol):
                 await self._on_audio_channel_closed()
 
         except Exception as e:
-            logger.error(f"处理goodbye消息时出错: {e}")
+            logger.error(f"处理goodbye消息时出错: {e}", exc_info=True)
 
     def _stop_udp_receiver(self):
         """
@@ -714,7 +764,7 @@ class MqttProtocol(Protocol):
             try:
                 self.udp_socket.close()
             except Exception as e:
-                logger.error(f"关闭UDP套接字失败: {e}")
+                logger.error(f"关闭UDP套接字失败: {e}", exc_info=True)
 
     def __del__(self):
         """
@@ -729,7 +779,7 @@ class MqttProtocol(Protocol):
                 self.mqtt_client.loop_stop()
                 self.mqtt_client.disconnect()
             except Exception as e:
-                logger.error(f"断开MQTT连接失败: {e}")
+                logger.error(f"断开MQTT连接失败: {e}", exc_info=True)
 
     # ============ 模板方法实现 ============
 
@@ -765,7 +815,7 @@ class MqttProtocol(Protocol):
                 self.mqtt_client.loop_stop()
                 self.mqtt_client.disconnect()
             except Exception as e:
-                logger.error(f"断开MQTT连接时出错: {e}")
+                logger.error(f"断开MQTT连接时出错: {e}", exc_info=True)
 
         # 重置时间戳
         self._last_activity_time = None

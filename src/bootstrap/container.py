@@ -4,6 +4,7 @@
 """
 
 import asyncio
+import os
 from typing import Any, Awaitable, Callable, Optional
 
 from src.bootstrap.protocols import PluginCommands, PluginContext, WindowContext
@@ -18,6 +19,11 @@ from src.plugins.manager import PluginManager
 from src.utils.config_manager import ConfigManager
 
 logger = get_logger()
+
+# 启动失败时直接退出，避免 zombie wait_shutdown
+_CRITICAL_PLUGINS = ("ui",)
+# audio 为关键能力，除非显式禁用
+_AUDIO_CRITICAL = True
 
 
 class PluginContextAdapter:
@@ -169,10 +175,15 @@ class ServiceContainer:
         # 核心服务
         self.event_bus = EventBus()
         self.state = StateManager(self.event_bus, aec_enabled=aec_enabled)
-        self.protocol = ProtocolManager(self.event_bus)
         self.tasks = TaskManager()
+        # Protocol 入站任务走 TaskManager，避免 fire-and-forget
+        self.protocol = ProtocolManager(self.event_bus, task_manager=self.tasks)
         self.plugins = PluginManager()
         self.resource_pool = ResourcePool()
+
+        # 容器持有的跨插件共享服务（启动时 bind，关闭时 unbind）
+        self.mcp_server = None
+        self.music_player = None
 
         # 适配器
         self._plugin_context: Optional[PluginContextAdapter] = None
@@ -218,6 +229,7 @@ class ServiceContainer:
         try:
             # 初始化任务管理器
             self.tasks.initialize()
+            self.protocol.set_task_manager(self.tasks)
 
             # 设置协议
             self.protocol.set_protocol(protocol)
@@ -232,6 +244,12 @@ class ServiceContainer:
             # 设置并启动插件
             await self._setup_plugins(mode, ctx, cmd)
             await self.plugins.start_all()
+
+            # 关键插件健康门闩：失败则退出，禁止 silent zombie
+            health_error = self._check_critical_plugins()
+            if health_error:
+                logger.error(health_error)
+                return 1
 
             # 广播初始状态
             await self.plugins.notify_device_state_changed(
@@ -248,6 +266,37 @@ class ServiceContainer:
         finally:
             await self.shutdown()
 
+    def _bind_shared_services(self) -> None:
+        """创建并绑定跨插件共享服务（McpServer / MusicPlayer）."""
+        from src.mcp.mcp_server import McpServer
+        from src.mcp.tools.music.music_player import MusicPlayer, bind_music_player
+
+        if self.mcp_server is None:
+            self.mcp_server = McpServer()
+            McpServer.bind_instance(self.mcp_server)
+
+        if self.music_player is None:
+            self.music_player = MusicPlayer()
+            bind_music_player(self.music_player)
+
+        logger.info("共享服务已绑定: McpServer, MusicPlayer")
+
+    def _unbind_shared_services(self) -> None:
+        """解除共享服务绑定（资源池最后阶段调用）."""
+        from src.mcp.mcp_server import McpServer
+        from src.mcp.tools.music.music_player import unbind_music_player
+
+        try:
+            unbind_music_player()
+        except Exception as e:
+            logger.debug(f"unbind MusicPlayer 失败: {e}", exc_info=True)
+        try:
+            McpServer.unbind_instance()
+        except Exception as e:
+            logger.debug(f"unbind McpServer 失败: {e}", exc_info=True)
+        self.music_player = None
+        self.mcp_server = None
+
     async def _setup_plugins(
         self, mode: str, ctx: PluginContext, cmd: PluginCommands
     ) -> None:
@@ -260,12 +309,18 @@ class ServiceContainer:
         from src.plugins.ui import UIPlugin
         from src.plugins.wake_word import WakeWordPlugin
 
-        # 创建插件实例
-        audio_plugin = AudioPlugin()
+        # 先绑定容器级共享服务，再初始化插件
+        self._bind_shared_services()
+
+        # 创建插件实例（注入容器持有的共享服务）
+        audio_plugin = AudioPlugin(music_player=self.music_player)
         wake_word_plugin = WakeWordPlugin()
-        ui_plugin = UIPlugin(mode=mode)
+        ui_plugin = UIPlugin(mode=mode, task_manager=self.tasks)
         shortcuts_plugin = ShortcutsPlugin()
-        mcp_plugin = McpPlugin()
+        mcp_plugin = McpPlugin(
+            server=self.mcp_server,
+            music_player=self.music_player,
+        )
 
         # 注册插件
         self.plugins.register(
@@ -283,7 +338,31 @@ class ServiceContainer:
         self._register_cleanup_resources()
 
         # 设置音频直连通道（TTS 音频不经过 EventBus，减少延迟）
-        self.protocol.set_audio_handler(audio_plugin.on_incoming_audio)
+        if not audio_plugin.failed:
+            self.protocol.set_audio_handler(audio_plugin.on_incoming_audio)
+
+    def _check_critical_plugins(self) -> Optional[str]:
+        """检查关键插件是否可用.
+
+        Returns:
+            错误描述；全部健康时返回 None
+        """
+        failed: list[str] = []
+        for name in _CRITICAL_PLUGINS:
+            if self.plugins.is_failed(name):
+                failed.append(name)
+
+        audio_disabled = os.getenv("XIAOZHI_DISABLE_AUDIO") == "1"
+        if _AUDIO_CRITICAL and not audio_disabled and self.plugins.is_failed("audio"):
+            failed.append("audio")
+
+        if not failed:
+            return None
+        return (
+            f"关键插件启动失败: {', '.join(failed)}。"
+            "应用将退出以避免空转（zombie）。"
+            "若需无音频调试，可设置 XIAOZHI_DISABLE_AUDIO=1。"
+        )
 
     def _setup_event_handlers(self) -> None:
         """
@@ -300,7 +379,10 @@ class ServiceContainer:
         """将所有模块的清理函数注册到资源池（先注册的后释放）."""
         pool = self.resource_pool
 
-        # 事件总线最后释放（最先注册）
+        # 最先注册 = 最后释放：共享服务 unbind 在插件清理之后
+        pool.register("shared_services", self._unbind_shared_services)
+
+        # 事件总线最后释放（次先注册）
         pool.register("event_bus", self.event_bus.clear)
 
         # 各插件注册自身资源
@@ -349,7 +431,13 @@ class ServiceContainer:
         await self.state.set_device_state(DeviceState.IDLE)
 
     async def _on_network_error(self, error_message: str = None) -> None:
+        """网络错误：停止持续监听并复位设备状态到 IDLE."""
         self.state.set_keep_listening(False)
+        try:
+            if not self.state.is_idle():
+                await self.state.set_device_state(DeviceState.IDLE)
+        except Exception as e:
+            logger.error(f"网络错误后复位设备状态失败: {e}", exc_info=True)
 
     async def _on_device_state_changed(self, data: dict) -> None:
         new_state = data.get("new_state")
@@ -374,7 +462,7 @@ class ServiceContainer:
             await self.plugins.notify_incoming_json(json_data)
 
         except Exception as e:
-            logger.error(f"处理 JSON 消息失败: {e}")
+            logger.error(f"处理 JSON 消息失败: {e}", exc_info=True)
 
     async def _handle_tts_start(self) -> None:
         if (
