@@ -389,3 +389,63 @@ def test_gui_activation_no_ensure_future_or_get_event_loop():
     assert "ensure_future" not in src
     assert "get_event_loop" not in src
     assert "get_running_loop" in src or "create_task" in src
+
+
+def test_config_manager_batch_update_single_save(tmp_path, monkeypatch):
+    """批量 update_configs 只落盘一次."""
+    from src.utils.config_manager import ConfigManager
+
+    ConfigManager.reset_instance()
+    cm = ConfigManager.get_instance()
+    # 指向临时文件，避免污染用户配置
+    cm.config_dir = tmp_path
+    cm.config_file = tmp_path / "config.json"
+    cm._config = {
+        "SYSTEM_OPTIONS": {
+            "NETWORK": {
+                "MQTT_INFO": None,
+                "WEBSOCKET_URL": None,
+                "WEBSOCKET_ACCESS_TOKEN": None,
+            }
+        }
+    }
+
+    saves = {"n": 0}
+    orig = cm._save_config
+
+    def counting_save(cfg):
+        saves["n"] += 1
+        return orig(cfg)
+
+    monkeypatch.setattr(cm, "_save_config", counting_save)
+
+    ok = cm.update_configs(
+        {
+            "SYSTEM_OPTIONS.NETWORK.MQTT_INFO": {"host": "x"},
+            "SYSTEM_OPTIONS.NETWORK.WEBSOCKET_URL": "wss://example",
+            "SYSTEM_OPTIONS.NETWORK.WEBSOCKET_ACCESS_TOKEN": "tok",
+        }
+    )
+    assert ok is True
+    assert saves["n"] == 1
+    assert cm.get_config("SYSTEM_OPTIONS.NETWORK.WEBSOCKET_URL") == "wss://example"
+
+    # 单次 update 仍会 save
+    cm.update_config("SYSTEM_OPTIONS.NETWORK.WEBSOCKET_ACCESS_TOKEN", "tok2")
+    assert saves["n"] == 2
+
+    ConfigManager.reset_instance()
+
+
+def test_music_player_init_is_lazy():
+    """MusicPlayer 构造不应立刻扫缓存目录或读满配置副作用路径."""
+    from src.mcp.tools.music.music_player import MusicPlayer
+
+    p = MusicPlayer()
+    assert p._config is None
+    assert p._cache_ready is False
+    assert p._temp_cleaned is False
+    # 访问 config 才加载
+    cfg = p.config
+    assert isinstance(cfg, dict)
+    assert "SEARCH_URL" in cfg

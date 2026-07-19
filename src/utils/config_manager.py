@@ -237,10 +237,11 @@ class ConfigManager:
         except (KeyError, TypeError):
             return default
 
-    def update_config(self, path: str, value: Any) -> bool:
+    def update_config(self, path: str, value: Any, *, save: bool = True) -> bool:
         """
         更新特定配置项
         path: 点分隔的配置路径，如 "SYSTEM_OPTIONS.NETWORK.MQTT_INFO"
+        save: 是否立即落盘；批量更新时传 False，最后再 save_config()/update_configs
         """
         try:
             current = self._config
@@ -248,10 +249,34 @@ class ConfigManager:
             for part in parts:
                 current = current.setdefault(part, {})
             current[last] = value
+            if not save:
+                return True
             return self._save_config(self._config)
         except Exception as e:
             logger.error(f"配置更新错误 {path}: {e}", exc_info=True)
             return False
+
+    def update_configs(self, updates: Dict[str, Any]) -> bool:
+        """批量更新多个配置路径，只写盘一次.
+
+        Args:
+            updates: path -> value，例如
+                {"SYSTEM_OPTIONS.NETWORK.WEBSOCKET_URL": "wss://..."}
+        """
+        if not updates:
+            return True
+        try:
+            for path, value in updates.items():
+                if not self.update_config(path, value, save=False):
+                    return False
+            return self._save_config(self._config)
+        except Exception as e:
+            logger.error(f"批量配置更新错误: {e}", exc_info=True)
+            return False
+
+    def save_config(self) -> bool:
+        """将当前内存配置落盘."""
+        return self._save_config(self._config)
 
     def reload_config(self) -> bool:
         """

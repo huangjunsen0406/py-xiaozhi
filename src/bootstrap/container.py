@@ -267,7 +267,10 @@ class ServiceContainer:
             await self.shutdown()
 
     def _bind_shared_services(self) -> None:
-        """创建并绑定跨插件共享服务（McpServer / MusicPlayer）."""
+        """创建并绑定跨插件共享服务（McpServer / MusicPlayer）.
+
+        MusicPlayer 构造已尽量轻量（配置/缓存懒加载），启动期只绑定实例。
+        """
         from src.mcp.mcp_server import McpServer
         from src.mcp.tools.music.music_player import MusicPlayer, bind_music_player
 
@@ -279,7 +282,7 @@ class ServiceContainer:
             self.music_player = MusicPlayer()
             bind_music_player(self.music_player)
 
-        logger.info("共享服务已绑定: McpServer, MusicPlayer")
+        logger.debug("共享服务已绑定: McpServer, MusicPlayer")
 
     def _unbind_shared_services(self) -> None:
         """解除共享服务绑定（资源池最后阶段调用）."""

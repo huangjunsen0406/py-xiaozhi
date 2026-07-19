@@ -124,23 +124,16 @@ class MusicPlayer:
         user_cache_dir = get_user_cache_dir()
         self.cache_dir = user_cache_dir / "music"
         self.temp_cache_dir = self.cache_dir / "temp"
-        self._init_cache_dirs()
+        self._cache_ready = False
+        self._temp_cleaned = False
 
-        self.config = self._load_config()
-
-        self._clean_temp_cache()
+        # 配置懒加载：首次真正播放/搜索时再读 ConfigManager
+        self._config: dict | None = None
 
         self._local_playlist: list[MusicMetadata] | None = None
         self._last_scan_time = 0
 
-        logger.info(
-            f"音乐播放器初始化完成 (FFmpeg + AudioCodec 模式, "
-            f"搜索: {self.config['SEARCH_URL']}, 直链: {self.config['URL_API']})"
-        )
-        logger.info(
-            f"默认平台: {self.config['DEFAULT_SOURCE']}, "
-            f"音质: {self.config['DEFAULT_BR']}"
-        )
+        logger.debug("MusicPlayer 实例已创建（缓存/配置懒初始化）")
 
     @staticmethod
     def _load_config() -> dict:
@@ -231,18 +224,47 @@ class MusicPlayer:
                 break
         return count
 
-    def _init_cache_dirs(self):
-        """初始化缓存目录"""
+    @property
+    def config(self) -> dict:
+        """懒加载音乐相关配置."""
+        if self._config is None:
+            self._config = self._load_config()
+            logger.debug(
+                "MusicPlayer 配置已加载: "
+                f"搜索={self._config['SEARCH_URL']}, "
+                f"平台={self._config['DEFAULT_SOURCE']}"
+            )
+        return self._config
+
+    def _ensure_cache_dirs(self) -> None:
+        """确保缓存目录存在（首次播放/下载时调用）."""
+        if self._cache_ready:
+            return
         try:
             self.cache_dir.mkdir(parents=True, exist_ok=True)
             self.temp_cache_dir.mkdir(parents=True, exist_ok=True)
-            logger.info(f"音乐缓存目录初始化完成: {self.cache_dir}")
+            self._cache_ready = True
+            logger.debug(f"音乐缓存目录就绪: {self.cache_dir}")
         except Exception as e:
             logger.error(f"创建缓存目录失败: {e}", exc_info=True)
             self.cache_dir = Path(tempfile.gettempdir()) / "xiaozhi_music_cache"
             self.temp_cache_dir = self.cache_dir / "temp"
             self.cache_dir.mkdir(parents=True, exist_ok=True)
             self.temp_cache_dir.mkdir(parents=True, exist_ok=True)
+            self._cache_ready = True
+
+    def _clean_temp_cache_once(self) -> None:
+        """进程内首次使用时清理临时缓存（避免启动期扫盘）."""
+        if self._temp_cleaned:
+            return
+        self._ensure_cache_dirs()
+        self._clean_temp_cache()
+        self._temp_cleaned = True
+
+    def _prepare_for_io(self) -> None:
+        """播放/搜索/下载前：确保配置与缓存目录就绪."""
+        _ = self.config  # 触发懒加载
+        self._clean_temp_cache_once()
 
     def _clean_temp_cache(self):
         """清理临时缓存文件"""
@@ -269,6 +291,7 @@ class MusicPlayer:
         ):
             return self._local_playlist
 
+        self._prepare_for_io()
         playlist = []
         if not self.cache_dir.exists():
             logger.warning(f"缓存目录不存在: {self.cache_dir}")
@@ -394,6 +417,7 @@ class MusicPlayer:
     async def play_local_song_by_id(self, file_id: str) -> dict:
         """根据文件ID播放本地歌曲"""
         try:
+            self._prepare_for_io()
             file_path = self.cache_dir / f"{file_id}.mp3"
 
             if not file_path.exists():
@@ -446,6 +470,7 @@ class MusicPlayer:
     async def search_and_play(self, song_name: str) -> dict:
         """搜索并播放歌曲"""
         try:
+            self._prepare_for_io()
             song_id, url = await self._search_song(song_name)
             if not song_id or not url:
                 return {"status": "error", "message": f"未找到歌曲: {song_name}"}
@@ -971,6 +996,7 @@ class MusicPlayer:
     async def _get_or_download_file(self, url: str) -> Path | None:
         """获取或下载文件"""
         try:
+            self._prepare_for_io()
             cache_filename = f"{self.song_id}.mp3"
             cache_path = self.cache_dir / cache_filename
 
@@ -1335,9 +1361,10 @@ class MusicPlayer:
             logger.error(f"处理恢复请求失败: {e}", exc_info=True)
 
     def __del__(self):
-        """清理资源"""
+        """清理资源（仅在曾初始化缓存时清理）"""
         try:
-            self._clean_temp_cache()
+            if getattr(self, "_cache_ready", False):
+                self._clean_temp_cache()
         except Exception as e:
             logger.debug(f"__del__ 清理临时缓存失败: {e}")
 

@@ -609,26 +609,27 @@ class ActivationService:
     def _process_ota_response(self, data: Dict):
         """
         处理OTA响应.
+
+        网络配置合并后一次落盘，避免 MQTT/WS URL/Token 各写一次磁盘。
         """
+        updates: Dict[str, object] = {}
+
         # 更新MQTT配置
         if "mqtt" in data and data["mqtt"]:
-            self.config_manager.update_config(
-                "SYSTEM_OPTIONS.NETWORK.MQTT_INFO", data["mqtt"]
-            )
+            updates["SYSTEM_OPTIONS.NETWORK.MQTT_INFO"] = data["mqtt"]
             self.logger.info("MQTT配置已更新")
 
         # 更新WebSocket配置
         if "websocket" in data:
             ws = data["websocket"]
             if ws.get("url"):
-                self.config_manager.update_config(
-                    "SYSTEM_OPTIONS.NETWORK.WEBSOCKET_URL", ws["url"]
-                )
+                updates["SYSTEM_OPTIONS.NETWORK.WEBSOCKET_URL"] = ws["url"]
                 self.logger.info(f"WebSocket URL: {ws['url']}")
             token = ws.get("token", "test-token") or "test-token"
-            self.config_manager.update_config(
-                "SYSTEM_OPTIONS.NETWORK.WEBSOCKET_ACCESS_TOKEN", token
-            )
+            updates["SYSTEM_OPTIONS.NETWORK.WEBSOCKET_ACCESS_TOKEN"] = token
+
+        if updates:
+            self.config_manager.update_configs(updates)
 
         # 检查激活数据
         if "activation" in data:
