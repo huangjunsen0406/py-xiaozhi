@@ -106,7 +106,7 @@ class AudioCodec:
             logger.info("AudioCodec 初始化完成")
 
         except Exception as e:
-            logger.error(f"初始化音频设备失败: {e}")
+            logger.error(f"初始化音频设备失败: {e}", exc_info=True)
             await self.close()
             raise
 
@@ -144,7 +144,7 @@ class AudioCodec:
                     )
                     self._encoded_callback(opus_data)
                 except Exception as e:
-                    logger.warning(f"编码失败: {e}")
+                    logger.warning(f"编码失败: {e}", exc_info=True)
 
             # 3. 通知监听器（线程安全）
             with self._listeners_lock:
@@ -152,10 +152,10 @@ class AudioCodec:
                     try:
                         listener.on_audio_data(audio_converted.copy())
                     except Exception as e:
-                        logger.warning(f"监听器处理失败: {e}")
+                        logger.warning(f"监听器处理失败: {e}", exc_info=True)
 
         except Exception as e:
-            logger.error(f"输入回调错误: {e}")
+            logger.error(f"输入回调错误: {e}", exc_info=True)
 
     def _output_callback(self, outdata, frames, time_info, status):
         """输出回调：解码 → 转换 → 播放
@@ -195,7 +195,7 @@ class AudioCodec:
                 outdata[:] = audio_converted[:frames]
 
         except Exception as e:
-            logger.error(f"输出回调错误: {e}")
+            logger.error(f"输出回调错误: {e}", exc_info=True)
             outdata.fill(0.0)
 
     def _configure_pipeline(self):
@@ -284,7 +284,7 @@ class AudioCodec:
             await self.output_buffer.put(audio_float32, replace_oldest=True)
 
         except Exception as e:
-            logger.warning(f"音频写入失败: {e}")
+            logger.warning(f"音频写入失败: {e}", exc_info=True)
 
     async def write_pcm_direct(self, pcm_float32: np.ndarray):
         """直接写入 float32 PCM（供 MusicPlayer 使用）
@@ -407,7 +407,7 @@ class AudioCodec:
             self._closed = True
 
         except Exception as e:
-            logger.error(f"关闭音频编解码器失败: {e}")
+            logger.error(f"关闭音频编解码器失败: {e}", exc_info=True)
         finally:
             self._is_closing = False
 
@@ -443,9 +443,9 @@ class AudioCodec:
                 with self._listeners_lock:
                     self._audio_listeners.clear()
             except Exception as e:
-                logger.warning(f"清理音频监听器失败（锁可能已损坏）: {e}")
+                logger.warning(f"清理音频监听器失败（锁可能已损坏）: {e}", exc_info=True)
 
             logger.debug("AudioCodec 析构清理完成")
 
         except Exception as e:
-            logger.error(f"析构函数清理失败: {e}")
+            logger.error(f"析构函数清理失败: {e}", exc_info=True)

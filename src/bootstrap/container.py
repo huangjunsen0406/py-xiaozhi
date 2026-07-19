@@ -480,7 +480,7 @@ class ServiceContainer:
                 if audio_plugin and audio_plugin.codec:
                     await audio_plugin.codec.clear_audio_queue()
             except Exception as e:
-                logger.warning(f"清空音频队列失败: {e}")
+                logger.warning(f"清空音频队列失败: {e}", exc_info=True)
             await self.state.set_device_state(DeviceState.LISTENING)
             if not (
                 self.state.listening_mode == ListeningMode.REALTIME

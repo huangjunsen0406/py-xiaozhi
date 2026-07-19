@@ -88,7 +88,7 @@ class VolumeController:
                 )
                 self._module_cache[module_name] = module
             except ImportError as e:
-                self.logger.warning(f"导入模块 {module_name} 失败: {e}")
+                self.logger.warning(f"导入模块 {module_name} 失败: {e}", exc_info=True)
                 raise
 
         if attr:
@@ -104,7 +104,7 @@ class VolumeController:
                 try:
                     return func(*args, **kwargs)
                 except Exception as e:
-                    self.logger.warning(f"{func_name}失败: {e}")
+                    self.logger.warning(f"{func_name}失败: {e}", exc_info=True)
                     return default_return
 
             return wrapper
@@ -140,7 +140,7 @@ class VolumeController:
             self.volume_control = cast(interface, POINTER(IAudioEndpointVolume))
             self.logger.debug("Windows音量控制初始化成功")
         except Exception as e:
-            self.logger.error(f"Windows音量控制初始化失败: {e}")
+            self.logger.error(f"Windows音量控制初始化失败: {e}", exc_info=True)
             raise
 
     def _init_macos(self) -> None:
@@ -154,7 +154,7 @@ class VolumeController:
                 raise Exception("无法访问macOS音量控制")
             self.logger.debug("macOS音量控制初始化成功")
         except Exception as e:
-            self.logger.error(f"macOS音量控制初始化失败: {e}")
+            self.logger.error(f"macOS音量控制初始化失败: {e}", exc_info=True)
             raise
 
     def _init_linux(self) -> None:

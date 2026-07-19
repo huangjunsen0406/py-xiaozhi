@@ -347,7 +347,7 @@ class ActivationService:
                 self._efuse_cache = efuse_data
 
         except Exception as e:
-            self.logger.error(f"验证efuse失败: {e}，重新创建")
+            self.logger.error(f"验证efuse失败: {e}，重新创建", exc_info=True)
             self._create_efuse_file(fingerprint, mac_address)
 
     def _ensure_device_identity(self) -> Tuple[Optional[str], Optional[str], bool]:
@@ -386,7 +386,7 @@ class ActivationService:
                         if mac != "00:00:00:00:00:00":
                             return mac
         except Exception as e:
-            self.logger.error(f"获取MAC地址失败: {e}")
+            self.logger.error(f"获取MAC地址失败: {e}", exc_info=True)
         return None
 
     def _normalize_mac(self, mac: str) -> str:
@@ -405,7 +405,7 @@ class ActivationService:
         try:
             return machineid.id()
         except Exception as e:
-            self.logger.warning(f"获取 machine_id 失败: {e}")
+            self.logger.warning(f"获取 machine_id 失败: {e}", exc_info=True)
             return None
 
     def _generate_serial_number_from_fingerprint(self, fingerprint: Dict) -> str:
@@ -486,7 +486,7 @@ class ActivationService:
             self._efuse_cache = data
             return True
         except Exception as e:
-            self.logger.error(f"保存efuse失败: {e}")
+            self.logger.error(f"保存efuse失败: {e}", exc_info=True)
             return False
 
     # ========== 配置初始化（私有方法） ==========
@@ -800,7 +800,7 @@ class ActivationService:
 
                             announce_activation_code(code, locale="zh-CN")
                         except Exception as e:
-                            logger.warning(f"激活码播报失败: {e}")
+                            logger.warning(f"激活码播报失败: {e}", exc_info=True)
 
                     async with session.post(
                         activate_url, headers=headers, json=payload
@@ -824,7 +824,7 @@ class ActivationService:
                 except asyncio.CancelledError:
                     raise
                 except Exception as e:
-                    self.logger.warning(f"激活请求失败: {e}，重试中...")
+                    self.logger.warning(f"激活请求失败: {e}，重试中...", exc_info=True)
                     await asyncio.sleep(retry_interval)
 
         self.logger.error(f"激活失败，达到最大重试次数 ({max_retries})")

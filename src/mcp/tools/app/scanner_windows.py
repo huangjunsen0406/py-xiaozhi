@@ -34,7 +34,7 @@ def scan_installed_applications() -> List[Dict[str, str]]:
             f"[WindowsScanner] 从开始菜单扫描到 {len(start_menu_apps)} 个主要应用"
         )
     except Exception as e:
-        logger.warning(f"[WindowsScanner] 开始菜单扫描失败: {e}")
+        logger.warning(f"[WindowsScanner] 开始菜单扫描失败: {e}", exc_info=True)
 
     # 2. 扫描注册表中的主要第三方应用（过滤系统组件）
     try:
@@ -49,7 +49,7 @@ def scan_installed_applications() -> List[Dict[str, str]]:
             f"[WindowsScanner] 从注册表扫描到 {len([a for a in registry_apps if a['display_name'].lower() not in existing_names])} 个新的主要应用"
         )
     except Exception as e:
-        logger.warning(f"[WindowsScanner] 注册表扫描失败: {e}")
+        logger.warning(f"[WindowsScanner] 注册表扫描失败: {e}", exc_info=True)
 
     # 3. 添加常见的系统应用（只保留用户常用的）
     system_apps = [
@@ -150,7 +150,7 @@ def scan_running_applications() -> List[Dict[str, str]]:
         return apps
 
     except Exception as e:
-        logger.error(f"[WindowsScanner] 扫描运行应用失败: {e}")
+        logger.error(f"[WindowsScanner] 扫描运行应用失败: {e}", exc_info=True)
         return []
 
 
@@ -259,7 +259,7 @@ def _scan_main_registry_apps() -> List[Dict[str, str]]:
                 logger.warning("[WindowsScanner] 无法解析PowerShell输出")
 
     except (subprocess.TimeoutExpired, subprocess.SubprocessError) as e:
-        logger.warning(f"[WindowsScanner] PowerShell扫描失败: {e}")
+        logger.warning(f"[WindowsScanner] PowerShell扫描失败: {e}", exc_info=True)
 
     return apps
 

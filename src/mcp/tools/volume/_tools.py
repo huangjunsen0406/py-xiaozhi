@@ -94,7 +94,7 @@ async def _get_volume_status(args: dict[str, Any]) -> str:
                 "reason": "Dependencies not available",
             }
     except Exception as e:
-        logger.warning(f"[VolumeTools] 获取音量状态失败: {e}")
+        logger.warning(f"[VolumeTools] 获取音量状态失败: {e}", exc_info=True)
         status = {
             "volume": 50,
             "muted": False,

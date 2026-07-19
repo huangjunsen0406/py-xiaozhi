@@ -156,7 +156,7 @@ class ConfigManager:
                     shutil.copy2(install_config, self.config_file)
                     logger.info(f"已从安装目录迁移配置: {install_config} -> {self.config_file}")
                 except Exception as e:
-                    logger.warning(f"迁移配置文件失败: {e}，将使用默认配置")
+                    logger.warning(f"迁移配置文件失败: {e}，将使用默认配置", exc_info=True)
 
         # 记录配置文件路径
         logger.info(f"配置目录: {self.config_dir.absolute()}")
@@ -187,7 +187,7 @@ class ConfigManager:
                 return self.DEFAULT_CONFIG.copy()
 
         except Exception as e:
-            logger.error(f"配置加载错误: {e}")
+            logger.error(f"配置加载错误: {e}", exc_info=True)
             return self.DEFAULT_CONFIG.copy()
 
     def _save_config(self, config: dict) -> bool:
@@ -204,7 +204,7 @@ class ConfigManager:
             return True
 
         except Exception as e:
-            logger.error(f"配置保存错误: {e}")
+            logger.error(f"配置保存错误: {e}", exc_info=True)
             return False
 
     @staticmethod
@@ -250,7 +250,7 @@ class ConfigManager:
             current[last] = value
             return self._save_config(self._config)
         except Exception as e:
-            logger.error(f"配置更新错误 {path}: {e}")
+            logger.error(f"配置更新错误 {path}: {e}", exc_info=True)
             return False
 
     def reload_config(self) -> bool:
@@ -262,7 +262,7 @@ class ConfigManager:
             logger.info("配置文件已重新加载")
             return True
         except Exception as e:
-            logger.error(f"配置重新加载失败: {e}")
+            logger.error(f"配置重新加载失败: {e}", exc_info=True)
             return False
 
     def generate_uuid(self) -> str:

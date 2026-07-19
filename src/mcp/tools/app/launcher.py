@@ -49,7 +49,7 @@ async def _find_matching_application(app_name: str) -> dict[str, Any] | None:
     try:
         return await find_best_matching_app(app_name, "installed")
     except Exception as e:
-        logger.warning(f"[AppLauncher] 查找匹配应用程序时出错: {e}")
+        logger.warning(f"[AppLauncher] 查找匹配应用程序时出错: {e}", exc_info=True)
         return None
 
 
@@ -74,7 +74,7 @@ async def _launch_matched_app(
         return await _launch_by_name(app_path)
 
     except Exception as e:
-        logger.error(f"[AppLauncher] 启动匹配应用失败: {e}")
+        logger.error(f"[AppLauncher] 启动匹配应用失败: {e}", exc_info=True)
         return False
 
 
@@ -99,5 +99,5 @@ async def _launch_by_name(app_name: str) -> bool:
             return False
 
     except Exception as e:
-        logger.error(f"[AppLauncher] 启动应用程序失败: {e}")
+        logger.error(f"[AppLauncher] 启动应用程序失败: {e}", exc_info=True)
         return False

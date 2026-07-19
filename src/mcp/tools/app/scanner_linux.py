@@ -137,7 +137,7 @@ def scan_running_applications() -> List[Dict[str, str]]:
         return apps
 
     except Exception as e:
-        logger.error(f"[LinuxScanner] 扫描运行应用失败: {e}")
+        logger.error(f"[LinuxScanner] 扫描运行应用失败: {e}", exc_info=True)
         return []
 
 

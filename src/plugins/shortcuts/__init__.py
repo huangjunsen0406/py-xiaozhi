@@ -43,7 +43,7 @@ def create_backend(
             logger.info("使用 macOS Quartz Event Tap 后端")
             return MacOSShortcutBackend(loop)
         except ImportError as e:
-            logger.warning(f"无法加载 macOS 后端: {e}")
+            logger.warning(f"无法加载 macOS 后端: {e}", exc_info=True)
             logger.info("回退到 pynput 后端")
             # 回退到 pynput
             try:
@@ -61,7 +61,7 @@ def create_backend(
             logger.info("使用 pynput 后端")
             return PynputShortcutBackend(loop)
         except ImportError as e:
-            logger.error(f"无法加载 pynput 后端: {e}")
+            logger.error(f"无法加载 pynput 后端: {e}", exc_info=True)
             return None
 
 
@@ -84,13 +84,13 @@ class _CmdAdapter:
             )
             await self._cmd.start_listening(mode)
         except Exception as e:
-            logger.error(f"切换对话状态失败: {e}")
+            logger.error(f"切换对话状态失败: {e}", exc_info=True)
 
     async def abort_speaking(self, reason):
         try:
             await self._cmd.abort_speaking(reason)
         except Exception as e:
-            logger.error(f"中断对话失败: {e}")
+            logger.error(f"中断对话失败: {e}", exc_info=True)
 
 
 class ShortcutsPlugin(Plugin):

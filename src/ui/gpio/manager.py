@@ -118,7 +118,7 @@ class GPIOViewManager:
             self._event_bus.off(Events.UI_UPDATE_EMOTION, self._on_update_emotion)
             self._event_bus.off(Events.UI_UPDATE_STATUS, self._on_update_status)
         except Exception as e:
-            logger.warning(f"GPIOViewManager: 取消订阅失败: {e}")
+            logger.warning(f"GPIOViewManager: 取消订阅失败: {e}", exc_info=True)
 
         # 关闭 GPIO
         self._gpio_input.close()

@@ -148,7 +148,7 @@ class ScreenshotCamera(BaseCamera):
             return byte_io.getvalue()
 
         except Exception as e:
-            logger.error(f"PIL screenshot capture failed: {e}")
+            logger.error(f"PIL screenshot capture failed: {e}", exc_info=True)
             return None
 
     def _capture_macos(self, display_id=None) -> bytes:
@@ -204,7 +204,7 @@ class ScreenshotCamera(BaseCamera):
             return byte_io.getvalue()
 
         except Exception as e:
-            logger.error(f"macOS screenshot capture failed: {e}")
+            logger.error(f"macOS screenshot capture failed: {e}", exc_info=True)
             return None
 
     def _composite_displays(self, displays):
@@ -253,7 +253,7 @@ class ScreenshotCamera(BaseCamera):
             return composite
 
         except Exception as e:
-            logger.error(f"Failed to composite displays: {e}")
+            logger.error(f"Failed to composite displays: {e}", exc_info=True)
             return None
 
     def _capture_windows(self, display_id=None) -> bytes:
@@ -341,7 +341,7 @@ class ScreenshotCamera(BaseCamera):
             return byte_io.getvalue()
 
         except Exception as e:
-            logger.error(f"Windows screenshot capture failed: {e}")
+            logger.error(f"Windows screenshot capture failed: {e}", exc_info=True)
             return None
 
     def _capture_linux(self, display_id=None) -> bytes:
@@ -414,7 +414,7 @@ class ScreenshotCamera(BaseCamera):
             return None
 
         except Exception as e:
-            logger.error(f"Linux screenshot capture failed: {e}")
+            logger.error(f"Linux screenshot capture failed: {e}", exc_info=True)
             return None
 
     def analyze(self, question: str, image_data: bytes | None = None) -> str:
@@ -471,7 +471,7 @@ class ScreenshotCamera(BaseCamera):
                     logger.debug(f"Captured display {display_num}: {screenshot.size}")
                     return screenshot
                 except Exception as e:
-                    logger.error(f"Failed to read display {display_num}: {e}")
+                    logger.error(f"Failed to read display {display_num}: {e}", exc_info=True)
                     os.unlink(temp_path)
                     return None
             else:
@@ -483,7 +483,7 @@ class ScreenshotCamera(BaseCamera):
                 return None
 
         except Exception as e:
-            logger.error(f"Single display capture failed: {e}")
+            logger.error(f"Single display capture failed: {e}", exc_info=True)
             return None
 
     def _capture_all_displays_macos(self):
@@ -557,5 +557,5 @@ class ScreenshotCamera(BaseCamera):
                 return self._composite_displays(displays)
 
         except Exception as e:
-            logger.error(f"All displays capture failed: {e}")
+            logger.error(f"All displays capture failed: {e}", exc_info=True)
             return None

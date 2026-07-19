@@ -238,7 +238,7 @@ class MusicPlayer:
             self.temp_cache_dir.mkdir(parents=True, exist_ok=True)
             logger.info(f"音乐缓存目录初始化完成: {self.cache_dir}")
         except Exception as e:
-            logger.error(f"创建缓存目录失败: {e}")
+            logger.error(f"创建缓存目录失败: {e}", exc_info=True)
             self.cache_dir = Path(tempfile.gettempdir()) / "xiaozhi_music_cache"
             self.temp_cache_dir = self.cache_dir / "temp"
             self.cache_dir.mkdir(parents=True, exist_ok=True)
@@ -253,10 +253,10 @@ class MusicPlayer:
                         file_path.unlink()
                         logger.debug(f"已删除临时缓存文件: {file_path.name}")
                 except Exception as e:
-                    logger.warning(f"删除临时缓存文件失败: {file_path.name}, {e}")
+                    logger.warning(f"删除临时缓存文件失败: {file_path.name}, {e}", exc_info=True)
             logger.info("临时音乐缓存清理完成")
         except Exception as e:
-            logger.error(f"清理临时缓存目录失败: {e}")
+            logger.error(f"清理临时缓存目录失败: {e}", exc_info=True)
 
     def _scan_local_music(self, force_refresh: bool = False) -> list[MusicMetadata]:
         """扫描本地音乐缓存"""
@@ -326,7 +326,7 @@ class MusicPlayer:
             }
 
         except Exception as e:
-            logger.error(f"获取本地歌单失败: {e}")
+            logger.error(f"获取本地歌单失败: {e}", exc_info=True)
             return {
                 "status": "error",
                 "message": f"获取本地歌单失败: {str(e)}",
@@ -383,7 +383,7 @@ class MusicPlayer:
             }
 
         except Exception as e:
-            logger.error(f"搜索本地音乐失败: {e}")
+            logger.error(f"搜索本地音乐失败: {e}", exc_info=True)
             return {
                 "status": "error",
                 "message": f"搜索失败: {str(e)}",
@@ -440,7 +440,7 @@ class MusicPlayer:
                 return {"status": "error", "message": "播放失败"}
 
         except Exception as e:
-            logger.error(f"播放本地音乐失败: {e}")
+            logger.error(f"播放本地音乐失败: {e}", exc_info=True)
             return {"status": "error", "message": f"播放失败: {str(e)}"}
 
     async def search_and_play(self, song_name: str) -> dict:
@@ -464,7 +464,7 @@ class MusicPlayer:
                 return {"status": "error", "message": "播放失败"}
 
         except Exception as e:
-            logger.error(f"搜索播放失败: {e}")
+            logger.error(f"搜索播放失败: {e}", exc_info=True)
             return {"status": "error", "message": f"操作失败: {str(e)}"}
 
     async def _cancel_task(self, task: asyncio.Task | None) -> None:
@@ -853,7 +853,7 @@ class MusicPlayer:
             return await self._start_playback(file_path)
 
         except Exception as e:
-            logger.error(f"播放失败: {e}")
+            logger.error(f"播放失败: {e}", exc_info=True)
             return False
 
     async def _start_playback(
@@ -981,7 +981,7 @@ class MusicPlayer:
             return await self._download_file(url, cache_filename)
 
         except Exception as e:
-            logger.error(f"获取文件失败: {e}")
+            logger.error(f"获取文件失败: {e}", exc_info=True)
             return None
 
     async def _resolve_download_url(self, api_url: str) -> str | None:
@@ -1019,7 +1019,7 @@ class MusicPlayer:
             return real_url
 
         except Exception as e:
-            logger.error(f"解析播放 URL 失败: {e}")
+            logger.error(f"解析播放 URL 失败: {e}", exc_info=True)
             return None
 
     def _sync_download_file(
@@ -1060,7 +1060,7 @@ class MusicPlayer:
             return result
 
         except Exception as e:
-            logger.error(f"下载失败: {e}")
+            logger.error(f"下载失败: {e}", exc_info=True)
             if temp_path and temp_path.exists():
                 try:
                     temp_path.unlink()

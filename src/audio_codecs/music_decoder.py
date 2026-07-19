@@ -46,7 +46,7 @@ class MusicDecoder:
                 )
                 return 0
             except OSError as e:
-                logger.warning(f"ffprobe 启动失败: {ffprobe}: {e}")
+                logger.warning(f"ffprobe 启动失败: {ffprobe}: {e}", exc_info=True)
                 return 0
 
             # 使用 ffprobe 获取时长
@@ -78,7 +78,7 @@ class MusicDecoder:
                 return 0
 
         except Exception as e:
-            logger.warning(f"解析音频文件时长失败: {e}")
+            logger.warning(f"解析音频文件时长失败: {e}", exc_info=True)
             return 0
 
     def __init__(self, sample_rate: int = 24000, channels: int = 1):
@@ -167,7 +167,7 @@ class MusicDecoder:
             return True
 
         except Exception as e:
-            logger.error(f"启动音频解码失败: {e}")
+            logger.error(f"启动音频解码失败: {e}", exc_info=True)
             return False
 
     async def _read_pcm_stream(self, output_queue: asyncio.Queue):
@@ -268,7 +268,7 @@ class MusicDecoder:
         except asyncio.CancelledError:
             logger.debug("解码任务被取消")
         except Exception as e:
-            logger.error(f"读取 PCM 流失败: {e}")
+            logger.error(f"读取 PCM 流失败: {e}", exc_info=True)
         finally:
             if eof_reached:
                 try:
@@ -290,7 +290,7 @@ class MusicDecoder:
             except asyncio.CancelledError:
                 pass
             except Exception as e:
-                logger.error(f"解码任务异常: {e}")
+                logger.error(f"解码任务异常: {e}", exc_info=True)
 
         if self._process:
             try:
@@ -318,4 +318,4 @@ class MusicDecoder:
             try:
                 await self._decode_task
             except Exception as e:
-                logger.error(f"等待解码完成失败: {e}")
+                logger.error(f"等待解码完成失败: {e}", exc_info=True)

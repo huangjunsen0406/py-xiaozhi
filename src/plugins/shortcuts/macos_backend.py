@@ -95,7 +95,7 @@ class MacOSShortcutBackend(ShortcutBackend):
             logger.info("macOS 全局快捷键监听已启动 (Quartz Event Tap)")
             return True
         except Exception as e:
-            logger.error(f"启动 macOS 快捷键监听失败: {e}")
+            logger.error(f"启动 macOS 快捷键监听失败: {e}", exc_info=True)
             return False
 
     def _create_event_tap(self):
@@ -150,7 +150,7 @@ class MacOSShortcutBackend(ShortcutBackend):
                 self._pressed_modifiers = Quartz.CGEventGetFlags(event)
 
         except Exception as e:
-            logger.error(f"事件回调错误: {e}")
+            logger.error(f"事件回调错误: {e}", exc_info=True)
 
         return event
 
@@ -266,7 +266,7 @@ class MacOSShortcutBackend(ShortcutBackend):
                     Quartz.CGEventTapEnable(self._tap, True)
                     logger.info("Event Tap 重新启用成功")
                 except Exception as e:
-                    logger.error(f"重新启用 Event Tap 失败: {e}")
+                    logger.error(f"重新启用 Event Tap 失败: {e}", exc_info=True)
                     # 尝试完全重建
                     try:
                         await self.stop()

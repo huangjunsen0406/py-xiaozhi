@@ -76,7 +76,7 @@ class SettingsModel(BaseModel):
                 logger.warning(f"配置文件不存在: {self._config_path}")
                 self._config = {}
         except Exception as e:
-            logger.error(f"加载配置失败: {e}")
+            logger.error(f"加载配置失败: {e}", exc_info=True)
             self._config = {}
 
     def _get_value(self, path: str, default: Any = None) -> Any:
@@ -112,7 +112,7 @@ class SettingsModel(BaseModel):
             # 发送配置保存信号，触发热重载
             self.configSaved.emit()
         except Exception as e:
-            logger.error(f"保存配置失败: {e}")
+            logger.error(f"保存配置失败: {e}", exc_info=True)
             self.set_error(f"保存配置失败: {e}")
 
     @Slot()
@@ -408,7 +408,7 @@ class SettingsModel(BaseModel):
             self._wake_word_preview = keyword_line
             self._wake_word_lang = lang
         except Exception as e:
-            logger.error(f"转换唤醒词失败: {e}")
+            logger.error(f"转换唤醒词失败: {e}", exc_info=True)
             self._wake_word_preview = f"转换失败: {e}"
 
     def _get_wakeWord(self) -> str:
@@ -774,7 +774,7 @@ class SettingsModel(BaseModel):
                 self.testComplete.emit("input", True)
 
         except Exception as e:
-            logger.error(f"录音测试失败: {e}")
+            logger.error(f"录音测试失败: {e}", exc_info=True)
             self.statusMessage.emit(f"[错误] {str(e)}")
             self.testComplete.emit("input", False)
         finally:
@@ -826,7 +826,7 @@ class SettingsModel(BaseModel):
             self.testComplete.emit("output", True)
 
         except Exception as e:
-            logger.error(f"播放测试失败: {e}")
+            logger.error(f"播放测试失败: {e}", exc_info=True)
             self.statusMessage.emit(f"[错误] {str(e)}")
             self.testComplete.emit("output", False)
         finally:
@@ -1145,5 +1145,5 @@ class SettingsModel(BaseModel):
         except ImportError:
             self.statusMessage.emit("[错误] cv2 未安装")
         except Exception as e:
-            logger.error(f"摄像头测试失败: {e}")
+            logger.error(f"摄像头测试失败: {e}", exc_info=True)
             self.statusMessage.emit(f"[错误] {str(e)}")

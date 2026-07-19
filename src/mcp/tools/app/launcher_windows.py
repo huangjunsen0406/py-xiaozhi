@@ -76,7 +76,7 @@ def launch_uwp_app_by_path(uwp_path: str) -> bool:
         else:
             return False
     except Exception as e:
-        logger.error(f"[WindowsLauncher] UWP应用启动失败: {e}")
+        logger.error(f"[WindowsLauncher] UWP应用启动失败: {e}", exc_info=True)
         return False
 
 
@@ -94,7 +94,7 @@ def launch_shortcut(shortcut_path: str) -> bool:
         logger.info(f"[WindowsLauncher] 快捷方式启动成功: {shortcut_path}")
         return True
     except Exception as e:
-        logger.error(f"[WindowsLauncher] 快捷方式启动失败: {e}")
+        logger.error(f"[WindowsLauncher] 快捷方式启动失败: {e}", exc_info=True)
         return False
 
 

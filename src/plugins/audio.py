@@ -124,7 +124,7 @@ class AudioPlugin(Plugin):
                 Events.MUSIC_PAUSE_REQUEST, MusicControlRequest(source="tts")
             )
         except Exception as e:
-            logger.warning(f"发送音乐暂停请求失败: {e}")
+            logger.warning(f"发送音乐暂停请求失败: {e}", exc_info=True)
 
     async def _resume_music_after_tts(self):
         """TTS 结束后恢复音乐"""

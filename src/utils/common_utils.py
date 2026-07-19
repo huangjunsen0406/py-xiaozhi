@@ -23,7 +23,7 @@ def open_url(url: str) -> bool:
             logger.warning(f"无法打开网页: {url}")
         return success
     except Exception as e:
-        logger.error(f"打开网页时出错: {e}")
+        logger.error(f"打开网页时出错: {e}", exc_info=True)
         return False
 
 
@@ -39,7 +39,7 @@ def copy_to_clipboard(text: str) -> bool:
         logger.warning("未安装pyperclip模块，无法复制到剪贴板")
         return False
     except Exception as e:
-        logger.error(f"复制到剪贴板时出错: {e}")
+        logger.error(f"复制到剪贴板时出错: {e}", exc_info=True)
         return False
 
 
@@ -97,7 +97,7 @@ def extract_verification_code(text: str) -> Optional[str]:
         logger.warning(f"未能从文本中找到验证码: {text}")
         return None
     except Exception as e:
-        logger.error(f"提取验证码时出错: {e}")
+        logger.error(f"提取验证码时出错: {e}", exc_info=True)
         return None
 
 

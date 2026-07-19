@@ -121,7 +121,7 @@ class OpusCodec:
                 f"解码: {self.output_sample_rate}Hz"
             )
         except Exception as e:
-            logger.error(f"创建Opus编解码器失败: {e}")
+            logger.error(f"创建Opus编解码器失败: {e}", exc_info=True)
             raise
 
     def encode(self, pcm_float32: np.ndarray, frame_size: int) -> bytes:

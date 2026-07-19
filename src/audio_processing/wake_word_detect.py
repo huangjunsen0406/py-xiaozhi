@@ -362,7 +362,7 @@ class WakeWordDetector:
                 if "no running event loop" in str(e) or "Event loop is closed" in str(e):
                     break
                 error_count += 1
-                logger.error(f"检测循环错误 ({error_count}/{MAX_ERRORS}): {e}")
+                logger.error(f"检测循环错误 ({error_count}/{MAX_ERRORS}): {e}", exc_info=True)
 
                 if error_count >= MAX_ERRORS:
                     logger.critical("达到最大错误次数，停止检测")
@@ -371,7 +371,7 @@ class WakeWordDetector:
                 await asyncio.sleep(1)
             except Exception as e:
                 error_count += 1
-                logger.error(f"检测循环错误 ({error_count}/{MAX_ERRORS}): {e}")
+                logger.error(f"检测循环错误 ({error_count}/{MAX_ERRORS}): {e}", exc_info=True)
 
                 if self.on_error:
                     try:
@@ -445,7 +445,7 @@ class WakeWordDetector:
                     else:
                         self.on_detected_callback(result, result)
                 except Exception as e:
-                    logger.error(f"唤醒词回调执行失败: {e}")
+                    logger.error(f"唤醒词回调执行失败: {e}", exc_info=True)
         finally:
             # 快速退出：正在停止时跳过延迟和队列清理
             if self._stopping:

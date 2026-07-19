@@ -59,7 +59,7 @@ class WakeWordPlugin(Plugin):
                 return
             await self.detector.start(self._audio_plugin.codec)
         except ImportError as e:
-            logger.error(f"无法导入唤醒词检测器: {e}")
+            logger.error(f"无法导入唤醒词检测器: {e}", exc_info=True)
             self.detector = None
         except Exception as e:
             logger.error(f"启动唤醒词检测器失败: {e}", exc_info=True)
@@ -69,7 +69,7 @@ class WakeWordPlugin(Plugin):
             try:
                 await self.detector.stop()
             except Exception as e:
-                logger.warning(f"停止唤醒词检测器失败: {e}")
+                logger.warning(f"停止唤醒词检测器失败: {e}", exc_info=True)
 
     def register_resources(self, pool) -> None:
         detector = self.detector
@@ -122,4 +122,4 @@ class WakeWordPlugin(Plugin):
         """
         唤醒词检测错误回调.
         """
-        logger.error(f"唤醒词检测错误: {error}")
+        logger.error(f"唤醒词检测错误: {error}", exc_info=True)

@@ -173,7 +173,7 @@ class GUIActivation(QObject, BaseActivation):
             else:
                 logger.warning("GUIActivation: 未配置激活 URL")
         except Exception as e:
-            logger.error(f"GUIActivation: 打开激活页面失败: {e}")
+            logger.error(f"GUIActivation: 打开激活页面失败: {e}", exc_info=True)
 
     @Slot()
     def cancelActivation(self):

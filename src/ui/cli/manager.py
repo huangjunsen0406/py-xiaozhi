@@ -105,7 +105,7 @@ class CLIViewManager:
             self._event_bus.off(Events.UI_UPDATE_EMOTION, self._on_update_emotion)
             self._event_bus.off(Events.UI_UPDATE_STATUS, self._on_update_status)
         except Exception as e:
-            logger.warning(f"CLIViewManager: 取消订阅失败: {e}")
+            logger.warning(f"CLIViewManager: 取消订阅失败: {e}", exc_info=True)
 
         await self._display.close()
         logger.info("CLIViewManager: 已关闭")

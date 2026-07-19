@@ -105,5 +105,5 @@ def launch_application(app_name: str) -> bool:
         return False
 
     except Exception as e:
-        logger.error(f"[LinuxLauncher] Linux启动失败: {e}")
+        logger.error(f"[LinuxLauncher] Linux启动失败: {e}", exc_info=True)
         return False
