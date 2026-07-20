@@ -1,11 +1,13 @@
-"""音乐播放器 (重构版).
+"""音乐播放器（编排门面）.
 
-使用 FFmpeg 解码 + AudioCodec 播放的架构。
+职责：组合 cache / download / lyrics + 播放主循环。
+- cache: 本地路径与临时目录
+- download: 直链解析与落盘
+- lyrics: 纯函数 lyric_at + 拉取/解析
+- playback: 单一 _playback_loop（音频 + 歌词同步，无独立歌词 task）
 """
 
 import asyncio
-import shutil
-import tempfile
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -17,7 +19,10 @@ import requests
 from src.audio_codecs.music_decoder import MusicDecoder
 from src.constants.constants import AudioConfig
 from src.logging import get_logger
-from src.utils.resource_finder import get_user_cache_dir
+
+from .cache import MusicCache
+from .download import MusicDownloader
+from .lyrics import fetch_kuwo_lyrics, format_lyric_display, lyric_at
 
 if TYPE_CHECKING:
     from src.audio_codecs.audio_codec import AudioCodec
@@ -105,7 +110,6 @@ class MusicPlayer:
         self.decoder: MusicDecoder | None = None
         self._music_queue = asyncio.Queue(maxsize=100)
         self._playback_task: asyncio.Task | None = None
-        self._lyrics_task: asyncio.Task | None = None
 
         self.current_song = ""
         self.current_url = ""
@@ -120,20 +124,28 @@ class MusicPlayer:
 
         self.lyrics: list[tuple[float, str]] = []
         self.current_lyric_index = -1
+        self._last_lyric_tick = 0.0  # 主循环内节流歌词检查
 
-        user_cache_dir = get_user_cache_dir()
-        self.cache_dir = user_cache_dir / "music"
-        self.temp_cache_dir = self.cache_dir / "temp"
-        self._cache_ready = False
-        self._temp_cleaned = False
-
-        # 配置懒加载：首次真正播放/搜索时再读 ConfigManager
+        # 配置懒加载
         self._config: dict | None = None
+
+        # SRP 子模块
+        self._cache = MusicCache()
+        self._downloader = MusicDownloader(self._cache)
 
         self._local_playlist: list[MusicMetadata] | None = None
         self._last_scan_time = 0
 
-        logger.debug("MusicPlayer 实例已创建（缓存/配置懒初始化）")
+        logger.debug("MusicPlayer 实例已创建（cache/download 已挂载，配置懒加载）")
+
+    # 兼容旧属性名（本地扫盘等仍可能用到）
+    @property
+    def cache_dir(self) -> Path:
+        return self._cache.root
+
+    @property
+    def temp_cache_dir(self) -> Path:
+        return self._cache.temp_dir
 
     @staticmethod
     def _load_config() -> dict:
@@ -229,6 +241,7 @@ class MusicPlayer:
         """懒加载音乐相关配置."""
         if self._config is None:
             self._config = self._load_config()
+            self._downloader.set_config(self._config)
             logger.debug(
                 "MusicPlayer 配置已加载: "
                 f"搜索={self._config['SEARCH_URL']}, "
@@ -236,49 +249,10 @@ class MusicPlayer:
             )
         return self._config
 
-    def _ensure_cache_dirs(self) -> None:
-        """确保缓存目录存在（首次播放/下载时调用）."""
-        if self._cache_ready:
-            return
-        try:
-            self.cache_dir.mkdir(parents=True, exist_ok=True)
-            self.temp_cache_dir.mkdir(parents=True, exist_ok=True)
-            self._cache_ready = True
-            logger.debug(f"音乐缓存目录就绪: {self.cache_dir}")
-        except Exception as e:
-            logger.error(f"创建缓存目录失败: {e}", exc_info=True)
-            self.cache_dir = Path(tempfile.gettempdir()) / "xiaozhi_music_cache"
-            self.temp_cache_dir = self.cache_dir / "temp"
-            self.cache_dir.mkdir(parents=True, exist_ok=True)
-            self.temp_cache_dir.mkdir(parents=True, exist_ok=True)
-            self._cache_ready = True
-
-    def _clean_temp_cache_once(self) -> None:
-        """进程内首次使用时清理临时缓存（避免启动期扫盘）."""
-        if self._temp_cleaned:
-            return
-        self._ensure_cache_dirs()
-        self._clean_temp_cache()
-        self._temp_cleaned = True
-
     def _prepare_for_io(self) -> None:
         """播放/搜索/下载前：确保配置与缓存目录就绪."""
-        _ = self.config  # 触发懒加载
-        self._clean_temp_cache_once()
-
-    def _clean_temp_cache(self):
-        """清理临时缓存文件"""
-        try:
-            for file_path in self.temp_cache_dir.glob("*"):
-                try:
-                    if file_path.is_file():
-                        file_path.unlink()
-                        logger.debug(f"已删除临时缓存文件: {file_path.name}")
-                except Exception as e:
-                    logger.warning(f"删除临时缓存文件失败: {file_path.name}, {e}", exc_info=True)
-            logger.info("临时音乐缓存清理完成")
-        except Exception as e:
-            logger.error(f"清理临时缓存目录失败: {e}", exc_info=True)
+        _ = self.config
+        self._cache.prepare()
 
     def _scan_local_music(self, force_refresh: bool = False) -> list[MusicMetadata]:
         """扫描本地音乐缓存"""
@@ -293,13 +267,10 @@ class MusicPlayer:
 
         self._prepare_for_io()
         playlist = []
-        if not self.cache_dir.exists():
+        music_files = self._cache.list_music_files()
+        if not music_files and not self.cache_dir.exists():
             logger.warning(f"缓存目录不存在: {self.cache_dir}")
             return playlist
-
-        music_files = []
-        for pattern in ["*.mp3", "*.m4a", "*.flac", "*.wav", "*.ogg"]:
-            music_files.extend(self.cache_dir.glob(pattern))
 
         logger.debug(f"找到 {len(music_files)} 个音乐文件")
 
@@ -418,16 +389,9 @@ class MusicPlayer:
         """根据文件ID播放本地歌曲"""
         try:
             self._prepare_for_io()
-            file_path = self.cache_dir / f"{file_id}.mp3"
-
-            if not file_path.exists():
-                for ext in [".m4a", ".flac", ".wav", ".ogg"]:
-                    alt_path = self.cache_dir / f"{file_id}{ext}"
-                    if alt_path.exists():
-                        file_path = alt_path
-                        break
-                else:
-                    return {"status": "error", "message": f"本地文件不存在: {file_id}"}
+            file_path = self._cache.find_song_file(file_id)
+            if file_path is None:
+                return {"status": "error", "message": f"本地文件不存在: {file_id}"}
 
             metadata = MusicMetadata(file_path)
             if MUTAGEN_AVAILABLE:
@@ -492,9 +456,11 @@ class MusicPlayer:
             logger.error(f"搜索播放失败: {e}", exc_info=True)
             return {"status": "error", "message": f"操作失败: {str(e)}"}
 
-    async def _cancel_task(self, task: asyncio.Task | None) -> None:
-        """取消并等待任务结束（忽略 CancelledError）."""
+    async def _cancel_playback_task(self) -> None:
+        """取消并等待播放主循环结束."""
+        task = self._playback_task
         if task is None or task.done():
+            self._playback_task = None
             return
         task.cancel()
         try:
@@ -502,37 +468,8 @@ class MusicPlayer:
         except asyncio.CancelledError:
             pass
         except Exception as e:
-            logger.debug(f"等待任务结束时异常: {e}")
-
-    async def _cancel_lyrics_task(self) -> None:
-        await self._cancel_task(self._lyrics_task)
-        self._lyrics_task = None
-
-    async def _cancel_playback_task(self) -> None:
-        await self._cancel_task(self._playback_task)
+            logger.debug(f"等待播放任务结束时异常: {e}")
         self._playback_task = None
-
-    def _spawn_lyrics_task(self) -> None:
-        """启动可追踪的歌词任务（替换旧实例）."""
-        # 同步路径：若旧任务仍在跑，先 cancel（不等待，避免在非 async 场景阻塞）
-        if self._lyrics_task and not self._lyrics_task.done():
-            self._lyrics_task.cancel()
-
-        task = asyncio.create_task(
-            self._lyrics_update_task(), name="music:lyrics_update"
-        )
-
-        def _on_done(t: asyncio.Task) -> None:
-            if self._lyrics_task is t:
-                self._lyrics_task = None
-            if t.cancelled():
-                return
-            exc = t.exception()
-            if exc:
-                logger.error(f"歌词更新任务异常结束: {exc}", exc_info=exc)
-
-        task.add_done_callback(_on_done)
-        self._lyrics_task = task
 
     async def stop(self) -> dict:
         try:
@@ -546,7 +483,6 @@ class MusicPlayer:
                 self.decoder = None
 
             await self._cancel_playback_task()
-            await self._cancel_lyrics_task()
 
             cleared = await self._clear_music_queue()
             logger.debug(f"停止时清空 {cleared} 帧音乐数据")
@@ -555,6 +491,7 @@ class MusicPlayer:
             self.paused = False
             self._pause_source = None
             self.current_position = 0
+            self.current_lyric_index = -1
 
             await self._emit_state_change("stopped", current_song)
             logger.info(f"停止播放: {current_song}")
@@ -638,10 +575,7 @@ class MusicPlayer:
             self.paused = False
             self._pause_source = None
             self.start_play_time = time.time() - self.current_position
-
-            # 歌词任务在 pause 时仍存活（is_playing=True）；若已退出则重启
-            if self._lyrics_task is None or self._lyrics_task.done():
-                self._spawn_lyrics_task()
+            self._last_lyric_tick = 0.0
 
             await self._emit_state_change("playing", self.current_song)
             return {"status": "success", "message": "已恢复播放"}
@@ -892,9 +826,8 @@ class MusicPlayer:
                 await self.decoder.stop()
                 self.decoder = None
 
-            # 取消旧的播放/歌词循环，防止多个 loop 并发
+            # 取消旧的播放主循环，防止多个 loop 并发
             await self._cancel_playback_task()
-            await self._cancel_lyrics_task()
 
             cleared = await self._clear_music_queue()
             if cleared > 0:
@@ -921,6 +854,7 @@ class MusicPlayer:
             self.current_position = start_position
             self.start_play_time = time.time() - start_position
             self.current_lyric_index = -1
+            self._last_lyric_tick = 0.0
 
             position_info = f" from {start_position:.1f}s" if start_position > 0 else ""
             logger.info(f"开始播放: {self.current_song}{position_info}")
@@ -934,8 +868,6 @@ class MusicPlayer:
                     "playing", self.current_song, start_position
                 )
 
-            self._spawn_lyrics_task()
-
             return True
 
         except Exception as e:
@@ -943,12 +875,15 @@ class MusicPlayer:
             return False
 
     async def _playback_loop(self):
-        """播放循环：从队列取PCM，写入AudioCodec"""
+        """唯一播放主循环：写音频 + 按进度同步歌词（方案 A，无独立歌词 task）."""
         try:
             while self.is_playing:
                 if self.paused:
                     await asyncio.sleep(0.1)
                     continue
+
+                # 节流：约 200ms 检查一次歌词（与写音频解耦，不另起 task）
+                await self._tick_lyrics()
 
                 try:
                     audio_data = await asyncio.wait_for(
@@ -969,6 +904,27 @@ class MusicPlayer:
             logger.debug("播放循环被取消")
         except Exception as e:
             logger.error(f"播放循环异常: {e}", exc_info=True)
+
+    async def _tick_lyrics(self) -> None:
+        """用唯一播放时钟推进歌词显示."""
+        if not self.lyrics:
+            return
+        now = time.time()
+        if now - self._last_lyric_tick < 0.2:
+            return
+        self._last_lyric_tick = now
+
+        position = now - self.start_play_time if self.start_play_time > 0 else 0.0
+        hit = lyric_at(self.lyrics, position)
+        if hit is None:
+            return
+        idx, text = hit
+        if idx == self.current_lyric_index:
+            return
+        self.current_lyric_index = idx
+        display = format_lyric_display(text, position, self.total_duration)
+        await self._emit_lyrics_update(display, self.lyrics[idx][0])
+        logger.debug(f"显示歌词: {text}")
 
     async def _write_to_audio_codec(self, pcm_data: np.ndarray):
         """将 PCM 数据写入 AudioCodec（全程 float32）"""
@@ -994,185 +950,32 @@ class MusicPlayer:
             logger.error(f"写入 AudioCodec 失败: {e}", exc_info=True)
 
     async def _get_or_download_file(self, url: str) -> Path | None:
-        """获取或下载文件"""
+        """获取或下载文件（委托 MusicDownloader + MusicCache）."""
         try:
             self._prepare_for_io()
-            cache_filename = f"{self.song_id}.mp3"
-            cache_path = self.cache_dir / cache_filename
-
-            if cache_path.exists():
-                logger.info(f"使用缓存: {cache_path}")
-                return cache_path
-
-            return await self._download_file(url, cache_filename)
-
+            return await self._downloader.get_or_download(
+                self.song_id or "unknown",
+                url,
+                filename=f"{self.song_id or 'unknown'}.mp3",
+            )
         except Exception as e:
             logger.error(f"获取文件失败: {e}", exc_info=True)
             return None
 
-    async def _resolve_download_url(self, api_url: str) -> str | None:
-        """请求直链 API 解析实际音频下载地址."""
-        try:
-            headers = {
-                "X-Request-Key": self.config["URL_API_KEY"],
-                "User-Agent": "lx-music-request",
-            }
-
-            response = await asyncio.to_thread(
-                requests.get,
-                api_url,
-                headers=headers,
-                timeout=15,
-            )
-            response.raise_for_status()
-            data = response.json()
-
-            real_url = None
-            if isinstance(data, dict):
-                real_url = data.get("url")
-                if not real_url:
-                    inner = data.get("data")
-                    if isinstance(inner, dict):
-                        real_url = inner.get("url")
-                    elif isinstance(inner, str):
-                        real_url = inner
-
-            if not real_url:
-                logger.error(f"未能从直链 API 提取播放 URL: {data}")
-                return None
-
-            logger.info(f"解析到播放地址: {real_url[:80]}...")
-            return real_url
-
-        except Exception as e:
-            logger.error(f"解析播放 URL 失败: {e}", exc_info=True)
-            return None
-
-    def _sync_download_file(
-        self, download_url: str, headers: dict, temp_path: Path, cache_path: Path
-    ) -> Path:
-        """同步下载文件并移入缓存（在线程中执行，避免阻塞事件循环）"""
-        response = requests.get(download_url, headers=headers, stream=True, timeout=30)
-        response.raise_for_status()
-
-        with open(temp_path, "wb") as f:
-            for chunk in response.iter_content(chunk_size=8192):
-                if chunk:
-                    f.write(chunk)
-
-        shutil.move(str(temp_path), str(cache_path))
-        return cache_path
-
-    async def _download_file(self, url: str, filename: str) -> Path | None:
-        """下载文件到缓存目录"""
-        temp_path = None
-        try:
-            download_url = await self._resolve_download_url(url)
-            if not download_url:
-                return None
-
-            temp_path = self.temp_cache_dir / f"temp_{int(time.time())}_{filename}"
-            cache_path = self.cache_dir / filename
-
-            result = await asyncio.to_thread(
-                self._sync_download_file,
-                download_url,
-                self.config["HEADERS"],
-                temp_path,
-                cache_path,
-            )
-
-            logger.info(f"音乐下载完成并缓存: {result}")
-            return result
-
-        except Exception as e:
-            logger.error(f"下载失败: {e}", exc_info=True)
-            if temp_path and temp_path.exists():
-                try:
-                    temp_path.unlink()
-                    logger.debug(f"已清理临时下载文件: {temp_path}")
-                except Exception as e:
-                    logger.debug(f"清理临时文件失败: {e}")
-            return None
-
     async def _fetch_lyrics(self, song_id: str):
-        """获取歌词.
-
-        Args:
-            song_id: 歌曲 ID (酷我数字 ID)
-        """
-        try:
-            self.lyrics = []
-
-            lyrics_url = self.config["LYRICS_URL"]
-            params = {"musicId": song_id}
-
-            logger.info(f"获取歌词: ID={song_id}")
-
-            response = await asyncio.to_thread(
-                requests.get,
-                lyrics_url,
-                params=params,
-                headers=self.config["HEADERS"],
-                timeout=10,
-            )
-            response.raise_for_status()
-
-            data = response.json()
-
-            if data.get("status") != 200:
-                logger.info("该歌曲暂无歌词")
-                return
-
-            lrc_list = data.get("data", {}).get("lrclist", [])
-            if not lrc_list:
-                logger.warning("未获取到歌词数据")
-                return
-
-            filtered_count = 0
-            _METADATA_PREFIXES = (
-                "作词",
-                "作曲",
-                "编曲",
-                "制作",
-                "演唱",
-                "原唱",
-                "翻唱",
-            )
-
-            for item in lrc_list:
-                time_str = item.get("time", "")
-                text = item.get("lineLyric", "").strip()
-
-                if not text or not time_str:
-                    continue
-
-                try:
-                    time_sec = float(time_str)
-                except (ValueError, TypeError):
-                    continue
-
-                if text.startswith(_METADATA_PREFIXES):
-                    filtered_count += 1
-                    continue
-
-                self.lyrics.append((time_sec, text))
-
-            if self.total_duration == 0 and self.lyrics:
-                last_time, _ = self.lyrics[-1]
-                self.total_duration = last_time + 5.0
-                logger.info(f"从歌词提取歌曲时长: {self.total_duration}秒")
-
-            logger.info(
-                f"成功获取歌词，共 {len(self.lyrics)} 行"
-                f"（过滤 {filtered_count} 行元数据）"
-            )
-
-        except Exception as e:
-            logger.error(f"获取歌词失败: {e}", exc_info=True)
+        """获取歌词（委托 lyrics 模块）."""
+        self.lyrics = await fetch_kuwo_lyrics(
+            song_id,
+            lyrics_url=self.config["LYRICS_URL"],
+            headers=self.config["HEADERS"],
+        )
+        if self.total_duration == 0 and self.lyrics:
+            last_time, _ = self.lyrics[-1]
+            self.total_duration = last_time + 5.0
+            logger.info(f"从歌词提取歌曲时长: {self.total_duration}秒")
 
     async def _handle_playback_finished(self):
-        """处理播放完成"""
+        """处理播放完成（仅由播放主循环触发，单一完成路径）."""
         if self.is_playing:
             logger.info(f"歌曲播放完成: {self.current_song}")
 
@@ -1180,81 +983,19 @@ class MusicPlayer:
                 await self.decoder.stop()
                 self.decoder = None
 
-            # 播放循环可能是调用方自身；只清引用避免自 cancel 死锁感
+            # 播放循环可能是调用方自身；只清引用
             if self._playback_task and not self._playback_task.done():
                 if self._playback_task is not asyncio.current_task():
                     await self._cancel_playback_task()
                 else:
                     self._playback_task = None
-            await self._cancel_lyrics_task()
 
             self.is_playing = False
             self.paused = False
             self.current_position = self.total_duration
+            self.current_lyric_index = -1
 
             await self._emit_state_change("completed", self.current_song)
-
-    async def _lyrics_update_task(self):
-        """歌词更新任务"""
-        logger.info(f"歌词更新任务启动，歌词数量: {len(self.lyrics)}")
-
-        if not self.lyrics:
-            logger.warning("没有歌词数据，歌词更新任务退出")
-            return
-
-        try:
-            while self.is_playing:
-                if self.paused:
-                    await asyncio.sleep(0.5)
-                    continue
-
-                current_time = time.time() - self.start_play_time
-
-                # 只有当时长有效时才检查播放完成（避免时长为0时立即完成）
-                if self.total_duration > 0 and current_time >= self.total_duration:
-                    await self._handle_playback_finished()
-                    break
-
-                current_index = self._find_current_lyric_index(current_time)
-
-                if current_index != self.current_lyric_index:
-                    await self._display_current_lyric(current_index)
-
-                await asyncio.sleep(0.2)
-        except asyncio.CancelledError:
-            logger.debug("歌词更新任务已取消")
-            raise
-        except Exception as e:
-            logger.error(f"歌词更新任务异常: {e}", exc_info=True)
-
-    def _find_current_lyric_index(self, current_time: float) -> int:
-        """查找当前时间对应的歌词索引"""
-        next_lyric_index = None
-        for i, (time_sec, _) in enumerate(self.lyrics):
-            if time_sec > current_time - 0.5:
-                next_lyric_index = i
-                break
-
-        if next_lyric_index is not None and next_lyric_index > 0:
-            return next_lyric_index - 1
-        elif next_lyric_index is None and self.lyrics:
-            return len(self.lyrics) - 1
-        else:
-            return 0
-
-    async def _display_current_lyric(self, current_index: int):
-        """显示当前歌词"""
-        self.current_lyric_index = current_index
-
-        if current_index < len(self.lyrics):
-            time_sec, text = self.lyrics[current_index]
-
-            position_str = self._format_time(time.time() - self.start_play_time)
-            duration_str = self._format_time(self.total_duration)
-            display_text = f"[{position_str}/{duration_str}] {text}"
-
-            await self._emit_lyrics_update(display_text, time_sec)
-            logger.debug(f"显示歌词: {text}")
 
     def _format_time(self, seconds: float) -> str:
         """将秒数格式化为 mm:ss 格式"""
@@ -1363,8 +1104,9 @@ class MusicPlayer:
     def __del__(self):
         """清理资源（仅在曾初始化缓存时清理）"""
         try:
-            if getattr(self, "_cache_ready", False):
-                self._clean_temp_cache()
+            cache = getattr(self, "_cache", None)
+            if cache is not None and getattr(cache, "_ready", False):
+                cache.clean_temp()
         except Exception as e:
             logger.debug(f"__del__ 清理临时缓存失败: {e}")
 

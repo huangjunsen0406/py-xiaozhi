@@ -358,27 +358,58 @@ async def test_cli_view_manager_uses_task_manager_for_emit():
 
 
 @pytest.mark.asyncio
-async def test_music_player_lyrics_task_cancelled_on_stop():
-    """歌词任务应在 stop 时被取消，不再 fire-and-forget."""
+async def test_music_player_tick_lyrics_in_playback_path():
+    """歌词由主循环 _tick_lyrics 驱动，无独立 lyrics task."""
     from src.mcp.tools.music.music_player import MusicPlayer
 
     player = MusicPlayer()
-    player.is_playing = True
-    player.lyrics = [(0.0, "line")]  # 非空，任务会进入循环
-    player.start_play_time = __import__("time").time()
-    player.total_duration = 9999
+    assert not hasattr(player, "_lyrics_task") or player.__dict__.get("_lyrics_task") is None
 
-    player._spawn_lyrics_task()
-    assert player._lyrics_task is not None
-    task = player._lyrics_task
-    await asyncio.sleep(0.05)
-    assert not task.done() or task.cancelled()
+    emitted = []
 
-    # stop 要求 is_playing；走内部 cancel 路径
-    await player._cancel_lyrics_task()
-    await asyncio.sleep(0)
-    assert player._lyrics_task is None
-    assert task.cancelled() or task.done()
+    async def fake_emit(text, time_sec=0):
+        emitted.append(text)
+
+    player.lyrics = [(0.0, "hello"), (5.0, "world")]
+    player.start_play_time = __import__("time").time() - 0.1
+    player.total_duration = 100
+    player.current_lyric_index = -1
+    player._last_lyric_tick = 0.0
+    player._emit_lyrics_update = fake_emit  # type: ignore
+
+    await player._tick_lyrics()
+    assert player.current_lyric_index == 0
+    assert emitted and "hello" in emitted[0]
+
+    # 节流：立即再 tick 不应重复
+    n = len(emitted)
+    await player._tick_lyrics()
+    assert len(emitted) == n
+
+
+def test_lyric_at_pure_function():
+    from src.mcp.tools.music.lyrics import format_lyric_display, lyric_at
+
+    lyrics = [(0.0, "a"), (5.0, "b"), (10.0, "c")]
+    assert lyric_at(lyrics, 0.0)[1] == "a"
+    # 算法 lead=0.5：在 5.6 时进入 b 句
+    assert lyric_at(lyrics, 5.6)[1] == "b"
+    assert lyric_at(lyrics, 99.0)[1] == "c"
+    assert lyric_at([], 1.0) is None
+    assert "[00:01/03:00]" in format_lyric_display("x", 1.0, 180.0)
+
+
+def test_music_cache_paths(tmp_path):
+    from src.mcp.tools.music.cache import MusicCache
+
+    c = MusicCache(root=tmp_path / "music")
+    c.prepare()
+    p = c.path_for_song("123")
+    assert p.parent == c.root
+    assert not c.has("123")
+    p.write_bytes(b"x")
+    assert c.has("123")
+    assert c.find_song_file("123") == p
 
 
 def test_gui_activation_no_ensure_future_or_get_event_loop():
@@ -443,9 +474,8 @@ def test_music_player_init_is_lazy():
 
     p = MusicPlayer()
     assert p._config is None
-    assert p._cache_ready is False
-    assert p._temp_cleaned is False
-    # 访问 config 才加载
+    assert p._cache._ready is False
+    assert p._cache._temp_cleaned is False
     cfg = p.config
     assert isinstance(cfg, dict)
     assert "SEARCH_URL" in cfg
