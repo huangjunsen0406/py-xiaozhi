@@ -1,7 +1,4 @@
-"""歌词数据与同步（单一职责：解析 + 按进度取句）.
-
-不含独立轮询 task；由播放主循环根据 position 调用 lyric_at。
-"""
+"""歌词拉取、解析，以及按播放进度取当前句."""
 
 from __future__ import annotations
 
@@ -14,8 +11,10 @@ from src.logging import get_logger
 
 logger = get_logger()
 
-LyricLine = tuple[float, str]  # (time_sec, text)
+# (时间秒, 文本)
+LyricLine = tuple[float, str]
 
+# 过滤掉作词/作曲这类信息行
 _METADATA_PREFIXES = (
     "作词",
     "作曲",
@@ -30,10 +29,9 @@ _METADATA_PREFIXES = (
 def lyric_at(
     lyrics: list[LyricLine], current_time: float, *, lead: float = 0.5
 ) -> tuple[int, str] | None:
-    """根据播放进度取当前歌词行（纯函数）.
+    """按当前播放时间找该显示哪句歌词.
 
-    Returns:
-        (index, text) 或 None（无歌词）
+    返回 (下标, 文本)；没有歌词返回 None。
     """
     if not lyrics:
         return None
@@ -57,7 +55,7 @@ def lyric_at(
 def format_lyric_display(
     text: str, position: float, duration: float
 ) -> str:
-    """格式化为 UI 展示文案."""
+    """拼 UI 上用的歌词行，例如 [00:12/03:45] 歌词内容."""
     return f"[{_fmt(position)}/{_fmt(duration)}] {text}"
 
 
@@ -68,10 +66,9 @@ def _fmt(seconds: float) -> str:
 
 
 def parse_kuwo_lrc_list(lrc_list: list[dict]) -> tuple[list[LyricLine], int]:
-    """解析酷我 lrclist → 歌词行列表.
+    """解析酷我返回的 lrclist.
 
-    Returns:
-        (lyrics, filtered_metadata_count)
+    返回 (歌词列表, 被过滤的信息行数量).
     """
     lyrics: list[LyricLine] = []
     filtered = 0
@@ -97,7 +94,7 @@ async def fetch_kuwo_lyrics(
     lyrics_url: str,
     headers: dict[str, Any] | None = None,
 ) -> list[LyricLine]:
-    """从酷我接口拉取并解析歌词."""
+    """从酷我接口拉歌词并解析."""
     try:
         logger.info(f"获取歌词: ID={song_id}")
         response = await asyncio.to_thread(

@@ -1,7 +1,4 @@
-"""音乐下载（单一职责：解析直链 + HTTP 落盘）.
-
-依赖 MusicCache 提供路径；不负责播放与搜歌。
-"""
+"""音乐下载：解析直链并写到本地缓存."""
 
 from __future__ import annotations
 
@@ -20,7 +17,7 @@ logger = get_logger()
 
 
 class MusicDownloader:
-    """将远程音频下载到本地缓存."""
+    """下载音频文件，优先走本地缓存."""
 
     def __init__(self, cache: MusicCache, config: dict[str, Any] | None = None) -> None:
         self._cache = cache
@@ -36,10 +33,9 @@ class MusicDownloader:
         *,
         filename: str | None = None,
     ) -> Path | None:
-        """缓存命中则返回路径，否则下载后返回."""
+        """有缓存直接用，没有再下载."""
         self._cache.prepare()
         name = filename or f"{song_id}.mp3"
-        # 优先按 song_id 找任意扩展名
         hit = self._cache.find_song_file(song_id)
         if hit is not None:
             logger.info(f"使用缓存: {hit}")
@@ -53,7 +49,7 @@ class MusicDownloader:
         return await self.download(api_url, name)
 
     async def resolve_play_url(self, api_url: str) -> str | None:
-        """请求直链 API 解析实际音频 URL."""
+        """调直链 API，拿到真正的音频 URL."""
         try:
             headers = {
                 "X-Request-Key": self._config.get("URL_API_KEY", "share-v3"),
@@ -91,6 +87,7 @@ class MusicDownloader:
     def _sync_download(
         self, download_url: str, headers: dict, temp_path: Path, cache_path: Path
     ) -> Path:
+        """同步下载（丢线程里跑，别堵事件循环）."""
         response = requests.get(
             download_url, headers=headers, stream=True, timeout=30
         )
@@ -103,7 +100,7 @@ class MusicDownloader:
         return cache_path
 
     async def download(self, api_url: str, filename: str) -> Path | None:
-        """下载到缓存目录."""
+        """下载并写入缓存目录."""
         self._cache.prepare()
         temp_path = None
         try:

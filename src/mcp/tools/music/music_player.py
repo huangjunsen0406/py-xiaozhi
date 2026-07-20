@@ -1,10 +1,7 @@
-"""音乐播放器（编排门面）.
+"""音乐播放器.
 
-职责：组合 cache / download / lyrics + 播放主循环。
-- cache: 本地路径与临时目录
-- download: 直链解析与落盘
-- lyrics: 纯函数 lyric_at + 拉取/解析
-- playback: 单一 _playback_loop（音频 + 歌词同步，无独立歌词 task）
+FFmpeg 解码 + AudioCodec 播放；缓存/下载/歌词拆到同目录其它文件。
+歌词跟着播放循环走，不再单独起一个 task 轮询。
 """
 
 import asyncio
@@ -124,21 +121,20 @@ class MusicPlayer:
 
         self.lyrics: list[tuple[float, str]] = []
         self.current_lyric_index = -1
-        self._last_lyric_tick = 0.0  # 主循环内节流歌词检查
+        # 限制歌词刷新频率，别每帧都算
+        self._last_lyric_tick = 0.0
 
-        # 配置懒加载
+        # 配置按需加载
         self._config: dict | None = None
 
-        # SRP 子模块
         self._cache = MusicCache()
         self._downloader = MusicDownloader(self._cache)
 
         self._local_playlist: list[MusicMetadata] | None = None
         self._last_scan_time = 0
 
-        logger.debug("MusicPlayer 实例已创建（cache/download 已挂载，配置懒加载）")
+        logger.debug("MusicPlayer 实例已创建")
 
-    # 兼容旧属性名（本地扫盘等仍可能用到）
     @property
     def cache_dir(self) -> Path:
         return self._cache.root
@@ -238,7 +234,7 @@ class MusicPlayer:
 
     @property
     def config(self) -> dict:
-        """懒加载音乐相关配置."""
+        """读取音乐配置（第一次访问时从 ConfigManager 加载）."""
         if self._config is None:
             self._config = self._load_config()
             self._downloader.set_config(self._config)
@@ -250,7 +246,7 @@ class MusicPlayer:
         return self._config
 
     def _prepare_for_io(self) -> None:
-        """播放/搜索/下载前：确保配置与缓存目录就绪."""
+        """搜歌/下载/播放前准备一下配置和缓存目录."""
         _ = self.config
         self._cache.prepare()
 
@@ -826,7 +822,7 @@ class MusicPlayer:
                 await self.decoder.stop()
                 self.decoder = None
 
-            # 取消旧的播放主循环，防止多个 loop 并发
+            # 先停掉上一次的播放循环
             await self._cancel_playback_task()
 
             cleared = await self._clear_music_queue()
@@ -875,14 +871,14 @@ class MusicPlayer:
             return False
 
     async def _playback_loop(self):
-        """唯一播放主循环：写音频 + 按进度同步歌词（方案 A，无独立歌词 task）."""
+        """播放循环：写 PCM，顺便按进度刷歌词."""
         try:
             while self.is_playing:
                 if self.paused:
                     await asyncio.sleep(0.1)
                     continue
 
-                # 节流：约 200ms 检查一次歌词（与写音频解耦，不另起 task）
+                # 大约 200ms 刷一次歌词
                 await self._tick_lyrics()
 
                 try:
@@ -906,7 +902,7 @@ class MusicPlayer:
             logger.error(f"播放循环异常: {e}", exc_info=True)
 
     async def _tick_lyrics(self) -> None:
-        """用唯一播放时钟推进歌词显示."""
+        """根据当前播放位置更新歌词显示."""
         if not self.lyrics:
             return
         now = time.time()
@@ -950,7 +946,7 @@ class MusicPlayer:
             logger.error(f"写入 AudioCodec 失败: {e}", exc_info=True)
 
     async def _get_or_download_file(self, url: str) -> Path | None:
-        """获取或下载文件（委托 MusicDownloader + MusicCache）."""
+        """有缓存用缓存，没有就下载."""
         try:
             self._prepare_for_io()
             return await self._downloader.get_or_download(
@@ -963,7 +959,7 @@ class MusicPlayer:
             return None
 
     async def _fetch_lyrics(self, song_id: str):
-        """获取歌词（委托 lyrics 模块）."""
+        """拉取并解析歌词."""
         self.lyrics = await fetch_kuwo_lyrics(
             song_id,
             lyrics_url=self.config["LYRICS_URL"],
@@ -975,7 +971,7 @@ class MusicPlayer:
             logger.info(f"从歌词提取歌曲时长: {self.total_duration}秒")
 
     async def _handle_playback_finished(self):
-        """处理播放完成（仅由播放主循环触发，单一完成路径）."""
+        """播放结束清理."""
         if self.is_playing:
             logger.info(f"歌曲播放完成: {self.current_song}")
 
@@ -983,7 +979,7 @@ class MusicPlayer:
                 await self.decoder.stop()
                 self.decoder = None
 
-            # 播放循环可能是调用方自身；只清引用
+            # 若 finish 是从播放循环里调过来的，别 cancel 自己
             if self._playback_task and not self._playback_task.done():
                 if self._playback_task is not asyncio.current_task():
                     await self._cancel_playback_task()

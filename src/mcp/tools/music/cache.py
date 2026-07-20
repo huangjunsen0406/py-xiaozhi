@@ -1,7 +1,4 @@
-"""音乐本地缓存（单一职责：路径、命中、临时目录、清理）.
-
-不负责网络下载与播放。
-"""
+"""本地音乐缓存目录管理."""
 
 from __future__ import annotations
 
@@ -16,7 +13,7 @@ logger = get_logger()
 
 
 class MusicCache:
-    """本地音乐文件缓存."""
+    """管理 music 缓存目录和临时文件."""
 
     def __init__(self, root: Path | None = None) -> None:
         base = root or (get_user_cache_dir() / "music")
@@ -26,7 +23,7 @@ class MusicCache:
         self._temp_cleaned = False
 
     def ensure(self) -> None:
-        """确保缓存目录存在."""
+        """创建缓存目录（幂等）."""
         if self._ready:
             return
         try:
@@ -43,21 +40,21 @@ class MusicCache:
             self._ready = True
 
     def prepare(self) -> None:
-        """首次 IO 前：建目录 + 清理 temp（进程内一次）."""
+        """首次用缓存前调用：建目录，并清理一次 temp."""
         self.ensure()
         if not self._temp_cleaned:
             self.clean_temp()
             self._temp_cleaned = True
 
     def path_for_song(self, song_id: str, ext: str = ".mp3") -> Path:
-        """歌曲缓存路径."""
+        """根据 song_id 生成缓存文件路径."""
         self.ensure()
         if not ext.startswith("."):
             ext = f".{ext}"
         return self.root / f"{song_id}{ext}"
 
     def find_song_file(self, song_id: str) -> Path | None:
-        """按 song_id 查找已缓存文件（多种扩展名）."""
+        """按 song_id 找已缓存的文件（试常见后缀）."""
         self.ensure()
         for ext in (".mp3", ".m4a", ".flac", ".wav", ".ogg"):
             p = self.root / f"{song_id}{ext}"
@@ -69,12 +66,12 @@ class MusicCache:
         return self.path_for_song(song_id, ext).exists()
 
     def temp_path(self, filename: str) -> Path:
-        """下载用临时文件路径."""
+        """下载过程中用的临时文件路径."""
         self.ensure()
         return self.temp_dir / f"temp_{int(time.time())}_{filename}"
 
     def list_music_files(self) -> list[Path]:
-        """列出缓存中的音乐文件."""
+        """列出缓存里的音乐文件."""
         self.ensure()
         if not self.root.exists():
             return []
@@ -84,7 +81,7 @@ class MusicCache:
         return files
 
     def clean_temp(self) -> None:
-        """清理临时目录."""
+        """清空 temp 目录."""
         try:
             if not self.temp_dir.exists():
                 return
