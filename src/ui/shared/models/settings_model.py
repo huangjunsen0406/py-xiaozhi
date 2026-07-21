@@ -103,13 +103,17 @@ class SettingsModel(BaseModel):
 
     @Slot()
     def save(self):
-        """保存配置到文件."""
+        """保存配置到文件，并让运行中的 ConfigManager 重新读盘."""
         try:
             with open(self._config_path, "w", encoding="utf-8") as f:
                 json.dump(self._config, f, ensure_ascii=False, indent=2)
+            # SettingsModel 自己有一份 dict，ConfigManager 单例要同步
+            try:
+                self._config_manager.reload_config()
+            except Exception as e:
+                logger.warning(f"ConfigManager 重载失败: {e}", exc_info=True)
             logger.info("设置已保存")
             self.statusMessage.emit("配置已保存")
-            # 发送配置保存信号，触发热重载
             self.configSaved.emit()
         except Exception as e:
             logger.error(f"保存配置失败: {e}", exc_info=True)

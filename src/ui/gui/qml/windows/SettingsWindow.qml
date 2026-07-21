@@ -273,6 +273,8 @@ AppWindow {
                         }
 
                         onClicked: {
+                            // 先抢焦点，让当前 TextField 触发 editingFinished 写回模型
+                            saveBtn.forceActiveFocus()
                             settingsModel.save()
                             root.close()
                         }
