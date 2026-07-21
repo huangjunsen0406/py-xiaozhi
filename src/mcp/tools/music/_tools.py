@@ -80,22 +80,53 @@ async def tool_music_stop(args):
 @mcp_tool(
     name="music_player.seek",
     description=(
-        "跳转到歌曲的指定位置。position 参数单位为秒（从开头计算）。"
-        "用于用户要求'快进到2分钟'、'跳到副歌部分'、'回到开头'、'跳转30%'、'跳到30秒'等场景。"
-        "注意：如果用户说'快进30秒'，需要先获取当前位置，再加上30秒。"
+        "【进度/跳转专用】跳转到当前歌曲的指定位置。"
+        "用户说「跳到30%」「进度跳转20%」「跳到一半」时：必须用 percent（0-100），"
+        "由播放器按总时长自动换算秒数，不要查歌词、不要猜位置。"
+        "用户说「跳到2分钟」「跳到90秒」「回到开头」时：用 position（秒，从0开始）。"
+        "「快进30秒」：先 get_status 取当前位置，再 position=当前秒+30。"
+        "与 get_lyrics 无关；百分比跳转不需要歌词。"
     ),
-    props=[Prop("position", PropType.INT, min_val=0)],
+    props=[
+        # -1 表示未传；percent 优先于 position
+        Prop("percent", PropType.INT, default=-1),
+        Prop("position", PropType.INT, default=-1),
+    ],
 )
 async def tool_music_seek(args):
-    result = await _call_player("seek", args)
+    percent = int(args.get("percent", -1))
+    position = int(args.get("position", -1))
+    kwargs = {}
+    if percent >= 0:
+        kwargs["percent"] = percent
+    elif position >= 0:
+        kwargs["position"] = position
+    else:
+        return "请指定 percent（0-100）或 position（秒）"
+    result = await _player().seek(**kwargs)
     return result.get("message", "跳转完成")
+
+
+@mcp_tool(
+    name="music_player.get_status",
+    description=(
+        "查询当前播放状态：歌名、是否播放/暂停、总时长（秒）、当前位置（秒）、进度百分比。"
+        "用于「现在播到哪了」「这首歌多长」「快进前先看进度」等。"
+        "不要用本工具代替 seek；跳转请调用 seek。"
+    ),
+)
+async def tool_music_get_status(args):
+    result = await _player().get_status()
+    return result.get("message", "无法获取状态")
 
 
 @mcp_tool(
     name="music_player.get_lyrics",
     description=(
-        "获取当前播放歌曲的歌词。返回完整歌词及时间戳。"
-        "用于用户询问'这首歌的歌词是什么'、'帮我看看歌词'、'歌词里唱的什么'等场景。"
+        "仅用于获取当前歌曲的歌词文本。"
+        "当用户问「歌词是什么」「唱了什么」时调用。"
+        "禁止用于：进度跳转、跳到百分之几、快进/快退、计算播放位置——"
+        "那些请用 music_player.seek（百分比用 percent）。"
     ),
 )
 async def tool_music_get_lyrics(args):

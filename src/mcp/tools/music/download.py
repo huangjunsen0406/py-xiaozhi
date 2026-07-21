@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import asyncio
+import re
 import shutil
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 import requests
 
@@ -15,13 +17,19 @@ from .cache import MusicCache
 
 logger = get_logger()
 
+# 直链搞不定时，走酷我官方试听
+_KUWO_PLAYURL = "https://wapi.kuwo.cn/api/v1/www/music/playUrl"
+_QUALITY_FALLBACKS = ("320k", "128k")
+
 
 class MusicDownloader:
-    """下载音频文件，优先走本地缓存."""
+    """下载音频，能命中缓存就不用下."""
 
     def __init__(self, cache: MusicCache, config: dict[str, Any] | None = None) -> None:
         self._cache = cache
         self._config = config or {}
+        # 上次失败原因，给上层提示用
+        self.last_error: str | None = None
 
     def set_config(self, config: dict[str, Any]) -> None:
         self._config = config
@@ -46,82 +54,288 @@ class MusicDownloader:
             logger.info(f"使用缓存: {cache_path}")
             return cache_path
 
-        return await self.download(api_url, name)
+        return await self.download(api_url, name, song_id=song_id)
 
-    async def resolve_play_url(self, api_url: str) -> str | None:
-        """调直链 API，拿到真正的音频 URL."""
+    @staticmethod
+    def _extract_url_from_payload(data: Any) -> str | None:
+        # 各家 JSON 字段不太一样，尽量抠出 url
+        if not isinstance(data, dict):
+            return None
+
+        real_url = data.get("url")
+        if isinstance(real_url, str) and real_url.startswith("http"):
+            return real_url
+
+        inner = data.get("data")
+        if isinstance(inner, dict):
+            nested = inner.get("url")
+            if isinstance(nested, str) and nested.startswith("http"):
+                return nested
+        elif isinstance(inner, str) and inner.startswith("http"):
+            return inner
+
+        return None
+
+    @staticmethod
+    def _describe_api_failure(data: Any) -> str:
+        if not isinstance(data, dict):
+            return "直链 API 返回无法解析的数据"
+
+        code = data.get("code")
+        msg = str(data.get("msg") or data.get("message") or "").strip()
+
+        # lx-music-api 常见 code
+        if code == 1 or "禁止批量下载" in msg or "block ip" in msg.lower():
+            return (
+                "直链 API 已封禁当前 IP（禁止批量下载）。"
+                "可切换网络/IP，或在设置中更换 MUSIC.URL_API"
+            )
+        if code == 5 or "too many" in msg.lower():
+            return "直链 API 请求过于频繁，请稍后再试"
+        if code == 2:
+            return "直链 API 获取播放地址失败（曲库无源或解析失败）"
+        if code == 4:
+            return "直链 API 内部错误"
+        if code == 6:
+            return "直链 API 参数错误"
+
+        if msg:
+            return f"直链 API 失败: {msg}"
+        return f"直链 API 未能返回播放 URL: {data}"
+
+    def _lx_headers(self) -> dict[str, str]:
+        # 对齐 Huibq/keep-alive render_api.js：只认 Key + UA
+        return {
+            "X-Request-Key": self._config.get("URL_API_KEY", "share-v3"),
+            "User-Agent": "lx-music-request",
+            "Content-Type": "application/json",
+        }
+
+    def _browser_headers(self) -> dict[str, str]:
+        # 酷我官方 playUrl 用
+        headers = dict(self._config.get("HEADERS") or {})
+        headers.setdefault(
+            "User-Agent",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+            "(KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+        )
+        headers.setdefault("Referer", "https://www.kuwo.cn/")
+        headers.setdefault("Accept", "application/json, text/plain, */*")
+        return headers
+
+    def media_headers(self, media_url: str) -> dict[str, str]:
+        """给 CDN / FFmpeg 流式播放用的请求头（不是 JSON API 那套）."""
+        host = (urlparse(media_url).hostname or "").lower()
+        ua = (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+            "(KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+        )
+        headers = {
+            "User-Agent": ua,
+            "Accept": "*/*",
+            "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+            "Connection": "keep-alive",
+        }
+        if "kuwo" in host or "sycdn" in host or "bd-lv" in host:
+            headers["Referer"] = "https://www.kuwo.cn/"
+            headers["Origin"] = "https://www.kuwo.cn"
+        return headers
+
+    # 旧名
+    def _download_headers(self, download_url: str) -> dict[str, str]:
+        return self.media_headers(download_url)
+
+    async def _fetch_json(
+        self, url: str, headers: dict[str, str], *, timeout: int = 15
+    ) -> Any | None:
         try:
-            headers = {
-                "X-Request-Key": self._config.get("URL_API_KEY", "share-v3"),
-                "User-Agent": "lx-music-request",
-            }
             response = await asyncio.to_thread(
-                requests.get,
-                api_url,
-                headers=headers,
-                timeout=15,
+                requests.get, url, headers=headers, timeout=timeout
             )
             response.raise_for_status()
-            data = response.json()
-
-            real_url = None
-            if isinstance(data, dict):
-                real_url = data.get("url")
-                if not real_url:
-                    inner = data.get("data")
-                    if isinstance(inner, dict):
-                        real_url = inner.get("url")
-                    elif isinstance(inner, str):
-                        real_url = inner
-
-            if not real_url:
-                logger.error(f"未能从直链 API 提取播放 URL: {data}")
-                return None
-
-            logger.info(f"解析到播放地址: {real_url[:80]}...")
-            return real_url
+            return response.json()
         except Exception as e:
-            logger.error(f"解析播放 URL 失败: {e}", exc_info=True)
+            logger.warning(f"请求失败 {urlparse(url).netloc}: {e}")
+            return None
+
+    def _candidate_lx_urls(self, api_url: str) -> list[str]:
+        # 先按配置音质试，再试 128k
+        urls = [api_url]
+        m = re.search(r"/url/[^/]+/[^/]+/([^/?#]+)", api_url)
+        if not m:
+            return urls
+        current_quality = m.group(1)
+        for q in _QUALITY_FALLBACKS:
+            if q == current_quality:
+                continue
+            alt = re.sub(
+                r"(/url/[^/]+/[^/]+/)[^/?#]+",
+                rf"\g<1>{q}",
+                api_url,
+                count=1,
+            )
+            if alt not in urls:
+                urls.append(alt)
+        return urls
+
+    async def _resolve_via_lx_api(self, api_url: str) -> tuple[str | None, str | None]:
+        last_reason: str | None = None
+        headers = self._lx_headers()
+
+        for candidate in self._candidate_lx_urls(api_url):
+            logger.debug(f"尝试直链 API: {candidate}")
+            data = await self._fetch_json(candidate, headers)
+            if data is None:
+                last_reason = "直链 API 网络请求失败"
+                continue
+
+            real_url = self._extract_url_from_payload(data)
+            if real_url:
+                logger.info(f"直链 API 解析成功: {real_url[:80]}...")
+                return real_url, None
+
+            last_reason = self._describe_api_failure(data)
+            logger.warning(f"直链 API 未返回 URL: {data}")
+
+            # IP 被封了换音质也没用
+            if "封禁" in (last_reason or "") or "禁止批量下载" in str(data):
+                break
+
+        return None, last_reason
+
+    async def _resolve_via_kuwo_official(
+        self, song_id: str
+    ) -> tuple[str | None, str | None]:
+        # 免费歌能听；付费歌官方会直接说不行
+        if not song_id or song_id == "unknown":
+            return None, "缺少歌曲 ID，无法回退官方接口"
+
+        headers = self._browser_headers()
+        last_reason: str | None = None
+
+        for br in ("320kmp3", "128kmp3"):
+            url = f"{_KUWO_PLAYURL}?mid={song_id}&type=music&httpsStatus=1&br={br}"
+            logger.debug(f"尝试酷我官方 playUrl: mid={song_id} br={br}")
+            data = await self._fetch_json(url, headers)
+            if data is None:
+                last_reason = "酷我官方接口网络请求失败"
+                continue
+
+            real_url = self._extract_url_from_payload(data)
+            if real_url:
+                logger.info(f"酷我官方接口解析成功: {real_url[:80]}...")
+                return real_url, None
+
+            msg = ""
+            if isinstance(data, dict):
+                msg = str(data.get("msg") or data.get("message") or "").strip()
+            if "付费" in msg:
+                last_reason = f"该歌曲为付费内容，官方接口无法试听（{msg}）"
+                break
+            last_reason = msg or f"酷我官方接口未返回 URL: {data}"
+            logger.warning(last_reason)
+
+        return None, last_reason
+
+    async def resolve_play_url(
+        self, api_url: str, *, song_id: str | None = None
+    ) -> str | None:
+        # 直链 → 降音质 → 官方接口
+        self.last_error = None
+        reasons: list[str] = []
+
+        try:
+            real_url, reason = await self._resolve_via_lx_api(api_url)
+            if real_url:
+                return real_url
+            if reason:
+                reasons.append(reason)
+
+            # 没传 song_id 时从 url 路径里抠
+            sid = song_id
+            if not sid or sid == "unknown":
+                m = re.search(r"/url/[^/]+/([^/]+)/", api_url)
+                if m:
+                    sid = m.group(1)
+
+            if sid:
+                real_url, reason = await self._resolve_via_kuwo_official(sid)
+                if real_url:
+                    return real_url
+                if reason:
+                    reasons.append(reason)
+
+            self.last_error = "；".join(reasons) if reasons else "未能解析播放地址"
+            logger.error(f"未能解析播放 URL: {self.last_error}")
+            return None
+        except Exception as e:
+            self.last_error = f"解析播放 URL 异常: {e}"
+            logger.error(self.last_error, exc_info=True)
             return None
 
     def _sync_download(
         self, download_url: str, headers: dict, temp_path: Path, cache_path: Path
     ) -> Path:
-        """同步下载（丢线程里跑，别堵事件循环）."""
-        response = requests.get(
-            download_url, headers=headers, stream=True, timeout=30
-        )
-        response.raise_for_status()
-        with open(temp_path, "wb") as f:
-            for chunk in response.iter_content(chunk_size=8192):
-                if chunk:
-                    f.write(chunk)
-        shutil.move(str(temp_path), str(cache_path))
-        return cache_path
+        # CDN 偶发 RemoteDisconnected，多试两次
+        last_err: Exception | None = None
+        for attempt in range(3):
+            try:
+                if temp_path.exists():
+                    temp_path.unlink()
+                with requests.get(
+                    download_url,
+                    headers=headers,
+                    stream=True,
+                    timeout=45,
+                    allow_redirects=True,
+                ) as response:
+                    response.raise_for_status()
+                    with open(temp_path, "wb") as f:
+                        for chunk in response.iter_content(chunk_size=64 * 1024):
+                            if chunk:
+                                f.write(chunk)
+                if temp_path.stat().st_size <= 0:
+                    raise IOError("下载文件为空")
+                shutil.move(str(temp_path), str(cache_path))
+                return cache_path
+            except (requests.RequestException, OSError) as e:
+                last_err = e
+                logger.warning(
+                    f"下载重试 {attempt + 1}/3 失败: {e}"
+                )
+        assert last_err is not None
+        raise last_err
 
-    async def download(self, api_url: str, filename: str) -> Path | None:
+    async def download(
+        self, api_url: str, filename: str, *, song_id: str | None = None
+    ) -> Path | None:
         """下载并写入缓存目录."""
         self._cache.prepare()
         temp_path = None
         try:
-            download_url = await self.resolve_play_url(api_url)
+            download_url = await self.resolve_play_url(api_url, song_id=song_id)
             if not download_url:
                 return None
 
             temp_path = self._cache.temp_path(filename)
             cache_path = self._cache.root / filename
+            headers = self.media_headers(download_url)
+            logger.debug(
+                f"开始下载音频: host={urlparse(download_url).hostname}"
+            )
 
             result = await asyncio.to_thread(
                 self._sync_download,
                 download_url,
-                self._config.get("HEADERS", {}),
+                headers,
                 temp_path,
                 cache_path,
             )
             logger.info(f"音乐下载完成并缓存: {result}")
             return result
         except Exception as e:
-            logger.error(f"下载失败: {e}", exc_info=True)
+            self.last_error = f"下载失败: {e}"
+            logger.error(self.last_error, exc_info=True)
             if temp_path and temp_path.exists():
                 try:
                     temp_path.unlink()
