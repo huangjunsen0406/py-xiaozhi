@@ -279,16 +279,36 @@ class WebsocketProtocol(Protocol):
             return
 
         try:
+            close_code = self.websocket.close_code
+        except Exception:
+            close_code = None
+        if close_code is not None:
+            logger.warning(f"WebSocket 已关闭 (code={close_code})，跳过发送文本")
+            if self.connected:
+                await self._handle_connection_loss(
+                    f"发送文本失败: 连接已关闭 {close_code}"
+                )
+            return
+
+        try:
             await self.websocket.send(message)
         except websockets.ConnectionClosed as e:
-            logger.warning(f"发送文本时连接已关闭: {e}", exc_info=True)
-            await self._handle_connection_loss(f"发送文本失败: {e.code} {e.reason}")
+            # 正常断连（含 1005），warning 就够了
+            logger.warning(f"发送文本时连接已关闭: {e}")
+            if self.connected and not self._is_closing:
+                await self._handle_connection_loss(
+                    f"发送文本失败: {e.code} {e.reason}"
+                )
         except websockets.ConnectionClosedError as e:
-            logger.warning(f"发送文本时连接错误: {e}", exc_info=True)
-            await self._handle_connection_loss(f"发送文本错误: {e.code} {e.reason}")
+            logger.warning(f"发送文本时连接错误: {e}")
+            if self.connected and not self._is_closing:
+                await self._handle_connection_loss(
+                    f"发送文本错误: {e.code} {e.reason}"
+                )
         except Exception as e:
             logger.error(f"发送文本消息失败: {e}", exc_info=True)
-            await self._handle_connection_loss(f"发送文本异常: {str(e)}")
+            if self.connected and not self._is_closing:
+                await self._handle_connection_loss(f"发送文本异常: {str(e)}")
 
     def is_audio_channel_opened(self) -> bool:
         """检查音频通道是否打开.

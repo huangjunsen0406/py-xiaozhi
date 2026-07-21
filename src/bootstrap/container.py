@@ -3,7 +3,6 @@
 整合所有核心服务，提供统一的应用入口。
 """
 
-import asyncio
 import os
 from typing import Any, Awaitable, Callable, Optional
 
@@ -447,7 +446,6 @@ class ServiceContainer:
         if new_state:
             await self.plugins.notify_device_state_changed(new_state)
             if new_state == DeviceState.LISTENING:
-                await asyncio.sleep(0.5)
                 self._aborted = False
 
     async def _on_incoming_json(self, json_data: dict) -> None:
@@ -477,21 +475,32 @@ class ServiceContainer:
             await self.state.set_device_state(DeviceState.SPEAKING)
 
     async def _handle_tts_stop(self) -> None:
-        if self.state.keep_listening:
-            try:
-                audio_plugin = self.plugins.get_plugin("audio")
-                if audio_plugin and audio_plugin.codec:
-                    await audio_plugin.codec.clear_audio_queue()
-            except Exception as e:
-                logger.warning(f"清空音频队列失败: {e}", exc_info=True)
-            await self.state.set_device_state(DeviceState.LISTENING)
-            if not (
-                self.state.listening_mode == ListeningMode.REALTIME
-                and self.state.is_listening()
-            ):
-                await self.protocol.send_start_listening(self.state.listening_mode)
-        else:
+        # 还要继续听的话，尽量先发 listen，再清队列、改状态
+        if not self.state.keep_listening:
             await self.state.set_device_state(DeviceState.IDLE)
+            return
+
+        # realtime 一般还在 listen 里，不用再发一遍
+        if self.state.listening_mode != ListeningMode.REALTIME:
+            if self.protocol.is_audio_channel_opened():
+                try:
+                    await self.protocol.send_start_listening(self.state.listening_mode)
+                except Exception as e:
+                    logger.warning(
+                        f"TTS 结束后重新 listen 失败: {e}",
+                        exc_info=True,
+                    )
+            else:
+                logger.warning("TTS 结束但协议通道已关闭，跳过重新 listen")
+
+        try:
+            audio_plugin = self.plugins.get_plugin("audio")
+            if audio_plugin and audio_plugin.codec:
+                await audio_plugin.codec.clear_audio_queue()
+        except Exception as e:
+            logger.warning(f"清空音频队列失败: {e}", exc_info=True)
+
+        await self.state.set_device_state(DeviceState.LISTENING)
 
     # -------------------------
     # 操作方法
@@ -556,6 +565,7 @@ class ServiceContainer:
         await self.state.set_device_state(DeviceState.LISTENING)
 
     async def abort_speaking(self, reason: str) -> None:
+        # 自动对话还在持续听时，打断后回到 listening，别停在 idle
         if self._aborted:
             logger.debug(f"已经中止，忽略重复请求: {reason}")
             return
@@ -563,5 +573,27 @@ class ServiceContainer:
         logger.info(f"中止语音输出: {reason}")
         self._aborted = True
         self.state.set_aborted(True)
-        await self.protocol.send_abort_speaking(reason)
-        await self.state.set_device_state(DeviceState.IDLE)
+        try:
+            if self.protocol.is_audio_channel_opened():
+                await self.protocol.send_abort_speaking(reason)
+        except Exception as e:
+            logger.warning(f"发送 abort 失败: {e}", exc_info=True)
+
+        if self.state.keep_listening:
+            if self.state.listening_mode != ListeningMode.REALTIME:
+                if self.protocol.is_audio_channel_opened():
+                    try:
+                        await self.protocol.send_start_listening(
+                            self.state.listening_mode
+                        )
+                    except Exception as e:
+                        logger.warning(
+                            f"打断后重新 listen 失败: {e}",
+                            exc_info=True,
+                        )
+            await self.state.set_device_state(DeviceState.LISTENING)
+            self._aborted = False
+            self.state.set_aborted(False)
+            logger.debug("打断后已恢复持续监听")
+        else:
+            await self.state.set_device_state(DeviceState.IDLE)

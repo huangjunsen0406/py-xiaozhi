@@ -305,13 +305,17 @@ class ProtocolGateway:
 
     async def send_start_listening(self, mode: ListeningMode) -> None:
         protocol = self._transport.protocol
-        if protocol:
+        if protocol and self._transport.is_audio_channel_opened():
             await protocol.send_start_listening(mode)
+        else:
+            logger.warning("音频通道未打开，跳过 send_start_listening")
 
     async def send_stop_listening(self) -> None:
         protocol = self._transport.protocol
-        if protocol:
+        if protocol and self._transport.is_audio_channel_opened():
             await protocol.send_stop_listening()
+        else:
+            logger.debug("音频通道未打开，跳过 send_stop_listening")
 
     async def send_abort_speaking(self, reason: str = None) -> None:
         protocol = self._transport.protocol
@@ -320,8 +324,10 @@ class ProtocolGateway:
 
     async def send_wake_word_detected(self, wake_word: str) -> None:
         protocol = self._transport.protocol
-        if protocol:
+        if protocol and self._transport.is_audio_channel_opened():
             await protocol.send_wake_word_detected(wake_word)
+        else:
+            logger.warning("音频通道未打开，跳过 send_wake_word_detected")
 
     async def send_iot_descriptors(self, descriptors) -> None:
         protocol = self._transport.protocol
