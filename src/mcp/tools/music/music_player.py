@@ -1,8 +1,7 @@
 """音乐播放会话.
 
-在线：搜歌 → 解析直链 → FFmpeg 流式播。
-本地：走 LocalLibrary 找文件再播。
-缓存 / 下载 / 歌词 / 搜歌逻辑在同目录其它文件。
+在线：FFmpeg 流式播 PCM；另起后台 copy 按网速预取整首（不跟听进度绑）。
+本地有缓存则直接播文件。
 """
 
 from __future__ import annotations
@@ -107,6 +106,10 @@ class MusicPlayer:
         self._event_bus = None
         self._plugin_ctx = None
         self._audio_codec = None
+        try:
+            self._downloader.cancel_prefetch()
+        except Exception:
+            pass
         logger.debug("MusicPlayer 已 detach 运行时绑定")
 
     def _get_audio_codec(self) -> "AudioCodec | None":
@@ -331,23 +334,19 @@ class MusicPlayer:
                 sample_rate=AudioConfig.OUTPUT_SAMPLE_RATE,
                 channels=AudioConfig.CHANNELS,
             )
-            # 从头恢复才写缓存；中途 resume 不写半截
-            cache_path = None
-            if (
-                is_http_url(self._current_source)
-                and self.song_id
-                and self.current_position <= 0.1
-            ):
-                self._cache.prepare()
-                if self._cache.find_song_file(self.song_id) is None:
-                    cache_path = self._cache.path_for_song(self.song_id)
+            # 流式：后台按网速预取整首（与播放进度无关）
+            if is_http_url(self._current_source) and self.song_id:
+                self._downloader.start_prefetch(
+                    str(self._current_source),
+                    self.song_id,
+                    self._stream_headers,
+                )
 
             success = await self.decoder.start_decode(
                 self._current_source,
                 self._music_queue,
                 self.current_position,
                 headers=self._stream_headers,
-                cache_path=cache_path,
             )
             if not success:
                 return {"status": "error", "message": "恢复播放失败"}
@@ -521,6 +520,10 @@ class MusicPlayer:
         self._stream_headers = self._downloader.media_headers(media_url)
         host = urlparse(media_url).hostname or media_url[:48]
         logger.info(f"已刷新流地址: {host}")
+        if self.song_id:
+            self._downloader.start_prefetch(
+                media_url, self.song_id, self._stream_headers
+            )
         return True
 
     async def _play_url(self, api_url: str) -> bool:
@@ -583,6 +586,11 @@ class MusicPlayer:
 
             host = urlparse(media_url).hostname or media_url[:48]
             logger.info(f"流式播放: {host}")
+            if self.song_id:
+                # 播放只解 PCM；缓存另开 FFmpeg copy，按网速拉满
+                self._downloader.start_prefetch(
+                    media_url, self.song_id, headers
+                )
             return await self._start_playback(media_url, headers=headers)
         except Exception as e:
             logger.error(f"播放失败: {e}", exc_info=True)
@@ -627,22 +635,11 @@ class MusicPlayer:
                 sample_rate=AudioConfig.OUTPUT_SAMPLE_RATE,
                 channels=AudioConfig.CHANNELS,
             )
-            # 在线从头播：边解 PCM 边 copy 到缓存，播完才有文件
-            cache_path = None
-            if (
-                is_http_url(source)
-                and self.song_id
-                and start_position <= 0.1
-            ):
-                self._cache.prepare()
-                cache_path = self._cache.path_for_song(self.song_id)
-
             success = await self.decoder.start_decode(
                 source,
                 self._music_queue,
                 start_position,
                 headers=self._stream_headers,
-                cache_path=cache_path,
             )
             if not success:
                 logger.error("启动音频解码器失败")
@@ -747,14 +744,12 @@ class MusicPlayer:
             return
         logger.info(f"歌曲播放完成: {self.current_song}")
         if self.decoder:
-            # EOF 时 decoder 已 commit 缓存；这里 stop 勿再删已提交文件
-            committed = self.decoder.committed_cache_path
-            if committed:
-                logger.info(f"本曲已缓存，下次可本地播放: {committed.name}")
-                self._library.invalidate()
-            # 已完整结束：清掉 part 标记，避免 stop 误删
             await self.decoder.stop()
             self.decoder = None
+        # 后台预取可能已经写好缓存
+        if self.song_id and self._cache.find_song_file(self.song_id):
+            self._library.invalidate()
+            logger.debug(f"播放结束，本地缓存可用: {self.song_id}")
 
         if self._playback_task and not self._playback_task.done():
             if self._playback_task is not asyncio.current_task():

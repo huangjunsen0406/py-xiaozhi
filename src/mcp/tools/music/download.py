@@ -1,17 +1,20 @@
-"""音乐下载：解析直链并写到本地缓存."""
+"""音乐下载：解析直链；后台 FFmpeg copy 预取到本地缓存."""
 
 from __future__ import annotations
 
 import asyncio
 import re
 import shutil
+import subprocess
+import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 from urllib.parse import urlparse
 
 import requests
 
 from src.logging import get_logger
+from src.utils.resource_finder import get_ffmpeg_path
 
 from .cache import MusicCache
 
@@ -21,15 +24,21 @@ logger = get_logger()
 _KUWO_PLAYURL = "https://wapi.kuwo.cn/api/v1/www/music/playUrl"
 _QUALITY_FALLBACKS = ("320k", "128k")
 
+_SUBPROCESS_KW = (
+    {"creationflags": subprocess.CREATE_NO_WINDOW} if sys.platform == "win32" else {}
+)
+
 
 class MusicDownloader:
-    """下载音频，能命中缓存就不用下."""
+    """解析播放地址；可选后台 copy 整首到缓存（按网速，不跟播放进度走）."""
 
     def __init__(self, cache: MusicCache, config: dict[str, Any] | None = None) -> None:
         self._cache = cache
         self._config = config or {}
         # 上次失败原因，给上层提示用
         self.last_error: str | None = None
+        self._prefetch_task: asyncio.Task | None = None
+        self._prefetch_song_id: str | None = None
 
     def set_config(self, config: dict[str, Any]) -> None:
         self._config = config
@@ -342,3 +351,144 @@ class MusicDownloader:
                 except Exception as cleanup_e:
                     logger.debug(f"清理临时文件失败: {cleanup_e}")
             return None
+
+    def start_prefetch(
+        self,
+        media_url: str,
+        song_id: str,
+        headers: Mapping[str, str] | None = None,
+    ) -> None:
+        """后台按网速 FFmpeg -c copy 整首落盘，不跟播放进度同步.
+
+        类似 HTML audio 的缓冲：播的同时尽快把整文件拉完，听完前也可能已缓存好。
+        换歌会取消上一次预取；暂停/停止当前歌不取消（继续缓冲）。
+        """
+        if not song_id or song_id == "unknown":
+            return
+        self._cache.prepare()
+        if self._cache.find_song_file(song_id) is not None:
+            logger.debug(f"已有缓存，跳过预取: {song_id}")
+            return
+
+        # 同一首歌已在预取
+        if (
+            self._prefetch_task
+            and not self._prefetch_task.done()
+            and self._prefetch_song_id == song_id
+        ):
+            return
+
+        self.cancel_prefetch()
+        hdrs = dict(headers or self.media_headers(media_url))
+        self._prefetch_song_id = song_id
+        self._prefetch_task = asyncio.create_task(
+            self._prefetch_copy_loop(media_url, song_id, hdrs),
+            name=f"music:prefetch:{song_id}",
+        )
+        logger.info(f"后台预取缓存: song_id={song_id}")
+
+    def cancel_prefetch(self) -> None:
+        """取消后台预取（换歌时）."""
+        task = self._prefetch_task
+        self._prefetch_task = None
+        self._prefetch_song_id = None
+        if task and not task.done():
+            task.cancel()
+
+    async def _prefetch_copy_loop(
+        self, media_url: str, song_id: str, headers: dict[str, str]
+    ) -> None:
+        final = self._cache.path_for_song(song_id)
+        part = final.with_name(f"{final.stem}.part{final.suffix}")
+        try:
+            if part.exists():
+                part.unlink()
+        except Exception:
+            pass
+
+        try:
+            ok = await self._ffmpeg_copy_url(media_url, part, headers)
+            if not ok:
+                return
+            if not part.exists() or part.stat().st_size <= 1024:
+                logger.warning(f"预取文件过小，丢弃: {part.name}")
+                if part.exists():
+                    part.unlink()
+                return
+            if final.exists():
+                final.unlink()
+            part.replace(final)
+            logger.info(
+                f"后台预取完成（可本地播）: {final.name} ({final.stat().st_size} bytes)"
+            )
+        except asyncio.CancelledError:
+            logger.debug(f"后台预取取消: {song_id}")
+            try:
+                if part.exists():
+                    part.unlink()
+            except Exception:
+                pass
+            raise
+        except Exception as e:
+            logger.warning(f"后台预取失败 {song_id}: {e}", exc_info=True)
+            try:
+                if part.exists():
+                    part.unlink()
+            except Exception:
+                pass
+        finally:
+            if self._prefetch_song_id == song_id:
+                self._prefetch_task = None
+                self._prefetch_song_id = None
+
+    async def _ffmpeg_copy_url(
+        self, media_url: str, out_path: Path, headers: dict[str, str]
+    ) -> bool:
+        """用 FFmpeg -c copy 按网速拉整首，不解码、不跟播放限速."""
+        from src.audio_codecs.music_decoder import _ffmpeg_header_args
+
+        ffmpeg = get_ffmpeg_path()
+        cmd = [
+            ffmpeg,
+            "-y",
+            "-reconnect",
+            "1",
+            "-reconnect_streamed",
+            "1",
+            "-reconnect_delay_max",
+            "5",
+        ]
+        cmd.extend(_ffmpeg_header_args(headers))
+        cmd.extend(
+            [
+                "-i",
+                media_url,
+                "-vn",
+                "-c:a",
+                "copy",
+                "-loglevel",
+                "error",
+                str(out_path),
+            ]
+        )
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+                **_SUBPROCESS_KW,
+            )
+            _, stderr = await proc.communicate()
+            if proc.returncode != 0:
+                err = (stderr or b"").decode("utf-8", errors="ignore").strip()
+                logger.warning(
+                    f"FFmpeg copy 预取失败 rc={proc.returncode}: {err[:300]}"
+                )
+                return False
+            return True
+        except FileNotFoundError:
+            logger.warning("FFmpeg 不可用，后台预取跳过")
+            return False
+        except Exception as e:
+            logger.warning(f"FFmpeg copy 预取异常: {e}", exc_info=True)
+            return False

@@ -48,7 +48,6 @@ def _ffmpeg_header_args(headers: Mapping[str, str] | None) -> list[str]:
             ua = str(value)
             continue
         lines.append(f"{key}: {value}")
-    # 文档要求每行以 \r\n 结尾
     if lines:
         blob = "".join(f"{line}\r\n" for line in lines)
         args.extend(["-headers", blob])
@@ -58,6 +57,8 @@ def _ffmpeg_header_args(headers: Mapping[str, str] | None) -> list[str]:
 
 
 class MusicDecoder:
+    """只负责把音源解成 PCM；缓存预取不走这里（避免和播放进度绑死）."""
+
     @staticmethod
     async def get_duration(
         source: AudioSource,
@@ -124,54 +125,6 @@ class MusicDecoder:
         self._process: subprocess.Process | None = None
         self._decode_task: asyncio.Task | None = None
         self._stopped = False
-        # 流式边播边 copy：完整听完才落到 final
-        self._cache_part: Path | None = None
-        self._cache_final: Path | None = None
-        self._cache_committed: Path | None = None
-
-    @property
-    def committed_cache_path(self) -> Path | None:
-        """完整播完后落盘的缓存路径；中途停止则为 None."""
-        return self._cache_committed
-
-    def _discard_cache_part(self) -> None:
-        part = self._cache_part
-        self._cache_part = None
-        self._cache_final = None
-        if part is None:
-            return
-        try:
-            if part.exists():
-                part.unlink()
-                logger.debug(f"丢弃未完成的流缓存: {part.name}")
-        except Exception as e:
-            logger.debug(f"清理流缓存临时文件失败: {e}")
-
-    def _commit_cache_part(self) -> None:
-        part, final = self._cache_part, self._cache_final
-        self._cache_part = None
-        self._cache_final = None
-        if part is None or final is None:
-            return
-        try:
-            if not part.exists() or part.stat().st_size <= 1024:
-                # 太小多半是失败/空文件
-                if part.exists():
-                    part.unlink()
-                return
-            final.parent.mkdir(parents=True, exist_ok=True)
-            if final.exists():
-                final.unlink()
-            part.replace(final)
-            self._cache_committed = final
-            logger.info(f"流式拷贝已写入缓存: {final.name} ({final.stat().st_size} bytes)")
-        except Exception as e:
-            logger.warning(f"流缓存落盘失败: {e}", exc_info=True)
-            try:
-                if part.exists():
-                    part.unlink()
-            except Exception:
-                pass
 
     async def start_decode(
         self,
@@ -183,9 +136,9 @@ class MusicDecoder:
     ) -> bool:
         """开始解码。source 为本地路径或 http(s)。
 
-        cache_path: 仅流式且从头播时，FFmpeg 同时 -c copy 写临时文件，
-        完整结束后再改名为缓存；中途 stop 会删掉临时文件。
+        cache_path 已废弃忽略：缓存由后台按网速 copy，不跟播放进度绑。
         """
+        _ = cache_path
         http = is_http_url(source)
         if not http:
             path = Path(source)
@@ -195,28 +148,6 @@ class MusicDecoder:
             source = path
 
         self._stopped = False
-        self._cache_part = None
-        self._cache_final = None
-        self._cache_committed = None
-
-        # 只有整曲从头流式才边播边拷；seek/半截不写缓存
-        write_cache = (
-            http
-            and cache_path is not None
-            and start_position <= 0.1
-            and not Path(cache_path).exists()
-        )
-        if write_cache:
-            final = Path(cache_path)
-            # 后缀要像 .mp3，否则 ffmpeg 不知道 muxer（.mp3.part 会挂）
-            part = final.with_name(f"{final.stem}.part{final.suffix}")
-            try:
-                if part.exists():
-                    part.unlink()
-            except Exception:
-                pass
-            self._cache_part = part
-            self._cache_final = final
 
         try:
             ffmpeg = get_ffmpeg_path()
@@ -254,7 +185,6 @@ class MusicDecoder:
 
             cmd = [ffmpeg]
 
-            # HTTP 流：断线重连
             if http:
                 cmd.extend(
                     [
@@ -271,19 +201,10 @@ class MusicDecoder:
             if start_position > 0.1:
                 cmd.extend(["-ss", f"{start_position:.3f}"])
 
-            cmd.extend(["-i", str(source)])
-
-            # 输出1：原样 copy 到本地（不是另起 requests 下载）
-            if self._cache_part is not None:
-                # -vn：只要音轨；-f 按后缀推断，.part.mp3 可被识别
-                cmd.extend(
-                    ["-vn", "-c:a", "copy", "-y", str(self._cache_part)]
-                )
-                logger.debug(f"流式同时拷贝到: {self._cache_part.name}")
-
-            # 输出2：PCM 给扬声器
             cmd.extend(
                 [
+                    "-i",
+                    str(source),
                     "-f",
                     "s16le",
                     "-ar",
@@ -304,22 +225,17 @@ class MusicDecoder:
 
             position_info = f" from {start_position:.1f}s" if start_position > 0 else ""
             mode = "流式" if http else "文件"
-            cache_info = "+缓存" if self._cache_part else ""
             logger.info(
-                f"开始解码音频({mode}{cache_info}): {_source_label(source)}"
-                f"{position_info} [{self.sample_rate}Hz, {self.channels}ch]"
+                f"开始解码音频({mode}): {_source_label(source)}{position_info} "
+                f"[{self.sample_rate}Hz, {self.channels}ch]"
             )
             return True
 
         except Exception as e:
             logger.error(f"启动音频解码失败: {e}", exc_info=True)
-            self._discard_cache_part()
             return False
 
     async def _read_pcm_stream(self, output_queue: asyncio.Queue):
-        """
-        读取 PCM 流并写入队列,使用队列占用率 + 时间兜底的双重限速策略.
-        """
         import time
 
         frame_duration_ms = AudioConfig.FRAME_DURATION
@@ -346,8 +262,7 @@ class MusicDecoder:
 
                     if self._process:
                         try:
-                            # 等 ffmpeg 把 copy 输出刷完
-                            await asyncio.wait_for(self._process.wait(), timeout=5.0)
+                            await asyncio.wait_for(self._process.wait(), timeout=2.0)
                         except (asyncio.TimeoutError, Exception):
                             pass
                         try:
@@ -360,11 +275,6 @@ class MusicDecoder:
                             logger.debug(f"读取 FFmpeg stderr 失败: {e}")
 
                     eof_reached = True
-                    # 完整播完 → 临时 part 改名进缓存
-                    if frame_count > 0:
-                        self._commit_cache_part()
-                    else:
-                        self._discard_cache_part()
                     break
 
                 frame_count += 1
@@ -409,12 +319,8 @@ class MusicDecoder:
 
         except asyncio.CancelledError:
             logger.debug("解码任务被取消")
-            if not eof_reached:
-                self._discard_cache_part()
         except Exception as e:
             logger.error(f"读取 PCM 流失败: {e}", exc_info=True)
-            if not eof_reached:
-                self._discard_cache_part()
         finally:
             if eof_reached:
                 try:
@@ -438,22 +344,23 @@ class MusicDecoder:
             except Exception as e:
                 logger.error(f"解码任务异常: {e}", exc_info=True)
 
-        if self._process:
+        proc = self._process
+        self._process = None
+        if proc is not None and proc.returncode is None:
             try:
-                self._process.terminate()
-                await asyncio.wait_for(self._process.wait(), timeout=2.0)
+                proc.terminate()
+                await asyncio.wait_for(proc.wait(), timeout=2.0)
             except asyncio.TimeoutError:
                 try:
-                    self._process.kill()
-                    await self._process.wait()
+                    proc.kill()
+                    await proc.wait()
                 except Exception as e:
-                    logger.debug(f"强制终止进程失败: {e}")
+                    logger.debug(f"强制结束 FFmpeg 失败: {e}")
+            except ProcessLookupError:
+                pass
             except Exception as e:
-                logger.debug(f"终止 FFmpeg 进程失败: {e}")
-
-        # 中途停：不要半截缓存
-        if self._cache_committed is None:
-            self._discard_cache_part()
+                if str(e).strip():
+                    logger.debug(f"结束 FFmpeg 进程: {e}")
 
     def is_running(self) -> bool:
         return (
