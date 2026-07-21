@@ -307,15 +307,20 @@ def test_mcp_server_container_bind_lifecycle():
 
 
 def test_ui_plugin_uses_view_facade_not_main_model():
-    """UIPlugin 源码不应再直连 main_model / _emotion_service 私有路径."""
+    """UIPlugin 不直接碰 main_model."""
     import inspect
 
     from src.plugins import ui as ui_mod
+    from src.plugins import ui_presenter as presenter_mod
 
     source = inspect.getsource(ui_mod.UIPlugin)
     assert "main_model" not in source
     assert "_emotion_service" not in source
-    assert "set_tts_text" in source or "_view_set_tts_text" in source
+    assert "create_viewport" in source
+
+    p_source = inspect.getsource(presenter_mod.UiPresenter)
+    assert "set_chat_text" in p_source
+    assert "set_music_line" in p_source
 
 
 def test_config_manager_reset_instance():
@@ -479,3 +484,448 @@ def test_music_player_init_is_lazy():
     cfg = p.config
     assert isinstance(cfg, dict)
     assert "SEARCH_URL" in cfg
+
+
+def test_viewport_protocol_and_cli_slots():
+    """CLI 对话和音乐两行互不影响."""
+    from src.core.event_bus import EventBus
+    from src.ui.cli.manager import CLIViewManager
+    from src.ui.shared.viewport import ViewPort
+
+    bus = EventBus()
+    vm = CLIViewManager(event_bus=bus)
+    assert isinstance(vm, ViewPort)
+
+    vm.set_chat_text("你好")
+    vm.set_music_line("♪ 歌词行")
+    assert vm._chat_text == "你好"
+    assert vm._music_line == "♪ 歌词行"
+    assert vm._display._dash_text == "你好"
+    assert vm._display._dash_music == "♪ 歌词行"
+
+    vm.set_chat_text("第二句")
+    assert vm._chat_text == "第二句"
+    assert vm._music_line == "♪ 歌词行"
+
+
+def test_gpio_viewport_slots():
+    from src.core.event_bus import EventBus
+    from src.ui.gpio.manager import GPIOViewManager
+    from src.ui.shared.viewport import ViewPort
+
+    vm = GPIOViewManager(event_bus=EventBus())
+    assert isinstance(vm, ViewPort)
+    vm.set_chat_text("chat")
+    vm.set_music_line("music")
+    assert vm._chat_text == "chat"
+    assert vm._music_line == "music"
+    vm.set_chat_text("chat2")
+    assert vm._chat_text == "chat2"
+    assert vm._music_line == "music"
+
+
+def test_create_viewport_cli_factory():
+    from src.core.event_bus import EventBus
+    from src.ui.cli.manager import CLIViewManager
+    from src.ui.shared.factory import create_viewport
+    from src.ui.shared.viewport import ViewPort
+
+    vp = create_viewport("cli", EventBus())
+    assert isinstance(vp, CLIViewManager)
+    assert isinstance(vp, ViewPort)
+
+
+def test_deprecated_ui_events_removed():
+    """旧的 UI_UPDATE_* / UI_TOGGLE_MODE 已删掉."""
+    from src.core.event_bus import Events
+
+    for name in (
+        "UI_UPDATE_TEXT",
+        "UI_UPDATE_EMOTION",
+        "UI_UPDATE_STATUS",
+        "UI_TOGGLE_MODE",
+    ):
+        assert not hasattr(Events, name)
+
+
+class _FakeViewport:
+    def __init__(self):
+        self.chat = []
+        self.music = []
+        self.status = []
+        self.emotions = []
+        self.buttons = []
+        self.auto_modes = []
+        self._auto = False
+
+    def set_chat_text(self, text: str) -> None:
+        self.chat.append(text)
+
+    def set_music_line(self, text: str) -> None:
+        self.music.append(text)
+
+    def set_status(self, status: str, connected: bool = True) -> None:
+        self.status.append((status, connected))
+
+    def set_emotion(self, emotion: str) -> None:
+        self.emotions.append(emotion)
+
+    def set_button_text(self, text: str) -> None:
+        self.buttons.append(text)
+
+    def set_auto_mode(self, auto_mode: bool) -> None:
+        self._auto = auto_mode
+        self.auto_modes.append(auto_mode)
+
+    def is_auto_mode(self) -> bool:
+        return self._auto
+
+    async def start(self, mode: str = "cli") -> None:
+        pass
+
+    async def close(self) -> None:
+        pass
+
+
+@pytest.mark.asyncio
+async def test_ui_plugin_routes_music_to_music_line():
+    """音乐走 music 行，不盖对话."""
+    from src.mcp.tools.music.events import MusicLyricsData, MusicStateData
+    from src.plugins.ui import UIPlugin
+
+    plugin = UIPlugin(mode="cli")
+    vp = _FakeViewport()
+    plugin.viewport = vp
+    plugin._presenter.bind(vp)
+
+    await plugin._on_music_state_changed(
+        MusicStateData(state="playing", song="测试曲", position=0.0, duration=180.0)
+    )
+    await plugin._on_music_lyrics_update(
+        MusicLyricsData(text="[00:01/03:00] 第一句", time_sec=1.0)
+    )
+    await plugin.on_incoming_json({"type": "tts", "text": "你好小智"})
+
+    assert any("正在播放" in t for t in vp.music)
+    assert "[00:01/03:00] 第一句" in vp.music
+    assert "你好小智" in vp.chat
+    assert not any("正在播放" in t or "第一句" in t for t in vp.chat)
+
+
+@pytest.mark.asyncio
+async def test_session_actions_owns_auto_mode():
+    """模式由 Session 改，界面只跟着 set_auto_mode."""
+    from src.plugins.ui_presenter import UiPresenter
+    from src.plugins.ui_session import SessionActions
+
+    class _Cmd:
+        def request_shutdown(self):
+            pass
+
+        async def abort_speaking(self, _):
+            pass
+
+        async def connect_protocol(self):
+            return True
+
+        async def send_wake_word_detected(self, text):
+            pass
+
+        async def start_listening(self, mode):
+            pass
+
+        async def stop_listening(self):
+            pass
+
+    class _Ctx:
+        def is_speaking(self):
+            return False
+
+        def is_listening(self):
+            return False
+
+        def get_config(self):
+            class C:
+                def get_config(self, k, d=None):
+                    return d
+
+            return C()
+
+    vp = _FakeViewport()
+    presenter = UiPresenter(vp)
+    session = SessionActions(_Ctx(), _Cmd(), presenter)
+
+    assert session.auto_mode is False
+    await session.auto_toggle()
+    assert session.auto_mode is True
+    assert vp.auto_modes == [True]
+    assert vp.is_auto_mode() is True
+    await session.auto_toggle()
+    assert session.auto_mode is False
+    assert vp.auto_modes == [True, False]
+
+
+@pytest.mark.asyncio
+async def test_auto_session_button_start_stop():
+    """自动模式主按钮会在开始/停止之间切换."""
+    from src.plugins.ui_presenter import UiPresenter
+    from src.plugins.ui_session import SessionActions
+
+    listening = {"v": False}
+    speaking = {"v": False}
+    stops = []
+    starts = []
+
+    class _Cmd:
+        async def connect_protocol(self):
+            return True
+
+        async def start_listening(self, mode):
+            starts.append(mode)
+            listening["v"] = True
+
+        async def stop_listening(self):
+            stops.append("stop")
+            listening["v"] = False
+
+        async def abort_speaking(self, reason):
+            stops.append(("abort", reason))
+            speaking["v"] = False
+
+        async def send_wake_word_detected(self, text):
+            pass
+
+    class _Ctx:
+        def is_speaking(self):
+            return speaking["v"]
+
+        def is_listening(self):
+            return listening["v"]
+
+        def get_config(self):
+            class C:
+                def get_config(self, k, d=None):
+                    return True if k == "AEC_OPTIONS.ENABLED" else d
+
+            return C()
+
+    vp = _FakeViewport()
+    session = SessionActions(_Ctx(), _Cmd(), UiPresenter(vp))
+    session._auto_mode = True
+
+    await session.auto_session_toggle()
+    assert session.auto_session_active is True
+    assert vp.buttons[-1] == "停止对话"
+    assert starts
+
+    await session.auto_session_toggle()
+    assert session.auto_session_active is False
+    assert vp.buttons[-1] == "开始对话"
+    assert "stop" in stops
+
+
+@pytest.mark.asyncio
+async def test_send_text_from_idle_starts_listen_then_detect():
+    """空闲发文本要先 listen 再 detect."""
+    from src.constants.constants import ListeningMode
+    from src.plugins.ui_presenter import UiPresenter
+    from src.plugins.ui_session import SessionActions
+
+    order = []
+    listening = {"v": False}
+
+    class _Cmd:
+        async def connect_protocol(self):
+            order.append("connect")
+            return True
+
+        async def start_listening(self, mode):
+            order.append(("listen", mode))
+            listening["v"] = True
+
+        async def send_wake_word_detected(self, text):
+            order.append(("detect", text))
+
+        async def abort_speaking(self, reason):
+            order.append(("abort", reason))
+
+    class _Ctx:
+        def is_speaking(self):
+            return False
+
+        def is_listening(self):
+            return listening["v"]
+
+        def get_config(self):
+            class C:
+                def get_config(self, k, d=None):
+                    return False  # AEC off → AUTO_STOP when auto
+
+            return C()
+
+    session = SessionActions(_Ctx(), _Cmd(), UiPresenter(_FakeViewport()))
+    # 手动模式空闲发文本
+    await session.send_text("播放歌曲")
+    assert order[0] == "connect"
+    assert order[1] == ("listen", ListeningMode.MANUAL)
+    assert order[2] == ("detect", "播放歌曲")
+
+    # 已在 listening 时不再重复 start
+    order.clear()
+    await session.send_text("你好")
+    assert order == [("detect", "你好")]
+
+
+@pytest.mark.asyncio
+async def test_abort_speaking_resumes_keep_listening():
+    """持续监听时打断后回到 listening."""
+    from src.bootstrap.container import ServiceContainer
+    from src.constants.constants import DeviceState, ListeningMode
+
+    order = []
+
+    class FakeProtocol:
+        def is_audio_channel_opened(self):
+            return True
+
+        async def send_abort_speaking(self, reason):
+            order.append(("abort", reason))
+
+        async def send_start_listening(self, mode):
+            order.append(("listen", mode))
+
+    class FakeState:
+        def __init__(self):
+            self.keep_listening = True
+            self.listening_mode = ListeningMode.AUTO_STOP
+            self._state = DeviceState.SPEAKING
+            self._aborted = False
+
+        def set_aborted(self, v):
+            self._aborted = v
+
+        async def set_device_state(self, state):
+            order.append(("state", state))
+            self._state = state
+
+    c = object.__new__(ServiceContainer)
+    c._aborted = False
+    c.state = FakeState()
+    c.protocol = FakeProtocol()
+
+    await c.abort_speaking("user_interruption")
+    assert ("abort", "user_interruption") in order
+    assert ("listen", ListeningMode.AUTO_STOP) in order
+    assert ("state", DeviceState.LISTENING) in order
+    assert ("state", DeviceState.IDLE) not in order
+    assert c._aborted is False
+
+
+def test_device_state_handler_does_not_block_with_sleep():
+    """进 LISTENING 不能在状态回调里 sleep."""
+    import inspect
+
+    from src.bootstrap import container as c_mod
+
+    src = inspect.getsource(c_mod.ServiceContainer._on_device_state_changed)
+    assert "asyncio.sleep" not in src
+    assert "await " not in src or "notify_device_state_changed" in src
+    # 不得再 await 人为延迟
+    assert "await asyncio" not in src
+    src_stop = inspect.getsource(c_mod.ServiceContainer._handle_tts_stop)
+    # 先续听再改状态：send_start_listening 应出现在 set_device_state 之前
+    assert src_stop.index("send_start_listening") < src_stop.index(
+        "set_device_state(DeviceState.LISTENING)"
+    )
+
+
+@pytest.mark.asyncio
+async def test_handle_tts_stop_relisten_before_state():
+    """AUTO_STOP：TTS 停了先发 listen 再改状态."""
+    from src.bootstrap.container import ServiceContainer
+    from src.constants.constants import DeviceState, ListeningMode
+
+    order = []
+
+    class FakeProtocol:
+        def is_audio_channel_opened(self):
+            return True
+
+        async def send_start_listening(self, mode):
+            order.append(("listen", mode))
+
+    class FakeState:
+        def __init__(self):
+            self.keep_listening = True
+            self.listening_mode = ListeningMode.AUTO_STOP
+            self._state = DeviceState.SPEAKING
+
+        def is_listening(self):
+            return self._state == DeviceState.LISTENING
+
+        async def set_device_state(self, state):
+            # 模拟慢插件：若 listen 在这之后发就会踩延迟
+            order.append(("state", state))
+            self._state = state
+
+    class FakeCodec:
+        async def clear_audio_queue(self):
+            order.append("clear_queue")
+
+    class FakePlugins:
+        def get_plugin(self, name):
+            if name == "audio":
+                p = type("P", (), {})()
+                p.codec = FakeCodec()
+                return p
+            return None
+
+    # 最小桩：只跑 _handle_tts_stop
+    c = object.__new__(ServiceContainer)
+    c.state = FakeState()
+    c.protocol = FakeProtocol()
+    c.plugins = FakePlugins()
+
+    await c._handle_tts_stop()
+
+    assert order[0] == ("listen", ListeningMode.AUTO_STOP)
+    assert "clear_queue" in order
+    assert ("state", DeviceState.LISTENING) in order
+    assert order.index(("listen", ListeningMode.AUTO_STOP)) < order.index(
+        ("state", DeviceState.LISTENING)
+    )
+
+
+@pytest.mark.asyncio
+async def test_handle_tts_stop_realtime_skips_relisten():
+    from src.bootstrap.container import ServiceContainer
+    from src.constants.constants import DeviceState, ListeningMode
+
+    order = []
+
+    class FakeProtocol:
+        def is_audio_channel_opened(self):
+            return True
+
+        async def send_start_listening(self, mode):
+            order.append("listen")
+
+    class FakeState:
+        keep_listening = True
+        listening_mode = ListeningMode.REALTIME
+
+        async def set_device_state(self, state):
+            order.append(("state", state))
+
+    class FakePlugins:
+        def get_plugin(self, name):
+            return None
+
+    c = object.__new__(ServiceContainer)
+    c.state = FakeState()
+    c.protocol = FakeProtocol()
+    c.plugins = FakePlugins()
+
+    await c._handle_tts_stop()
+    assert "listen" not in order
+    assert order == [("state", DeviceState.LISTENING)]
