@@ -64,46 +64,18 @@ class ViewManager(QObject):
         return self._settings_model
 
     def _subscribe_events(self):
-        """订阅 EventBus 事件."""
-        self._event_bus.on(Events.UI_UPDATE_TEXT, self._on_update_text)
-        self._event_bus.on(Events.UI_UPDATE_EMOTION, self._on_update_emotion)
-        self._event_bus.on(Events.UI_UPDATE_STATUS, self._on_update_status)
         self._event_bus.on(Events.UI_TOGGLE_WINDOW, self._on_toggle_window)
-        self._event_bus.on(Events.UI_TOGGLE_MODE, self._on_toggle_mode)
-        logger.debug("ViewManager: 已订阅 UI 事件")
+        logger.debug("ViewManager: 已订阅窗口切换事件")
 
     def _on_config_saved(self):
         """配置保存后触发热重载事件."""
         logger.info("ViewManager: 配置已保存，触发热重载事件")
         self._tasks.spawn(self._event_bus.emit(Events.CONFIG_CHANGED), name="ui:config_changed")
 
-    async def _on_update_text(self, data):
-        """处理文本更新."""
-        text = data.text if hasattr(data, "text") else str(data)
-        self._main_model.set_tts_text(text)
-
-    async def _on_update_emotion(self, data):
-        """处理表情更新."""
-        emotion = data.emotion if hasattr(data, "emotion") else str(data)
-        url = self._emotion_service.get_emotion_url(emotion)
-        self._main_model.set_emotion_url(url)
-
-    async def _on_update_status(self, data):
-        """处理状态更新."""
-        if hasattr(data, "status"):
-            self._main_model.set_status(data.status, data.connected)
-        elif isinstance(data, dict):
-            self._main_model.set_status(data.get("status", ""), data.get("connected", True))
-
     async def _on_toggle_window(self, data=None):
         """处理窗口切换事件."""
         logger.debug("ViewManager: 收到窗口切换事件")
         self.toggle_window()
-
-    async def _on_toggle_mode(self, data=None):
-        """处理模式切换事件."""
-        logger.debug("ViewManager: 收到模式切换事件")
-        self.toggle_mode()
 
     async def start(self, mode: str = "gui"):
         """启动视图.
@@ -206,47 +178,38 @@ class ViewManager(QObject):
 
     @property
     def main_model(self) -> MainModel:
-        """获取主窗口模型（QML 绑定用；插件层请用 facade 方法）."""
+        """给 QML 绑的主模型."""
         return self._main_model
 
     @property
     def is_running(self) -> bool:
-        """是否正在运行."""
         return self._running
 
-    def set_tts_text(self, text: str) -> None:
-        """设置 TTS / 状态文本显示."""
-        self._main_model.set_tts_text(text)
+    def set_chat_text(self, text: str) -> None:
+        self._main_model.set_chat_text(text)
+
+    def set_music_line(self, text: str) -> None:
+        self._main_model.set_music_line(text)
 
     def set_emotion(self, emotion: str) -> None:
-        """按表情名更新显示（内部解析 gif URL）."""
         url = self._emotion_service.get_emotion_url(emotion)
         self._main_model.set_emotion_url(url)
 
     def set_status(self, status: str, connected: bool = True) -> None:
-        """设置连接/设备状态文案."""
         self._main_model.set_status(status, connected)
 
     def set_button_text(self, text: str) -> None:
-        """设置主按钮文案（手动录音等）."""
         self._main_model.set_button_text(text)
 
     def set_auto_mode(self, auto_mode: bool) -> None:
-        """设置自动/手动模式（不额外发事件）."""
         self._main_model.set_auto_mode(auto_mode)
 
     def is_auto_mode(self) -> bool:
-        """当前是否自动对话模式."""
         return bool(self._main_model._auto_mode)
-
-    def toggle_auto_mode(self) -> bool:
-        """切换自动/手动模式，返回切换后是否为自动模式."""
-        self._main_model.toggle_auto_mode()
-        return self.is_auto_mode()
 
     @Slot()
     def toggle_mode(self):
-        """请求切换对话模式：只发事件，由 UIPlugin 统一改 model，避免双重切换."""
+        # 真状态在 Session 里改，这里只发事件
         self._tasks.spawn(self._event_bus.emit(Events.UI_AUTO_TOGGLE), name="ui:auto_toggle")
 
     @Slot()

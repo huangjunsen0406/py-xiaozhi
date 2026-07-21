@@ -84,8 +84,8 @@ class EventBridge(QObject):
 
     @Slot()
     def onAutoStart(self):
-        """自动模式开始监听."""
-        logger.debug("EventBridge: 自动模式开始监听")
+        """自动模式：开始或停止对话."""
+        logger.debug("EventBridge: 自动模式开始/停止对话")
         self._emit_event(Events.UI_AUTO_START)
 
     @Slot()

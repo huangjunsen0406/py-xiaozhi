@@ -1,8 +1,5 @@
 # -*- coding: utf-8 -*-
-"""CLI 视图管理器.
-
-管理 CLI 模式下的终端显示界面，与 GUI 的 ViewManager 功能对应。
-"""
+"""CLI 终端界面."""
 
 import asyncio
 from typing import TYPE_CHECKING, Optional
@@ -19,10 +16,7 @@ logger = get_logger()
 
 
 class CLIViewManager:
-    """CLI 视图管理器.
-
-    管理 CLI 模式下的终端界面，提供与 GUI ViewManager 一致的接口。
-    """
+    """CLI 界面（和 GUI 同一套 set_* 接口）."""
 
     def __init__(
         self,
@@ -39,44 +33,14 @@ class CLIViewManager:
         self._auto_mode = False
         self._status = "待命"
         self._connected = False
-        self._tts_text = ""
+        self._chat_text = ""
+        self._music_line = ""
 
         # 设置命令回调
         self._display.set_command_callback(self._handle_command)
 
         # 尽早拦截日志输出
         self._display.intercept_logging()
-
-        # 订阅事件
-        self._subscribe_events()
-
-    def _subscribe_events(self):
-        """订阅 EventBus 事件."""
-        self._event_bus.on(Events.UI_UPDATE_TEXT, self._on_update_text)
-        self._event_bus.on(Events.UI_UPDATE_EMOTION, self._on_update_emotion)
-        self._event_bus.on(Events.UI_UPDATE_STATUS, self._on_update_status)
-        logger.debug("CLIViewManager: 已订阅 UI 事件")
-
-    async def _on_update_text(self, data):
-        """处理文本更新."""
-        text = data.text if hasattr(data, "text") else str(data)
-        self._tts_text = text
-        self._display.update_text(text)
-
-    async def _on_update_emotion(self, data):
-        """处理表情更新."""
-        emotion = data.emotion if hasattr(data, "emotion") else str(data)
-        self._display.update_emotion(emotion)
-
-    async def _on_update_status(self, data):
-        """处理状态更新."""
-        if hasattr(data, "status"):
-            self._status = data.status
-            self._connected = getattr(data, "connected", True)
-        elif isinstance(data, dict):
-            self._status = data.get("status", "")
-            self._connected = data.get("connected", True)
-        self._display.update_status(self._status, self._connected)
 
     async def start(self, mode: str = "cli"):
         """启动 CLI 视图.
@@ -98,15 +62,6 @@ class CLIViewManager:
         """关闭 CLI 视图."""
         logger.info("CLIViewManager: 正在关闭...")
         self._running = False
-
-        # 取消订阅事件
-        try:
-            self._event_bus.off(Events.UI_UPDATE_TEXT, self._on_update_text)
-            self._event_bus.off(Events.UI_UPDATE_EMOTION, self._on_update_emotion)
-            self._event_bus.off(Events.UI_UPDATE_STATUS, self._on_update_status)
-        except Exception as e:
-            logger.warning(f"CLIViewManager: 取消订阅失败: {e}", exc_info=True)
-
         await self._display.close()
         logger.info("CLIViewManager: 已关闭")
 
@@ -187,36 +142,24 @@ class CLIViewManager:
         self._connected = connected
         self._display.update_status(status, connected)
 
-    def set_tts_text(self, text: str):
-        """设置 TTS 文本."""
-        self._tts_text = text
+    def set_chat_text(self, text: str):
+        self._chat_text = text
         self._display.update_text(text)
 
+    def set_music_line(self, text: str):
+        self._music_line = text
+        self._display.update_music_line(text)
+
     def set_emotion(self, emotion: str):
-        """设置表情."""
         self._display.update_emotion(emotion)
 
     def set_auto_mode(self, auto_mode: bool):
-        """设置自动模式."""
         self._auto_mode = auto_mode
         self._display.update_auto_mode(auto_mode)
 
     def set_button_text(self, text: str):
-        """CLI 无实体按钮，保留 facade 兼容."""
+        # 终端没有主按钮
         logger.debug(f"CLI set_button_text: {text}")
 
     def is_auto_mode(self) -> bool:
         return bool(self._auto_mode)
-
-    # ========== 兼容 GUI ViewManager 的属性 ==========
-
-    @property
-    def main_model(self):
-        """返回自身作为 model 代理."""
-        return self
-
-    def toggle_auto_mode(self) -> bool:
-        """切换自动模式，返回切换后是否为自动."""
-        self._auto_mode = not self._auto_mode
-        self._display.update_auto_mode(self._auto_mode)
-        return self._auto_mode

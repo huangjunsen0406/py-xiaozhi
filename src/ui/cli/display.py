@@ -36,12 +36,13 @@ class CLIDisplay:
         self._dash_status = "待命"
         self._dash_connected = False
         self._dash_text = ""
+        self._dash_music = ""
         self._dash_emotion = "neutral"
         self._dash_auto_mode = False
 
         # 布局设置
         self._input_area_lines = 3  # 输入区行数
-        self._dashboard_lines = 8  # 显示区最少行数
+        self._dashboard_lines = 9  # 显示区最少行数
 
         # ANSI 样式
         self._ansi = {
@@ -130,10 +131,13 @@ class CLIDisplay:
         self._schedule_render()
 
     def update_text(self, text: str):
-        """更新文本显示."""
         if text and text.strip():
             self._dash_text = text.strip()
             self._schedule_render()
+
+    def update_music_line(self, text: str):
+        self._dash_music = (text or "").strip()
+        self._schedule_render()
 
     def update_emotion(self, emotion: str):
         """更新表情."""
@@ -210,7 +214,8 @@ class CLIDisplay:
             f"状态: {trunc(self._dash_status)}",
             f"连接: {conn_text} | 模式: {mode_text}",
             f"表情: {self._dash_emotion}",
-            f"文本: {trunc(self._dash_text)}",
+            f"对话: {trunc(self._dash_text)}",
+            f"音乐: {trunc(self._dash_music) if self._dash_music else '—'}",
         ]
 
         # 不显示日志行（日志仍被拦截，只是不在界面显示）

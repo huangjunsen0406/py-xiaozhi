@@ -231,7 +231,7 @@ class ShortcutsPlugin(Plugin):
         from src.core.event_bus import Events
 
         asyncio.run_coroutine_threadsafe(
-            self._event_bus.emit(Events.UI_TOGGLE_MODE), self._loop
+            self._event_bus.emit(Events.UI_AUTO_TOGGLE), self._loop
         )
 
     def _handle_window_toggle(self) -> None:
