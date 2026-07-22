@@ -13,13 +13,41 @@ from src.utils.resource_finder import (
 
 logger = get_logger()
 
+# 进程内权威配置：由 initialize_config() 创建，get_config() 读取；无懒单例
+_current: "ConfigManager | None" = None
+
+
+def initialize_config() -> "ConfigManager":
+    """创建或返回已初始化的配置管理器（应用入口调用）."""
+    global _current
+    if _current is None:
+        _current = ConfigManager()
+    return _current
+
+
+def get_config() -> "ConfigManager":
+    """获取已初始化的配置管理器.
+
+    Raises:
+        RuntimeError: 尚未 initialize_config()
+    """
+    if _current is None:
+        raise RuntimeError(
+            "ConfigManager 未初始化：请在入口调用 initialize_config()"
+        )
+    return _current
+
+
+def reset_config() -> None:
+    """丢弃进程配置（仅测试）."""
+    global _current
+    _current = None
+
 
 class ConfigManager:
     """
-    配置管理器.
+    配置管理器（普通实例；进程权威由 initialize_config/get_config 持有）.
     """
-
-    _instance = None
 
     # 默认配置
     DEFAULT_CONFIG = {
@@ -109,23 +137,8 @@ class ConfigManager:
         },
     }
 
-    def __new__(cls):
-        """
-        确保单例模式.
-        """
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-            cls._instance._initialized = False
-        return cls._instance
-
     def __init__(self):
-        """
-        初始化配置管理器.
-        """
-        if self._initialized:
-            return
-        self._initialized = True
-
+        """初始化配置管理器（直接构造；应用请用 initialize_config）."""
         # 初始化配置文件路径
         self._init_config_paths()
 
@@ -307,21 +320,3 @@ class ConfigManager:
                 logger.info(f"已生成新的客户端ID: {client_id}")
             else:
                 logger.error("保存新的客户端ID失败")
-
-    @classmethod
-    def get_instance(cls):
-        """
-        获取配置管理器实例.
-        """
-        if cls._instance is None:
-            cls._instance = cls()
-        return cls._instance
-
-    @classmethod
-    def reset_instance(cls) -> None:
-        """丢弃单例（仅测试/完整重启用）.
-
-        ConfigManager 仍是进程级权威配置源；应用运行中不要调用。
-        下次 get_instance() 会重新加载配置文件。
-        """
-        cls._instance = None

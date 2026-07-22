@@ -49,13 +49,20 @@ def parse_args():
     return parser.parse_args()
 
 
-# 先解析参数，再初始化日志
+# 先解析参数，再初始化配置与日志（禁止 ConfigManager 懒单例）
 _args = parse_args()
 
-from src.logging import setup_logging  # noqa: E402
+from src.utils.config_manager import initialize_config  # noqa: E402
+
+initialize_config()
+
+from src.logging import load_logging_config, setup_logging  # noqa: E402
 
 # CLI 模式禁用控制台日志输出（由 CLIDisplay 接管）
-setup_logging(enable_console=(_args.mode != "cli"))
+setup_logging(
+    enable_console=(_args.mode != "cli"),
+    config=load_logging_config(),
+)
 
 from src.bootstrap.container import ServiceContainer  # noqa: E402
 from src.constants.system import SystemConstants  # noqa: E402

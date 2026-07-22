@@ -45,16 +45,16 @@ class EventType:
 def get_frame_duration() -> int:
     """获取设备的帧长度.
 
-    优先从配置读取，无配置时根据设备架构自动检测。
-    ConfigManager 仅在调用时懒加载，避免 import constants 时产生 IO 副作用。
+    优先从已初始化的配置读取，无配置时根据设备架构自动检测。
+    不在 import constants 时读配置。
 
     返回:
         int: 帧长度(毫秒)，支持 20/40/60
     """
     try:
-        from src.utils.config_manager import ConfigManager
+        from src.utils.config_manager import get_config
 
-        configured = ConfigManager.get_instance().get_config(
+        configured = get_config().get_config(
             "AUDIO_DEVICES.frame_duration"
         )
         if configured in [20, 40, 60]:
@@ -102,9 +102,9 @@ class AudioConfig:
         调用此方法使新值在下次 initialize/reload_devices 时生效。
         """
         try:
-            from src.utils.config_manager import ConfigManager
+            from src.utils.config_manager import get_config
 
-            config = ConfigManager.get_instance()
+            config = get_config()
             cls.OUTPUT_SAMPLE_RATE = config.get_config(
                 "AUDIO_DEVICES.opus_output_sample_rate", 24000
             )

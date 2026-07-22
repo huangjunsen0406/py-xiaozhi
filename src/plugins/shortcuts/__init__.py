@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Callable, Dict, Optional
 from src.constants.constants import AbortReason
 from src.logging import get_logger
 from src.plugins.base import Plugin
-from src.utils.config_manager import ConfigManager
+from src.utils.config_manager import get_config
 
 from .base import ShortcutBackend, ShortcutConfig
 
@@ -112,7 +112,7 @@ class ShortcutsPlugin(Plugin):
         self._adapter: Optional[_CmdAdapter] = None
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._event_bus = None
-        self._config = ConfigManager.get_instance()
+        self._config = get_config()
         self._shortcuts_config: Dict = {}
         self._enabled = True
 

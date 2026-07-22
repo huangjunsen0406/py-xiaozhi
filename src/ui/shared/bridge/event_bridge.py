@@ -129,10 +129,10 @@ class EventBridge(QObject):
     @Slot()
     def openActivationUrl(self):
         """打开激活页面."""
-        from src.utils.config_manager import ConfigManager
+        from src.utils.config_manager import get_config
 
         try:
-            config = ConfigManager.get_instance()
+            config = get_config()
             url = config.get_config("SYSTEM_OPTIONS.NETWORK.AUTHORIZATION_URL", "")
             if url:
                 from PySide6.QtCore import QUrl

@@ -10,7 +10,7 @@ from src.audio_codecs.stream_manager import AudioStreamManager
 from src.constants.constants import AudioConfig
 from src.logging import get_logger
 from src.utils.audio_device import AudioDeviceManager, DeviceConfig
-from src.utils.config_manager import ConfigManager
+from src.utils.config_manager import get_config
 
 logger = get_logger()
 
@@ -43,7 +43,7 @@ class AudioCodec:
         AudioConfig.reload()
 
         # 组件（依赖注入）
-        self.device_manager = AudioDeviceManager(ConfigManager.get_instance())
+        self.device_manager = AudioDeviceManager(get_config())
         self.opus_codec = OpusCodec(
             input_sample_rate=AudioConfig.INPUT_SAMPLE_RATE,
             output_sample_rate=AudioConfig.OUTPUT_SAMPLE_RATE,

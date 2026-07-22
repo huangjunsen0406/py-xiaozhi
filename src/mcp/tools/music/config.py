@@ -20,9 +20,9 @@ def _cfg_str(cm, path: str, default: str) -> str:
 
 
 def load_music_config() -> dict:
-    from src.utils.config_manager import ConfigManager
+    from src.utils.config_manager import get_config
 
-    cm = ConfigManager.get_instance()
+    cm = get_config()
     pick = _cfg_str
 
     return {

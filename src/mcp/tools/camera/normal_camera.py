@@ -7,7 +7,7 @@ import json
 import requests
 
 from src.logging import get_logger
-from src.utils.config_manager import ConfigManager
+from src.utils.config_manager import get_config
 
 from .base_camera import BaseCamera
 
@@ -56,10 +56,10 @@ class NormalCamera(BaseCamera):
 
         # 准备请求头
         headers = {
-            "Device-Id": ConfigManager.get_instance().get_config(
+            "Device-Id": get_config().get_config(
                 "SYSTEM_OPTIONS.DEVICE_ID"
             ),
-            "Client-Id": ConfigManager.get_instance().get_config(
+            "Client-Id": get_config().get_config(
                 "SYSTEM_OPTIONS.CLIENT_ID"
             ),
         }

@@ -1,9 +1,6 @@
 """日志配置模块.
 
-提供日志系统的配置管理，支持：
-- 环境感知（dev/test/prod）
-- 配置文件和环境变量
-- 动态日志级别调整
+提供日志系统的配置数据类与加载函数（无单例 get_instance）。
 """
 
 import os
@@ -14,9 +11,7 @@ from typing import Any, Optional
 
 
 class Environment(Enum):
-    """
-    运行环境枚举.
-    """
+    """运行环境枚举."""
 
     DEVELOPMENT = "development"
     TESTING = "testing"
@@ -25,26 +20,20 @@ class Environment(Enum):
 
 @dataclass
 class LoggingConfig:
-    """
-    日志配置数据类.
-    """
+    """日志配置数据类."""
 
-    # 基础配置
     level: str = "INFO"
     format_type: str = "colored"  # colored, json, simple
 
-    # 文件配置
     log_dir: Optional[Path] = None
     log_file: str = "app.log"
     error_log_file: str = "error.log"
 
-    # 轮转配置
     max_bytes: int = 10 * 1024 * 1024  # 10MB
     backup_count: int = 30
     rotation_when: str = "midnight"  # midnight, H, D, W0-W6
     rotation_interval: int = 1
 
-    # 功能开关
     enable_console: bool = True
     enable_file: bool = True
     enable_error_file: bool = True
@@ -52,7 +41,6 @@ class LoggingConfig:
     enable_async: bool = False
     enable_sensitive_filter: bool = True
 
-    # 敏感信息配置
     sensitive_patterns: list[str] = field(
         default_factory=lambda: [
             "password",
@@ -69,7 +57,6 @@ class LoggingConfig:
         ]
     )
 
-    # 第三方日志级别控制
     third_party_levels: dict[str, str] = field(
         default_factory=lambda: {
             "urllib3": "WARNING",
@@ -82,45 +69,47 @@ class LoggingConfig:
     )
 
 
-class LoggingConfigManager:
+def _get_environment() -> Environment:
+    env_str = os.environ.get("APP_ENV", "development").lower()
+    env_map = {
+        "dev": Environment.DEVELOPMENT,
+        "development": Environment.DEVELOPMENT,
+        "test": Environment.TESTING,
+        "testing": Environment.TESTING,
+        "prod": Environment.PRODUCTION,
+        "production": Environment.PRODUCTION,
+    }
+    return env_map.get(env_str, Environment.DEVELOPMENT)
+
+
+def _get_default_log_dir() -> Path:
+    try:
+        from src.utils.resource_finder import get_log_dir
+
+        return get_log_dir()
+    except ImportError:
+        return Path.cwd() / "logs"
+
+
+def load_logging_config(app_config: Any | None = None) -> LoggingConfig:
+    """加载日志配置（纯函数，无单例）.
+
+    Args:
+        app_config: 可选 ConfigManager 实例；未传时若已 initialize_config 则读取 LOGGING 段。
     """
-    日志配置管理器.
-    """
+    config = LoggingConfig()
 
-    _instance: Optional["LoggingConfigManager"] = None
-    _config: Optional[LoggingConfig] = None
+    try:
+        if app_config is None:
+            from src.utils.config_manager import get_config
 
-    def __new__(cls) -> "LoggingConfigManager":
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-        return cls._instance
+            try:
+                app_config = get_config()
+            except RuntimeError:
+                app_config = None
 
-    def __init__(self) -> None:
-        if self._config is None:
-            self._config = self._load_config()
-
-    @classmethod
-    def get_instance(cls) -> "LoggingConfigManager":
-        """
-        获取配置管理器单例.
-        """
-        if cls._instance is None:
-            cls._instance = cls()
-        return cls._instance
-
-    def _load_config(self) -> LoggingConfig:
-        """
-        加载日志配置.
-        """
-        config = LoggingConfig()
-
-        # 尝试从 ConfigManager 加载配置
-        try:
-            from src.utils.config_manager import ConfigManager
-
-            cfg_manager = ConfigManager.get_instance()
-            logging_cfg = cfg_manager.get_config("LOGGING", {})
-
+        if app_config is not None:
+            logging_cfg = app_config.get_config("LOGGING", {}) or {}
             if logging_cfg:
                 config.level = logging_cfg.get("LEVEL", config.level)
                 config.format_type = logging_cfg.get("FORMAT_TYPE", config.format_type)
@@ -150,97 +139,27 @@ class LoggingConfigManager:
                 third_party = logging_cfg.get("THIRD_PARTY_LEVELS")
                 if third_party:
                     config.third_party_levels.update(third_party)
-        except ImportError:
-            # ConfigManager 未安装时使用默认配置
-            pass
+    except Exception:
+        # 配置未就绪时使用默认
+        pass
 
-        # 从环境变量加载（优先级最高）
-        env_level = os.environ.get("LOG_LEVEL")
-        if env_level:
-            config.level = env_level.upper()
-        config.format_type = os.environ.get("LOG_FORMAT", config.format_type)
+    env_level = os.environ.get("LOG_LEVEL")
+    if env_level:
+        config.level = env_level.upper()
+    config.format_type = os.environ.get("LOG_FORMAT", config.format_type)
 
-        # 根据环境自动调整（仅在未通过环境变量显式设置级别时）
-        env = self._get_environment()
-        if not env_level:
-            if env == Environment.DEVELOPMENT:
-                config.level = "DEBUG"
-            elif env == Environment.PRODUCTION:
-                config.level = "INFO"
+    env = _get_environment()
+    if not env_level:
+        if env == Environment.DEVELOPMENT:
+            config.level = "DEBUG"
+        elif env == Environment.PRODUCTION:
+            config.level = "INFO"
 
-        if env == Environment.PRODUCTION:
-            config.enable_json_file = True
-            config.enable_async = True
+    if env == Environment.PRODUCTION:
+        config.enable_json_file = True
+        config.enable_async = True
 
-        # 设置日志目录
-        if config.log_dir is None:
-            config.log_dir = self._get_default_log_dir()
+    if config.log_dir is None:
+        config.log_dir = _get_default_log_dir()
 
-        return config
-
-    def _get_environment(self) -> Environment:
-        """
-        获取当前运行环境.
-        """
-        env_str = os.environ.get("APP_ENV", "development").lower()
-        env_map = {
-            "dev": Environment.DEVELOPMENT,
-            "development": Environment.DEVELOPMENT,
-            "test": Environment.TESTING,
-            "testing": Environment.TESTING,
-            "prod": Environment.PRODUCTION,
-            "production": Environment.PRODUCTION,
-        }
-        return env_map.get(env_str, Environment.DEVELOPMENT)
-
-    def _get_default_log_dir(self) -> Path:
-        """
-        获取默认日志目录.
-        """
-        # 使用用户数据目录，确保打包后可写
-        try:
-            from src.utils.resource_finder import get_log_dir
-
-            return get_log_dir()
-        except ImportError:
-            return Path.cwd() / "logs"
-
-    @property
-    def config(self) -> LoggingConfig:
-        """
-        获取当前配置.
-        """
-        if self._config is None:
-            self._config = self._load_config()
-        return self._config
-
-    def update_config(self, **kwargs: Any) -> None:
-        """
-        动态更新配置.
-        """
-        if self._config is None:
-            self._config = self._load_config()
-
-        for key, value in kwargs.items():
-            if hasattr(self._config, key):
-                setattr(self._config, key, value)
-
-    def get_level_for_logger(self, name: str) -> str:
-        """
-        获取特定logger的日志级别.
-        """
-        if self._config is None:
-            return "INFO"
-
-        # 检查是否是第三方库
-        for prefix, level in self._config.third_party_levels.items():
-            if name.startswith(prefix):
-                return level
-
-        return self._config.level
-
-    def reload(self) -> None:
-        """
-        重新加载配置.
-        """
-        self._config = self._load_config()
+    return config

@@ -19,7 +19,7 @@ import psutil
 
 from src.constants.system import SystemConstants
 from src.logging import get_logger
-from src.utils.config_manager import ConfigManager
+from src.utils.config_manager import ConfigManager, get_config
 from src.utils.resource_finder import get_user_data_dir
 
 logger = get_logger()
@@ -50,7 +50,7 @@ class ActivationService:
         self._initialized = False
 
         # 配置管理器
-        self.config_manager = ConfigManager.get_instance()
+        self.config_manager = get_config()
 
         # 设备身份相关
         self._efuse_cache: Optional[Dict] = None

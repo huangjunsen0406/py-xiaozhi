@@ -6,7 +6,7 @@ from abc import ABC, abstractmethod
 from typing import Any
 
 from src.logging import get_logger
-from src.utils.config_manager import ConfigManager
+from src.utils.config_manager import get_config
 
 logger = get_logger()
 
@@ -23,7 +23,7 @@ class BaseCamera(ABC):
         self.jpeg_data = {"buf": b"", "len": 0}  # 图像的JPEG字节数据  # 字节数据长度
 
         # 从配置中读取相机参数
-        config = ConfigManager.get_instance()
+        config = get_config()
         self.camera_index = config.get_config("CAMERA.camera_index", 0)
         self.frame_width = config.get_config("CAMERA.frame_width", 640)
         self.frame_height = config.get_config("CAMERA.frame_height", 480)

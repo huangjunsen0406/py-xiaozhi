@@ -7,7 +7,7 @@ import websockets
 from src.constants.constants import AudioConfig
 from src.logging import get_logger
 from src.protocols.protocol import Protocol
-from src.utils.config_manager import ConfigManager
+from src.utils.config_manager import get_config
 
 # 服务器可能使用自签名证书，暂时跳过客户端证书验证
 # 以避免生产环境中非正规SSL证书导致连接失败
@@ -20,7 +20,7 @@ class WebsocketProtocol(Protocol):
     def __init__(self):
         super().__init__()
         # 获取配置管理器实例
-        self.config = ConfigManager.get_instance()
+        self.config = get_config()
         self.websocket = None
         self.connected = False
         self.hello_received = None  # 初始化时先设为 None

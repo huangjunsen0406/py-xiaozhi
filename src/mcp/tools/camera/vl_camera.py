@@ -9,7 +9,7 @@ import httpx
 from openai import OpenAI
 
 from src.logging import get_logger
-from src.utils.config_manager import ConfigManager
+from src.utils.config_manager import get_config
 
 from .base_camera import BaseCamera
 
@@ -26,7 +26,7 @@ class VLCamera(BaseCamera):
         初始化智普AI摄像头.
         """
         super().__init__()
-        config = ConfigManager.get_instance()
+        config = get_config()
 
         # 初始化OpenAI客户端（设置超时防止 API 无响应时线程池挂起）
         self.client = OpenAI(

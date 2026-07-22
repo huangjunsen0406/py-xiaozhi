@@ -14,7 +14,7 @@ from PySide6.QtCore import Property, Signal, Slot
 
 from src.audio_processing.keyword_converters import convert_wake_word
 from src.logging import get_logger
-from src.utils.config_manager import ConfigManager
+from src.utils.config_manager import get_config
 from src.utils.resource_finder import get_user_data_dir
 
 from .base_model import BaseModel
@@ -35,7 +35,7 @@ class SettingsModel(BaseModel):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._config_manager = ConfigManager.get_instance()
+        self._config_manager = get_config()
         self._config_path = get_user_data_dir() / "config" / "config.json"
         self._config: dict = {}
 
@@ -149,7 +149,7 @@ class SettingsModel(BaseModel):
         try:
             with open(self._config_path, "w", encoding="utf-8") as f:
                 json.dump(self._config, f, ensure_ascii=False, indent=2)
-            # SettingsModel 自己有一份 dict，ConfigManager 单例要同步
+            # SettingsModel 自己有一份 dict，进程内 ConfigManager 要同步
             try:
                 self._config_manager.reload_config()
             except Exception as e:

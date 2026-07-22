@@ -15,7 +15,7 @@ from src.core.state_manager import StateManager
 from src.core.task_manager import TaskManager
 from src.logging import get_logger
 from src.plugins.manager import PluginManager
-from src.utils.config_manager import ConfigManager
+from src.utils.config_manager import ConfigManager, get_config
 
 logger = get_logger()
 
@@ -163,7 +163,7 @@ class ServiceContainer:
         logger.debug("初始化 ServiceContainer")
 
         # 配置
-        self.config = ConfigManager.get_instance()
+        self.config = get_config()
 
         # 获取 AEC 配置
         try:

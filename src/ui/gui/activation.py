@@ -163,9 +163,9 @@ class GUIActivation(QObject, BaseActivation):
             from PySide6.QtCore import QUrl
             from PySide6.QtGui import QDesktopServices
 
-            from src.utils.config_manager import ConfigManager
+            from src.utils.config_manager import get_config
 
-            config = ConfigManager.get_instance()
+            config = get_config()
             url = config.get_config("SYSTEM_OPTIONS.NETWORK.AUTHORIZATION_URL", "")
             if url:
                 QDesktopServices.openUrl(QUrl(url))

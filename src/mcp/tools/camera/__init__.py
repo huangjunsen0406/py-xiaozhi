@@ -8,7 +8,7 @@ from typing import Callable
 
 from src.logging import get_logger
 from src.mcp.tooling import McpTool, Property, PropertyList, PropertyType
-from src.utils.config_manager import ConfigManager
+from src.utils.config_manager import get_config
 
 from .normal_camera import NormalCamera
 from .vl_camera import VLCamera
@@ -20,7 +20,7 @@ def create_camera():
     """
     按配置创建一个摄像头实现并返回.
     """
-    config = ConfigManager.get_instance()
+    config = get_config()
 
     vl_key = config.get_config("CAMERA.VLapi_key")
     vl_url = config.get_config("CAMERA.Local_VL_url")
