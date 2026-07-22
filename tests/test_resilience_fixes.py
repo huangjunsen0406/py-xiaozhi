@@ -206,27 +206,23 @@ async def test_plugin_mark_failed_skips_notify_only_for_failed():
 
 
 def test_constants_import_has_no_config_manager_side_effect(monkeypatch):
-    """import constants 不应在模块级拉起 ConfigManager IO."""
+    """import constants 不应在模块级拉起配置 IO."""
     import importlib
     import sys
 
-    # 清掉已加载模块，强制重新 import
     for name in list(sys.modules):
         if name == "src.constants.constants" or name.startswith("src.constants.constants."):
             del sys.modules[name]
 
     calls = {"n": 0}
 
-    class FakeCM:
-        @classmethod
-        def get_instance(cls):
-            calls["n"] += 1
-            raise AssertionError("import 时不应调用 ConfigManager.get_instance")
+    def fake_get_config():
+        calls["n"] += 1
+        raise AssertionError("import 时不应调用 get_config")
 
     monkeypatch.setattr(
-        "src.utils.config_manager.ConfigManager", FakeCM, raising=False
+        "src.utils.config_manager.get_config", fake_get_config, raising=False
     )
-    # 重新加载
     import src.constants.constants as constants
 
     importlib.reload(constants)
@@ -315,15 +311,19 @@ def test_ui_plugin_uses_view_facade_not_main_model():
     assert "set_music_line" in p_source
 
 
-def test_config_manager_reset_instance():
-    from src.utils.config_manager import ConfigManager
+def test_config_manager_initialize_and_reset():
+    from src.utils.config_manager import get_config, initialize_config, reset_config
 
-    a = ConfigManager.get_instance()
-    ConfigManager.reset_instance()
-    b = ConfigManager.get_instance()
-    assert a is not b
-    # 再 reset 避免污染其它测试
-    ConfigManager.reset_instance()
+    reset_config()
+    with pytest.raises(RuntimeError):
+        get_config()
+    a = initialize_config()
+    b = get_config()
+    assert a is b
+    reset_config()
+    c = initialize_config()
+    assert c is not a
+    reset_config()
 
 
 @pytest.mark.asyncio
@@ -421,10 +421,10 @@ def test_gui_activation_no_ensure_future_or_get_event_loop():
 
 def test_config_manager_batch_update_single_save(tmp_path, monkeypatch):
     """批量 update_configs 只落盘一次."""
-    from src.utils.config_manager import ConfigManager
+    from src.utils.config_manager import get_config, initialize_config, reset_config
 
-    ConfigManager.reset_instance()
-    cm = ConfigManager.get_instance()
+    reset_config()
+    cm = initialize_config()
     # 指向临时文件，避免污染用户配置
     cm.config_dir = tmp_path
     cm.config_file = tmp_path / "config.json"
@@ -457,25 +457,32 @@ def test_config_manager_batch_update_single_save(tmp_path, monkeypatch):
     assert ok is True
     assert saves["n"] == 1
     assert cm.get_config("SYSTEM_OPTIONS.NETWORK.WEBSOCKET_URL") == "wss://example"
+    assert get_config() is cm
 
     # 单次 update 仍会 save
     cm.update_config("SYSTEM_OPTIONS.NETWORK.WEBSOCKET_ACCESS_TOKEN", "tok2")
     assert saves["n"] == 2
 
-    ConfigManager.reset_instance()
+    reset_config()
 
 
 def test_music_player_init_is_lazy():
     """MusicPlayer 构造不应立刻扫缓存目录或读满配置副作用路径."""
     from src.mcp.tools.music.music_player import MusicPlayer
+    from src.utils.config_manager import initialize_config, reset_config
 
-    p = MusicPlayer()
-    assert p._config is None
-    assert p._cache._ready is False
-    assert p._cache._temp_cleaned is False
-    cfg = p.config
-    assert isinstance(cfg, dict)
-    assert "SEARCH_URL" in cfg
+    reset_config()
+    initialize_config()
+    try:
+        p = MusicPlayer()
+        assert p._config is None
+        assert p._cache._ready is False
+        assert p._cache._temp_cleaned is False
+        cfg = p.config
+        assert isinstance(cfg, dict)
+        assert "SEARCH_URL" in cfg
+    finally:
+        reset_config()
 
 
 def test_viewport_protocol_and_cli_slots():
@@ -1142,3 +1149,19 @@ def test_settings_run_worker_emits_test_complete_on_exception():
     assert stub._testing_input is False
     assert completed == [("input", False)]
     assert any("device busy" in str(m) for m in messages)
+
+
+def test_no_config_or_logging_get_instance_api():
+    """配置/日志不再暴露 get_instance 懒单例."""
+    from src.utils import config_manager as cm
+    from src.logging import log_config as lc
+    import src.logging as logging_pkg
+
+    assert not hasattr(cm.ConfigManager, "get_instance")
+    assert not hasattr(cm.ConfigManager, "reset_instance")
+    assert hasattr(cm, "initialize_config")
+    assert hasattr(cm, "get_config")
+    assert hasattr(cm, "reset_config")
+    assert not hasattr(lc, "LoggingConfigManager")
+    assert hasattr(lc, "load_logging_config")
+    assert "LoggingConfigManager" not in logging_pkg.__all__
