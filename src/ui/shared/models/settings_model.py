@@ -63,6 +63,48 @@ class SettingsModel(BaseModel):
         self._load_config()
         self._load_wake_word(update_preview=False)
 
+    def _run_worker(
+        self,
+        target,
+        *args,
+        name: str | None = None,
+        test_kind: str | None = None,
+        clear_flags=None,
+    ) -> None:
+        """后台线程统一入口：异常必达 statusMessage / testComplete，避免 UI 一直转圈.
+
+        Args:
+            target: 工作函数（应自行处理业务成功路径的 Signal）
+            *args: 传给 target 的参数
+            name: 线程名
+            test_kind: 若提供，异常时 emit testComplete(kind, False)
+            clear_flags: 异常/结束时调用的清理回调（如复位 _testing_*）
+        """
+
+        def _entry():
+            try:
+                target(*args)
+            except Exception as e:
+                logger.error(f"设置页后台任务失败 ({name or target}): {e}", exc_info=True)
+                try:
+                    self.statusMessage.emit(f"[错误] {e}")
+                except Exception:
+                    pass
+                if test_kind is not None:
+                    try:
+                        self.testComplete.emit(test_kind, False)
+                    except Exception:
+                        pass
+            finally:
+                if clear_flags is not None:
+                    try:
+                        clear_flags()
+                    except Exception:
+                        pass
+
+        thread = threading.Thread(target=_entry, name=name or "settings:worker", daemon=True)
+        thread.start()
+
     # ========== 配置读写 ==========
 
     def _load_config(self):
@@ -739,50 +781,45 @@ class SettingsModel(BaseModel):
         self._testing_input = True
         self.statusMessage.emit("开始录音测试...")
 
-        thread = threading.Thread(target=self._do_input_test, args=(device,))
-        thread.daemon = True
-        thread.start()
+        self._run_worker(
+            self._do_input_test,
+            device,
+            name="settings:input_test",
+            test_kind="input",
+            clear_flags=lambda: setattr(self, "_testing_input", False),
+        )
 
     def _do_input_test(self, device: dict):
-        """执行录音测试."""
-        try:
-            device_id = device["index"]
-            sample_rate = device["sample_rate"]
-            duration = 3
+        """执行录音测试（异常由 _run_worker 兜底）."""
+        device_id = device["index"]
+        sample_rate = device["sample_rate"]
+        duration = 3
 
-            self.statusMessage.emit(f"请对着麦克风说话 ({duration}秒)...")
-            time.sleep(1)
+        self.statusMessage.emit(f"请对着麦克风说话 ({duration}秒)...")
+        time.sleep(1)
 
-            recording = sd.rec(
-                int(duration * sample_rate),
-                samplerate=sample_rate,
-                channels=1,
-                device=device_id,
-                dtype=np.float32,
-            )
-            sd.wait()
+        recording = sd.rec(
+            int(duration * sample_rate),
+            samplerate=sample_rate,
+            channels=1,
+            device=device_id,
+            dtype=np.float32,
+        )
+        sd.wait()
 
-            # 分析录音
-            max_amplitude = np.max(np.abs(recording))
+        max_amplitude = np.max(np.abs(recording))
 
-            if max_amplitude < 0.001:
-                self.statusMessage.emit("[失败] 未检测到音频信号")
-                self.testComplete.emit("input", False)
-            elif max_amplitude > 0.8:
-                self.statusMessage.emit("[警告] 音频信号过载")
-                self.testComplete.emit("input", True)
-            else:
-                self.statusMessage.emit(
-                    f"[成功] 录音测试通过 (音量: {max_amplitude:.1%})"
-                )
-                self.testComplete.emit("input", True)
-
-        except Exception as e:
-            logger.error(f"录音测试失败: {e}", exc_info=True)
-            self.statusMessage.emit(f"[错误] {str(e)}")
+        if max_amplitude < 0.001:
+            self.statusMessage.emit("[失败] 未检测到音频信号")
             self.testComplete.emit("input", False)
-        finally:
-            self._testing_input = False
+        elif max_amplitude > 0.8:
+            self.statusMessage.emit("[警告] 音频信号过载")
+            self.testComplete.emit("input", True)
+        else:
+            self.statusMessage.emit(
+                f"[成功] 录音测试通过 (音量: {max_amplitude:.1%})"
+            )
+            self.testComplete.emit("input", True)
 
     @Slot()
     def testOutputDevice(self):
@@ -799,42 +836,36 @@ class SettingsModel(BaseModel):
         self._testing_output = True
         self.statusMessage.emit("开始播放测试...")
 
-        thread = threading.Thread(target=self._do_output_test, args=(device,))
-        thread.daemon = True
-        thread.start()
+        self._run_worker(
+            self._do_output_test,
+            device,
+            name="settings:output_test",
+            test_kind="output",
+            clear_flags=lambda: setattr(self, "_testing_output", False),
+        )
 
     def _do_output_test(self, device: dict):
-        """执行播放测试."""
-        try:
-            device_id = device["index"]
-            sample_rate = device["sample_rate"]
-            duration = 2.0
-            frequency = 440
+        """执行播放测试（异常由 _run_worker 兜底）."""
+        device_id = device["index"]
+        sample_rate = device["sample_rate"]
+        duration = 2.0
+        frequency = 440
 
-            self.statusMessage.emit("播放 440Hz 测试音...")
-            time.sleep(0.5)
+        self.statusMessage.emit("播放 440Hz 测试音...")
+        time.sleep(0.5)
 
-            # 生成测试音
-            t = np.linspace(0, duration, int(sample_rate * duration))
-            audio = 0.3 * np.sin(2 * np.pi * frequency * t)
+        t = np.linspace(0, duration, int(sample_rate * duration))
+        audio = 0.3 * np.sin(2 * np.pi * frequency * t)
 
-            # 淡入淡出
-            fade_samples = int(0.1 * sample_rate)
-            audio[:fade_samples] *= np.linspace(0, 1, fade_samples)
-            audio[-fade_samples:] *= np.linspace(1, 0, fade_samples)
+        fade_samples = int(0.1 * sample_rate)
+        audio[:fade_samples] *= np.linspace(0, 1, fade_samples)
+        audio[-fade_samples:] *= np.linspace(1, 0, fade_samples)
 
-            sd.play(audio, samplerate=sample_rate, device=device_id)
-            sd.wait()
+        sd.play(audio, samplerate=sample_rate, device=device_id)
+        sd.wait()
 
-            self.statusMessage.emit("[成功] 播放测试完成")
-            self.testComplete.emit("output", True)
-
-        except Exception as e:
-            logger.error(f"播放测试失败: {e}", exc_info=True)
-            self.statusMessage.emit(f"[错误] {str(e)}")
-            self.testComplete.emit("output", False)
-        finally:
-            self._testing_output = False
+        self.statusMessage.emit("[成功] 播放测试完成")
+        self.testComplete.emit("output", True)
 
     # ========== 快捷键设置 ==========
 
@@ -985,10 +1016,11 @@ class SettingsModel(BaseModel):
             return
 
         self._cameras_loading = True
-        thread = threading.Thread(
-            target=self._do_load_cameras, name="settings:scan_cameras", daemon=True
+        self._run_worker(
+            self._do_load_cameras,
+            name="settings:scan_cameras",
+            clear_flags=lambda: setattr(self, "_cameras_loading", False),
         )
-        thread.start()
 
     def _do_load_cameras(self):
         """执行摄像头扫描（后台线程；早停 + 压低 OpenCV 日志噪声）."""
@@ -1017,7 +1049,6 @@ class SettingsModel(BaseModel):
             ]
 
             consecutive_fail = 0
-            seen_ok = 0
             for i in order:
                 try:
                     cap = cv2.VideoCapture(i)
@@ -1026,7 +1057,6 @@ class SettingsModel(BaseModel):
                         cameras.append({"index": i, "name": f"摄像头 {i}"})
                         cap.release()
                         consecutive_fail = 0
-                        seen_ok += 1
                     else:
                         consecutive_fail += 1
                         try:
@@ -1051,10 +1081,10 @@ class SettingsModel(BaseModel):
             logger.warning("cv2 未安装，无法扫描摄像头")
         except Exception as e:
             logger.error(f"扫描摄像头失败: {e}", exc_info=True)
+            raise
         finally:
             self._cameras = cameras
             self._cameras_loaded_once = True
-            self._cameras_loading = False
             self.devicesChanged.emit()
             self.statusMessage.emit(
                 f"摄像头列表已刷新（{len(cameras)} 个）"
@@ -1106,48 +1136,48 @@ class SettingsModel(BaseModel):
         camera = self._cameras[idx]
         self.statusMessage.emit(f"正在测试摄像头 {camera['name']}...")
 
-        thread = threading.Thread(target=self._do_camera_test, args=(camera,))
-        thread.daemon = True
-        thread.start()
+        self._run_worker(
+            self._do_camera_test,
+            camera,
+            name="settings:camera_test",
+            test_kind="camera",
+        )
 
     def _do_camera_test(self, camera: dict):
-        """执行摄像头测试."""
+        """执行摄像头测试（异常由 _run_worker 兜底）."""
         try:
             import cv2
-
-            camera_id = camera["index"]
-            cap = cv2.VideoCapture(camera_id)
-
-            if not cap.isOpened():
-                self.statusMessage.emit("[失败] 无法打开摄像头")
-                return
-
-            # 设置分辨率
-            width = self._get_value("CAMERA.frame_width", 640)
-            height = self._get_value("CAMERA.frame_height", 480)
-            cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
-            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
-
-            # 读取几帧（让摄像头预热）
-            for _ in range(5):
-                cap.read()
-
-            # 捕获一帧
-            ret, frame = cap.read()
-            cap.release()
-
-            if not ret or frame is None:
-                self.statusMessage.emit("[失败] 无法捕获图像")
-                return
-
-            # 获取实际分辨率
-            actual_height, actual_width = frame.shape[:2]
-            self.statusMessage.emit(
-                f"[成功] 摄像头正常 (分辨率: {actual_width}x{actual_height})"
-            )
-
         except ImportError:
             self.statusMessage.emit("[错误] cv2 未安装")
-        except Exception as e:
-            logger.error(f"摄像头测试失败: {e}", exc_info=True)
-            self.statusMessage.emit(f"[错误] {str(e)}")
+            self.testComplete.emit("camera", False)
+            return
+
+        camera_id = camera["index"]
+        cap = cv2.VideoCapture(camera_id)
+
+        if not cap.isOpened():
+            self.statusMessage.emit("[失败] 无法打开摄像头")
+            self.testComplete.emit("camera", False)
+            return
+
+        width = self._get_value("CAMERA.frame_width", 640)
+        height = self._get_value("CAMERA.frame_height", 480)
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
+
+        for _ in range(5):
+            cap.read()
+
+        ret, frame = cap.read()
+        cap.release()
+
+        if not ret or frame is None:
+            self.statusMessage.emit("[失败] 无法捕获图像")
+            self.testComplete.emit("camera", False)
+            return
+
+        actual_height, actual_width = frame.shape[:2]
+        self.statusMessage.emit(
+            f"[成功] 摄像头正常 (分辨率: {actual_width}x{actual_height})"
+        )
+        self.testComplete.emit("camera", True)
