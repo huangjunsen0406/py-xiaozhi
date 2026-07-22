@@ -164,7 +164,9 @@ class MusicDownloader:
             response.raise_for_status()
             return response.json()
         except Exception as e:
-            logger.warning(f"请求失败 {urlparse(url).netloc}: {e}")
+            logger.warning(
+                f"请求失败 {urlparse(url).netloc}: {e}", exc_info=True
+            )
             return None
 
     def _candidate_lx_urls(self, api_url: str) -> list[str]:

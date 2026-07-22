@@ -294,13 +294,13 @@ class WebsocketProtocol(Protocol):
             await self.websocket.send(message)
         except websockets.ConnectionClosed as e:
             # 正常断连（含 1005），warning 就够了
-            logger.warning(f"发送文本时连接已关闭: {e}")
+            logger.warning(f"发送文本时连接已关闭: {e}", exc_info=True)
             if self.connected and not self._is_closing:
                 await self._handle_connection_loss(
                     f"发送文本失败: {e.code} {e.reason}"
                 )
         except websockets.ConnectionClosedError as e:
-            logger.warning(f"发送文本时连接错误: {e}")
+            logger.warning(f"发送文本时连接错误: {e}", exc_info=True)
             if self.connected and not self._is_closing:
                 await self._handle_connection_loss(
                     f"发送文本错误: {e.code} {e.reason}"
