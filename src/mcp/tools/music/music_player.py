@@ -32,8 +32,9 @@ logger = get_logger()
 
 
 class MusicPlayer:
-    def __init__(self, audio_codec: "AudioCodec | None" = None):
-        self._audio_codec = audio_codec
+    def __init__(self):
+        # AudioCodec 仅经 Events.AUDIO_CODEC_CHANGED 注入，构造期不接收
+        self._audio_codec: "AudioCodec | None" = None
         self._event_bus = None
         self._plugin_ctx = None
 
@@ -74,10 +75,30 @@ class MusicPlayer:
     def temp_cache_dir(self) -> Path:
         return self._cache.temp_dir
 
-    def set_audio_codec(self, audio_codec: "AudioCodec | None") -> None:
-        self._audio_codec = audio_codec
-        if audio_codec:
-            logger.info("AudioCodec 已设置到 MusicPlayer")
+    async def _on_audio_codec_changed(self, codec=None) -> None:
+        """EventBus：AudioPlugin 发布 codec 就绪/清除.
+
+        EventBus 在 data 为 None 时无参调用 handler，故 codec 必须有默认值。
+        清除时先 stop，避免持有已 close 的 codec 继续写。
+        """
+        if codec is None:
+            if self.is_playing:
+                try:
+                    await self.stop()
+                except Exception as e:
+                    logger.debug(f"codec 清除前停止播放失败: {e}", exc_info=True)
+            if self.decoder:
+                try:
+                    await self.decoder.stop()
+                except Exception as e:
+                    logger.debug(f"codec 清除前停止 decoder 失败: {e}", exc_info=True)
+                self.decoder = None
+            self._audio_codec = None
+            logger.debug("MusicPlayer AudioCodec 已清除")
+            return
+
+        self._audio_codec = codec
+        logger.info("AudioCodec 已设置到 MusicPlayer")
 
     def set_event_bus(self, event_bus, plugin_ctx=None) -> None:
         from src.core.event_bus import Events
@@ -88,6 +109,7 @@ class MusicPlayer:
         if event_bus:
             event_bus.on(Events.MUSIC_PAUSE_REQUEST, self._on_pause_request)
             event_bus.on(Events.MUSIC_RESUME_REQUEST, self._on_resume_request)
+            event_bus.on(Events.AUDIO_CODEC_CHANGED, self._on_audio_codec_changed)
             logger.info("MusicPlayer 已连接到 EventBus")
 
     def _unsubscribe_event_bus(self) -> None:
@@ -98,6 +120,7 @@ class MusicPlayer:
 
             self._event_bus.off(Events.MUSIC_PAUSE_REQUEST, self._on_pause_request)
             self._event_bus.off(Events.MUSIC_RESUME_REQUEST, self._on_resume_request)
+            self._event_bus.off(Events.AUDIO_CODEC_CHANGED, self._on_audio_codec_changed)
         except Exception as e:
             logger.debug(f"MusicPlayer 取消 EventBus 订阅失败: {e}")
 
@@ -847,51 +870,3 @@ class MusicPlayer:
                 cache.clean_temp()
         except Exception as e:
             logger.debug(f"__del__ 清理临时缓存失败: {e}")
-
-
-# 进程内共享：容器 bind 优先，工具侧 get_* 兼容
-_music_player_instance: MusicPlayer | None = None
-_music_player_bound: bool = False
-
-
-def bind_music_player(player: MusicPlayer) -> None:
-    global _music_player_instance, _music_player_bound
-    if (
-        _music_player_instance is not None
-        and _music_player_instance is not player
-    ):
-        try:
-            _music_player_instance.detach()
-        except Exception as e:
-            logger.debug(f"替换 MusicPlayer 时 detach 旧实例失败: {e}")
-    _music_player_instance = player
-    _music_player_bound = True
-    logger.info("[MusicPlayer] 已绑定容器实例")
-
-
-def unbind_music_player() -> None:
-    global _music_player_instance, _music_player_bound
-    if _music_player_instance is not None:
-        try:
-            _music_player_instance.detach()
-        except Exception as e:
-            logger.debug(f"unbind MusicPlayer detach 失败: {e}")
-    _music_player_instance = None
-    _music_player_bound = False
-    logger.debug("[MusicPlayer] 已解除容器绑定")
-
-
-def get_music_player_instance() -> MusicPlayer:
-    global _music_player_instance
-    if _music_player_instance is None:
-        _music_player_instance = MusicPlayer()
-        logger.info("[MusicPlayer] 创建回退实例（容器未绑定）")
-    return _music_player_instance
-
-
-def is_music_player_bound() -> bool:
-    return _music_player_bound and _music_player_instance is not None
-
-
-def reset_music_player_instance() -> None:
-    unbind_music_player()

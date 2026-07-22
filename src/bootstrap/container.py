@@ -21,7 +21,7 @@ logger = get_logger()
 
 # 启动失败时直接退出，避免 zombie wait_shutdown
 _CRITICAL_PLUGINS = ("ui",)
-# audio 为关键能力，除非显式禁用
+# audio 默认关键；XIAOZHI_DEGRADED_AUDIO=1 时失败仅降级不 exit
 _AUDIO_CRITICAL = True
 
 
@@ -197,6 +197,8 @@ class ServiceContainer:
 
         # 关闭状态（防重入）
         self._shutting_down = False
+        # audio 降级运行（XIAOZHI_DEGRADED_AUDIO=1 且 audio failed）
+        self._degraded_audio = False
 
     # -------------------------
     # 适配器创建
@@ -250,6 +252,18 @@ class ServiceContainer:
                 logger.error(health_error)
                 return 1
 
+            # audio 失败但允许降级：打横幅/日志，继续跑 UI
+            if self.plugins.is_failed("audio") and not self._audio_is_fatal():
+                msg = (
+                    "降级：音频不可用（无麦/扬声器）。设置仍可用，修复设备后请重启。"
+                )
+                logger.warning(msg)
+                self._degraded_audio = True
+                try:
+                    await self.event_bus.emit(Events.SYSTEM_NOTICE, msg)
+                except Exception as e:
+                    logger.debug(f"降级提示事件失败: {e}", exc_info=True)
+
             # 广播初始状态
             await self.plugins.notify_device_state_changed(
                 self.state.device_state
@@ -266,36 +280,33 @@ class ServiceContainer:
             await self.shutdown()
 
     def _bind_shared_services(self) -> None:
-        """创建并绑定跨插件共享服务（McpServer / MusicPlayer）.
+        """创建跨插件共享服务（McpServer / MusicPlayer），仅容器持有.
 
-        MusicPlayer 构造已尽量轻量（配置/缓存懒加载），启动期只绑定实例。
+        不再写入模块级单例；插件与 MCP 工具经构造注入 / 闭包拿到同一实例。
         """
         from src.mcp.mcp_server import McpServer
-        from src.mcp.tools.music.music_player import MusicPlayer, bind_music_player
+        from src.mcp.tools.music.music_player import MusicPlayer
 
         if self.mcp_server is None:
             self.mcp_server = McpServer()
-            McpServer.bind_instance(self.mcp_server)
 
         if self.music_player is None:
             self.music_player = MusicPlayer()
-            bind_music_player(self.music_player)
 
-        logger.debug("共享服务已绑定: McpServer, MusicPlayer")
+        logger.debug("共享服务已创建: McpServer, MusicPlayer")
 
     def _unbind_shared_services(self) -> None:
-        """解除共享服务绑定（资源池最后阶段调用）."""
-        from src.mcp.mcp_server import McpServer
-        from src.mcp.tools.music.music_player import unbind_music_player
-
-        try:
-            unbind_music_player()
-        except Exception as e:
-            logger.debug(f"unbind MusicPlayer 失败: {e}", exc_info=True)
-        try:
-            McpServer.unbind_instance()
-        except Exception as e:
-            logger.debug(f"unbind McpServer 失败: {e}", exc_info=True)
+        """释放共享服务引用（资源池最后阶段调用）."""
+        if self.music_player is not None:
+            try:
+                self.music_player.detach()
+            except Exception as e:
+                logger.debug(f"detach MusicPlayer 失败: {e}", exc_info=True)
+        if self.mcp_server is not None:
+            try:
+                self.mcp_server.detach()
+            except Exception as e:
+                logger.debug(f"detach McpServer 失败: {e}", exc_info=True)
         self.music_player = None
         self.mcp_server = None
 
@@ -314,8 +325,8 @@ class ServiceContainer:
         # 先绑定容器级共享服务，再初始化插件
         self._bind_shared_services()
 
-        # 创建插件实例（注入容器持有的共享服务）
-        audio_plugin = AudioPlugin(music_player=self.music_player)
+        # 创建插件实例（Audio 经事件发布 codec，不注入 MusicPlayer）
+        audio_plugin = AudioPlugin()
         wake_word_plugin = WakeWordPlugin()
         ui_plugin = UIPlugin(mode=mode, task_manager=self.tasks)
         shortcuts_plugin = ShortcutsPlugin()
@@ -343,6 +354,19 @@ class ServiceContainer:
         if not audio_plugin.failed:
             self.protocol.set_audio_handler(audio_plugin.on_incoming_audio)
 
+    def _audio_is_fatal(self) -> bool:
+        """audio 失败是否应导致进程退出.
+
+        - XIAOZHI_DISABLE_AUDIO=1：有意禁用，不视为失败
+        - XIAOZHI_DEGRADED_AUDIO=1：失败则降级继续（UI/设置可用）
+        - 默认：audio 失败即 exit 1
+        """
+        if os.getenv("XIAOZHI_DISABLE_AUDIO") == "1":
+            return False
+        if os.getenv("XIAOZHI_DEGRADED_AUDIO") == "1":
+            return False
+        return _AUDIO_CRITICAL
+
     def _check_critical_plugins(self) -> Optional[str]:
         """检查关键插件是否可用.
 
@@ -354,16 +378,21 @@ class ServiceContainer:
             if self.plugins.is_failed(name):
                 failed.append(name)
 
-        audio_disabled = os.getenv("XIAOZHI_DISABLE_AUDIO") == "1"
-        if _AUDIO_CRITICAL and not audio_disabled and self.plugins.is_failed("audio"):
+        if self._audio_is_fatal() and self.plugins.is_failed("audio"):
             failed.append("audio")
 
         if not failed:
             return None
+        hints = []
+        if "audio" in failed:
+            hints.append(
+                "无音频调试可设 XIAOZHI_DISABLE_AUDIO=1；"
+                "或设 XIAOZHI_DEGRADED_AUDIO=1 以无麦模式继续（UI/设置可用）。"
+            )
         return (
             f"关键插件启动失败: {', '.join(failed)}。"
             "应用将退出以避免空转（zombie）。"
-            "若需无音频调试，可设置 XIAOZHI_DISABLE_AUDIO=1。"
+            + (" " + " ".join(hints) if hints else "")
         )
 
     def _setup_event_handlers(self) -> None:

@@ -50,9 +50,10 @@ class UIPlugin(Plugin):
 
         bus = self._ctx.event_bus
         bus.on(Events.NETWORK_ERROR, self._on_network_error)
+        bus.on(Events.SYSTEM_NOTICE, self._on_system_notice)
         bus.on(Events.MUSIC_STATE_CHANGED, self._on_music_state_changed)
         bus.on(Events.MUSIC_LYRICS_UPDATE, self._on_music_lyrics_update)
-        logger.info("UIPlugin 已订阅音乐/网络事件")
+        logger.info("UIPlugin 已订阅音乐/网络/系统提示事件")
 
         if self._session:
             self._session.subscribe(bus)
@@ -78,6 +79,10 @@ class UIPlugin(Plugin):
 
     async def _on_network_error(self, error_message: str = None) -> None:
         self._presenter.show_network_error()
+
+    async def _on_system_notice(self, message: str = None) -> None:
+        if message:
+            self._presenter.set_status(str(message), connected=True)
 
     def register_resources(self, pool) -> None:
         if self.viewport:

@@ -33,9 +33,13 @@ class Events:
     # 音频通道
     AUDIO_CHANNEL_OPENED = "audio_channel_opened"
     AUDIO_CHANNEL_CLOSED = "audio_channel_closed"
+    # AudioCodec 生命周期（AudioPlugin → MusicPlayer 等订阅者，避免直连 set）
+    AUDIO_CODEC_CHANGED = "audio_codec_changed"
 
     # 应用生命周期
     APP_SHUTDOWN = "app_shutdown"
+    # 系统级提示（降级模式横幅等，payload: str）
+    SYSTEM_NOTICE = "system_notice"
 
     # 音乐播放器事件
     MUSIC_STATE_CHANGED = "music_state_changed"  # 播放状态变化
@@ -62,6 +66,12 @@ class Events:
     CONFIG_CHANGED = "config_changed"  # 配置已变更（需要热重载）
 
 
+# 已知事件名集合：拼写错误时在 on/emit 打 warning（debug 友好）
+_KNOWN_EVENTS: frozenset[str] = frozenset(
+    v for k, v in vars(Events).items() if not k.startswith("_") and isinstance(v, str)
+)
+
+
 class EventBus:
     """事件总线.
 
@@ -83,6 +93,14 @@ class EventBus:
             list
         )
 
+    @staticmethod
+    def _warn_if_unknown(event: str, action: str) -> None:
+        if event not in _KNOWN_EVENTS:
+            logger.warning(
+                f"EventBus: {action} 未知事件名 {event!r}（可能是拼写错误；"
+                "请使用 Events.* 常量）"
+            )
+
     def on(self, event: str, handler: Callable[..., Awaitable[None]]) -> None:
         """注册事件处理器.
 
@@ -90,6 +108,7 @@ class EventBus:
             event: 事件名称
             handler: 异步处理函数
         """
+        self._warn_if_unknown(event, "注册")
         if handler not in self._handlers[event]:
             self._handlers[event].append(handler)
             logger.debug(f"EventBus: 注册处理器 {handler.__name__} -> {event}")
@@ -129,6 +148,8 @@ class EventBus:
         """
         handlers = list(self._handlers.get(event, []))
         if not handlers:
+            # 无订阅者时仍提示未知事件名，避免拼写错误静默丢失
+            self._warn_if_unknown(event, "触发")
             return
 
         logger.debug(f"EventBus: 触发事件 {event}, {len(handlers)} 个处理器")

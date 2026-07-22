@@ -1,6 +1,7 @@
 """音频插件.
 
 负责音频采集、编码、播放和发送。
+AudioCodec 经 Events.AUDIO_CODEC_CHANGED 发布，不直连 MusicPlayer。
 """
 
 import asyncio
@@ -13,7 +14,6 @@ from src.plugins.base import Plugin
 
 if TYPE_CHECKING:
     from src.bootstrap.protocols import PluginCommands, PluginContext
-    from src.mcp.tools.music.music_player import MusicPlayer
 
 logger = get_logger()
 
@@ -24,19 +24,11 @@ class AudioPlugin(Plugin):
     name = "audio"
     priority = 10  # 最高优先级，其他插件依赖 audio_codec
 
-    def __init__(self, music_player: Optional["MusicPlayer"] = None) -> None:
+    def __init__(self) -> None:
         super().__init__()
         self.codec: Optional[AudioCodec] = None
-        self._music_player = music_player
         self._send_sem = asyncio.Semaphore(MAX_CONCURRENT_AUDIO_SENDS)
         self._in_silence_period = False
-
-    def _get_music_player(self):
-        if self._music_player is not None:
-            return self._music_player
-        from src.mcp.tools.music.music_player import get_music_player_instance
-
-        return get_music_player_instance()
 
     async def setup(self, ctx: "PluginContext", cmd: "PluginCommands") -> None:
         await super().setup(ctx, cmd)
@@ -50,19 +42,35 @@ class AudioPlugin(Plugin):
             await self.codec.initialize()
             self.codec.set_encoded_callback(self._on_encoded_audio)
 
-            music_player = self._get_music_player()
-            music_player.set_audio_codec(self.codec)
-
-            # 订阅配置变更事件
             from src.core.event_bus import Events
+
             ctx.event_bus.on(Events.CONFIG_CHANGED, self._on_config_changed)
+            # codec 在 start() 再发布：此时 McpPlugin 已为 MusicPlayer 订阅 EventBus
 
         except Exception as e:
             logger.error(f"音频插件初始化失败: {e}", exc_info=True)
             self.codec = None
-            # 标记失败，供依赖插件与容器健康门闩使用
             self.mark_failed()
             raise
+
+    async def start(self) -> None:
+        await super().start()
+        if self.codec and not self.failed:
+            await self._publish_audio_codec(self.codec)
+
+    async def _publish_audio_codec(self, codec) -> None:
+        """向订阅者（如 MusicPlayer）发布 AudioCodec 实例或 None."""
+        if not self._ctx or not self._ctx.event_bus:
+            logger.warning(
+                "无法发布 AUDIO_CODEC_CHANGED：PluginContext / EventBus 未就绪"
+            )
+            return
+        from src.core.event_bus import Events
+
+        try:
+            await self._ctx.event_bus.emit(Events.AUDIO_CODEC_CHANGED, codec)
+        except Exception as e:
+            logger.warning(f"发布 AUDIO_CODEC_CHANGED 失败: {e}", exc_info=True)
 
     async def _on_config_changed(self, data=None):
         """配置变更时重新加载音频设备."""
@@ -129,7 +137,6 @@ class AudioPlugin(Plugin):
     async def _resume_music_after_tts(self):
         """TTS 结束后恢复音乐"""
         try:
-            # 通过事件总线发送恢复请求
             from src.core.event_bus import Events
             from src.mcp.tools.music.events import MusicControlRequest
 
@@ -145,20 +152,14 @@ class AudioPlugin(Plugin):
         if codec:
 
             async def _cleanup():
-                """音频编解码器完整清理"""
+                """音频编解码器完整清理：先通知订阅者清 codec，再 close."""
                 import gc
 
                 try:
-                    music_player = self._get_music_player()
-                    if music_player.is_playing:
-                        await music_player.stop()
-                    if music_player.decoder:
-                        await music_player.decoder.stop()
-                        music_player.decoder = None
-                    # 只清 codec；完整 detach 由 mcp 清理 / 容器 unbind 负责
-                    music_player.set_audio_codec(None)
+                    # Music 收到 None 会自行 stop；完整 detach 由 mcp/容器负责
+                    await self._publish_audio_codec(None)
                 except Exception as e:
-                    logger.debug(f"清理音乐播放器失败: {e}", exc_info=True)
+                    logger.debug(f"发布 codec 清除失败: {e}", exc_info=True)
                 gc.collect()
                 await codec.close()
 
