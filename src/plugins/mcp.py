@@ -1,6 +1,6 @@
 """MCP 插件.
 
-管理 MCP 工具和消息处理。共享 McpServer / MusicPlayer 由容器注入。
+管理 MCP 工具和消息处理。McpServer / MusicPlayer 必须由容器注入。
 """
 
 from typing import TYPE_CHECKING, Any, Optional
@@ -26,26 +26,17 @@ class McpPlugin(Plugin):
         music_player: Optional["MusicPlayer"] = None,
     ) -> None:
         super().__init__()
-        self._server: Optional[McpServer] = server
+        if server is None:
+            raise ValueError("McpPlugin 需要容器注入的 McpServer")
+        if music_player is None:
+            raise ValueError("McpPlugin 需要容器注入的 MusicPlayer")
+        self._server: McpServer = server
         self._music_player = music_player
-
-    def _get_server(self) -> McpServer:
-        if self._server is None:
-            self._server = McpServer.get_instance()
-        return self._server
-
-    def _get_music_player(self):
-        if self._music_player is not None:
-            return self._music_player
-        from src.mcp.tools.music.music_player import get_music_player_instance
-
-        return get_music_player_instance()
 
     async def setup(self, ctx: "PluginContext", cmd: "PluginCommands") -> None:
         await super().setup(ctx, cmd)
-        server = self._get_server()
+        server = self._server
 
-        # MCP 响应需要使用 send_mcp_message 包装消息格式
         async def _send(msg: str):
             try:
                 await cmd.send_mcp_message(msg)
@@ -54,14 +45,21 @@ class McpPlugin(Plugin):
 
         try:
             server.set_send_callback(_send)
-            server.add_common_tools()
+            # 摄像头：懒创建一次，挂到 server，供 vision 配置与 take_photo 共用
+            from src.mcp.tools.camera import create_camera, register_camera_tools
+            from src.mcp.tools.screenshot import register_screenshot_tools
+
+            camera = create_camera()
+            server.set_camera(camera)
+            register_camera_tools(server.add_tool, camera)
+            register_screenshot_tools(server.add_tool, camera)
+
+            server.add_common_tools(music_player=self._music_player)
         except Exception as e:
             logger.error(f"MCP 工具注册失败: {e}", exc_info=True)
 
-        # 为 MusicPlayer 注入 EventBus
         try:
-            music_player = self._get_music_player()
-            music_player.set_event_bus(ctx.event_bus, ctx)
+            self._music_player.set_event_bus(ctx.event_bus, ctx)
             logger.info("MusicPlayer EventBus 已注入")
         except Exception as e:
             logger.warning(f"设置 MusicPlayer EventBus 失败: {e}", exc_info=True)
@@ -74,24 +72,22 @@ class McpPlugin(Plugin):
                 payload = message.get("payload")
                 if not payload:
                     return
-                await self._get_server().parse_message(payload)
+                await self._server.parse_message(payload)
         except Exception as e:
             logger.error(f"MCP 消息处理失败: {e}", exc_info=True)
 
     def register_resources(self, pool) -> None:
         async def _mcp_cleanup():
             try:
-                music_player = self._get_music_player()
+                music_player = self._music_player
                 if music_player.is_playing:
                     await music_player.stop()
-                # 解绑 EventBus / codec；容器 unbind 会再次 detach（幂等）
                 music_player.detach()
             except Exception as e:
                 logger.debug(f"停止/detach 音乐播放器失败: {e}", exc_info=True)
 
             try:
-                if self._server:
-                    self._server.detach()
+                self._server.detach()
             except Exception as e:
                 logger.debug(f"MCP shutdown 清理失败: {e}", exc_info=True)
 

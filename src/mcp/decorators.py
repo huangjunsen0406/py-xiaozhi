@@ -112,7 +112,9 @@ def discover_tool_modules():
         try:
             import_module(mod_name)
         except Exception as e:
-            logger.warning("跳过工具模块 %s (import 失败): %s", mod_name, e)
+            logger.warning(
+                "跳过工具模块 %s (import 失败): %s", mod_name, e, exc_info=True
+            )
 
     # 先导入根目录下的 module (例如 tools/foo.py)
     for file_path in base_path.glob("*.py"):
@@ -131,6 +133,10 @@ def discover_tool_modules():
         module_base = f"{package}.{subdir.name}"
         logger.debug("Discovering MCP tool package: %s", module_base)
         _safe_import(module_base)
+
+        # 需容器注入依赖的工具包：由 McpPlugin 显式 register，不走全局装饰器发现
+        if subdir.name in ("music", "camera", "screenshot"):
+            continue
 
         tools_file = subdir / "_tools.py"
         if tools_file.exists():

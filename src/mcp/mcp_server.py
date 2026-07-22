@@ -18,56 +18,8 @@ class McpServer:
     """
     MCP服务器实现.
 
-    正常路径由 ServiceContainer 创建并 bind_instance；
-    get_instance 作为工具/插件兼容入口。
+    由 ServiceContainer 创建，经 McpPlugin 注入。
     """
-
-    _instance = None
-    _bound = False
-
-    @classmethod
-    def bind_instance(cls, instance: "McpServer") -> None:
-        """由容器绑定权威实例."""
-        if cls._instance is not None and cls._instance is not instance:
-            try:
-                cls._instance.detach()
-            except Exception:
-                pass
-        cls._instance = instance
-        cls._bound = True
-        logger.info("McpServer 已绑定容器实例")
-
-    @classmethod
-    def unbind_instance(cls) -> None:
-        """容器关闭：detach 并清空绑定."""
-        if cls._instance is not None:
-            try:
-                cls._instance.detach()
-            except Exception:
-                pass
-        cls._instance = None
-        cls._bound = False
-        logger.debug("McpServer 已解除容器绑定")
-
-    @classmethod
-    def get_instance(cls):
-        """
-        获取实例：优先返回容器绑定；否则惰性创建回退单例.
-        """
-        if cls._instance is None:
-            cls._instance = McpServer()
-            cls._bound = False
-            logger.info("McpServer 创建回退实例（容器未绑定）")
-        return cls._instance
-
-    @classmethod
-    def is_bound(cls) -> bool:
-        return bool(cls._bound and cls._instance is not None)
-
-    @classmethod
-    def reset_instance(cls) -> None:
-        """丢弃实例（测试 / 完整重启用）."""
-        cls.unbind_instance()
 
     def __init__(self):
         self.tools: list[McpTool] = []
@@ -79,6 +31,13 @@ class McpServer:
         设置发送消息的回调函数；传 None 表示解绑。
         """
         self._send_callback = callback
+
+    def set_camera(self, camera) -> None:
+        """注入摄像头（vision 配置 / take_photo 共用）."""
+        self._camera = camera
+
+    def get_camera(self):
+        return self._camera
 
     def detach(self) -> None:
         """容器关闭时解绑运行时依赖，保留工具列表便于同进程再启动."""
@@ -104,9 +63,11 @@ class McpServer:
         logger.info(f"Add tool: {tool.name}")
         self.tools.append(tool)
 
-    def add_common_tools(self):
+    def add_common_tools(self, music_player=None):
         """
         添加通用工具.
+
+        music_player: 容器注入的 MusicPlayer；提供时注册音乐工具（闭包持有实例）。
         """
         # 备份原有工具列表
         original_tools = self.tools.copy()
@@ -116,6 +77,11 @@ class McpServer:
 
         for decorated_tool in iter_registered_mcp_tools():
             self.add_tool(decorated_tool)
+
+        if music_player is not None:
+            from src.mcp.tools.music import register_music_tools
+
+            register_music_tools(self.add_tool, music_player)
 
         # 恢复原有工具
         self.tools.extend(original_tools)
@@ -295,9 +261,12 @@ class McpServer:
             url = vision.get("url")
             token = vision.get("token")
             if url:
-                from src.mcp.tools.camera import get_camera_instance
+                camera = self._camera
+                if camera is None:
+                    from src.mcp.tools.camera import create_camera
 
-                camera = get_camera_instance()
+                    camera = create_camera()
+                    self._camera = camera
                 camera.set_explain_url(url)
                 if token:
                     camera.set_explain_token(token)

@@ -421,11 +421,15 @@ class ScreenshotCamera(BaseCamera):
         try:
             logger.info(f"Analyzing screenshot with question: {question}")
 
-            from src.mcp.tools.camera import get_camera_instance
-
-            camera_instance = get_camera_instance()
+            # 优先使用注册时注入的拍照摄像头（共用 vision URL/token）
+            camera_instance = getattr(self, "_photo_camera_ref", None)
             buf = image_data if image_data is not None else self.jpeg_data["buf"]
-            return camera_instance.analyze(question, image_data=buf)
+            if camera_instance is not None:
+                return camera_instance.analyze(question, image_data=buf)
+
+            from src.mcp.tools.camera import create_camera
+
+            return create_camera().analyze(question, image_data=buf)
 
         except Exception as e:
             logger.error(f"Error analyzing screenshot: {e}", exc_info=True)

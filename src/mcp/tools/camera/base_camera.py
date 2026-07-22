@@ -2,7 +2,6 @@
 Base camera implementation.
 """
 
-import threading
 from abc import ABC, abstractmethod
 from typing import Any
 
@@ -17,9 +16,6 @@ class BaseCamera(ABC):
     基础摄像头类，定义接口.
     """
 
-    _instances = {}  # 存储各子类的单例实例
-    _lock = threading.Lock()
-
     def __init__(self):
         """
         初始化基础摄像头.
@@ -31,17 +27,6 @@ class BaseCamera(ABC):
         self.camera_index = config.get_config("CAMERA.camera_index", 0)
         self.frame_width = config.get_config("CAMERA.frame_width", 640)
         self.frame_height = config.get_config("CAMERA.frame_height", 480)
-
-    @classmethod
-    def get_instance(cls):
-        """
-        获取单例实例（所有子类共享此方法）.
-        """
-        if cls not in cls._instances:
-            with cls._lock:
-                if cls not in cls._instances:
-                    cls._instances[cls] = cls()
-        return cls._instances[cls]
 
     def _do_cv2_capture(self) -> bool:
         """
