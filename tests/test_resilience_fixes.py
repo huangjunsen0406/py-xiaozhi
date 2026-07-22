@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import threading
 from unittest.mock import AsyncMock
 
 import pytest
@@ -235,75 +236,66 @@ def test_constants_import_has_no_config_manager_side_effect(monkeypatch):
     assert constants.DeviceState.IDLE == "idle"
 
 
-def test_music_player_detach_and_reset():
-    from src.mcp.tools.music import music_player as mp_mod
+def test_music_player_detach_clears_runtime_bindings():
+    from src.mcp.tools.music.music_player import MusicPlayer
 
-    mp_mod.reset_music_player_instance()
-    player = mp_mod.get_music_player_instance()
+    player = MusicPlayer()
     player._audio_codec = object()  # type: ignore
     player._event_bus = object()  # type: ignore
     player.detach()
     assert player._audio_codec is None
     assert player._event_bus is None
 
-    mp_mod.reset_music_player_instance()
-    assert mp_mod._music_player_instance is None
-    # 再取会新建
-    p2 = mp_mod.get_music_player_instance()
-    assert p2 is not None
-    mp_mod.reset_music_player_instance()
 
-
-def test_music_player_container_bind_lifecycle():
-    from src.mcp.tools.music import music_player as mp_mod
+def test_music_tools_register_with_injected_player():
+    """音乐工具闭包持有注入的 MusicPlayer，无 get_music_player_instance."""
+    from src.mcp.mcp_server import McpServer
+    from src.mcp.tools.music import register_music_tools
     from src.mcp.tools.music.music_player import MusicPlayer
 
-    mp_mod.reset_music_player_instance()
     owned = MusicPlayer()
-    mp_mod.bind_music_player(owned)
-    assert mp_mod.is_music_player_bound()
-    assert mp_mod.get_music_player_instance() is owned
+    server = McpServer()
+    register_music_tools(server.add_tool, owned)
 
-    # 工具侧拿到的就是容器实例
-    from src.mcp.tools.music._tools import _player
+    names = {t.name for t in server.tools}
+    assert "music_player.search_and_play" in names
+    assert "music_player.stop" in names
 
-    assert _player() is owned
+    # 源码层：不再导出全局 get/bind
+    import src.mcp.tools.music as music_pkg
+    import src.mcp.tools.music.music_player as mp_mod
 
-    mp_mod.unbind_music_player()
-    assert not mp_mod.is_music_player_bound()
-    assert mp_mod._music_player_instance is None
+    assert not hasattr(music_pkg, "get_music_player_instance")
+    assert not hasattr(mp_mod, "get_music_player_instance")
+    assert not hasattr(mp_mod, "bind_music_player")
 
 
-def test_mcp_server_detach_and_reset():
+def test_mcp_server_detach_clears_callback():
     from src.mcp.mcp_server import McpServer
 
-    McpServer.reset_instance()
-    server = McpServer.get_instance()
+    server = McpServer()
     server.set_send_callback(lambda m: None)
     assert server._send_callback is not None
     server.detach()
     assert server._send_callback is None
 
-    McpServer.reset_instance()
-    assert McpServer._instance is None
-    # 重建
-    s2 = McpServer.get_instance()
-    assert s2 is not None
-    McpServer.reset_instance()
 
-
-def test_mcp_server_container_bind_lifecycle():
+def test_mcp_server_has_no_get_instance():
     from src.mcp.mcp_server import McpServer
 
-    McpServer.reset_instance()
-    owned = McpServer()
-    McpServer.bind_instance(owned)
-    assert McpServer.is_bound()
-    assert McpServer.get_instance() is owned
+    assert not hasattr(McpServer, "get_instance")
+    assert not hasattr(McpServer, "bind_instance")
+    assert not hasattr(McpServer, "unbind_instance")
 
-    McpServer.unbind_instance()
-    assert not McpServer.is_bound()
-    assert McpServer._instance is None
+
+def test_mcp_plugin_requires_injected_services():
+    from src.plugins.mcp import McpPlugin
+
+    try:
+        McpPlugin(server=None, music_player=None)
+        assert False, "should raise"
+    except ValueError as e:
+        assert "McpServer" in str(e) or "MusicPlayer" in str(e)
 
 
 def test_ui_plugin_uses_view_facade_not_main_model():
@@ -929,3 +921,224 @@ async def test_handle_tts_stop_realtime_skips_relisten():
     await c._handle_tts_stop()
     assert "listen" not in order
     assert order == [("state", DeviceState.LISTENING)]
+
+
+# ---------------------------------------------------------------------------
+# 2026-07-22 polish：exc_info 债外的架构/冒烟
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_event_bus_warns_on_unknown_event_name(caplog):
+    import logging
+
+    bus = EventBus()
+    with caplog.at_level(logging.WARNING):
+        bus.on("typo_event_that_does_not_exist", AsyncMock())
+        await bus.emit("another_typo_event")
+
+    text = caplog.text
+    assert "typo_event_that_does_not_exist" in text
+    assert "another_typo_event" in text
+    assert "未知事件名" in text
+
+
+@pytest.mark.asyncio
+async def test_music_player_receives_codec_via_event_bus():
+    """Audio 发布 AUDIO_CODEC_CHANGED → Music 订阅；无 set_audio_codec 直连."""
+    from src.mcp.tools.music.music_player import MusicPlayer
+
+    bus = EventBus()
+    player = MusicPlayer()
+    player.set_event_bus(bus)
+    codec = object()
+
+    await bus.emit(Events.AUDIO_CODEC_CHANGED, codec)
+    assert player._audio_codec is codec
+
+    player.is_playing = True
+    player.current_song = "t"
+
+    async def _fake_stop():
+        player.is_playing = False
+        return {"status": "success"}
+
+    player.stop = _fake_stop  # type: ignore[method-assign]
+
+    await bus.emit(Events.AUDIO_CODEC_CHANGED, None)
+    assert player._audio_codec is None
+    assert player.is_playing is False
+
+    player.detach()
+
+
+def test_music_player_has_no_set_audio_codec_api():
+    from src.mcp.tools.music.music_player import MusicPlayer
+
+    assert not hasattr(MusicPlayer, "set_audio_codec")
+    assert MusicPlayer.__init__.__code__.co_argcount == 1  # 仅 self
+
+
+def test_audio_is_fatal_respects_degraded_env(monkeypatch):
+    from src.bootstrap.container import ServiceContainer
+
+    c = object.__new__(ServiceContainer)
+    monkeypatch.delenv("XIAOZHI_DISABLE_AUDIO", raising=False)
+    monkeypatch.delenv("XIAOZHI_DEGRADED_AUDIO", raising=False)
+    assert c._audio_is_fatal() is True
+
+    monkeypatch.setenv("XIAOZHI_DEGRADED_AUDIO", "1")
+    assert c._audio_is_fatal() is False
+
+    monkeypatch.delenv("XIAOZHI_DEGRADED_AUDIO", raising=False)
+    monkeypatch.setenv("XIAOZHI_DISABLE_AUDIO", "1")
+    assert c._audio_is_fatal() is False
+
+
+def test_check_critical_plugins_audio_degraded(monkeypatch):
+    from src.bootstrap.container import ServiceContainer
+
+    class FakePlugins:
+        def __init__(self, failed):
+            self._failed = failed
+
+        def is_failed(self, name):
+            return name in self._failed
+
+    c = object.__new__(ServiceContainer)
+    c.plugins = FakePlugins({"audio", "ui"})
+    monkeypatch.delenv("XIAOZHI_DISABLE_AUDIO", raising=False)
+    monkeypatch.delenv("XIAOZHI_DEGRADED_AUDIO", raising=False)
+    err = c._check_critical_plugins()
+    assert err is not None
+    assert "ui" in err
+    assert "audio" in err
+
+    # 仅 audio 失败 + degraded → 不门闩
+    c.plugins = FakePlugins({"audio"})
+    monkeypatch.setenv("XIAOZHI_DEGRADED_AUDIO", "1")
+    assert c._check_critical_plugins() is None
+
+    # 仅 audio 失败 + 默认 → 门闩
+    monkeypatch.delenv("XIAOZHI_DEGRADED_AUDIO", raising=False)
+    err = c._check_critical_plugins()
+    assert err is not None and "audio" in err
+    assert "XIAOZHI_DEGRADED_AUDIO" in err
+
+
+@pytest.mark.asyncio
+async def test_cli_mock_protocol_smoke_session():
+    """CLI 级冒烟：mock 协议 → 有界音频 + JSON → 状态机事件，无需真网/真麦."""
+    from src.core.task_manager import TaskManager
+    from src.protocols.protocol import Protocol
+
+    bus = EventBus()
+    tm = TaskManager()
+    tm.initialize()
+    transport = ProtocolTransport(bus, task_manager=tm)
+
+    received_json: list = []
+    received_audio: list = []
+
+    async def on_json(data):
+        received_json.append(data)
+
+    async def on_audio(data: bytes):
+        received_audio.append(data)
+
+    bus.on(Events.INCOMING_JSON, on_json)
+
+    class MockProtocol(Protocol):
+        def __init__(self):
+            super().__init__()
+            self._opened = False
+            self.sent_texts: list[str] = []
+            self.sent_audio: list[bytes] = []
+
+        async def open_audio_channel(self) -> bool:
+            self._opened = True
+            if self._on_audio_channel_opened:
+                await self._on_audio_channel_opened()
+            return True
+
+        async def close_audio_channel(self) -> None:
+            self._opened = False
+            if self._on_audio_channel_closed:
+                await self._on_audio_channel_closed()
+
+        def is_audio_channel_opened(self) -> bool:
+            return self._opened
+
+        async def send_text(self, message):
+            self.sent_texts.append(message)
+
+        async def send_audio(self, data: bytes):
+            self.sent_audio.append(data)
+
+    mock = MockProtocol()
+    transport._protocol = mock
+    transport._setup_callbacks()
+    transport.set_audio_handler(on_audio)
+
+    assert await transport.connect(timeout=1.0) is True
+    assert mock.is_audio_channel_opened()
+
+    # 模拟服务端 JSON + 多帧音频（有界队列 + 单 consumer）
+    transport._on_incoming_json({"type": "tts", "state": "start", "text": "你好"})
+    for i in range(20):
+        transport._on_incoming_audio(bytes([i % 256]))
+    transport._on_incoming_json({"type": "tts", "state": "stop"})
+
+    # 等 TaskManager / consumer 处理完
+    await asyncio.sleep(0.15)
+
+    assert any(m.get("type") == "tts" for m in received_json)
+    assert len(received_audio) == 20
+
+    await transport.disconnect()
+    await tm.cancel_all()
+
+
+def test_settings_run_worker_emits_test_complete_on_exception():
+    """后台任务异常必须 testComplete，避免设置页一直转圈."""
+    from src.ui.shared.models.settings_model import SettingsModel
+
+    # 不走完整 __init__（会碰 ConfigManager / 文件）；绑定 _run_worker 到简易桩
+    completed: list = []
+    messages: list = []
+
+    class _Sig:
+        def __init__(self, sink):
+            self._sink = sink
+
+        def emit(self, *args):
+            self._sink.append(args if len(args) != 1 else args[0])
+
+    class _Stub:
+        pass
+
+    stub = _Stub()
+    stub.testComplete = _Sig(completed)
+    stub.statusMessage = _Sig(messages)
+    stub._testing_input = True
+    stub._run_worker = SettingsModel._run_worker.__get__(stub, SettingsModel)
+
+    def boom():
+        raise RuntimeError("device busy")
+
+    done = threading.Event()
+
+    def clear():
+        stub._testing_input = False
+        done.set()
+
+    stub._run_worker(
+        boom,
+        name="settings:test_worker",
+        test_kind="input",
+        clear_flags=clear,
+    )
+    assert done.wait(timeout=2.0)
+    assert stub._testing_input is False
+    assert completed == [("input", False)]
+    assert any("device busy" in str(m) for m in messages)
