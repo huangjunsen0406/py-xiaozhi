@@ -45,9 +45,6 @@ class ActivationService:
     统一激活服务.
     """
 
-    _instance: Optional["ActivationService"] = None
-    _lock = asyncio.Lock()
-
     def __init__(self):
         self.logger = get_logger()
         self._initialized = False
@@ -76,26 +73,11 @@ class ActivationService:
         self._local_ip: Optional[str] = None
 
     @classmethod
-    async def get_instance(cls) -> "ActivationService":
-        """
-        获取单例实例（异步）.
-        """
-        if cls._instance is None:
-            async with cls._lock:
-                if cls._instance is None:
-                    instance = cls()
-                    await instance._async_init()
-                    cls._instance = instance
-        return cls._instance
-
-    @classmethod
-    def get_instance_sync(cls) -> "ActivationService":
-        """
-        获取单例实例（同步，用于已初始化后）.
-        """
-        if cls._instance is None:
-            raise RuntimeError("ActivationService 尚未初始化，请先调用 get_instance()")
-        return cls._instance
+    async def create(cls) -> "ActivationService":
+        """创建并异步初始化实例."""
+        instance = cls()
+        await instance._async_init()
+        return instance
 
     async def _async_init(self):
         """

@@ -77,7 +77,7 @@ async def handle_activation(mode: str) -> bool:
         from src.activation import ActivationService
 
         logger.info("开始设备激活流程检查...")
-        activation_service = await ActivationService.get_instance()
+        activation_service = await ActivationService.create()
         init_result = await activation_service.initialize()
 
         if not init_result.get("success", False):
