@@ -1,4 +1,6 @@
-"""GUI模式设备激活窗口控制器 - PySide6 + QML."""
+"""GUI 设备激活窗口：QObject 控制器 + 组合 BaseActivation 流程（无多继承）."""
+
+from __future__ import annotations
 
 import asyncio
 from pathlib import Path
@@ -8,23 +10,41 @@ from PySide6.QtGui import QGuiApplication
 from PySide6.QtQml import QQmlApplicationEngine
 
 from src.logging import get_logger
-from src.ui.shared.activation import BaseActivation
 from src.ui.gui.models import ActivationModel
+from src.ui.shared.activation import BaseActivation
 
 logger = get_logger()
 
 
-class GuiActivation(QObject, BaseActivation):
-    """GUI激活窗口控制器.
+class _ActivationFlow(BaseActivation):
+    """纯流程对象：把展示回调接到 GuiActivation 控制器."""
 
-    继承 QObject（Qt Signals/Slots）和 BaseActivation（核心流程）。
-    """
+    def __init__(self, controller: "GuiActivation", service, init_result: dict):
+        super().__init__(service, init_result)
+        self._ui = controller
+
+    def _show_code(self, data: dict) -> None:
+        self._ui._show_code(data)
+
+    def _show_result(self, success: bool) -> None:
+        self._ui._show_result(success)
+
+    def _show_error(self, msg: str) -> None:
+        self._ui._show_error(msg)
+
+    async def run(self) -> bool:
+        return await self._core_activate()
+
+
+class GuiActivation(QObject):
+    """GUI 激活窗口控制器（只继承 QObject；流程用组合）."""
 
     activationCompleted = Signal(bool)
 
     def __init__(self, activation_service, init_result: dict, parent=None):
-        QObject.__init__(self, parent)
-        BaseActivation.__init__(self, activation_service, init_result)
+        super().__init__(parent)
+        self._service = activation_service
+        self._flow = _ActivationFlow(self, activation_service, init_result)
         self._engine: QQmlApplicationEngine | None = None
         self._model = ActivationModel()
         self._completion_future: asyncio.Future | None = None
@@ -32,7 +52,6 @@ class GuiActivation(QObject, BaseActivation):
         self._activation_task: asyncio.Task | None = None
 
     async def run(self) -> bool:
-        """运行激活流程."""
         loop = asyncio.get_running_loop()
         self._completion_future = loop.create_future()
         self._loop = loop
@@ -46,9 +65,7 @@ class GuiActivation(QObject, BaseActivation):
         self._cleanup()
         return result
 
-    # ---- 内部方法 ----
-
-    def _setup_ui(self):
+    def _setup_ui(self) -> None:
         self._engine = QQmlApplicationEngine()
         ctx = self._engine.rootContext()
         ctx.setContextProperty("activationModel", self._model)
@@ -67,14 +84,14 @@ class GuiActivation(QObject, BaseActivation):
         root.closing.connect(self._on_window_closing)
         logger.debug("GuiActivation: UI 初始化完成")
 
-    def _show_window(self):
+    def _show_window(self) -> None:
         if self._engine and self._engine.rootObjects():
             window = self._engine.rootObjects()[0]
             window.show()
             window.raise_()
             window.requestActivate()
 
-    def _update_device_info(self):
+    def _update_device_info(self) -> None:
         serial = self._service.get_serial_number() or "--"
         mac = self._service.get_mac_address() or "--"
         self._model.update_device_info(serial, mac)
@@ -91,8 +108,7 @@ class GuiActivation(QObject, BaseActivation):
         else:
             self._model.set_status_not_activated()
 
-    def _start_activation(self):
-        """从 Qt timer 回调进入 asyncio（必须用 running loop 上的 create_task）."""
+    def _start_activation(self) -> None:
         try:
             loop = self._loop or asyncio.get_running_loop()
             self._activation_task = loop.create_task(
@@ -102,17 +118,15 @@ class GuiActivation(QObject, BaseActivation):
             logger.error(f"GuiActivation: 无法调度激活协程: {e}", exc_info=True)
             self._complete(False)
 
-    async def _run_activation(self):
+    async def _run_activation(self) -> None:
         try:
-            await self._core_activate()
+            await self._flow.run()
         except asyncio.CancelledError:
             logger.info("GuiActivation: 激活被取消")
             self._complete(False)
         except Exception as e:
             logger.error(f"GuiActivation: 激活异常: {e}", exc_info=True)
             self._complete(False)
-
-    # ---- BaseActivation 展示方法 ----
 
     def _show_code(self, data: dict) -> None:
         code = data.get("code", "------")
@@ -132,22 +146,20 @@ class GuiActivation(QObject, BaseActivation):
         logger.error(f"GuiActivation: {msg}")
         self._complete(False)
 
-    def _complete(self, success: bool):
+    def _complete(self, success: bool) -> None:
         if self._completion_future and not self._completion_future.done():
             self._completion_future.set_result(success)
         self.activationCompleted.emit(success)
 
-    def _on_window_closing(self):
+    def _on_window_closing(self) -> None:
         logger.info("GuiActivation: 窗口关闭")
         if self._completion_future and not self._completion_future.done():
             self._completion_future.set_result(False)
 
-    def _cleanup(self):
+    def _cleanup(self) -> None:
         if self._engine:
             self._engine.deleteLater()
             self._engine = None
-
-    # ========== QML Slots ==========
 
     @Slot()
     def copyActivationCode(self):
