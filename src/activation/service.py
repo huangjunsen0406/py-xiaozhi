@@ -180,10 +180,9 @@ class ActivationService:
             self._is_activating = True
             self._activation_task = asyncio.current_task()
 
-            # 显示激活信息
-            self._show_activation_info(data)
+            # 副作用：剪贴板 + 播报（文案展示由 UI 层 _show_code 负责）
+            self._apply_code_side_effects(code)
 
-            # 执行激活
             return await self._do_activate(challenge, code)
 
         except asyncio.CancelledError:
@@ -694,22 +693,17 @@ class ActivationService:
 
     # ========== 激活流程执行（私有方法） ==========
 
-    def _show_activation_info(self, data: Dict):
-        """
-        显示激活信息.
-        """
-        code = data.get("code", "------")
-        message = data.get("message", "请在xiaozhi.me输入验证码")
-
-        text = f".请登录到控制面板添加设备，输入验证码：{' '.join(code)}..."
-        print("\n==================")
-        print(text)
-        print("==================\n")
-
+    def _apply_code_side_effects(self, code: str) -> None:
+        """验证码副作用：日志、剪贴板、语音播报（不负责终端/GUI 文案）."""
+        if not code:
+            return
+        message = (self._activation_data or {}).get(
+            "message", "请在控制面板输入验证码"
+        )
         self.logger.info(f"激活提示: {message}")
         self.logger.info(f"验证码: {code}")
 
-        # 复制验证码到剪贴板
+        text = f".请登录到控制面板添加设备，输入验证码：{' '.join(code)}..."
         try:
             from src.utils.common_utils import handle_verification_code
 
@@ -717,7 +711,6 @@ class ActivationService:
         except Exception as e:
             self.logger.debug(f"复制验证码失败: {e}")
 
-        # 播报验证码
         try:
             from src.utils.activation_announcer import announce_activation_code
 

@@ -81,7 +81,7 @@ async def handle_activation(mode: str) -> bool:
         bool: 激活是否成功
     """
     try:
-        from src.activation import ActivationService
+        from src.activation import ActivationService, create_activation_ui
 
         logger.info("开始设备激活流程检查...")
         activation_service = await ActivationService.create()
@@ -95,28 +95,12 @@ async def handle_activation(mode: str) -> bool:
             logger.info("设备已激活，无需激活流程")
             return True
 
-        return await _create_activation(mode, activation_service, init_result).run()
+        ui = create_activation_ui(mode, activation_service, init_result)
+        return await ui.run()
 
     except Exception as e:
         logger.error(f"激活流程异常: {e}", exc_info=True)
         return False
-
-
-def _create_activation(mode: str, activation_service, init_result: dict):
-    """创建激活处理器工厂.
-
-    GUI 使用 PySide6 窗口，CLI/GPIO 共用终端交互。
-    init_result 传入避免重复调用 initialize()。
-    """
-    if mode == "gui":
-        from src.ui.gui import GUIActivation
-
-        return GUIActivation(activation_service, init_result)
-    else:
-        # cli / gpio 同走 CLIActivation
-        from src.ui.cli import CLIActivation
-
-        return CLIActivation(activation_service, init_result)
 
 
 async def start_app(mode: str, protocol: str, skip_activation: bool) -> int:
@@ -227,7 +211,23 @@ if __name__ == "__main__":
                 else:
                     raise
         else:
-            # CLI / GPIO 模式：标准 asyncio
+            # CLI / GPIO 模式：标准 asyncio；SIGINT 请求 TaskManager 关闭
+            shutdown_state = {"requested": False}
+
+            def handle_sigint_cli(*_):
+                if shutdown_state["requested"]:
+                    # 二次 Ctrl+C：硬退
+                    logger.warning("再次收到 SIGINT，强制退出")
+                    os._exit(130)
+                shutdown_state["requested"] = True
+                logger.info("收到 SIGINT 信号，正在退出...")
+                try:
+                    if _container and _container.tasks:
+                        _container.tasks.request_shutdown()
+                except Exception:
+                    pass
+
+            signal.signal(signal.SIGINT, handle_sigint_cli)
             exit_code = asyncio.run(
                 start_app(args.mode, args.protocol, args.skip_activation)
             )

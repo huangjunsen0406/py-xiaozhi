@@ -1,9 +1,6 @@
 """EventBus 桥接器 - Python 信号与 QML 信号双向转换."""
 
-from collections.abc import Callable
-
 from PySide6.QtCore import QObject, QTimer, Signal, Slot
-from PySide6.QtGui import QGuiApplication
 
 from src.core.event_bus import EventBus, Events
 from src.logging import get_logger
@@ -16,6 +13,8 @@ class EventBridge(QObject):
 
     QML → Python: QML 调用 slot，slot 内部 emit EventBus 事件
     Python → QML: EventBus 事件触发 Python Signal，QML 连接该 Signal
+
+    设备激活由独立 GuiActivation 窗口处理，主界面桥接不再承载激活信号。
     """
 
     # ========== Python → QML 信号 ==========
@@ -24,10 +23,6 @@ class EventBridge(QObject):
     showWindow = Signal()
     hideWindow = Signal()
     showSettingsWindow = Signal()  # 显示设置窗口
-    showActivationWindow = Signal()  # 显示激活窗口
-
-    # 激活相关
-    activationCompleted = Signal(bool, arguments=["success"])
 
     # ========== 构造 ==========
 
@@ -35,7 +30,6 @@ class EventBridge(QObject):
         super().__init__(parent)
         self._event_bus = event_bus
         self._task_manager = task_manager
-        self._activation_code_getter: Callable[[], str] | None = None
 
     def _emit_event(self, event: str, data=None):
         """安全地发射 EventBus 事件，在 Qt 主线程中调度到 asyncio loop."""
@@ -113,40 +107,3 @@ class EventBridge(QObject):
         """打开设置窗口 - 直接发射信号到 QML."""
         logger.debug("EventBridge: 打开设置窗口")
         self.showSettingsWindow.emit()
-
-    # ========== 激活相关 Slots ==========
-
-    @Slot()
-    def copyActivationCode(self):
-        """复制激活码到剪贴板."""
-        if self._activation_code_getter:
-            code = self._activation_code_getter()
-            if code:
-                clipboard = QGuiApplication.clipboard()
-                clipboard.setText(code)
-                logger.info(f"EventBridge: 已复制激活码: {code}")
-
-    @Slot()
-    def openActivationUrl(self):
-        """打开激活页面."""
-        from src.utils.config_manager import get_config
-
-        try:
-            config = get_config()
-            url = config.get_config("SYSTEM_OPTIONS.NETWORK.AUTHORIZATION_URL", "")
-            if url:
-                from PySide6.QtCore import QUrl
-                from PySide6.QtGui import QDesktopServices
-
-                QDesktopServices.openUrl(QUrl(url))
-                logger.info(f"EventBridge: 已打开激活页面: {url}")
-            else:
-                logger.warning("EventBridge: 未配置激活 URL")
-        except Exception as e:
-            logger.error(f"EventBridge: 打开激活页面失败: {e}", exc_info=True)
-
-    def set_activation_code_getter(self, getter: Callable[[], str]):
-        """设置激活码获取函数."""
-        self._activation_code_getter = getter
-
-    # ========== Python → QML (发射信号) ==========

@@ -9,7 +9,7 @@ from src.ui.shared.activation import BaseActivation
 logger = get_logger()
 
 
-class CLIActivation(BaseActivation):
+class CliActivation(BaseActivation):
     """CLI模式设备激活处理器.
 
     继承 BaseActivation，仅覆盖终端输出的展示方法。
