@@ -778,7 +778,7 @@ async def test_send_text_from_idle_starts_listen_then_detect():
 @pytest.mark.asyncio
 async def test_abort_speaking_resumes_keep_listening():
     """持续监听时打断后回到 listening."""
-    from src.bootstrap.container import ServiceContainer
+    from src.bootstrap.session import ConversationSession
     from src.constants.constants import DeviceState, ListeningMode
 
     order = []
@@ -807,31 +807,32 @@ async def test_abort_speaking_resumes_keep_listening():
             order.append(("state", state))
             self._state = state
 
-    c = object.__new__(ServiceContainer)
-    c._aborted = False
-    c.state = FakeState()
-    c.protocol = FakeProtocol()
+    session = ConversationSession(
+        state=FakeState(),
+        protocol=FakeProtocol(),
+        plugins=None,  # type: ignore[arg-type]
+    )
 
-    await c.abort_speaking("user_interruption")
+    await session.abort_speaking("user_interruption")
     assert ("abort", "user_interruption") in order
     assert ("listen", ListeningMode.AUTO_STOP) in order
     assert ("state", DeviceState.LISTENING) in order
     assert ("state", DeviceState.IDLE) not in order
-    assert c._aborted is False
+    assert session._aborted is False
 
 
 def test_device_state_handler_does_not_block_with_sleep():
     """进 LISTENING 不能在状态回调里 sleep."""
     import inspect
 
-    from src.bootstrap import container as c_mod
+    from src.bootstrap.session import ConversationSession
 
-    src = inspect.getsource(c_mod.ServiceContainer._on_device_state_changed)
+    src = inspect.getsource(ConversationSession._on_device_state_changed)
     assert "asyncio.sleep" not in src
     assert "await " not in src or "notify_device_state_changed" in src
     # 不得再 await 人为延迟
     assert "await asyncio" not in src
-    src_stop = inspect.getsource(c_mod.ServiceContainer._handle_tts_stop)
+    src_stop = inspect.getsource(ConversationSession._handle_tts_stop)
     # 先续听再改状态：send_start_listening 应出现在 set_device_state 之前
     assert src_stop.index("send_start_listening") < src_stop.index(
         "set_device_state(DeviceState.LISTENING)"
@@ -841,7 +842,7 @@ def test_device_state_handler_does_not_block_with_sleep():
 @pytest.mark.asyncio
 async def test_handle_tts_stop_relisten_before_state():
     """AUTO_STOP：TTS 停了先发 listen 再改状态."""
-    from src.bootstrap.container import ServiceContainer
+    from src.bootstrap.session import ConversationSession
     from src.constants.constants import DeviceState, ListeningMode
 
     order = []
@@ -879,13 +880,13 @@ async def test_handle_tts_stop_relisten_before_state():
                 return p
             return None
 
-    # 最小桩：只跑 _handle_tts_stop
-    c = object.__new__(ServiceContainer)
-    c.state = FakeState()
-    c.protocol = FakeProtocol()
-    c.plugins = FakePlugins()
+    session = ConversationSession(
+        state=FakeState(),
+        protocol=FakeProtocol(),
+        plugins=FakePlugins(),  # type: ignore[arg-type]
+    )
 
-    await c._handle_tts_stop()
+    await session._handle_tts_stop()
 
     assert order[0] == ("listen", ListeningMode.AUTO_STOP)
     assert "clear_queue" in order
@@ -897,7 +898,7 @@ async def test_handle_tts_stop_relisten_before_state():
 
 @pytest.mark.asyncio
 async def test_handle_tts_stop_realtime_skips_relisten():
-    from src.bootstrap.container import ServiceContainer
+    from src.bootstrap.session import ConversationSession
     from src.constants.constants import DeviceState, ListeningMode
 
     order = []
@@ -920,12 +921,13 @@ async def test_handle_tts_stop_realtime_skips_relisten():
         def get_plugin(self, name):
             return None
 
-    c = object.__new__(ServiceContainer)
-    c.state = FakeState()
-    c.protocol = FakeProtocol()
-    c.plugins = FakePlugins()
+    session = ConversationSession(
+        state=FakeState(),
+        protocol=FakeProtocol(),
+        plugins=FakePlugins(),  # type: ignore[arg-type]
+    )
 
-    await c._handle_tts_stop()
+    await session._handle_tts_stop()
     assert "listen" not in order
     assert order == [("state", DeviceState.LISTENING)]
 
@@ -987,23 +989,22 @@ def test_music_player_has_no_set_audio_codec_api():
 
 
 def test_audio_is_fatal_respects_degraded_env(monkeypatch):
-    from src.bootstrap.container import ServiceContainer
+    from src.bootstrap.health import audio_is_fatal
 
-    c = object.__new__(ServiceContainer)
     monkeypatch.delenv("XIAOZHI_DISABLE_AUDIO", raising=False)
     monkeypatch.delenv("XIAOZHI_DEGRADED_AUDIO", raising=False)
-    assert c._audio_is_fatal() is True
+    assert audio_is_fatal() is True
 
     monkeypatch.setenv("XIAOZHI_DEGRADED_AUDIO", "1")
-    assert c._audio_is_fatal() is False
+    assert audio_is_fatal() is False
 
     monkeypatch.delenv("XIAOZHI_DEGRADED_AUDIO", raising=False)
     monkeypatch.setenv("XIAOZHI_DISABLE_AUDIO", "1")
-    assert c._audio_is_fatal() is False
+    assert audio_is_fatal() is False
 
 
 def test_check_critical_plugins_audio_degraded(monkeypatch):
-    from src.bootstrap.container import ServiceContainer
+    from src.bootstrap.health import check_critical_plugins
 
     class FakePlugins:
         def __init__(self, failed):
@@ -1012,23 +1013,20 @@ def test_check_critical_plugins_audio_degraded(monkeypatch):
         def is_failed(self, name):
             return name in self._failed
 
-    c = object.__new__(ServiceContainer)
-    c.plugins = FakePlugins({"audio", "ui"})
     monkeypatch.delenv("XIAOZHI_DISABLE_AUDIO", raising=False)
     monkeypatch.delenv("XIAOZHI_DEGRADED_AUDIO", raising=False)
-    err = c._check_critical_plugins()
+    err = check_critical_plugins(FakePlugins({"audio", "ui"}))
     assert err is not None
     assert "ui" in err
     assert "audio" in err
 
     # 仅 audio 失败 + degraded → 不门闩
-    c.plugins = FakePlugins({"audio"})
     monkeypatch.setenv("XIAOZHI_DEGRADED_AUDIO", "1")
-    assert c._check_critical_plugins() is None
+    assert check_critical_plugins(FakePlugins({"audio"})) is None
 
     # 仅 audio 失败 + 默认 → 门闩
     monkeypatch.delenv("XIAOZHI_DEGRADED_AUDIO", raising=False)
-    err = c._check_critical_plugins()
+    err = check_critical_plugins(FakePlugins({"audio"}))
     assert err is not None and "audio" in err
     assert "XIAOZHI_DEGRADED_AUDIO" in err
 
