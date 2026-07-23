@@ -1,11 +1,5 @@
-"""GPIO UI 模块.
+"""GPIO UI 模块（Linux/树莓派按键）."""
 
-提供 GPIO 按键控制界面，仅支持 Linux（树莓派）。
+from src.ui.gpio.manager import GpioViewManager
 
-使用时按需导入：
-    from src.ui.gpio import GPIOViewManager
-"""
-
-from src.ui.gpio.manager import GPIOViewManager
-
-__all__ = ["GPIOViewManager"]
+__all__ = ["GpioViewManager"]

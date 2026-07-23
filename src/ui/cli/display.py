@@ -419,7 +419,7 @@ class CLIDisplay:
         sys.stdout.flush()
 
     async def _handle_command(self, cmd: str):
-        """处理命令 - 全部转发给 ViewManager."""
+        """处理命令 - 全部转发给 CliViewManager."""
         if not cmd:
             return
 

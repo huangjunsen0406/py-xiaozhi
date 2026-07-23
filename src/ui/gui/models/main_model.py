@@ -2,7 +2,7 @@
 
 from PySide6.QtCore import Property, Signal
 
-from .base_model import BaseModel
+from src.ui.gui.models.base_model import BaseModel
 
 
 class MainModel(BaseModel):

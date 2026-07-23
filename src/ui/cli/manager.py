@@ -15,8 +15,8 @@ if TYPE_CHECKING:
 logger = get_logger()
 
 
-class CLIViewManager:
-    """CLI 界面（和 GUI 同一套 set_* 接口）."""
+class CliViewManager:
+    """CLI 界面（ViewPort：与 GUI/GPIO 同一套 set_*）."""
 
     def __init__(
         self,
@@ -48,7 +48,7 @@ class CLIViewManager:
         Args:
             mode: 运行模式（CLI 模式下忽略此参数）
         """
-        logger.info("CLIViewManager: 启动 CLI 界面...")
+        logger.info("CliViewManager: 启动 CLI 界面...")
         self._running = True
         self._loop = asyncio.get_running_loop()
 
@@ -56,14 +56,14 @@ class CLIViewManager:
         try:
             await self._display.start()
         except asyncio.CancelledError:
-            logger.info("CLIViewManager: 显示任务被取消")
+            logger.info("CliViewManager: 显示任务被取消")
 
     async def close(self):
         """关闭 CLI 视图."""
-        logger.info("CLIViewManager: 正在关闭...")
+        logger.info("CliViewManager: 正在关闭...")
         self._running = False
         await self._display.close()
-        logger.info("CLIViewManager: 已关闭")
+        logger.info("CliViewManager: 已关闭")
 
     def _handle_command(self, cmd: str):
         """处理用户命令 - 统一入口."""
@@ -102,7 +102,7 @@ class CLIViewManager:
                 return
             except Exception as e:
                 logger.error(
-                    f"CLIViewManager 经 TaskManager 调度事件 {event} 失败: {e}",
+                    f"CliViewManager 经 TaskManager 调度事件 {event} 失败: {e}",
                     exc_info=True,
                 )
 
@@ -119,13 +119,13 @@ class CLIViewManager:
                     return
                 if exc:
                     logger.error(
-                        f"CLIViewManager 发射事件 {event} 失败: {exc}",
+                        f"CliViewManager 发射事件 {event} 失败: {exc}",
                         exc_info=exc,
                     )
 
             fut.add_done_callback(_done)
         except Exception as e:
-            logger.error(f"CLIViewManager 调度事件 {event} 失败: {e}", exc_info=True)
+            logger.error(f"CliViewManager 调度事件 {event} 失败: {e}", exc_info=True)
             if asyncio.iscoroutine(coro):
                 coro.close()
 

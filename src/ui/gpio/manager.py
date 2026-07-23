@@ -15,8 +15,8 @@ if TYPE_CHECKING:
 logger = get_logger()
 
 
-class GPIOViewManager:
-    """GPIO 界面（接口和 CLI 对齐）."""
+class GpioViewManager:
+    """GPIO 界面（ViewPort：与 CLI/GUI 同一套 set_*）."""
 
     def __init__(
         self,
@@ -42,7 +42,7 @@ class GPIOViewManager:
         Args:
             mode: 运行模式（GPIO 模式下忽略此参数）
         """
-        logger.info("GPIOViewManager: 启动 GPIO 界面...")
+        logger.info("GpioViewManager: 启动 GPIO 界面...")
         self._running = True
         self._loop = asyncio.get_running_loop()
 
@@ -67,14 +67,14 @@ class GPIOViewManager:
             while self._running:
                 await asyncio.sleep(1)
         except asyncio.CancelledError:
-            logger.info("GPIOViewManager: 任务被取消")
+            logger.info("GpioViewManager: 任务被取消")
 
     async def close(self):
         """关闭 GPIO 视图."""
-        logger.info("GPIOViewManager: 正在关闭...")
+        logger.info("GpioViewManager: 正在关闭...")
         self._running = False
         self._gpio_input.close()
-        logger.info("GPIOViewManager: 已关闭")
+        logger.info("GpioViewManager: 已关闭")
 
     # ========== 按键回调 ==========
 
@@ -119,7 +119,7 @@ class GPIOViewManager:
                 return
             except Exception as e:
                 logger.error(
-                    f"GPIOViewManager 经 TaskManager 调度事件 {event} 失败: {e}",
+                    f"GpioViewManager 经 TaskManager 调度事件 {event} 失败: {e}",
                     exc_info=True,
                 )
 
@@ -136,13 +136,13 @@ class GPIOViewManager:
                     return
                 if exc:
                     logger.error(
-                        f"GPIOViewManager 发射事件 {event} 失败: {exc}",
+                        f"GpioViewManager 发射事件 {event} 失败: {exc}",
                         exc_info=exc,
                     )
 
             fut.add_done_callback(_done)
         except Exception as e:
-            logger.error(f"GPIOViewManager 调度事件 {event} 失败: {e}", exc_info=True)
+            logger.error(f"GpioViewManager 调度事件 {event} 失败: {e}", exc_info=True)
             if asyncio.iscoroutine(coro):
                 coro.close()
 
