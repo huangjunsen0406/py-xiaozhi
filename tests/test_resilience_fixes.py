@@ -330,7 +330,7 @@ def test_config_manager_initialize_and_reset():
 async def test_cli_view_manager_uses_task_manager_for_emit():
     from src.core.event_bus import EventBus, Events
     from src.core.task_manager import TaskManager
-    from src.ui.cli.manager import CLIViewManager
+    from src.ui.cli.manager import CliViewManager
 
     bus = EventBus()
     tm = TaskManager()
@@ -341,7 +341,7 @@ async def test_cli_view_manager_uses_task_manager_for_emit():
         got.append("abort")
 
     bus.on(Events.UI_ABORT_REQUEST, on_abort)
-    vm = CLIViewManager(event_bus=bus, task_manager=tm)
+    vm = CliViewManager(event_bus=bus, task_manager=tm)
     vm._loop = asyncio.get_running_loop()
     vm._safe_emit(Events.UI_ABORT_REQUEST)
 
@@ -413,7 +413,7 @@ def test_gui_activation_no_ensure_future_or_get_event_loop():
     import inspect
     from src.ui.gui import activation as act_mod
 
-    src = inspect.getsource(act_mod.GUIActivation)
+    src = inspect.getsource(act_mod.GuiActivation)
     assert "ensure_future" not in src
     assert "get_event_loop" not in src
     assert "get_running_loop" in src or "create_task" in src
@@ -488,11 +488,11 @@ def test_music_player_init_is_lazy():
 def test_viewport_protocol_and_cli_slots():
     """CLI 对话和音乐两行互不影响."""
     from src.core.event_bus import EventBus
-    from src.ui.cli.manager import CLIViewManager
+    from src.ui.cli.manager import CliViewManager
     from src.ui.shared.viewport import ViewPort
 
     bus = EventBus()
-    vm = CLIViewManager(event_bus=bus)
+    vm = CliViewManager(event_bus=bus)
     assert isinstance(vm, ViewPort)
 
     vm.set_chat_text("你好")
@@ -509,10 +509,10 @@ def test_viewport_protocol_and_cli_slots():
 
 def test_gpio_viewport_slots():
     from src.core.event_bus import EventBus
-    from src.ui.gpio.manager import GPIOViewManager
+    from src.ui.gpio.manager import GpioViewManager
     from src.ui.shared.viewport import ViewPort
 
-    vm = GPIOViewManager(event_bus=EventBus())
+    vm = GpioViewManager(event_bus=EventBus())
     assert isinstance(vm, ViewPort)
     vm.set_chat_text("chat")
     vm.set_music_line("music")
@@ -525,12 +525,12 @@ def test_gpio_viewport_slots():
 
 def test_create_viewport_cli_factory():
     from src.core.event_bus import EventBus
-    from src.ui.cli.manager import CLIViewManager
+    from src.ui.cli.manager import CliViewManager
     from src.ui.shared.factory import create_viewport
     from src.ui.shared.viewport import ViewPort
 
     vp = create_viewport("cli", EventBus())
-    assert isinstance(vp, CLIViewManager)
+    assert isinstance(vp, CliViewManager)
     assert isinstance(vp, ViewPort)
 
 
@@ -1108,7 +1108,7 @@ async def test_cli_mock_protocol_smoke_session():
 
 def test_settings_run_worker_emits_test_complete_on_exception():
     """后台任务异常必须 testComplete，避免设置页一直转圈."""
-    from src.ui.shared.models.settings_model import SettingsModel
+    from src.ui.gui.models.settings_model import SettingsModel
 
     # 不走完整 __init__（会碰 ConfigManager / 文件）；绑定 _run_worker 到简易桩
     completed: list = []
