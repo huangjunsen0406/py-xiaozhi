@@ -106,10 +106,11 @@ class MacOSShortcutBackend(ShortcutBackend):
             Quartz.CGEventMaskBit(Quartz.kCGEventFlagsChanged)
         )
 
+        # ListenOnly：不拦截事件流，Ctrl+C / 系统快捷键可正常到达终端
         self._tap = Quartz.CGEventTapCreate(
             Quartz.kCGSessionEventTap,
             Quartz.kCGHeadInsertEventTap,
-            Quartz.kCGEventTapOptionDefault,
+            Quartz.kCGEventTapOptionListenOnly,
             event_mask,
             self._event_callback,
             None,
@@ -252,30 +253,53 @@ class MacOSShortcutBackend(ShortcutBackend):
             )
 
     async def _health_check_loop(self):
-        """健康检查循环."""
+        """健康检查：禁用则尝试 re-enable；失败只 warning，避免重建风暴挡退出."""
+        consecutive_fail = 0
+        max_warn_streak = 3  # 连续失败超过此次数后降级日志频率
+
         while self._running:
-            await asyncio.sleep(self._check_interval)
+            try:
+                await asyncio.sleep(self._check_interval)
+            except asyncio.CancelledError:
+                break
 
             if not self._running:
                 break
 
-            # 检查 event tap 是否仍然有效
-            if self._tap and not Quartz.CGEventTapIsEnabled(self._tap):
-                logger.warning("Event Tap 已被禁用，尝试重新启用...")
+            if not self._tap:
+                continue
+
+            try:
+                if Quartz.CGEventTapIsEnabled(self._tap):
+                    consecutive_fail = 0
+                    continue
+            except Exception:
+                # tap 已失效
+                consecutive_fail += 1
+            else:
+                # 仅 re-enable，不 stop/start 整棵树（重建会和 CFRunLoop/信号打架）
                 try:
                     Quartz.CGEventTapEnable(self._tap, True)
-                    logger.info("Event Tap 重新启用成功")
+                    if Quartz.CGEventTapIsEnabled(self._tap):
+                        if consecutive_fail > 0:
+                            logger.info("Event Tap 重新启用成功")
+                        consecutive_fail = 0
+                        continue
                 except Exception as e:
-                    logger.error(f"重新启用 Event Tap 失败: {e}", exc_info=True)
-                    # 尝试完全重建
-                    try:
-                        await self.stop()
-                        await self.start()
-                        # 重新注册所有快捷键
-                        for name, config in list(self._shortcuts.items()):
-                            callback = self._callbacks.get(name)
-                            if callback:
-                                self.register(name, config, callback)
-                        logger.info("Event Tap 重建成功")
-                    except Exception as rebuild_error:
-                        logger.error(f"重建 Event Tap 失败: {rebuild_error}")
+                    logger.debug(f"CGEventTapEnable 异常: {e}")
+
+                consecutive_fail += 1
+
+            if consecutive_fail <= max_warn_streak:
+                logger.warning(
+                    "Event Tap 仍不可用（%s 次）。"
+                    "请检查：系统设置 → 隐私与安全性 → 辅助功能。"
+                    "快捷键可能暂时失效；Ctrl+C 应仍可退出。",
+                    consecutive_fail,
+                )
+            elif consecutive_fail % 12 == 0:
+                # 约每分钟一次，避免刷屏
+                logger.warning(
+                    "Event Tap 持续不可用（已 %s 次检查），跳过强制重建",
+                    consecutive_fail,
+                )
