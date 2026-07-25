@@ -167,34 +167,79 @@ class SettingsSystemOptionsMixin:
     def _set_pathMcpPluginsDir(self, value: str):
         self._set_value("MCP_PLUGINS.DIR", value.strip() if value else "")
 
-    def _get_pathHints(self) -> str:
-        """只读：当前生效路径提示（默认路径说明）."""
+    def _default_data_paths(self) -> dict[str, str]:
+        """配置留空时各目录的系统默认绝对路径（不含 PATHS 覆盖）."""
+        from pathlib import Path
+
+        from src.utils.resource_finder import get_user_data_dir
+
+        data = get_user_data_dir()
+        cache_custom = (self._get_pathCacheDir() or "").strip()
+        cache_default = Path(cache_custom) if cache_custom else (data / "cache")
+        return {
+            "cache": str(data / "cache"),
+            "log": str(data / "logs"),
+            # 音乐默认挂在「当前缓存」下：自定义了缓存则跟随
+            "music": str(cache_default / "music"),
+            "keywords": str(data / "keywords"),
+            "mcp": str(data / "mcp_plugins"),
+        }
+
+    def _get_pathDefaultCacheDir(self) -> str:
         try:
-            from src.utils.resource_finder import (
-                get_music_cache_dir,
-                get_user_cache_dir,
-                get_user_data_dir,
-                get_user_log_dir,
-            )
+            return self._default_data_paths()["cache"]
+        except Exception:
+            return ""
+
+    def _get_pathDefaultLogDir(self) -> str:
+        try:
+            return self._default_data_paths()["log"]
+        except Exception:
+            return ""
+
+    def _get_pathDefaultMusicCacheDir(self) -> str:
+        try:
+            return self._default_data_paths()["music"]
+        except Exception:
+            return ""
+
+    def _get_pathDefaultKeywordsDir(self) -> str:
+        try:
+            return self._default_data_paths()["keywords"]
+        except Exception:
+            return ""
+
+    def _get_pathDefaultMcpPluginsDir(self) -> str:
+        try:
+            return self._default_data_paths()["mcp"]
+        except Exception:
+            return ""
+
+    def _get_pathHints(self) -> str:
+        """只读：数据根与操作提示（默认路径已显示在各输入框占位符）."""
+        try:
+            from src.utils.resource_finder import get_user_data_dir
 
             data = get_user_data_dir()
             return (
                 f"数据根(配置固定在此): {data}\n"
-                f"当前缓存: {get_user_cache_dir()}\n"
-                f"当前日志: {get_user_log_dir()}\n"
-                f"当前音乐缓存: {get_music_cache_dir()}\n"
                 f"留空=默认；点「选择」用系统对话框；保存后下次启动迁移"
             )
         except Exception:
             return "留空使用默认路径；保存后下次启动迁移"
 
-    def _browse_directory(self, title: str, current: str) -> str:
+    def _browse_directory(self, title: str, current: str, which: str = "") -> str:
         """打开系统文件夹选择对话框；取消返回空串（调用方勿覆盖）."""
         from pathlib import Path
 
         from PySide6.QtWidgets import QApplication, QFileDialog
 
         start = current.strip() if current else ""
+        if not start and which:
+            try:
+                start = self._default_data_paths().get(which, "")
+            except Exception:
+                start = ""
         if not start:
             try:
                 from src.utils.resource_finder import get_user_data_dir

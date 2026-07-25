@@ -390,7 +390,7 @@ ScrollView {
                     text: settingsModel ? settingsModel.pathCacheDir : ""
                     onTextEdited: if (settingsModel) settingsModel.pathCacheDir = text
                     onEditingFinished: if (settingsModel) settingsModel.pathCacheDir = text
-                    placeholderText: "默认: {用户数据}/cache"
+                    placeholderText: settingsModel ? settingsModel.pathDefaultCacheDir : ""
                     font.pixelSize: Theme.fontSizeSm
                     background: Rectangle {
                         radius: Theme.radiusSm
@@ -464,7 +464,7 @@ ScrollView {
                     text: settingsModel ? settingsModel.pathLogDir : ""
                     onTextEdited: if (settingsModel) settingsModel.pathLogDir = text
                     onEditingFinished: if (settingsModel) settingsModel.pathLogDir = text
-                    placeholderText: "默认: {用户数据}/logs"
+                    placeholderText: settingsModel ? settingsModel.pathDefaultLogDir : ""
                     font.pixelSize: Theme.fontSizeSm
                     background: Rectangle {
                         radius: Theme.radiusSm
@@ -538,7 +538,7 @@ ScrollView {
                     text: settingsModel ? settingsModel.pathMusicCacheDir : ""
                     onTextEdited: if (settingsModel) settingsModel.pathMusicCacheDir = text
                     onEditingFinished: if (settingsModel) settingsModel.pathMusicCacheDir = text
-                    placeholderText: "默认: {缓存}/music"
+                    placeholderText: settingsModel ? settingsModel.pathDefaultMusicCacheDir : ""
                     font.pixelSize: Theme.fontSizeSm
                     background: Rectangle {
                         radius: Theme.radiusSm
@@ -612,7 +612,7 @@ ScrollView {
                     text: settingsModel ? settingsModel.pathKeywordsDir : ""
                     onTextEdited: if (settingsModel) settingsModel.pathKeywordsDir = text
                     onEditingFinished: if (settingsModel) settingsModel.pathKeywordsDir = text
-                    placeholderText: "默认: {用户数据}/keywords"
+                    placeholderText: settingsModel ? settingsModel.pathDefaultKeywordsDir : ""
                     font.pixelSize: Theme.fontSizeSm
                     background: Rectangle {
                         radius: Theme.radiusSm
@@ -686,7 +686,7 @@ ScrollView {
                     text: settingsModel ? settingsModel.pathMcpPluginsDir : ""
                     onTextEdited: if (settingsModel) settingsModel.pathMcpPluginsDir = text
                     onEditingFinished: if (settingsModel) settingsModel.pathMcpPluginsDir = text
-                    placeholderText: "默认: {用户数据}/mcp_plugins"
+                    placeholderText: settingsModel ? settingsModel.pathDefaultMcpPluginsDir : ""
                     font.pixelSize: Theme.fontSizeSm
                     background: Rectangle {
                         radius: Theme.radiusSm
