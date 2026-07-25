@@ -401,6 +401,21 @@ ScrollView {
                 Button {
                     text: "选择"
                     font.pixelSize: Theme.fontSizeSm
+                    Layout.preferredWidth: 64
+                    Layout.preferredHeight: 32
+                    background: Rectangle {
+                        radius: Theme.radiusSm
+                        color: parent.pressed ? Theme.backgroundHover : Theme.backgroundSecondary
+                        border.width: 1
+                        border.color: Theme.divider
+                    }
+                    contentItem: Text {
+                        text: parent.text
+                        font.pixelSize: Theme.fontSizeSm
+                        color: Theme.textPrimary
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
                     onClicked: {
                         if (!settingsModel) return
                         var p = settingsModel.browseDirectory("cache")
@@ -410,6 +425,21 @@ ScrollView {
                 Button {
                     text: "默认"
                     font.pixelSize: Theme.fontSizeSm
+                    Layout.preferredWidth: 64
+                    Layout.preferredHeight: 32
+                    background: Rectangle {
+                        radius: Theme.radiusSm
+                        color: parent.pressed ? Theme.backgroundHover : Theme.backgroundSecondary
+                        border.width: 1
+                        border.color: Theme.divider
+                    }
+                    contentItem: Text {
+                        text: parent.text
+                        font.pixelSize: Theme.fontSizeSm
+                        color: Theme.textPrimary
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
                     onClicked: {
                         if (!settingsModel) return
                         settingsModel.clearPathDir("cache")
@@ -445,6 +475,21 @@ ScrollView {
                 Button {
                     text: "选择"
                     font.pixelSize: Theme.fontSizeSm
+                    Layout.preferredWidth: 64
+                    Layout.preferredHeight: 32
+                    background: Rectangle {
+                        radius: Theme.radiusSm
+                        color: parent.pressed ? Theme.backgroundHover : Theme.backgroundSecondary
+                        border.width: 1
+                        border.color: Theme.divider
+                    }
+                    contentItem: Text {
+                        text: parent.text
+                        font.pixelSize: Theme.fontSizeSm
+                        color: Theme.textPrimary
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
                     onClicked: {
                         if (!settingsModel) return
                         var p = settingsModel.browseDirectory("log")
@@ -454,6 +499,21 @@ ScrollView {
                 Button {
                     text: "默认"
                     font.pixelSize: Theme.fontSizeSm
+                    Layout.preferredWidth: 64
+                    Layout.preferredHeight: 32
+                    background: Rectangle {
+                        radius: Theme.radiusSm
+                        color: parent.pressed ? Theme.backgroundHover : Theme.backgroundSecondary
+                        border.width: 1
+                        border.color: Theme.divider
+                    }
+                    contentItem: Text {
+                        text: parent.text
+                        font.pixelSize: Theme.fontSizeSm
+                        color: Theme.textPrimary
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
                     onClicked: {
                         if (!settingsModel) return
                         settingsModel.clearPathDir("log")
@@ -489,6 +549,21 @@ ScrollView {
                 Button {
                     text: "选择"
                     font.pixelSize: Theme.fontSizeSm
+                    Layout.preferredWidth: 64
+                    Layout.preferredHeight: 32
+                    background: Rectangle {
+                        radius: Theme.radiusSm
+                        color: parent.pressed ? Theme.backgroundHover : Theme.backgroundSecondary
+                        border.width: 1
+                        border.color: Theme.divider
+                    }
+                    contentItem: Text {
+                        text: parent.text
+                        font.pixelSize: Theme.fontSizeSm
+                        color: Theme.textPrimary
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
                     onClicked: {
                         if (!settingsModel) return
                         var p = settingsModel.browseDirectory("music")
@@ -498,6 +573,21 @@ ScrollView {
                 Button {
                     text: "默认"
                     font.pixelSize: Theme.fontSizeSm
+                    Layout.preferredWidth: 64
+                    Layout.preferredHeight: 32
+                    background: Rectangle {
+                        radius: Theme.radiusSm
+                        color: parent.pressed ? Theme.backgroundHover : Theme.backgroundSecondary
+                        border.width: 1
+                        border.color: Theme.divider
+                    }
+                    contentItem: Text {
+                        text: parent.text
+                        font.pixelSize: Theme.fontSizeSm
+                        color: Theme.textPrimary
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
                     onClicked: {
                         if (!settingsModel) return
                         settingsModel.clearPathDir("music")
@@ -533,6 +623,21 @@ ScrollView {
                 Button {
                     text: "选择"
                     font.pixelSize: Theme.fontSizeSm
+                    Layout.preferredWidth: 64
+                    Layout.preferredHeight: 32
+                    background: Rectangle {
+                        radius: Theme.radiusSm
+                        color: parent.pressed ? Theme.backgroundHover : Theme.backgroundSecondary
+                        border.width: 1
+                        border.color: Theme.divider
+                    }
+                    contentItem: Text {
+                        text: parent.text
+                        font.pixelSize: Theme.fontSizeSm
+                        color: Theme.textPrimary
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
                     onClicked: {
                         if (!settingsModel) return
                         var p = settingsModel.browseDirectory("keywords")
@@ -542,6 +647,21 @@ ScrollView {
                 Button {
                     text: "默认"
                     font.pixelSize: Theme.fontSizeSm
+                    Layout.preferredWidth: 64
+                    Layout.preferredHeight: 32
+                    background: Rectangle {
+                        radius: Theme.radiusSm
+                        color: parent.pressed ? Theme.backgroundHover : Theme.backgroundSecondary
+                        border.width: 1
+                        border.color: Theme.divider
+                    }
+                    contentItem: Text {
+                        text: parent.text
+                        font.pixelSize: Theme.fontSizeSm
+                        color: Theme.textPrimary
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
                     onClicked: {
                         if (!settingsModel) return
                         settingsModel.clearPathDir("keywords")
@@ -577,6 +697,21 @@ ScrollView {
                 Button {
                     text: "选择"
                     font.pixelSize: Theme.fontSizeSm
+                    Layout.preferredWidth: 64
+                    Layout.preferredHeight: 32
+                    background: Rectangle {
+                        radius: Theme.radiusSm
+                        color: parent.pressed ? Theme.backgroundHover : Theme.backgroundSecondary
+                        border.width: 1
+                        border.color: Theme.divider
+                    }
+                    contentItem: Text {
+                        text: parent.text
+                        font.pixelSize: Theme.fontSizeSm
+                        color: Theme.textPrimary
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
                     onClicked: {
                         if (!settingsModel) return
                         var p = settingsModel.browseDirectory("mcp")
@@ -586,6 +721,21 @@ ScrollView {
                 Button {
                     text: "默认"
                     font.pixelSize: Theme.fontSizeSm
+                    Layout.preferredWidth: 64
+                    Layout.preferredHeight: 32
+                    background: Rectangle {
+                        radius: Theme.radiusSm
+                        color: parent.pressed ? Theme.backgroundHover : Theme.backgroundSecondary
+                        border.width: 1
+                        border.color: Theme.divider
+                    }
+                    contentItem: Text {
+                        text: parent.text
+                        font.pixelSize: Theme.fontSizeSm
+                        color: Theme.textPrimary
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
                     onClicked: {
                         if (!settingsModel) return
                         settingsModel.clearPathDir("mcp")
