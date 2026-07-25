@@ -103,6 +103,18 @@ class ConfigManager:
             "FILTER_LENGTH_RATIO": 0.4,
             "ENABLE_PREPROCESS": True,
         },
+        # 外挂 MCP 插件（用户目录 mcp_plugins，自带 lib/）
+        "MCP_PLUGINS": {
+            "ENABLED": True,
+            "DIR": None,  # null = {用户数据}/mcp_plugins
+            "ENABLED_IDS": [],  # 空 = 按插件 enabled_by_default
+            "DISABLED_IDS": [],
+            "ALLOW_HOST_GET": ["config_readonly", "logger"],
+            # 严格校验（默认关，避免示例包无 platforms/abi 时无法加载）
+            "ENFORCE_PREFIX": False,
+            "REQUIRE_PYTHON_ABI": False,
+            "REQUIRE_PLATFORMS": False,
+        },
         "AUDIO_DEVICES": {
             "input_device_id": None,
             "input_device_name": None,

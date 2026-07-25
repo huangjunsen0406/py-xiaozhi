@@ -1,0 +1,10 @@
+{
+  "id": "com.example.hello",
+  "name": "Hello Demo",
+  "version": "1.0.0",
+  "api_version": 1,
+  "entry": "plugin:register",
+  "runtime": "python-inprocess",
+  "tool_name_prefix": "example.",
+  "enabled_by_default": true
+}

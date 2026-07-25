@@ -1225,3 +1225,190 @@ def test_no_config_or_logging_get_instance_api():
     assert not hasattr(lc, "LoggingConfigManager")
     assert hasattr(lc, "load_logging_config")
     assert "LoggingConfigManager" not in logging_pkg.__all__
+
+# ---------------------------------------------------------------------------
+# MCP 外挂插件加载器
+# ---------------------------------------------------------------------------
+
+
+def test_mcp_plugin_loader_loads_package_and_respects_disabled(tmp_path):
+    """胖插件目录：register(host) 成功；DISABLED_IDS 不加载."""
+    from src.mcp.mcp_server import McpServer
+    from src.mcp.plugins.host import McpHost
+    from src.mcp.plugins.loader import PluginLoader
+
+    plugin_root = tmp_path / "com.example.hello"
+    plugin_root.mkdir()
+    (plugin_root / "manifest.json").write_text(
+        (
+            "{"
+            '"id":"com.example.hello",'
+            '"version":"1.0.0",'
+            '"api_version":1,'
+            '"entry":"plugin:register",'
+            '"runtime":"python-inprocess",'
+            '"enabled_by_default":true'
+            "}"
+        ),
+        encoding="utf-8",
+    )
+    plugin_src = (
+        "def register(host):\n"
+        "    @host.tool(name=\"example.hello\", description=\"hi\", props=[])\n"
+        "    async def hello(args):\n"
+        "        return \"ok\"\n"
+    )
+    # decode escapes for actual file content written by the test
+    (plugin_root / "plugin.py").write_text(
+        plugin_src.encode().decode("unicode_escape"),
+        encoding="utf-8",
+    )
+
+    server = McpServer()
+    host = McpHost(server.add_tool, allow_get=["logger"])
+    loader = PluginLoader(host, plugins_dir=tmp_path)
+    results = loader.load_all()
+    assert any(r.plugin_id == "com.example.hello" and not r.error for r in results)
+    assert any(tool.name == "example.hello" for tool in server.tools)
+
+    server2 = McpServer()
+    host2 = McpHost(server2.add_tool)
+    loader2 = PluginLoader(
+        host2, plugins_dir=tmp_path, disabled_ids=["com.example.hello"]
+    )
+    results2 = loader2.load_all()
+    assert any(r.error == "disabled" for r in results2)
+    assert not any(tool.name == "example.hello" for tool in server2.tools)
+
+
+def test_mcp_plugin_loader_vendored_lib(tmp_path):
+    """lib/ 下模块可被插件 import（模拟自带依赖）."""
+    from src.mcp.mcp_server import McpServer
+    from src.mcp.plugins.host import McpHost
+    from src.mcp.plugins.loader import PluginLoader
+
+    root = tmp_path / "com.example.vendored"
+    root.mkdir()
+    (root / "manifest.json").write_text(
+        (
+            "{"
+            '"id":"com.example.vendored",'
+            '"entry":"plugin:register",'
+            '"runtime":"python-inprocess"'
+            "}"
+        ),
+        encoding="utf-8",
+    )
+    lib = root / "lib"
+    lib.mkdir()
+    (lib / "demo_dep.py").write_text("VALUE = 42\n".encode().decode("unicode_escape"), encoding="utf-8")
+    plugin_src = (
+        "def register(host):\n"
+        "    import demo_dep\n"
+        "    @host.tool(name=\"example.answer\", description=\"answer\")\n"
+        "    async def answer(args):\n"
+        "        return str(demo_dep.VALUE)\n"
+    )
+    (root / "plugin.py").write_text(
+        plugin_src.encode().decode("unicode_escape"), encoding="utf-8"
+    )
+
+    server = McpServer()
+    loader = PluginLoader(McpHost(server.add_tool), plugins_dir=tmp_path)
+    results = loader.load_all()
+    assert any(
+        not r.error and r.plugin_id == "com.example.vendored" for r in results
+    )
+    assert any(tool.name == "example.answer" for tool in server.tools)
+
+
+def test_mcp_plugin_simple_py_file(tmp_path):
+    from src.mcp.mcp_server import McpServer
+    from src.mcp.plugins.host import McpHost
+    from src.mcp.plugins.loader import PluginLoader
+
+    solo_src = (
+        "from src.mcp.tooling import McpTool, PropertyList\n\n"
+        "def register(host):\n"
+        "    async def ping(args):\n"
+        "        return \"pong\"\n"
+        "    host.add_tool(McpTool(\"solo.ping\", \"ping\", PropertyList(), ping))\n"
+    )
+    (tmp_path / "solo.py").write_text(
+        solo_src.encode().decode("unicode_escape"), encoding="utf-8"
+    )
+
+    server = McpServer()
+    PluginLoader(McpHost(server.add_tool), plugins_dir=tmp_path).load_all()
+    assert any(tool.name == "solo.ping" for tool in server.tools)
+
+
+def test_mcp_server_unload_plugin(tmp_path):
+    """运行时按 plugin_id 卸载外挂工具."""
+    from src.mcp.mcp_server import McpServer
+    from src.mcp.plugins.host import McpHost
+    from src.mcp.plugins.loader import PluginLoader
+
+    root = tmp_path / "com.example.tmp"
+    root.mkdir()
+    (root / "manifest.json").write_text(
+        '{"id":"com.example.tmp","entry":"plugin:register","runtime":"python-inprocess"}',
+        encoding="utf-8",
+    )
+    (root / "plugin.py").write_text(
+        "def register(host):\n"
+        "    @host.tool(name=\"example.tmp\", description=\"t\")\n"
+        "    async def t(args):\n"
+        "        return \"1\"\n",
+        encoding="utf-8",
+    )
+
+    server = McpServer()
+    host = McpHost(server.add_tool)
+    results = PluginLoader(host, plugins_dir=tmp_path).load_all()
+    for r in results:
+        if not r.error:
+            for n in r.tool_names:
+                server._plugin_tool_owner[n] = r.plugin_id
+    assert any(tool.name == "example.tmp" for tool in server.tools)
+    n = server.unload_plugin("com.example.tmp")
+    assert n == 1
+    assert not any(tool.name == "example.tmp" for tool in server.tools)
+
+
+def test_mcp_plugin_rejects_future_api_version(tmp_path):
+    from src.mcp.mcp_server import McpServer
+    from src.mcp.plugins.host import McpHost
+    from src.mcp.plugins.loader import PluginLoader
+
+    root = tmp_path / "com.example.future"
+    root.mkdir()
+    (root / "manifest.json").write_text(
+        '{"id":"com.example.future","api_version":99,'
+        '"entry":"plugin:register","runtime":"python-inprocess"}',
+        encoding="utf-8",
+    )
+    (root / "plugin.py").write_text("def register(host):\n    pass\n", encoding="utf-8")
+    server = McpServer()
+    results = PluginLoader(McpHost(server.add_tool), plugins_dir=tmp_path).load_all()
+    assert any(r.error and "api_version" in (r.error or "") for r in results)
+
+
+def test_check_mcp_plugin_script(tmp_path):
+    import sys
+    from pathlib import Path as P
+
+    root_repo = P(__file__).resolve().parents[1]
+    if str(root_repo) not in sys.path:
+        sys.path.insert(0, str(root_repo))
+    from scripts.check_mcp_plugin import check_plugin
+
+    root = tmp_path / "pkg"
+    root.mkdir()
+    (root / "manifest.json").write_text(
+        '{"id":"x","entry":"plugin:register","runtime":"python-inprocess"}',
+        encoding="utf-8",
+    )
+    (root / "plugin.py").write_text("def register(host):\n    pass\n", encoding="utf-8")
+    assert check_plugin(root) == []
+    assert check_plugin(tmp_path / "missing") != []

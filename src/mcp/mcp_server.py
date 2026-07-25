@@ -25,6 +25,8 @@ class McpServer:
         self.tools: list[McpTool] = []
         self._send_callback: Callable | None = None
         self._camera = None
+        # 外挂插件 tool_name -> plugin_id
+        self._plugin_tool_owner: dict[str, str] = {}
 
     def set_send_callback(self, callback: Callable | None):
         """
@@ -57,11 +59,58 @@ class McpServer:
 
         # 检查是否已存在
         if any(t.name == tool.name for t in self.tools):
-            logger.warning(f"Tool {tool.name} already added")
+            logger.warning(f"Tool {tool.name} already added（拒绝重复注册）")
             return
 
         logger.info(f"Add tool: {tool.name}")
         self.tools.append(tool)
+
+    def remove_tools_by_names(self, names: set[str] | list[str]) -> int:
+        """按名称移除工具，返回移除数量."""
+        name_set = set(names)
+        if not name_set:
+            return 0
+        before = len(self.tools)
+        self.tools = [t for t in self.tools if t.name not in name_set]
+        return before - len(self.tools)
+
+    def unload_plugin(self, plugin_id: str) -> int:
+        """卸载外挂插件已注册的工具."""
+        from src.mcp.plugins.registry import PluginRegistry
+
+        reg = PluginRegistry(tool_owner=self._plugin_tool_owner)
+        return reg.unload_plugin(self, plugin_id)
+
+    def reload_external_plugins(
+        self, music_player=None, volume_controller=None
+    ) -> list:
+        """仅重载外挂：先卸掉已知外挂工具，再按配置扫描加载.
+
+        注意：不会重新 register 内置工具；内置应已在 tools 中。
+        """
+        # 卸掉当前登记的全部外挂工具
+        if self._plugin_tool_owner:
+            names = set(self._plugin_tool_owner.keys())
+            self.remove_tools_by_names(names)
+            self._plugin_tool_owner.clear()
+
+        from src.mcp.plugins.loader import load_mcp_plugins_from_config
+
+        capabilities = {}
+        if music_player is not None:
+            capabilities["music_player"] = music_player
+        try:
+            from src.utils.config_manager import get_config
+
+            capabilities["config_readonly"] = get_config()
+        except Exception:
+            pass
+
+        return load_mcp_plugins_from_config(
+            self.add_tool,
+            capabilities=capabilities,
+            tool_owner=self._plugin_tool_owner,
+        )
 
     def add_common_tools(self, music_player=None, volume_controller=None):
         """
@@ -87,6 +136,28 @@ class McpServer:
         register_volume_tools(self.add_tool, volume_controller)
         register_app_tools(self.add_tool)
         register_weather_tools(self.add_tool)
+
+        # 外挂：用户目录插件包（自带 lib/），失败隔离
+        try:
+            from src.mcp.plugins.loader import load_mcp_plugins_from_config
+
+            capabilities = {}
+            if music_player is not None:
+                capabilities["music_player"] = music_player
+            try:
+                from src.utils.config_manager import get_config
+
+                capabilities["config_readonly"] = get_config()
+            except Exception:
+                pass
+
+            load_mcp_plugins_from_config(
+                self.add_tool,
+                capabilities=capabilities,
+                tool_owner=self._plugin_tool_owner,
+            )
+        except Exception as e:
+            logger.error(f"加载外挂 MCP 插件失败: {e}", exc_info=True)
 
         # 恢复原有工具
         self.tools.extend(original_tools)
