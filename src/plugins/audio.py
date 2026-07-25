@@ -45,7 +45,7 @@ class AudioPlugin(Plugin):
             from src.core.event_bus import Events
 
             ctx.event_bus.on(Events.CONFIG_CHANGED, self._on_config_changed)
-            # codec 在 start() 再发布：此时 McpPlugin 已为 MusicPlayer 订阅 EventBus
+            # codec 在 start() 再发布：MusicPlayer 在 McpPlugin.setup 中订阅 EventBus
 
         except Exception as e:
             logger.error(f"音频插件初始化失败: {e}", exc_info=True)

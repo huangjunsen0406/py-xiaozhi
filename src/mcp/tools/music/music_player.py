@@ -4,14 +4,13 @@
 - PlaybackEngine — 解码队列 / 启停暂停跳转
 - MusicEventBridge — EventBus 绑定与状态/歌词发射
 
-对外仍是单一 MusicPlayer；插件与 MCP 只依赖本类。
+状态字段在 engine；本类只保留生产常用属性（is_playing / paused / current_song）。
 """
 
 from __future__ import annotations
 
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 from src.audio_codecs.music_decoder import MusicDecoder
 from src.logging import get_logger
@@ -24,9 +23,6 @@ from .local_library import LocalLibrary
 from .lyrics import fetch_kuwo_lyrics, format_lyric_display, lyric_at
 from .online_search import search_song
 from .playback import PlaybackDeps, PlaybackEngine
-
-if TYPE_CHECKING:
-    from src.audio_codecs.audio_codec import AudioCodec
 
 logger = get_logger()
 
@@ -53,15 +49,11 @@ class MusicPlayer:
 
         logger.debug("MusicPlayer 实例已创建")
 
-    # ----- hooks for PlaybackEngine -----
+    # ----- PlaybackEngine hooks -----
 
     def prepare_for_io(self) -> None:
         self.reload_config()
         self._cache.prepare()
-
-    # 引擎 hooks 名与内部一致
-    def _prepare_for_io(self) -> None:
-        self.prepare_for_io()
 
     def is_speaking(self) -> bool:
         ctx = self._bus.plugin_ctx
@@ -81,7 +73,7 @@ class MusicPlayer:
     ) -> None:
         await self._bus.emit_state_change(state, song_name, position)
 
-    # ----- 属性：状态挂在 engine，对测试/工具保持扁平访问 -----
+    # ----- 生产常用状态（扁平访问）-----
 
     @property
     def cache_dir(self) -> Path:
@@ -92,116 +84,16 @@ class MusicPlayer:
         return self._cache.temp_dir
 
     @property
-    def decoder(self):
-        return self._engine.decoder
-
-    @decoder.setter
-    def decoder(self, value) -> None:
-        self._engine.decoder = value
-
-    @property
     def is_playing(self) -> bool:
         return self._engine.is_playing
-
-    @is_playing.setter
-    def is_playing(self, value: bool) -> None:
-        self._engine.is_playing = value
 
     @property
     def paused(self) -> bool:
         return self._engine.paused
 
-    @paused.setter
-    def paused(self, value: bool) -> None:
-        self._engine.paused = value
-
     @property
     def current_song(self) -> str:
         return self._engine.current_song
-
-    @current_song.setter
-    def current_song(self, value: str) -> None:
-        self._engine.current_song = value
-
-    @property
-    def song_id(self) -> str:
-        return self._engine.song_id
-
-    @song_id.setter
-    def song_id(self, value: str) -> None:
-        self._engine.song_id = value
-
-    @property
-    def total_duration(self) -> float:
-        return self._engine.total_duration
-
-    @total_duration.setter
-    def total_duration(self, value: float) -> None:
-        self._engine.total_duration = value
-
-    @property
-    def current_position(self) -> float:
-        return self._engine.current_position
-
-    @current_position.setter
-    def current_position(self, value: float) -> None:
-        self._engine.current_position = value
-
-    @property
-    def start_play_time(self) -> float:
-        return self._engine.start_play_time
-
-    @start_play_time.setter
-    def start_play_time(self, value: float) -> None:
-        self._engine.start_play_time = value
-
-    @property
-    def current_lyric_index(self) -> int:
-        return self._engine.current_lyric_index
-
-    @current_lyric_index.setter
-    def current_lyric_index(self, value: int) -> None:
-        self._engine.current_lyric_index = value
-
-    @property
-    def _last_lyric_tick(self) -> float:
-        return self._engine.last_lyric_tick
-
-    @_last_lyric_tick.setter
-    def _last_lyric_tick(self, value: float) -> None:
-        self._engine.last_lyric_tick = value
-
-    @property
-    def _pause_source(self) -> str | None:
-        return self._engine.pause_source
-
-    @_pause_source.setter
-    def _pause_source(self, value: str | None) -> None:
-        self._engine.pause_source = value
-
-    @property
-    def _audio_codec(self) -> "AudioCodec | None":
-        return self._engine.audio_codec
-
-    @_audio_codec.setter
-    def _audio_codec(self, value: "AudioCodec | None") -> None:
-        self._engine.audio_codec = value
-
-    @property
-    def _event_bus(self):
-        return self._bus.event_bus
-
-    @_event_bus.setter
-    def _event_bus(self, value) -> None:
-        self._bus.event_bus = value
-
-    @property
-    def _plugin_ctx(self):
-        return self._bus.plugin_ctx
-
-    @_plugin_ctx.setter
-    def _plugin_ctx(self, value) -> None:
-        self._bus.plugin_ctx = value
 
     @property
     def config(self) -> dict:
@@ -261,6 +153,7 @@ class MusicPlayer:
         return self._library.search(query)
 
     async def play_local_song_by_id(self, file_id: str) -> dict:
+        eng = self._engine
         try:
             self.prepare_for_io()
             resolved = self._library.resolve(file_id)
@@ -268,27 +161,27 @@ class MusicPlayer:
                 return {"status": "error", "message": f"本地文件不存在: {file_id}"}
 
             file_path, metadata = resolved
-            self.current_song = metadata.display_name()
-            self.song_id = file_id
-            self.total_duration = metadata.duration or 0
+            eng.current_song = metadata.display_name()
+            eng.song_id = file_id
+            eng.total_duration = metadata.duration or 0
             self.current_url = str(file_path)
             self.lyrics = []
 
             duration = await MusicDecoder.get_duration(file_path)
             if duration > 0:
-                self.total_duration = duration
+                eng.total_duration = duration
                 logger.info(f"从音频文件获取准确时长: {duration:.2f}秒")
-            elif self.total_duration == 0:
+            elif eng.total_duration == 0:
                 logger.warning("无法获取音频时长")
 
-            success = await self._engine.start_playback(file_path)
+            success = await eng.start_playback(file_path)
             if success:
                 return {
                     "status": "success",
-                    "message": f"正在播放: {self.current_song}",
-                    "song": self.current_song,
-                    "duration": self._format_time(self.total_duration),
-                    "total_seconds": self.total_duration,
+                    "message": f"正在播放: {eng.current_song}",
+                    "song": eng.current_song,
+                    "duration": self._format_time(eng.total_duration),
+                    "total_seconds": eng.total_duration,
                 }
             return {"status": "error", "message": "播放失败"}
         except Exception as e:
@@ -296,26 +189,27 @@ class MusicPlayer:
             return {"status": "error", "message": f"播放失败: {str(e)}"}
 
     async def search_and_play(self, song_name: str) -> dict:
+        eng = self._engine
         try:
             self.prepare_for_io()
             hit = await search_song(song_name, self.config)
             if hit is None:
                 return {"status": "error", "message": f"未找到歌曲: {song_name}"}
 
-            self.current_song = hit.display_name
-            self.song_id = hit.song_id
-            self.total_duration = hit.duration
+            eng.current_song = hit.display_name
+            eng.song_id = hit.song_id
+            eng.total_duration = hit.duration
             self.current_url = hit.api_url
             await self._fetch_lyrics(hit.song_id)
 
-            success = await self._engine.play_url(hit.api_url)
+            success = await eng.play_url(hit.api_url)
             if success:
                 return {
                     "status": "success",
-                    "message": f"正在播放: {self.current_song}",
-                    "song": self.current_song,
-                    "duration": self._format_time(self.total_duration),
-                    "total_seconds": self.total_duration,
+                    "message": f"正在播放: {eng.current_song}",
+                    "song": eng.current_song,
+                    "duration": self._format_time(eng.total_duration),
+                    "total_seconds": eng.total_duration,
                 }
 
             detail = self._downloader.last_error or "未知原因"
@@ -335,13 +229,14 @@ class MusicPlayer:
         }
 
     async def get_status(self) -> dict:
-        position = await self.get_position()
-        progress = await self.get_progress()
-        if not self.is_playing:
+        eng = self._engine
+        position = await eng.get_position()
+        progress = await eng.get_progress()
+        if not eng.is_playing:
             playing_state = "未播放"
-        elif self.paused and self._pause_source == "manual":
+        elif eng.paused and eng.pause_source == "manual":
             playing_state = "已暂停"
-        elif self.is_playing:
+        elif eng.is_playing:
             playing_state = "播放中"
         else:
             playing_state = "未知"
@@ -349,12 +244,12 @@ class MusicPlayer:
         return {
             "status": "success",
             "message": (
-                f"当前歌曲: {self.current_song}\n"
+                f"当前歌曲: {eng.current_song}\n"
                 f"播放状态: {playing_state}\n"
-                f"暂停来源: {self._pause_source or '无'} (tts=说话时临时暂停)\n"
-                f"总时长秒: {int(self.total_duration)}\n"
+                f"暂停来源: {eng.pause_source or '无'} (tts=说话时临时暂停)\n"
+                f"总时长秒: {int(eng.total_duration)}\n"
                 f"当前位置秒: {int(position)}\n"
-                f"播放时长: {self._format_time(self.total_duration)}\n"
+                f"播放时长: {self._format_time(eng.total_duration)}\n"
                 f"当前位置: {self._format_time(position)}\n"
                 f"播放进度: {progress}%\n"
                 f"歌词可用: {'是' if len(self.lyrics) > 0 else '否'}\n"
@@ -367,36 +262,35 @@ class MusicPlayer:
     async def _tick_lyrics(self) -> None:
         if not self.lyrics:
             return
+        eng = self._engine
         now = time.time()
-        if now - self._last_lyric_tick < 0.2:
+        if now - eng.last_lyric_tick < 0.2:
             return
-        self._last_lyric_tick = now
+        eng.last_lyric_tick = now
 
-        position = now - self.start_play_time if self.start_play_time > 0 else 0.0
+        position = now - eng.start_play_time if eng.start_play_time > 0 else 0.0
         hit = lyric_at(self.lyrics, position)
         if hit is None:
             return
         idx, text = hit
-        if idx == self.current_lyric_index:
+        if idx == eng.current_lyric_index:
             return
-        self.current_lyric_index = idx
-        display = format_lyric_display(text, position, self.total_duration)
-        await self._emit_lyrics_update(display, self.lyrics[idx][0])
+        eng.current_lyric_index = idx
+        display = format_lyric_display(text, position, eng.total_duration)
+        await self._bus.emit_lyrics_update(display, self.lyrics[idx][0])
         logger.debug(f"显示歌词: {text}")
 
-    async def _emit_lyrics_update(self, lyrics_text: str, time_sec: float = 0):
-        await self._bus.emit_lyrics_update(lyrics_text, time_sec)
-
     async def _fetch_lyrics(self, song_id: str):
+        eng = self._engine
         self.lyrics = await fetch_kuwo_lyrics(
             song_id,
             lyrics_url=self.config["LYRICS_URL"],
             headers=self.config["HEADERS"],
         )
-        if self.total_duration == 0 and self.lyrics:
+        if eng.total_duration == 0 and self.lyrics:
             last_time, _ = self.lyrics[-1]
-            self.total_duration = last_time + 5.0
-            logger.info(f"从歌词提取歌曲时长: {self.total_duration}秒")
+            eng.total_duration = last_time + 5.0
+            logger.info(f"从歌词提取歌曲时长: {eng.total_duration}秒")
 
     def _format_time(self, seconds: float) -> str:
         minutes = int(seconds) // 60
