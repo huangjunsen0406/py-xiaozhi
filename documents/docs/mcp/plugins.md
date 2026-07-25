@@ -76,7 +76,8 @@ com.example.hello/
 | `platforms` | Optional; skip if OS/arch mismatch |
 | `python_abi` | Optional; e.g. `cp310` |
 | `entry` | `module:attr`, default `plugin:register` |
-| `runtime` | `python-inprocess` (default) or `python-subprocess` (isolated process) |
+| `runtime` | **`python-inprocess` (default, same process)** or **`python-subprocess` (child process)** |
+| `call_timeout` | Optional; `python-subprocess` only — per-call timeout in seconds (default 60) |
 | `tool_name_prefix` | Recommended for tool names |
 
 Optional strict flags (default off): `ENFORCE_PREFIX`, `REQUIRE_PYTHON_ABI`, `REQUIRE_PLATFORMS`.
@@ -171,7 +172,41 @@ def register(host):
     ...
 ```
 
-Vendored `lib/` avoids end-user pip; it is **not** full process isolation. For heavy native conflicts, set `"runtime": "python-subprocess"` in manifest (tool callbacks run in a child process; `host.get` only supports JSON-serializable snapshots such as `config_readonly`, plus a local `logger`).
+Vendored `lib/` avoids end-user pip; it is **not** process isolation by itself.
+
+## Runtimes: `python-inprocess` vs `python-subprocess`
+
+**Subprocess is not the default.** Omit `runtime` or set `python-inprocess` to load the plugin in the host Python process.
+
+| | `python-inprocess` (default) | `python-subprocess` |
+|--|------------------------------|---------------------|
+| Process | Same as host | Dedicated worker (JSON lines over stdin/stdout) |
+| Crash / hang isolation | Poor (can take down the app) | Better (timeout can kill the child) |
+| `host.get("logger")` | Host logger | Local logger in the worker |
+| `host.get("config_readonly")` | Config object / read-only view | **JSON-serializable config snapshot** |
+| Live objects (e.g. `music_player`) | Allowed if whitelisted | **Not available** (not serializable) |
+| Best for | Light, trusted plugins needing host services | Heavy native deps / isolation from UI & audio |
+
+Enable subprocess explicitly in `manifest.json`:
+
+```json
+{
+  "id": "com.example.hello_sub",
+  "entry": "plugin:register",
+  "runtime": "python-subprocess",
+  "tool_name_prefix": "example.",
+  "call_timeout": 30
+}
+```
+
+Samples in the repo:
+
+```text
+examples/mcp_plugins/com.example.hello/        # in-process
+examples/mcp_plugins/com.example.hello_sub/  # subprocess
+```
+
+Note: subprocess isolation is **not** an OS sandbox — same user privileges as the app; it only separates interpreter and address space.
 
 ## User install steps
 
@@ -181,11 +216,25 @@ Vendored `lib/` avoids end-user pip; it is **not** full process isolation. For h
 4. Logs should show: `[MCP插件] 已加载 <id> (N 工具)`.  
 5. Confirm tools via chat or MCP `tools/list`.
 
-Repo sample (stdlib only):
+Repo samples (stdlib only):
 
 ```text
-examples/mcp_plugins/com.example.hello/
+examples/mcp_plugins/com.example.hello/        # in-process
+examples/mcp_plugins/com.example.hello_sub/  # subprocess runtime
 ```
+
+## Settings: per-tool enable/disable (`MCP_TOOLS`)
+
+In the app: **Settings → MCP tools**. Tools are grouped by package/plugin id; toggle one tool or a whole group.
+
+- Config key: `MCP_TOOLS.DISABLED` (array of full tool names; default `[]` = all on).
+- Built-in catalog is scanned from `src/mcp/tools/*/register.py` (group = folder name, e.g. `music` / `app`).
+- External tools come from `mcp_plugins` manifests / source heuristics.
+- **When disabled**: omitted from MCP `tools/list`; `tools/call` is rejected.
+- **After save**: if a protocol session is open, the app **disconnects and reconnects** so the server can refresh the tool list; reconnect stays **idle** (does not auto-enter listening).
+- If not connected, config is stored and applies on the **next** connect.
+
+Difference from `MCP_PLUGINS.DISABLED_IDS`: the latter **skips loading** a whole package; the former **trims exposure** of already-registered tools.
 
 ## Developer check
 
@@ -205,17 +254,19 @@ python scripts/check_mcp_plugin.py /path/to/plugin --strict
 | API | Role |
 |-----|------|
 | Startup | `add_common_tools` → `load_mcp_plugins_from_config` |
-| `server.unload_plugin(plugin_id)` | Remove that plugin’s tools |
+| `server.unload_plugin(plugin_id)` | Remove that plugin’s tools; terminates subprocess workers if any |
 | `server.reload_external_plugins(...)` | Unload externals and rescan |
 
-Settings UI, list-change notifications, subprocess isolation, and signing are future work.
+Signing and a plugin store remain future work.
 
 ## Security
 
-Plugins run **in-process** with the same privileges as the app. Install only trusted packages. Set `MCP_PLUGINS.ENABLED=false` to disable all external plugins.
+- **`python-inprocess`**: same process and privileges as the app.  
+- **`python-subprocess`**: better crash isolation; still same OS user — **not** a security sandbox.  
+- Install only trusted packages. Set `MCP_PLUGINS.ENABLED=false` to disable all external plugins.
 
 ## See also
 
 - [Built-in MCP guide](./index.md)  
 - Samples: `examples/mcp_plugins/`  
-- Code: `src/mcp/plugins/` (`host.py`, `loader.py`, `registry.py`)
+- Code: `src/mcp/plugins/` (`host.py`, `loader.py`, `registry.py`, `subprocess_runtime.py`, `subprocess_worker.py`)

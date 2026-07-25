@@ -76,7 +76,8 @@ com.example.hello/
 | `platforms` | 可选；声明后与当前 OS/ARCH 不符则跳过 |
 | `python_abi` | 可选；如 `cp310`，与宿主不一致则跳过 |
 | `entry` | `模块:属性`，默认 `plugin:register` |
-| `runtime` | 当前仅支持 `python-inprocess` |
+| `runtime` | **`python-inprocess`（默认，同进程）** 或 **`python-subprocess`（独立子进程）** |
+| `call_timeout` | 可选；仅 `python-subprocess`，单次工具调用超时秒数（默认 60） |
 | `tool_name_prefix` | 建议填写；工具名宜带此前缀 |
 
 可选严格配置（默认关）：`ENFORCE_PREFIX`、`REQUIRE_PYTHON_ABI`、`REQUIRE_PLATFORMS`。
@@ -175,7 +176,41 @@ def register(host):
     ...
 ```
 
-同进程加载下，`lib/` 只解决「免用户 pip」；**不是**进程级隔离。ROS/重型 native 冲突时，后续可考虑子进程运行时。
+同进程加载下，`lib/` 只解决「免用户 pip」，**不是**进程级隔离。
+
+## 运行时：`python-inprocess` 与 `python-subprocess`
+
+**默认不是子进程。** 未写或写 `python-inprocess` 时，插件与主程序共用同一 Python 进程。
+
+| | `python-inprocess`（默认） | `python-subprocess` |
+|--|---------------------------|---------------------|
+| 进程 | 与宿主同进程 | 独立 worker 进程（stdin/stdout JSON 行协议） |
+| 崩溃/堵死隔离 | 差（可拖垮宿主） | 较好（可超时结束子进程） |
+| `host.get("logger")` | 宿主 logger | 子进程本地 logger |
+| `host.get("config_readonly")` | 配置对象/只读视图 | **可 JSON 序列化的配置快照** |
+| `host.get("music_player")` 等活对象 | 白名单允许时可用 | **不可用**（无法跨进程传对象） |
+| 适用 | 轻量、可信、需宿主能力 | 重型 native、依赖冲突、希望与 UI/音频隔离 |
+
+在 `manifest.json` 中显式开启子进程：
+
+```json
+{
+  "id": "com.example.hello_sub",
+  "entry": "plugin:register",
+  "runtime": "python-subprocess",
+  "tool_name_prefix": "example.",
+  "call_timeout": 30
+}
+```
+
+仓库示例：
+
+```text
+examples/mcp_plugins/com.example.hello/          # inprocess
+examples/mcp_plugins/com.example.hello_sub/    # subprocess
+```
+
+说明：子进程隔离**不是** OS 级沙箱，仍是本机同用户权限；只隔离解释器与内存空间。
 
 ## 用户安装步骤
 
@@ -188,8 +223,22 @@ def register(host):
 仓库示例（无第三方依赖，可直接拷贝）：
 
 ```text
-examples/mcp_plugins/com.example.hello/
+examples/mcp_plugins/com.example.hello/        # 同进程
+examples/mcp_plugins/com.example.hello_sub/  # 子进程 runtime
 ```
+
+## 设置页：按工具启停（MCP_TOOLS）
+
+应用内 **参数设置 → MCP 工具**：按包名/插件分组列出工具，可单开或整组开关。
+
+- 配置键：`MCP_TOOLS.DISABLED`（工具全名字符串数组，黑名单；默认 `[]` 全开）。
+- 内置工具目录来自扫描 `src/mcp/tools/*/register.py`（分组 = 目录名，如 `music` / `app`）。
+- 外挂来自 `mcp_plugins` 的 manifest / 源码启发式扫描。
+- **关闭后**：不出现在 MCP `tools/list`，`tools/call` 也会拒绝。
+- **保存后**：若当前已连接协议，会**断开并重连**以便服务端重新拉工具列表；重连后保持**空闲**，不会自动进入「聆听中」。
+- 未连接时仅写配置，**下次连接**生效。
+
+与 `MCP_PLUGINS.DISABLED_IDS` 的区别：后者是**整包不加载**；前者是工具已注册前提下的**暴露面裁剪**。
 
 ## 开发者检查
 
@@ -211,17 +260,19 @@ python scripts/check_mcp_plugin.py /path/to/plugin --strict
 | API | 说明 |
 |-----|------|
 | 启动加载 | `McpServer.add_common_tools` 末尾调用 `load_mcp_plugins_from_config` |
-| `server.unload_plugin(plugin_id)` | 移除该插件已注册工具 |
+| `server.unload_plugin(plugin_id)` | 移除该插件已注册工具；若为 subprocess 会结束子进程 |
 | `server.reload_external_plugins(...)` | 卸掉外挂后按配置重新扫描 |
 
-设置 UI、列表变更推送、子进程隔离、签名等为后续能力。
+签名校验、插件商店等为后续能力。
 
 ## 安全提示
 
-插件与主程序**同进程**，权限等同本机任意代码。请只安装**可信来源**插件；可用 `MCP_PLUGINS.ENABLED=false` 一键关闭全部外挂。
+- **`python-inprocess`**：与主程序同进程，权限等同本机任意代码。  
+- **`python-subprocess`**：工具逻辑在子进程，崩溃隔离更好，但仍是本机同用户权限，**不是**安全沙箱。  
+- 请只安装**可信来源**插件；可用 `MCP_PLUGINS.ENABLED=false` 一键关闭全部外挂。
 
 ## 相关文档
 
 - [MCP 内置工具开发指南](./index.md)  
 - 示例目录：`examples/mcp_plugins/`  
-- 实现：`src/mcp/plugins/`（`host.py`、`loader.py`、`registry.py`）
+- 实现：`src/mcp/plugins/`（`host.py`、`loader.py`、`registry.py`、`subprocess_runtime.py`、`subprocess_worker.py`）
