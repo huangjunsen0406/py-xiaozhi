@@ -63,25 +63,30 @@ class McpServer:
         logger.info(f"Add tool: {tool.name}")
         self.tools.append(tool)
 
-    def add_common_tools(self, music_player=None):
+    def add_common_tools(self, music_player=None, volume_controller=None):
         """
-        添加通用工具.
+        添加通用工具（全部经 register_* 显式挂载）.
 
-        music_player: 容器注入的 MusicPlayer；提供时注册音乐工具（闭包持有实例）。
+        music_player: 容器注入的 MusicPlayer；提供时注册音乐工具。
+        volume_controller: 可选注入的 VolumeController；未提供时由 register 内创建。
+        camera / screenshot 由 McpPlugin 在 setup 中单独 register。
         """
         # 备份原有工具列表
         original_tools = self.tools.copy()
         self.tools.clear()
 
-        from src.mcp.decorators import iter_registered_mcp_tools
-
-        for decorated_tool in iter_registered_mcp_tools():
-            self.add_tool(decorated_tool)
-
         if music_player is not None:
             from src.mcp.tools.music import register_music_tools
 
             register_music_tools(self.add_tool, music_player)
+
+        from src.mcp.tools.app import register_app_tools
+        from src.mcp.tools.volume import register_volume_tools
+        from src.mcp.tools.weather import register_weather_tools
+
+        register_volume_tools(self.add_tool, volume_controller)
+        register_app_tools(self.add_tool)
+        register_weather_tools(self.add_tool)
 
         # 恢复原有工具
         self.tools.extend(original_tools)
