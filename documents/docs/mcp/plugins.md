@@ -76,7 +76,7 @@ com.example.hello/
 | `platforms` | Optional; skip if OS/arch mismatch |
 | `python_abi` | Optional; e.g. `cp310` |
 | `entry` | `module:attr`, default `plugin:register` |
-| `runtime` | Currently only `python-inprocess` |
+| `runtime` | `python-inprocess` (default) or `python-subprocess` (isolated process) |
 | `tool_name_prefix` | Recommended for tool names |
 
 Optional strict flags (default off): `ENFORCE_PREFIX`, `REQUIRE_PYTHON_ABI`, `REQUIRE_PLATFORMS`.
@@ -171,7 +171,7 @@ def register(host):
     ...
 ```
 
-Vendored `lib/` avoids end-user pip; it is **not** full process isolation. For heavy native conflicts, a future subprocess runtime may be needed.
+Vendored `lib/` avoids end-user pip; it is **not** full process isolation. For heavy native conflicts, set `"runtime": "python-subprocess"` in manifest (tool callbacks run in a child process; `host.get` only supports JSON-serializable snapshots such as `config_readonly`, plus a local `logger`).
 
 ## User install steps
 

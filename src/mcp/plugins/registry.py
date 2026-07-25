@@ -28,6 +28,12 @@ class PluginRegistry:
 
     def unload_plugin(self, server: "McpServer", plugin_id: str) -> int:
         """从 server.tools 移除该插件注册的工具；返回移除数量."""
+        try:
+            from src.mcp.plugins.subprocess_runtime import drop_session
+
+            drop_session(plugin_id)
+        except Exception:
+            pass
         names = set(self.tools_for_plugin(plugin_id))
         if not names:
             logger.info("[MCP插件] 卸载 %s：无已注册工具", plugin_id)

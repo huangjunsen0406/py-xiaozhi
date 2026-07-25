@@ -1,4 +1,4 @@
-"""外挂 MCP 插件目录加载（python-inprocess + vendored lib）."""
+"""外挂 MCP 插件目录加载（python-inprocess / python-subprocess + vendored lib）."""
 
 from __future__ import annotations
 
@@ -19,22 +19,19 @@ from src.utils.resource_finder import get_user_data_dir
 
 logger = get_logger()
 
-# 宿主插件 API 版本（manifest.api_version 不得大于此值）
 HOST_PLUGIN_API_VERSION = 1
+SUPPORTED_RUNTIMES = frozenset({"python-inprocess", "python-subprocess"})
 
 
 def default_plugins_dir() -> Path:
-    """默认插件根目录：{用户数据}/mcp_plugins."""
     path = get_user_data_dir() / "mcp_plugins"
     path.mkdir(parents=True, exist_ok=True)
     return path
 
 
 def current_platform_tag() -> str:
-    """与 manifest.platforms 对齐：macos-arm64 / windows-amd64 / linux-x86_64 …"""
     system = platform.system().lower()
     machine = platform.machine().lower()
-
     if system == "darwin":
         os_name = "macos"
     elif system == "windows":
@@ -43,7 +40,6 @@ def current_platform_tag() -> str:
         os_name = "linux"
     else:
         os_name = system
-
     if machine in ("x86_64", "amd64"):
         arch = "amd64" if os_name == "windows" else "x86_64"
     elif machine in ("aarch64", "arm64"):
@@ -52,26 +48,21 @@ def current_platform_tag() -> str:
         arch = "x86"
     else:
         arch = machine
-
     return f"{os_name}-{arch}"
 
 
 def current_python_abi() -> str:
-    """如 cp311."""
     v = sys.version_info
     return f"cp{v.major}{v.minor}"
 
 
 def parse_version(ver: str) -> tuple[int, ...]:
-    """宽松解析版本号，只取数字段."""
     parts = re.findall(r"\d+", ver or "0")
     return tuple(int(p) for p in parts) if parts else (0,)
 
 
 def version_gte(current: str, minimum: str) -> bool:
-    """current >= minimum."""
     a, b = parse_version(current), parse_version(minimum)
-    # pad
     n = max(len(a), len(b))
     a = a + (0,) * (n - len(a))
     b = b + (0,) * (n - len(b))
@@ -84,11 +75,10 @@ class LoadedPlugin:
     path: Path
     tool_names: list[str] = field(default_factory=list)
     error: str | None = None
+    runtime: str = "python-inprocess"
 
 
 class PluginLoader:
-    """扫描目录，加载 manifest 插件包并调用 register(host)."""
-
     def __init__(
         self,
         host: McpHost,
@@ -99,6 +89,8 @@ class PluginLoader:
         enforce_prefix: bool = False,
         require_python_abi: bool = False,
         require_platforms: bool = False,
+        tool_owner: dict[str, str] | None = None,
+        raw_add_tool=None,
     ) -> None:
         self._base_host = host
         self.plugins_dir = Path(plugins_dir) if plugins_dir else default_plugins_dir()
@@ -107,19 +99,19 @@ class PluginLoader:
         self.enforce_prefix = enforce_prefix
         self.require_python_abi = require_python_abi
         self.require_platforms = require_platforms
+        self.tool_owner = tool_owner
+        self._raw_add_tool = raw_add_tool or host._add_tool
         self.loaded: list[LoadedPlugin] = []
         self._platform = current_platform_tag()
         self._abi = current_python_abi()
         self._host_version = getattr(SystemConstants, "APP_VERSION", "0.0.0")
 
     def load_all(self) -> list[LoadedPlugin]:
-        """加载目录下全部合格插件；返回结果列表（含失败项）."""
         self.loaded.clear()
         root = self.plugins_dir
         if not root.is_dir():
             logger.info("[MCP插件] 目录不存在，跳过: %s", root)
             return self.loaded
-
         for child in sorted(root.iterdir(), key=lambda p: p.name.lower()):
             if child.name.startswith(".") or child.name.startswith("_"):
                 continue
@@ -127,14 +119,11 @@ class PluginLoader:
                 self._load_package_dir(child)
             elif child.suffix == ".py" and child.is_file():
                 self._load_simple_py(child)
-
         ok = sum(1 for x in self.loaded if not x.error)
         fail = sum(1 for x in self.loaded if x.error)
         logger.info(
             "[MCP插件] 加载完成: 成功 %d, 跳过/失败 %d, 目录 %s",
-            ok,
-            fail,
-            root,
+            ok, fail, root,
         )
         return self.loaded
 
@@ -151,20 +140,16 @@ class PluginLoader:
             if (path / "plugin.py").is_file():
                 self._load_package_dir_without_manifest(path)
             return
-
         try:
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         except Exception as e:
             self._record(path.name, path, error=f"manifest 无效: {e}")
             return
-
         plugin_id = str(manifest.get("id") or path.name)
         try:
             self._validate_and_import_package(path, manifest, plugin_id)
         except Exception as e:
-            logger.error(
-                "[MCP插件] 加载失败 %s: %s", plugin_id, e, exc_info=True
-            )
+            logger.error("[MCP插件] 加载失败 %s: %s", plugin_id, e, exc_info=True)
             self._record(plugin_id, path, error=str(e))
 
     def _load_package_dir_without_manifest(self, path: Path) -> None:
@@ -178,13 +163,10 @@ class PluginLoader:
         try:
             self._validate_and_import_package(path, manifest, plugin_id)
         except Exception as e:
-            logger.error(
-                "[MCP插件] 加载失败 %s: %s", plugin_id, e, exc_info=True
-            )
+            logger.error("[MCP插件] 加载失败 %s: %s", plugin_id, e, exc_info=True)
             self._record(plugin_id, path, error=str(e))
 
     def _check_manifest_compat(self, manifest: dict[str, Any]) -> None:
-        """api_version / min_host_version / platforms / python_abi."""
         api = manifest.get("api_version", 1)
         try:
             api_i = int(api)
@@ -196,19 +178,16 @@ class PluginLoader:
             )
         if api_i < 1:
             raise RuntimeError(f"api_version 过低: {api_i}")
-
         min_host = manifest.get("min_host_version")
         if min_host and not version_gte(str(self._host_version), str(min_host)):
             raise RuntimeError(
                 f"宿主版本 {self._host_version} < 插件要求 min_host_version={min_host}"
             )
-
         platforms = manifest.get("platforms")
         if platforms is None and self.require_platforms:
             raise RuntimeError("manifest 缺少 platforms（已开启强制校验）")
         if platforms is not None:
             plat_set = set(platforms)
-            # 兼容 amd64/x86_64 别名
             aliases = {self._platform}
             if "x86_64" in self._platform:
                 aliases.add(self._platform.replace("x86_64", "amd64"))
@@ -218,7 +197,6 @@ class PluginLoader:
                 raise RuntimeError(
                     f"平台不匹配: host={self._platform}, plugin={platforms}"
                 )
-
         abi = manifest.get("python_abi")
         if abi is None and self.require_python_abi:
             raise RuntimeError("manifest 缺少 python_abi（已开启强制校验）")
@@ -237,22 +215,31 @@ class PluginLoader:
             logger.info("[MCP插件] 已禁用，跳过: %s", plugin_id)
             return
 
-        runtime = manifest.get("runtime", "python-inprocess")
-        if runtime != "python-inprocess":
+        runtime = str(manifest.get("runtime") or "python-inprocess")
+        if runtime not in SUPPORTED_RUNTIMES:
             raise RuntimeError(
-                f"不支持的 runtime: {runtime}（当前仅 python-inprocess）"
+                f"不支持的 runtime: {runtime}（支持: {sorted(SUPPORTED_RUNTIMES)}）"
             )
-
         self._check_manifest_compat(manifest)
-
         entry = str(manifest.get("entry") or "plugin:register")
         if ":" not in entry:
             raise RuntimeError(f"entry 须为 module:attr，得到: {entry}")
-        module_part, attr_part = entry.split(":", 1)
-
         prefix = manifest.get("tool_name_prefix")
-        host = self._base_host.bind_plugin(plugin_id)
 
+        if runtime == "python-subprocess":
+            self._load_subprocess_package(
+                path, plugin_id, entry=entry, prefix=prefix, manifest=manifest
+            )
+            return
+        self._load_inprocess_package(
+            path, plugin_id, entry=entry, prefix=prefix, manifest=manifest
+        )
+
+    def _load_inprocess_package(
+        self, path: Path, plugin_id: str, *, entry: str, prefix: Any, manifest: dict[str, Any]
+    ) -> None:
+        module_part, attr_part = entry.split(":", 1)
+        host = self._base_host.bind_plugin(plugin_id)
         extra_paths: list[Path] = [path]
         lib = path / "lib"
         if lib.is_dir():
@@ -268,15 +255,11 @@ class PluginLoader:
                     native = alt2
         if native.is_dir():
             extra_paths.append(native)
-
-        inserted: list[str] = []
         try:
             for p in reversed(extra_paths):
                 sp = str(p.resolve())
                 if sp not in sys.path:
                     sys.path.insert(0, sp)
-                    inserted.append(sp)
-
             unique_name = f"mcp_plugin_{_safe_mod_name(plugin_id)}_{module_part}"
             mod = _import_plugin_module(path, module_part, unique_name)
             register_fn = getattr(mod, attr_part, None)
@@ -284,32 +267,71 @@ class PluginLoader:
                 raise RuntimeError(
                     f"入口 {entry} 不可调用（模块 {module_part} 无属性 {attr_part}）"
                 )
-
             register_fn(host)
-
             names = host.registered_tool_names
             if prefix:
                 bad = [n for n in names if not n.startswith(str(prefix))]
                 if bad:
-                    msg = (
-                        f"工具名未使用前缀 {prefix}: {bad}"
-                    )
+                    msg = f"工具名未使用前缀 {prefix}: {bad}"
                     if self.enforce_prefix:
                         raise RuntimeError(msg)
                     logger.warning("[MCP插件:%s] %s", plugin_id, msg)
-
-            self._record(plugin_id, path, tool_names=names)
-            logger.info(
-                "[MCP插件] 已加载 %s (%d 工具) from %s",
-                plugin_id,
-                len(names),
-                path,
+            if self.tool_owner is not None:
+                for n in names:
+                    self.tool_owner[n] = plugin_id
+            self._record(
+                plugin_id, path, tool_names=names, runtime="python-inprocess"
             )
-        finally:
-            _ = inserted
+            logger.info(
+                "[MCP插件] 已加载 %s (%d 工具, inprocess) from %s",
+                plugin_id, len(names), path,
+            )
+        except Exception:
+            raise
+
+    def _load_subprocess_package(
+        self, path: Path, plugin_id: str, *, entry: str, prefix: Any, manifest: dict[str, Any]
+    ) -> None:
+        from src.mcp.plugins.subprocess_runtime import (
+            PluginSubprocessSession,
+            register_subprocess_plugin_tools,
+            track_session,
+        )
+
+        allow = list(self._base_host._allow_get)
+        caps = dict(self._base_host._capabilities)
+        timeout = float(manifest.get("call_timeout") or 60)
+        session = PluginSubprocessSession(
+            plugin_id=plugin_id,
+            plugin_root=path,
+            entry=entry,
+            platform_tag=self._platform,
+            allow_get=allow,
+            capabilities=caps,
+            call_timeout=timeout,
+        )
+        try:
+            session.start_and_bootstrap()
+            names = register_subprocess_plugin_tools(
+                self._raw_add_tool,
+                session=session,
+                tool_owner=self.tool_owner,
+                enforce_prefix=self.enforce_prefix,
+                prefix=str(prefix) if prefix else None,
+            )
+            track_session(plugin_id, session)
+            self._record(
+                plugin_id, path, tool_names=names, runtime="python-subprocess"
+            )
+            logger.info(
+                "[MCP插件] 已加载 %s (%d 工具, subprocess) from %s",
+                plugin_id, len(names), path,
+            )
+        except Exception:
+            session.terminate()
+            raise
 
     def _load_simple_py(self, path: Path) -> None:
-        """无依赖单文件：mcp_plugins/hello.py 含 register(host)."""
         plugin_id = path.stem
         if not self._is_enabled(plugin_id, True):
             self._record(plugin_id, path, error="disabled")
@@ -327,11 +349,15 @@ class PluginLoader:
             if not callable(register_fn):
                 raise RuntimeError("单文件插件须定义 register(host)")
             register_fn(host)
-            self._record(plugin_id, path, tool_names=host.registered_tool_names)
+            names = host.registered_tool_names
+            if self.tool_owner is not None:
+                for n in names:
+                    self.tool_owner[n] = plugin_id
+            self._record(
+                plugin_id, path, tool_names=names, runtime="python-inprocess"
+            )
             logger.info(
-                "[MCP插件] 已加载单文件 %s (%d 工具)",
-                plugin_id,
-                len(host.registered_tool_names),
+                "[MCP插件] 已加载单文件 %s (%d 工具)", plugin_id, len(names)
             )
         except Exception as e:
             logger.error(
@@ -346,6 +372,7 @@ class PluginLoader:
         *,
         tool_names: list[str] | None = None,
         error: str | None = None,
+        runtime: str = "python-inprocess",
     ) -> None:
         self.loaded.append(
             LoadedPlugin(
@@ -353,6 +380,7 @@ class PluginLoader:
                 path=path,
                 tool_names=list(tool_names or []),
                 error=error,
+                runtime=runtime,
             )
         )
 
@@ -362,10 +390,8 @@ def _safe_mod_name(plugin_id: str) -> str:
 
 
 def _import_plugin_module(plugin_root: Path, module_part: str, unique_name: str):
-    """从插件根加载 module_part（plugin 或 sub.module）."""
     py_file = plugin_root / f"{module_part.replace('.', '/')}.py"
     pkg_init = plugin_root / module_part.split(".")[0] / "__init__.py"
-
     if py_file.is_file():
         spec = importlib.util.spec_from_file_location(unique_name, py_file)
         if spec is None or spec.loader is None:
@@ -375,10 +401,8 @@ def _import_plugin_module(plugin_root: Path, module_part: str, unique_name: str)
         sys.modules[module_part] = mod
         spec.loader.exec_module(mod)
         return mod
-
     if (plugin_root / module_part).is_dir() and pkg_init.is_file():
         return importlib.import_module(module_part)
-
     return importlib.import_module(module_part)
 
 
@@ -389,14 +413,9 @@ def load_mcp_plugins_from_config(
     capabilities: dict | None = None,
     tool_owner: dict[str, str] | None = None,
 ) -> list[LoadedPlugin]:
-    """根据配置加载外挂插件；配置总开关关闭则空列表.
-
-    tool_owner: 可选 dict，加载后写入 tool_name -> plugin_id，供运行时卸载。
-    """
     if config is None:
         try:
             from src.utils.config_manager import get_config
-
             config = get_config()
         except Exception:
             logger.debug("[MCP插件] 无配置，使用默认目录加载")
@@ -413,11 +432,9 @@ def load_mcp_plugins_from_config(
 
     dir_cfg = _get("MCP_PLUGINS.DIR", None)
     plugins_dir = Path(dir_cfg) if dir_cfg else default_plugins_dir()
-
     allow = _get("MCP_PLUGINS.ALLOW_HOST_GET", list(DEFAULT_ALLOW_GET))
     if not isinstance(allow, list):
         allow = list(DEFAULT_ALLOW_GET)
-
     enabled_ids = _get("MCP_PLUGINS.ENABLED_IDS", []) or []
     disabled_ids = _get("MCP_PLUGINS.DISABLED_IDS", []) or []
     enforce_prefix = bool(_get("MCP_PLUGINS.ENFORCE_PREFIX", False))
@@ -437,6 +454,8 @@ def load_mcp_plugins_from_config(
         enforce_prefix=enforce_prefix,
         require_python_abi=require_abi,
         require_platforms=require_plat,
+        tool_owner=tool_owner,
+        raw_add_tool=add_tool,
     )
     results = loader.load_all()
     if tool_owner is not None:

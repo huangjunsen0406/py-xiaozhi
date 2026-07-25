@@ -1842,3 +1842,60 @@ def test_discover_plugin_catalog_from_sources(tmp_path, monkeypatch):
     assert hello["source"] == "plugin"
     assert hello["groupLabel"] == "Hello"
 
+
+
+def test_mcp_plugin_subprocess_runtime(tmp_path):
+    """python-subprocess：独立进程加载并代理调用."""
+    import asyncio
+    import json
+    from src.mcp.mcp_server import McpServer
+    from src.mcp.plugins.host import McpHost
+    from src.mcp.plugins.loader import PluginLoader
+    from src.mcp.plugins.subprocess_runtime import drop_all_sessions
+
+    plug = tmp_path / "com.example.iso"
+    plug.mkdir()
+    (plug / "manifest.json").write_text(
+        json.dumps(
+            {
+                "id": "com.example.iso",
+                "entry": "plugin:register",
+                "runtime": "python-subprocess",
+                "api_version": 1,
+                "enabled_by_default": True,
+            }
+        ),
+        encoding="utf-8",
+    )
+    (plug / "plugin.py").write_text(
+        "def register(host):\n"
+        "    @host.tool(name=\"example.iso_ping\", description=\"ping\", props=[])\n"
+        "    def ping(args):\n"
+        "        return \"pong-iso\"\n",
+        encoding="utf-8",
+    )
+
+    server = McpServer()
+    host = McpHost(server.add_tool, allow_get=["logger"])
+    loader = PluginLoader(
+        host,
+        plugins_dir=tmp_path,
+        raw_add_tool=server.add_tool,
+    )
+    try:
+        loaded = loader.load_all()
+        ok = [x for x in loaded if x.plugin_id == "com.example.iso"]
+        assert ok and ok[0].error is None
+        assert ok[0].runtime == "python-subprocess"
+        assert any(t.name == "example.iso_ping" for t in server.tools)
+
+        async def _call():
+            tool = next(t for t in server.tools if t.name == "example.iso_ping")
+            raw = await tool.call({})
+            data = json.loads(raw)
+            assert data.get("isError") is False
+            assert "pong-iso" in data["content"][0]["text"]
+
+        asyncio.run(_call())
+    finally:
+        drop_all_sessions()
