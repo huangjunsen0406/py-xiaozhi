@@ -1,9 +1,6 @@
-"""CLI 模块.
+"""CLI 模块：命令行界面."""
 
-提供命令行用户界面。
-"""
+from src.ui.cli.activation import CliActivation
+from src.ui.cli.manager import CliViewManager
 
-from src.ui.cli.activation import CLIActivation
-from src.ui.cli.manager import CLIViewManager
-
-__all__ = ["CLIActivation", "CLIViewManager"]
+__all__ = ["CliActivation", "CliViewManager"]

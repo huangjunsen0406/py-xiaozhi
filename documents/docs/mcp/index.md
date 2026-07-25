@@ -1,28 +1,30 @@
 # MCP Tool Development Guide
 
-This document explains how to develop built-in MCP tools for py-xiaozhi. For external MCP service integration, refer to the [External MCP Integration Guide](xiaozhi-mcp.md).
+This document explains how to develop **built-in** MCP tools for py-xiaozhi. For external MCP services, see the [External MCP Integration Guide](xiaozhi-mcp.md).
 
 ## How It Works
 
-1. On startup, `McpServer.add_common_tools()` calls `discover_tool_modules()` to automatically scan all sub-packages under `src/mcp/tools/`
-2. Scanning imports each sub-package's `__init__.py`, as well as the sub-package's `_tools.py` (if it exists)
-3. During import, the `@mcp_tool` decorator registers tool functions into a global registry
-4. After registration, tools are exposed externally via the JSON-RPC 2.0 protocol
+1. `McpPlugin.setup` creates runtime objects (e.g. camera) and calls `register_camera_tools` / `register_screenshot_tools`
+2. `McpServer.add_common_tools()` **explicitly** calls each package’s `register_*_tools(add_tool, …)`
+3. Each `register_*` holds dependencies in a closure (e.g. `MusicPlayer`, `VolumeController`), builds `McpTool` instances, and calls `add_tool`
+4. Tools are exposed over JSON-RPC 2.0
 
-**You only need to write tool functions and add decorators -- no modification to `mcp_server.py` required.**
+**Built-in tools do not use a global `@mcp_tool` decorator or filesystem auto-discovery.** To add a package: implement `register_*_tools` and wire it once in `add_common_tools` (or `McpPlugin`).
 
-## Quick Start: Developing a Light Control Tool
+Inject runtime objects from the container / plugin — **do not** use module-level `get_instance` singletons.
 
-### Step 1: Create the Directory
+## Quick Start: Light Control Tool
+
+### Step 1: Directory
 
 ```
 src/mcp/tools/light/
-├── __init__.py      # Imports _tools to trigger decorator registration
-├── _tools.py        # Tool registration (@mcp_tool decorator)
-└── light_manager.py # Business logic (optional; simple tools can be written directly in _tools.py)
+├── __init__.py          # export register_light_tools
+├── register.py      # register_light_tools
+└── light_manager.py     # optional business logic
 ```
 
-### Step 2: Write Business Logic (`light_manager.py`)
+### Step 2: Business logic (`light_manager.py`)
 
 ```python
 """Light control business logic."""
@@ -55,148 +57,169 @@ class LightManager:
     def get_status(self) -> str:
         state = "on" if self._on else "off"
         return f"Light status: {state}, brightness: {self._brightness}%"
-
-
-_light = LightManager()
-
-
-def get_light_manager() -> LightManager:
-    return _light
 ```
 
-### Step 3: Register MCP Tools (`_tools.py`)
+### Step 3: `register_light_tools` (`register.py`)
 
 ```python
 """Light MCP tool registration."""
 
-from src.mcp.decorators import Prop, PropType, mcp_tool
+from collections.abc import Callable
+from typing import Any
 
-from .light_manager import get_light_manager
+from src.logging import get_logger
+from src.mcp.tooling import McpTool, Property, PropertyList, PropertyType
 
+from .light_manager import LightManager
 
-@mcp_tool(
-    name="self.light.turn_on",
-    description="Turn on the light. Call when user says 'turn on the light', 'switch on the light'.",
-)
-async def tool_light_on(args):
-    return get_light_manager().turn_on()
+logger = get_logger()
 
 
-@mcp_tool(
-    name="self.light.turn_off",
-    description="Turn off the light. Call when user says 'turn off the light', 'switch off the light'.",
-)
-async def tool_light_off(args):
-    return get_light_manager().turn_off()
+def register_light_tools(
+    add_tool: Callable[[McpTool], None],
+    manager: LightManager | None = None,
+) -> None:
+    light = manager or LightManager()
 
+    async def turn_on(args: dict[str, Any]) -> str:
+        return light.turn_on()
 
-@mcp_tool(
-    name="self.light.set_brightness",
-    description="Set the light brightness. Parameter: brightness (0-100).",
-    props=[Prop("brightness", PropType.INT, min_val=0, max_val=100)],
-)
-async def tool_set_brightness(args):
-    brightness = args.get("brightness", 100)
-    return get_light_manager().set_brightness(brightness)
+    async def turn_off(args: dict[str, Any]) -> str:
+        return light.turn_off()
 
+    async def set_brightness(args: dict[str, Any]) -> str:
+        brightness = int(args.get("brightness", 100))
+        return light.set_brightness(brightness)
 
-@mcp_tool(
-    name="self.light.get_status",
-    description="View the current state of the light (on/off, brightness).",
-)
-async def tool_light_status(args):
-    return get_light_manager().get_status()
+    async def get_status(args: dict[str, Any]) -> str:
+        return light.get_status()
+
+    tools = [
+        McpTool(
+            "self.light.turn_on",
+            "Turn on the light. Call when user says 'turn on the light'.",
+            PropertyList(),
+            turn_on,
+        ),
+        McpTool(
+            "self.light.turn_off",
+            "Turn off the light. Call when user says 'turn off the light'.",
+            PropertyList(),
+            turn_off,
+        ),
+        McpTool(
+            "self.light.set_brightness",
+            "Set light brightness. Parameter: brightness (0-100).",
+            PropertyList(
+                [
+                    Property(
+                        "brightness",
+                        PropertyType.INTEGER,
+                        min_value=0,
+                        max_value=100,
+                    )
+                ]
+            ),
+            set_brightness,
+        ),
+        McpTool(
+            "self.light.get_status",
+            "View current light state (on/off, brightness).",
+            PropertyList(),
+            get_status,
+        ),
+    ]
+    for tool in tools:
+        add_tool(tool)
+    logger.info("Registered %d light MCP tools", len(tools))
 ```
 
-### Step 4: Write `__init__.py`
+### Step 4: `__init__.py`
 
 ```python
 """Light control tools."""
 
-# Import _tools to trigger @mcp_tool decorator registration
-from . import _tools  # noqa: F401
+from .register import register_light_tools
+
+__all__ = ["register_light_tools"]
 ```
 
-**Done.** After restarting the application, all 4 light control tools are automatically available.
+### Step 5: Wire into the host
+
+In `src/mcp/mcp_server.py` → `add_common_tools`:
+
+```python
+from src.mcp.tools.light import register_light_tools
+
+register_light_tools(self.add_tool)
+```
+
+If the tool needs a container-owned object, create it in `McpPlugin.setup` and pass it into `register_light_tools(server.add_tool, manager)`.
+
+**Done.** Restart the app to load the tools.
 
 ## API Reference
 
-### `@mcp_tool` Decorator
+### `McpTool` / `Property`
 
 ```python
-from src.mcp.decorators import Prop, PropType, mcp_tool
+from src.mcp.tooling import McpTool, Property, PropertyList, PropertyType
 
-@mcp_tool(
-    name="self.module.action",   # Tool name (globally unique)
-    description="Tool description; the AI uses this to decide when to call",
-    props=[                      # Parameter list (optional; omit if no parameters)
-        Prop("city", PropType.STR),                              # Required string
-        Prop("days", PropType.INT, default=3, min_val=1, max_val=7),  # Optional integer with range
-        Prop("verbose", PropType.BOOL, default=False),           # Optional boolean
-    ],
+McpTool(
+    name="self.module.action",  # globally unique
+    description="Used by the model to decide when to call",
+    properties=PropertyList(
+        [
+            Property("city", PropertyType.STRING),
+            Property(
+                "days",
+                PropertyType.INTEGER,
+                default_value=3,
+                min_value=1,
+                max_value=7,
+            ),
+            Property("verbose", PropertyType.BOOLEAN, default_value=False),
+        ]
+    ),
+    callback=async_handler,  # async def handler(args: dict) -> str | int | bool
 )
-async def tool_function(args: dict) -> str:
-    city = args.get("city", "")
-    days = args.get("days", 3)
-    return json.dumps({"city": city, "days": days}, ensure_ascii=False)
 ```
 
-### Parameter Types
+### Parameter types
 
-| Type | Usage | Description |
+| Type | Usage | Notes |
 |------|------|------|
-| `PropType.STR` | `Prop("name", PropType.STR)` | String |
-| `PropType.INT` | `Prop("count", PropType.INT, min_val=0, max_val=100)` | Integer, with optional range limit |
-| `PropType.BOOL` | `Prop("flag", PropType.BOOL, default=False)` | Boolean |
+| `PropertyType.STRING` | `Property("name", PropertyType.STRING)` | String |
+| `PropertyType.INTEGER` | `Property("n", PropertyType.INTEGER, min_value=0, max_value=100)` | Integer, optional range |
+| `PropertyType.BOOLEAN` | `Property("flag", PropertyType.BOOLEAN, default_value=False)` | Boolean |
 
-- Parameters without `default` are **required**
-- Parameters with `default` are **optional**
-- `min_val` / `max_val` only apply to `INT`
+### Return values
 
-### Return Values
+Prefer **`str`** (or bool/int). Use `json.dumps(..., ensure_ascii=False)` for structured payloads.
 
-Tool functions must return a **`str`** type. Use `json.dumps()` when returning structured data:
-
-```python
-# Simple text
-return "Operation successful"
-
-# Structured JSON
-return json.dumps({"status": "success", "data": result}, ensure_ascii=False)
-```
-
-**Do not return `dict`**; the MCP protocol requires text content.
-
-## Auto-Discovery Rules
-
-`discover_tool_modules()` scan order:
-
-1. `src/mcp/tools/*.py` -- standalone files in the root directory (skips files starting with `_`)
-2. `src/mcp/tools/<name>/` -- `__init__.py` of each sub-package
-3. `src/mcp/tools/<name>/_tools.py` -- `_tools.py` inside the sub-package (if it exists)
-
-**Key Points**:
-- `__init__.py` must import `_tools` or tool modules, otherwise the decorator will not trigger
-- Files starting with `_` are skipped (`_tools.py` is the only exception; it is explicitly loaded)
-- A single module import failure only produces a warning and does not affect loading of other tools
-
-## Development Conventions
+## Registration conventions
 
 | Rule | Description |
 |------|------|
-| Naming | Tool name format: `self.module.action`, globally unique |
-| Async | Tool functions use `async def`; wrap blocking operations with `asyncio.to_thread()` |
-| Timeout | External API calls must set a `timeout` |
-| Logging | Use `from src.logging import get_logger`, prefix with `[ToolName]` |
-| Error Handling | Catch exceptions with try/except, return user-readable error messages, log stack traces with `logger.error(..., exc_info=True)` |
+| Entry | Export `register_*_tools(add_tool, ...)` implemented in **`register.py`** |
+| Package layout | `__init__.py` (re-export) + `register.py` (registration) + domain modules |
+| Wiring | Call once from `add_common_tools` or `McpPlugin.setup` |
+| Dependencies | Inject into the closure; no module-level singletons |
+| Naming | Prefer `self.module.action`, globally unique |
+| Async | `async def`; wrap blocking I/O with `asyncio.to_thread` |
+| Timeout | Always set `timeout` for external APIs |
+| Logging | `get_logger()`, prefix `[ToolName]` |
+| Errors | try/except, user-readable message + `exc_info=True` |
 
-## Existing Tool Modules
+## Built-in tool modules
 
-| Module | Path | Function | Detailed Docs |
-|------|------|------|----------|
-| Volume Control | `src/mcp/tools/volume/` | Volume set/query/status diagnostics | [system.md](system.md) |
-| App Management | `src/mcp/tools/app/` | App launch/kill/scan, running process query | [system.md](system.md) |
-| Camera | `src/mcp/tools/camera/` | Photo capture, visual Q&A | [camera.md](camera.md) |
-| Screenshot | `src/mcp/tools/screenshot/` | Desktop screenshot, screen OCR, multi-monitor support | — |
-| Music | `src/mcp/tools/music/` | Search & play, pause/resume/stop, lyrics, local playlist | [music.md](music.md) |
-| Weather | `src/mcp/tools/weather/` | Weather query, weather forecast (example tool) | — |
+| Module | Path | Registration file | Registration | Docs |
+|------|------|----------|------|------|
+| Volume | `volume/` | `register.py` | `register_volume_tools` | [system.md](system.md) |
+| Apps | `app/` | `register.py` | `register_app_tools` | [system.md](system.md) |
+| Camera | `camera/` | `register.py` | `register_camera_tools` (McpPlugin) | [camera.md](camera.md) |
+| Screenshot | `screenshot/` | `register.py` | `register_screenshot_tools` (McpPlugin) | — |
+| Music | `music/` | `register.py` | `register_music_tools` (injected MusicPlayer) | [music.md](music.md) |
+| Weather | `weather/` | `register.py` + `service.py` | `register_weather_tools` (mock for now) | — |
+
+User-directory **external** plugins (vendored deps, install-and-run) are documented in [External Plugins](./plugins.md). They coexist with built-in `register_*` and do not bring back decorator discovery.

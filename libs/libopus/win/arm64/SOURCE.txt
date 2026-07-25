@@ -1,0 +1,5 @@
+source=MSYS2 clangarm64
+package=mingw-w64-clang-aarch64-opus-1.6.1-1-any.pkg.tar.zst
+url=https://repo.msys2.org/mingw/clangarm64/mingw-w64-clang-aarch64-opus-1.6.1-1-any.pkg.tar.zst
+original=libopus-0.dll
+version=1.6.1

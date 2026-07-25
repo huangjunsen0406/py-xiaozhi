@@ -1,13 +1,10 @@
-"""UI 模块.
+"""UI 模块：gui / cli / gpio 三种界面.
 
-提供 GUI、CLI 和 GPIO 三种用户界面实现。
-
-注意：不在顶层导入具体模块，避免跨模式依赖问题。
-使用时按需从子模块导入：
-    - GUI:  from src.ui.gui import ViewManager
-    - CLI:  from src.ui.cli import CLIViewManager
-    - GPIO: from src.ui.gpio import GPIOViewManager  # 仅 Linux
+按需导入，避免跨模式依赖：
+    from src.ui.gui import GuiViewManager
+    from src.ui.cli import CliViewManager
+    from src.ui.gpio import GpioViewManager  # 仅 Linux
+    from src.ui.shared import ViewPort, create_viewport
 """
 
 __all__ = []
-

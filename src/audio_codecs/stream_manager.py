@@ -76,7 +76,7 @@ class AudioStreamManager:
                 f"{self.device_config.output_channels}ch"
             )
         except Exception as e:
-            logger.error(f"创建音频流失败: {e}")
+            logger.error(f"创建音频流失败: {e}", exc_info=True)
             raise
 
     def start(self) -> None:
@@ -92,7 +92,7 @@ class AudioStreamManager:
                 self.output_stream.start()
             logger.info("音频流已启动")
         except Exception as e:
-            logger.error(f"启动音频流失败: {e}")
+            logger.error(f"启动音频流失败: {e}", exc_info=True)
             raise
 
     def stop(self) -> None:
@@ -114,7 +114,7 @@ class AudioStreamManager:
 
             logger.info("音频流已停止")
         except Exception as e:
-            logger.error(f"停止音频流失败: {e}")
+            logger.error(f"停止音频流失败: {e}", exc_info=True)
 
     def reinitialize_stream(
         self,
@@ -177,5 +177,5 @@ class AudioStreamManager:
 
         except Exception as e:
             stream_type = "输入" if is_input else "输出"
-            logger.error(f"{stream_type}流重建失败: {e}")
+            logger.error(f"{stream_type}流重建失败: {e}", exc_info=True)
             return False

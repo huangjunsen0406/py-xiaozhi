@@ -211,7 +211,7 @@ def kill_process(pid: int, force: bool = False) -> bool:
         logger.warning(f"[ProcessManager] 进程不存在: {pid}")
         return False
     except psutil.AccessDenied as e:
-        logger.warning(f"[ProcessManager] 无权终止进程 {pid}: {e}")
+        logger.warning(f"[ProcessManager] 无权终止进程 {pid}: {e}", exc_info=True)
         return False
 
 
@@ -279,7 +279,7 @@ def kill_application_by_name(app_name: str, force: bool = False) -> bool:
         except psutil.NoSuchProcess:
             logger.debug(f"[ProcessManager] 进程已退出: PID={pid}")
         except psutil.AccessDenied as e:
-            logger.warning(f"[ProcessManager] 无权操作进程 PID={pid}: {e}")
+            logger.warning(f"[ProcessManager] 无权操作进程 PID={pid}: {e}", exc_info=True)
 
     logger.info(
         f"[ProcessManager] 终止操作完成，成功 {success_count}/{len(matched)} 个进程"

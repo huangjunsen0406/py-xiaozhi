@@ -104,4 +104,4 @@ class ShortcutBackend(ABC):
                 try:
                     callback()
                 except Exception as e:
-                    logger.error(f"快捷键回调 {name} 执行失败: {e}")
+                    logger.error(f"快捷键回调 {name} 执行失败: {e}", exc_info=True)

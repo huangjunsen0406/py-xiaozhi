@@ -48,6 +48,8 @@ ScrollView {
                     id: musicSearchUrlField
                     Layout.fillWidth: true
                     text: settingsModel ? settingsModel.musicSearchUrl : ""
+                    // 边改边写回；只靠 editingFinished 时点保存常写不上空串
+                    onTextEdited: if (settingsModel) settingsModel.musicSearchUrl = text
                     onEditingFinished: if (settingsModel) settingsModel.musicSearchUrl = text
                     placeholderText: "留空使用默认酷我搜索 API"
                     font.pixelSize: Theme.fontSizeSm
@@ -68,6 +70,7 @@ ScrollView {
                     id: musicUrlApiField
                     Layout.fillWidth: true
                     text: settingsModel ? settingsModel.musicUrlApi : ""
+                    onTextEdited: if (settingsModel) settingsModel.musicUrlApi = text
                     onEditingFinished: if (settingsModel) settingsModel.musicUrlApi = text
                     placeholderText: "留空使用默认 lx-music-api"
                     font.pixelSize: Theme.fontSizeSm
@@ -88,6 +91,7 @@ ScrollView {
                     id: musicUrlApiKeyField
                     Layout.fillWidth: true
                     text: settingsModel ? settingsModel.musicUrlApiKey : ""
+                    onTextEdited: if (settingsModel) settingsModel.musicUrlApiKey = text
                     onEditingFinished: if (settingsModel) settingsModel.musicUrlApiKey = text
                     placeholderText: "留空使用默认 Key"
                     font.pixelSize: Theme.fontSizeSm
@@ -102,7 +106,7 @@ ScrollView {
             Text {
                 text: "搜索 API 使用酷我官方接口，直链 API 用于获取播放地址（需配合 API Key）"
                 font.pixelSize: Theme.fontSizeXs
-                color: Theme.textTertiary
+                color: Theme.textPlaceholder
                 wrapMode: Text.WordWrap
                 Layout.fillWidth: true
             }

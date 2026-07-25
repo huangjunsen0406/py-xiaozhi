@@ -7,7 +7,7 @@ import websockets
 from src.constants.constants import AudioConfig
 from src.logging import get_logger
 from src.protocols.protocol import Protocol
-from src.utils.config_manager import ConfigManager
+from src.utils.config_manager import get_config
 
 # 服务器可能使用自签名证书，暂时跳过客户端证书验证
 # 以避免生产环境中非正规SSL证书导致连接失败
@@ -20,7 +20,7 @@ class WebsocketProtocol(Protocol):
     def __init__(self):
         super().__init__()
         # 获取配置管理器实例
-        self.config = ConfigManager.get_instance()
+        self.config = get_config()
         self.websocket = None
         self.connected = False
         self.hello_received = None  # 初始化时先设为 None
@@ -132,7 +132,7 @@ class WebsocketProtocol(Protocol):
                 return False
 
         except Exception as e:
-            logger.error(f"WebSocket连接失败: {e}")
+            logger.error(f"WebSocket连接失败: {e}", exc_info=True)
             await self._do_cleanup()
             if self._on_network_error:
                 await self._on_network_error(f"无法连接服务: {str(e)}")
@@ -173,7 +173,7 @@ class WebsocketProtocol(Protocol):
             try:
                 await self.websocket.close()
             except Exception as e:
-                logger.error(f"关闭WebSocket连接时出错: {e}")
+                logger.error(f"关闭WebSocket连接时出错: {e}", exc_info=True)
 
         self.websocket = None
 
@@ -216,7 +216,7 @@ class WebsocketProtocol(Protocol):
                                 if self._on_incoming_json:
                                     self._on_incoming_json(data)
                         except json.JSONDecodeError as e:
-                            logger.error(f"无效的JSON消息: {message}, 错误: {e}")
+                            logger.error(f"无效的JSON消息: {message}, 错误: {e}", exc_info=True)
                     elif isinstance(message, bytes):
                         # 二进制消息，可能是音频
                         if self._on_incoming_audio:
@@ -238,13 +238,13 @@ class WebsocketProtocol(Protocol):
                 logger.info(f"WebSocket连接错误关闭: {e}")
                 await self._handle_connection_loss(f"连接错误: {e.code} {e.reason}")
         except websockets.InvalidState as e:
-            logger.error(f"WebSocket状态无效: {e}")
+            logger.error(f"WebSocket状态无效: {e}", exc_info=True)
             await self._handle_connection_loss("连接状态异常")
         except ConnectionResetError:
             logger.warning("连接被重置")
             await self._handle_connection_loss("连接被重置")
         except OSError as e:
-            logger.error(f"网络I/O错误: {e}")
+            logger.error(f"网络I/O错误: {e}", exc_info=True)
             await self._handle_connection_loss("网络I/O错误")
         except Exception as e:
             logger.error(f"消息处理循环异常: {e}", exc_info=True)
@@ -260,13 +260,13 @@ class WebsocketProtocol(Protocol):
         try:
             await self.websocket.send(data)
         except websockets.ConnectionClosed as e:
-            logger.warning(f"发送音频时连接已关闭: {e}")
+            logger.warning(f"发送音频时连接已关闭: {e}", exc_info=True)
             await self._handle_connection_loss(f"发送音频失败: {e.code} {e.reason}")
         except websockets.ConnectionClosedError as e:
-            logger.warning(f"发送音频时连接错误: {e}")
+            logger.warning(f"发送音频时连接错误: {e}", exc_info=True)
             await self._handle_connection_loss(f"发送音频错误: {e.code} {e.reason}")
         except Exception as e:
-            logger.error(f"发送音频数据失败: {e}")
+            logger.error(f"发送音频数据失败: {e}", exc_info=True)
             # 不要在这里调用网络错误回调，让连接处理器处理
             await self._handle_connection_loss(f"发送音频异常: {str(e)}")
 
@@ -279,16 +279,36 @@ class WebsocketProtocol(Protocol):
             return
 
         try:
+            close_code = self.websocket.close_code
+        except Exception:
+            close_code = None
+        if close_code is not None:
+            logger.warning(f"WebSocket 已关闭 (code={close_code})，跳过发送文本")
+            if self.connected:
+                await self._handle_connection_loss(
+                    f"发送文本失败: 连接已关闭 {close_code}"
+                )
+            return
+
+        try:
             await self.websocket.send(message)
         except websockets.ConnectionClosed as e:
-            logger.warning(f"发送文本时连接已关闭: {e}")
-            await self._handle_connection_loss(f"发送文本失败: {e.code} {e.reason}")
+            # 正常断连（含 1005），warning 就够了
+            logger.warning(f"发送文本时连接已关闭: {e}", exc_info=True)
+            if self.connected and not self._is_closing:
+                await self._handle_connection_loss(
+                    f"发送文本失败: {e.code} {e.reason}"
+                )
         except websockets.ConnectionClosedError as e:
-            logger.warning(f"发送文本时连接错误: {e}")
-            await self._handle_connection_loss(f"发送文本错误: {e.code} {e.reason}")
+            logger.warning(f"发送文本时连接错误: {e}", exc_info=True)
+            if self.connected and not self._is_closing:
+                await self._handle_connection_loss(
+                    f"发送文本错误: {e.code} {e.reason}"
+                )
         except Exception as e:
-            logger.error(f"发送文本消息失败: {e}")
-            await self._handle_connection_loss(f"发送文本异常: {str(e)}")
+            logger.error(f"发送文本消息失败: {e}", exc_info=True)
+            if self.connected and not self._is_closing:
+                await self._handle_connection_loss(f"发送文本异常: {str(e)}")
 
     def is_audio_channel_opened(self) -> bool:
         """检查音频通道是否打开.
@@ -336,7 +356,7 @@ class WebsocketProtocol(Protocol):
             logger.info("成功处理服务器 hello 消息")
 
         except Exception as e:
-            logger.error(f"处理服务器 hello 消息时出错: {e}")
+            logger.error(f"处理服务器 hello 消息时出错: {e}", exc_info=True)
             if self._on_network_error:
                 await self._on_network_error(f"处理服务器响应失败: {str(e)}")
 
@@ -359,6 +379,6 @@ class WebsocketProtocol(Protocol):
                 await self._on_audio_channel_closed()
 
         except Exception as e:
-            logger.error(f"关闭音频通道失败: {e}")
+            logger.error(f"关闭音频通道失败: {e}", exc_info=True)
         finally:
             self._is_closing = False

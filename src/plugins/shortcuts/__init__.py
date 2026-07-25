@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Callable, Dict, Optional
 from src.constants.constants import AbortReason
 from src.logging import get_logger
 from src.plugins.base import Plugin
-from src.utils.config_manager import ConfigManager
+from src.utils.config_manager import get_config
 
 from .base import ShortcutBackend, ShortcutConfig
 
@@ -43,7 +43,7 @@ def create_backend(
             logger.info("使用 macOS Quartz Event Tap 后端")
             return MacOSShortcutBackend(loop)
         except ImportError as e:
-            logger.warning(f"无法加载 macOS 后端: {e}")
+            logger.warning(f"无法加载 macOS 后端: {e}", exc_info=True)
             logger.info("回退到 pynput 后端")
             # 回退到 pynput
             try:
@@ -61,7 +61,7 @@ def create_backend(
             logger.info("使用 pynput 后端")
             return PynputShortcutBackend(loop)
         except ImportError as e:
-            logger.error(f"无法加载 pynput 后端: {e}")
+            logger.error(f"无法加载 pynput 后端: {e}", exc_info=True)
             return None
 
 
@@ -84,13 +84,13 @@ class _CmdAdapter:
             )
             await self._cmd.start_listening(mode)
         except Exception as e:
-            logger.error(f"切换对话状态失败: {e}")
+            logger.error(f"切换对话状态失败: {e}", exc_info=True)
 
     async def abort_speaking(self, reason):
         try:
             await self._cmd.abort_speaking(reason)
         except Exception as e:
-            logger.error(f"中断对话失败: {e}")
+            logger.error(f"中断对话失败: {e}", exc_info=True)
 
 
 class ShortcutsPlugin(Plugin):
@@ -112,7 +112,7 @@ class ShortcutsPlugin(Plugin):
         self._adapter: Optional[_CmdAdapter] = None
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._event_bus = None
-        self._config = ConfigManager.get_instance()
+        self._config = get_config()
         self._shortcuts_config: Dict = {}
         self._enabled = True
 
@@ -231,7 +231,7 @@ class ShortcutsPlugin(Plugin):
         from src.core.event_bus import Events
 
         asyncio.run_coroutine_threadsafe(
-            self._event_bus.emit(Events.UI_TOGGLE_MODE), self._loop
+            self._event_bus.emit(Events.UI_AUTO_TOGGLE), self._loop
         )
 
     def _handle_window_toggle(self) -> None:

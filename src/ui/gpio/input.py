@@ -70,7 +70,7 @@ class GPIOInput:
                 "未安装 gpiozero 库，请运行: sudo apt install python3-gpiozero python3-rpi.gpio"
             )
         except Exception as e:
-            logger.error(f"GPIO 初始化失败: {e}")
+            logger.error(f"GPIO 初始化失败: {e}", exc_info=True)
 
     @property
     def available(self) -> bool:
@@ -148,7 +148,7 @@ class GPIOInput:
             try:
                 button.close()
             except Exception as e:
-                logger.warning(f"关闭 GPIO 按钮失败: {e}")
+                logger.warning(f"关闭 GPIO 按钮失败: {e}", exc_info=True)
 
         self._buttons.clear()
         with self._lock:

@@ -38,6 +38,7 @@ class Plugin:
 
     def __init__(self) -> None:
         self._started = False
+        self._failed = False
         self._ctx: "PluginContext" = None
         self._cmd: "PluginCommands" = None
         self._deps: dict[str, "Plugin"] = {}  # 依赖注入的插件实例
@@ -60,6 +61,15 @@ class Plugin:
     def deps(self) -> dict[str, "Plugin"]:
         """获取依赖的插件实例."""
         return self._deps
+
+    @property
+    def failed(self) -> bool:
+        """插件是否已标记为失败（setup/start 失败或依赖失败）."""
+        return self._failed
+
+    def mark_failed(self) -> None:
+        """标记插件失败，后续 start/notify 将被跳过."""
+        self._failed = True
 
     def get_dep(self, name: str) -> Optional["Plugin"]:
         """获取指定名称的依赖插件."""

@@ -66,7 +66,7 @@ class PynputShortcutBackend(ShortcutBackend):
             logger.info("pynput 全局快捷键监听已启动")
             return True
         except Exception as e:
-            logger.error(f"启动 pynput 快捷键监听失败: {e}")
+            logger.error(f"启动 pynput 快捷键监听失败: {e}", exc_info=True)
             return False
 
     async def stop(self) -> None:
@@ -89,7 +89,7 @@ class PynputShortcutBackend(ShortcutBackend):
             try:
                 self._listener.stop()
             except Exception as e:
-                logger.warning(f"停止监听器时出错: {e}")
+                logger.warning(f"停止监听器时出错: {e}", exc_info=True)
             self._listener = None
 
         self._pressed_keys.clear()
@@ -247,4 +247,4 @@ class PynputShortcutBackend(ShortcutBackend):
             self._pressed_keys.clear()
             logger.info("pynput 监听器重启成功")
         except Exception as e:
-            logger.error(f"重启 pynput 监听器失败: {e}")
+            logger.error(f"重启 pynput 监听器失败: {e}", exc_info=True)

@@ -1,6 +1,7 @@
 """音频插件.
 
 负责音频采集、编码、播放和发送。
+AudioCodec 经 Events.AUDIO_CODEC_CHANGED 发布，不直连 MusicPlayer。
 """
 
 import asyncio
@@ -33,6 +34,7 @@ class AudioPlugin(Plugin):
         await super().setup(ctx, cmd)
 
         if os.getenv("XIAOZHI_DISABLE_AUDIO") == "1":
+            logger.warning("XIAOZHI_DISABLE_AUDIO=1，音频插件以禁用模式运行")
             return
 
         try:
@@ -40,18 +42,35 @@ class AudioPlugin(Plugin):
             await self.codec.initialize()
             self.codec.set_encoded_callback(self._on_encoded_audio)
 
-            from src.mcp.tools.music.music_player import get_music_player_instance
-
-            music_player = get_music_player_instance()
-            music_player.set_audio_codec(self.codec)
-
-            # 订阅配置变更事件
             from src.core.event_bus import Events
+
             ctx.event_bus.on(Events.CONFIG_CHANGED, self._on_config_changed)
+            # codec 在 start() 再发布：MusicPlayer 在 McpPlugin.setup 中订阅 EventBus
 
         except Exception as e:
             logger.error(f"音频插件初始化失败: {e}", exc_info=True)
             self.codec = None
+            self.mark_failed()
+            raise
+
+    async def start(self) -> None:
+        await super().start()
+        if self.codec and not self.failed:
+            await self._publish_audio_codec(self.codec)
+
+    async def _publish_audio_codec(self, codec) -> None:
+        """向订阅者（如 MusicPlayer）发布 AudioCodec 实例或 None."""
+        if not self._ctx or not self._ctx.event_bus:
+            logger.warning(
+                "无法发布 AUDIO_CODEC_CHANGED：PluginContext / EventBus 未就绪"
+            )
+            return
+        from src.core.event_bus import Events
+
+        try:
+            await self._ctx.event_bus.emit(Events.AUDIO_CODEC_CHANGED, codec)
+        except Exception as e:
+            logger.warning(f"发布 AUDIO_CODEC_CHANGED 失败: {e}", exc_info=True)
 
     async def _on_config_changed(self, data=None):
         """配置变更时重新加载音频设备."""
@@ -113,12 +132,11 @@ class AudioPlugin(Plugin):
                 Events.MUSIC_PAUSE_REQUEST, MusicControlRequest(source="tts")
             )
         except Exception as e:
-            logger.warning(f"发送音乐暂停请求失败: {e}")
+            logger.warning(f"发送音乐暂停请求失败: {e}", exc_info=True)
 
     async def _resume_music_after_tts(self):
         """TTS 结束后恢复音乐"""
         try:
-            # 通过事件总线发送恢复请求
             from src.core.event_bus import Events
             from src.mcp.tools.music.events import MusicControlRequest
 
@@ -134,24 +152,14 @@ class AudioPlugin(Plugin):
         if codec:
 
             async def _cleanup():
-                """音频编解码器完整清理"""
+                """音频编解码器完整清理：先通知订阅者清 codec，再 close."""
                 import gc
 
                 try:
-                    from src.mcp.tools.music.music_player import get_music_player_instance
-
-                    try:
-                        music_player = get_music_player_instance()
-                        if music_player.is_playing:
-                            await music_player.stop()
-                        if music_player.decoder:
-                            await music_player.decoder.stop()
-                            music_player.decoder = None
-                        music_player.set_audio_codec(None)
-                    except Exception as e:
-                        logger.debug(f"清理音乐播放器失败: {e}")
-                except Exception:
-                    pass
+                    # Music 收到 None 会自行 stop；完整 detach 由 mcp/容器负责
+                    await self._publish_audio_codec(None)
+                except Exception as e:
+                    logger.debug(f"发布 codec 清除失败: {e}", exc_info=True)
                 gc.collect()
                 await codec.close()
 
@@ -166,7 +174,7 @@ class AudioPlugin(Plugin):
                 return
             self._cmd.schedule_command_nowait(self._send_audio_async, encoded_data)
         except Exception as e:
-            logger.error(f"调度音频发送失败: {e}")
+            logger.error(f"调度音频发送失败: {e}", exc_info=True)
 
     async def _send_audio_async(self, encoded_data: bytes) -> None:
         """
@@ -179,7 +187,7 @@ class AudioPlugin(Plugin):
                 if self._should_send_microphone_audio():
                     await self._cmd.send_audio(encoded_data)
             except Exception as e:
-                logger.error(f"发送音频数据失败: {e}")
+                logger.error(f"发送音频数据失败: {e}", exc_info=True)
 
     def _should_send_microphone_audio(self) -> bool:
         """
@@ -189,5 +197,6 @@ class AudioPlugin(Plugin):
             if self._in_silence_period:
                 return False
             return self._ctx.should_capture_audio()
-        except Exception:
+        except Exception as e:
+            logger.warning(f"判断是否发送麦克风音频失败，默认不发送: {e}", exc_info=True)
             return False

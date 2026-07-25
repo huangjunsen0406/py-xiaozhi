@@ -322,7 +322,7 @@ async def get_cached_applications(force_refresh: bool = False) -> list[dict[str,
             return _cached_applications or []
 
     except Exception as e:
-        logger.error(f"[AppUtils] 刷新应用程序缓存失败: {e}")
+        logger.error(f"[AppUtils] 刷新应用程序缓存失败: {e}", exc_info=True)
         return _cached_applications or []
 
 
@@ -373,7 +373,7 @@ async def find_best_matching_app(
         return best_app
 
     except Exception as e:
-        logger.error(f"[AppUtils] 查找匹配应用失败: {e}")
+        logger.error(f"[AppUtils] 查找匹配应用失败: {e}", exc_info=True)
         return None
 
 

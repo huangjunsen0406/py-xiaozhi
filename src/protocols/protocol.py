@@ -187,7 +187,7 @@ class Protocol:
                     continue
 
         except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse IoT descriptors: {e}")
+            logger.error(f"Failed to parse IoT descriptors: {e}", exc_info=True)
             return
 
     async def send_iot_states(self, states):
@@ -287,7 +287,7 @@ class Protocol:
         except asyncio.CancelledError:
             logger.debug("连接监控任务被取消")
         except Exception as e:
-            logger.error(f"连接监控异常: {e}")
+            logger.error(f"连接监控异常: {e}", exc_info=True)
 
     # ============ 自动重连（公共） ============
 
@@ -329,7 +329,7 @@ class Protocol:
             try:
                 self._on_connection_state_changed(False, reason)
             except Exception as e:
-                logger.error(f"调用连接状态变化回调失败: {e}")
+                logger.error(f"调用连接状态变化回调失败: {e}", exc_info=True)
 
         # 调用子类协议特定清理
         await self._do_cleanup()
@@ -339,7 +339,7 @@ class Protocol:
             try:
                 await self._on_audio_channel_closed()
             except Exception as e:
-                logger.error(f"调用音频通道关闭回调失败: {e}")
+                logger.error(f"调用音频通道关闭回调失败: {e}", exc_info=True)
 
         # 根据配置决定是否尝试自动重连
         if (
@@ -372,7 +372,7 @@ class Protocol:
                     self._reconnect_attempts, self._max_reconnect_attempts
                 )
             except Exception as e:
-                logger.error(f"调用重连回调失败: {e}")
+                logger.error(f"调用重连回调失败: {e}", exc_info=True)
 
         logger.info(
             f"尝试自动重连 ({self._reconnect_attempts}/{self._max_reconnect_attempts})"
@@ -397,7 +397,7 @@ class Protocol:
                             f"重连失败，已达到最大重连次数: {original_reason}"
                         )
         except Exception as e:
-            logger.error(f"重连过程中出错: {e}")
+            logger.error(f"重连过程中出错: {e}", exc_info=True)
             if self._reconnect_attempts >= self._max_reconnect_attempts:
                 if self._on_network_error:
                     await self._on_network_error(f"重连异常: {str(e)}")

@@ -103,7 +103,7 @@ const modules = [
     icon: WrenchIcon,
     features: [
       'McpServer 实现 MCP 规范与 JSON-RPC 2.0',
-      '@mcp_tool 装饰器自动发现并注册工具函数',
+      'register_*_tools 显式注册；无装饰器自动发现',
       '内置工具：音乐/摄像头/截图/应用管理/天气/音量'
     ]
   },

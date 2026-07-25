@@ -8,7 +8,7 @@ from .filters import (
     SensitiveDataFilter,
 )
 from .formatters import ColoredFormatter, JsonFormatter, SimpleFormatter
-from .log_config import LoggingConfig, LoggingConfigManager
+from .log_config import LoggingConfig, load_logging_config
 from .log_handlers import (
     AsyncHandler,
     TimeSizeRotatingFileHandler,
@@ -28,7 +28,7 @@ __all__ = [
     "shutdown_logging",
     # 配置
     "LoggingConfig",
-    "LoggingConfigManager",
+    "load_logging_config",
     # 过滤器
     "SensitiveDataFilter",
     "DuplicateFilter",
@@ -69,10 +69,9 @@ def setup_logging(
     """
     global _initialized
 
-    # 获取或创建配置
+    # 获取或创建配置（无 LoggingConfigManager 单例）
     if config is None:
-        config_manager = LoggingConfigManager.get_instance()
-        config = config_manager.config
+        config = load_logging_config()
 
     # 应用参数覆盖
     if level:

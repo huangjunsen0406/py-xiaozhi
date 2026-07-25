@@ -36,12 +36,13 @@ class CLIDisplay:
         self._dash_status = "待命"
         self._dash_connected = False
         self._dash_text = ""
+        self._dash_music = ""
         self._dash_emotion = "neutral"
         self._dash_auto_mode = False
 
         # 布局设置
         self._input_area_lines = 3  # 输入区行数
-        self._dashboard_lines = 8  # 显示区最少行数
+        self._dashboard_lines = 9  # 显示区最少行数
 
         # ANSI 样式
         self._ansi = {
@@ -130,10 +131,13 @@ class CLIDisplay:
         self._schedule_render()
 
     def update_text(self, text: str):
-        """更新文本显示."""
         if text and text.strip():
             self._dash_text = text.strip()
             self._schedule_render()
+
+    def update_music_line(self, text: str):
+        self._dash_music = (text or "").strip()
+        self._schedule_render()
 
     def update_emotion(self, emotion: str):
         """更新表情."""
@@ -166,9 +170,20 @@ class CLIDisplay:
         if not self._initialized:
             return
         try:
-            asyncio.create_task(self._safe_render())
+            task = asyncio.create_task(self._safe_render(), name="cli:render")
+
+            def _on_done(t: asyncio.Task):
+                if t.cancelled():
+                    return
+                exc = t.exception()
+                if exc:
+                    logging.getLogger(__name__).error(
+                        f"CLI 渲染任务异常: {exc}", exc_info=exc
+                    )
+
+            task.add_done_callback(_on_done)
         except Exception as e:
-            logging.getLogger(__name__).error(f"创建渲染任务失败: {e}")
+            logging.getLogger(__name__).error(f"创建渲染任务失败: {e}", exc_info=True)
 
     async def _safe_render(self):
         """安全渲染（带锁）."""
@@ -199,7 +214,8 @@ class CLIDisplay:
             f"状态: {trunc(self._dash_status)}",
             f"连接: {conn_text} | 模式: {mode_text}",
             f"表情: {self._dash_emotion}",
-            f"文本: {trunc(self._dash_text)}",
+            f"对话: {trunc(self._dash_text)}",
+            f"音乐: {trunc(self._dash_music) if self._dash_music else '—'}",
         ]
 
         # 不显示日志行（日志仍被拦截，只是不在界面显示）
@@ -403,7 +419,7 @@ class CLIDisplay:
         sys.stdout.flush()
 
     async def _handle_command(self, cmd: str):
-        """处理命令 - 全部转发给 ViewManager."""
+        """处理命令 - 全部转发给 CliViewManager."""
         if not cmd:
             return
 

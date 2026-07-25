@@ -33,9 +33,13 @@ class Events:
     # 音频通道
     AUDIO_CHANNEL_OPENED = "audio_channel_opened"
     AUDIO_CHANNEL_CLOSED = "audio_channel_closed"
+    # AudioCodec 生命周期（AudioPlugin → MusicPlayer 等订阅者，避免直连 set）
+    AUDIO_CODEC_CHANGED = "audio_codec_changed"
 
     # 应用生命周期
     APP_SHUTDOWN = "app_shutdown"
+    # 系统级提示（降级模式横幅等，payload: str）
+    SYSTEM_NOTICE = "system_notice"
 
     # 音乐播放器事件
     MUSIC_STATE_CHANGED = "music_state_changed"  # 播放状态变化
@@ -46,26 +50,28 @@ class Events:
     MUSIC_PAUSE_REQUEST = "music_pause_request"  # 请求暂停（如 TTS）
     MUSIC_RESUME_REQUEST = "music_resume_request"  # 请求恢复
 
-    # UI 用户操作事件（View → Plugin）
-    UI_BUTTON_PRESS = "ui_button_press"  # 按钮按下（手动模式）
-    UI_BUTTON_RELEASE = "ui_button_release"  # 按钮释放（手动模式）
-    UI_MANUAL_TOGGLE = "ui_manual_toggle"  # 手动录音切换（点击开始/停止）
-    UI_AUTO_TOGGLE = "ui_auto_toggle"  # 自动模式切换
-    UI_AUTO_START = "ui_auto_start"  # 自动模式开始监听
-    UI_ABORT_REQUEST = "ui_abort_request"  # 中断请求
-    UI_SEND_TEXT = "ui_send_text"  # 发送文本
-    UI_QUIT_REQUEST = "ui_quit_request"  # 退出请求
-    UI_OPEN_SETTINGS = "ui_open_settings"  # 打开设置窗口
-
-    # UI 更新事件（Plugin → View）
-    UI_UPDATE_TEXT = "ui_update_text"  # 更新文本显示
-    UI_UPDATE_EMOTION = "ui_update_emotion"  # 更新表情
-    UI_UPDATE_STATUS = "ui_update_status"  # 更新状态
-    UI_TOGGLE_MODE = "ui_toggle_mode"  # 切换对话模式
-    UI_TOGGLE_WINDOW = "ui_toggle_window"  # 切换窗口可见性
+    # UI 操作（界面 → 插件）
+    UI_BUTTON_PRESS = "ui_button_press"  # 手动：按下
+    UI_BUTTON_RELEASE = "ui_button_release"  # 手动：松开
+    UI_MANUAL_TOGGLE = "ui_manual_toggle"  # 手动：点一下开始/结束录音
+    UI_AUTO_TOGGLE = "ui_auto_toggle"  # 切自动/手动
+    UI_AUTO_START = "ui_auto_start"  # 自动：开始/停止对话
+    UI_ABORT_REQUEST = "ui_abort_request"  # 打断
+    UI_SEND_TEXT = "ui_send_text"  # 发文本
+    UI_QUIT_REQUEST = "ui_quit_request"  # 退出
+    UI_OPEN_SETTINGS = "ui_open_settings"  # 打开设置
+    UI_TOGGLE_WINDOW = "ui_toggle_window"  # 显隐主窗口（GUI）
 
     # 配置变更事件
     CONFIG_CHANGED = "config_changed"  # 配置已变更（需要热重载）
+    # MCP 工具暴露变更后：断开并重连协议，使服务端重新 tools/list
+    PROTOCOL_RECONNECT_REQUEST = "protocol_reconnect_request"
+
+
+# 已知事件名集合：拼写错误时在 on/emit 打 warning（debug 友好）
+_KNOWN_EVENTS: frozenset[str] = frozenset(
+    v for k, v in vars(Events).items() if not k.startswith("_") and isinstance(v, str)
+)
 
 
 class EventBus:
@@ -89,6 +95,14 @@ class EventBus:
             list
         )
 
+    @staticmethod
+    def _warn_if_unknown(event: str, action: str) -> None:
+        if event not in _KNOWN_EVENTS:
+            logger.warning(
+                f"EventBus: {action} 未知事件名 {event!r}（可能是拼写错误；"
+                "请使用 Events.* 常量）"
+            )
+
     def on(self, event: str, handler: Callable[..., Awaitable[None]]) -> None:
         """注册事件处理器.
 
@@ -96,6 +110,7 @@ class EventBus:
             event: 事件名称
             handler: 异步处理函数
         """
+        self._warn_if_unknown(event, "注册")
         if handler not in self._handlers[event]:
             self._handlers[event].append(handler)
             logger.debug(f"EventBus: 注册处理器 {handler.__name__} -> {event}")
@@ -135,6 +150,8 @@ class EventBus:
         """
         handlers = list(self._handlers.get(event, []))
         if not handlers:
+            # 无订阅者时仍提示未知事件名，避免拼写错误静默丢失
+            self._warn_if_unknown(event, "触发")
             return
 
         logger.debug(f"EventBus: 触发事件 {event}, {len(handlers)} 个处理器")
@@ -145,7 +162,10 @@ class EventBus:
             try:
                 tasks.append(self._safe_call(handler, data))
             except Exception as e:
-                logger.error(f"EventBus: 创建任务失败 {handler.__name__}: {e}")
+                logger.error(
+                    f"EventBus: 创建任务失败 {handler.__name__}: {e}",
+                    exc_info=True,
+                )
 
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
@@ -175,7 +195,10 @@ class EventBus:
             else:
                 await handler(data)
         except Exception as e:
-            logger.error(f"EventBus: 处理器 {handler.__name__} 执行异常: {e}")
+            logger.error(
+                f"EventBus: 处理器 {handler.__name__} 执行异常: {e}",
+                exc_info=True,
+            )
 
     def has_handlers(self, event: str) -> bool:
         """

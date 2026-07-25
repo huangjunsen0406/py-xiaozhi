@@ -79,7 +79,7 @@ class TrayService(QObject):
             return True
 
         except Exception as e:
-            logger.error(f"系统托盘初始化失败: {e}")
+            logger.error(f"系统托盘初始化失败: {e}", exc_info=True)
             return False
 
     def update_tooltip(self, text: str):

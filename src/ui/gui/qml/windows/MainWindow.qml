@@ -91,21 +91,39 @@ AppWindow {
                         }
                     }
 
-                    // TTS 文本显示区域
+                    // 对话 + 音乐行
                     Rectangle {
                         Layout.fillWidth: true
-                        Layout.preferredHeight: 60
+                        Layout.preferredHeight: 72
                         color: "transparent"
 
-                        Text {
+                        Column {
                             anchors.fill: parent
-                            anchors.margins: 10
-                            text: (mainModel && mainModel.ttsText) ? mainModel.ttsText : "待命"
-                            font.pixelSize: Theme.fontSizeSm
-                            color: Theme.textSecondary
-                            horizontalAlignment: Text.AlignHCenter
-                            verticalAlignment: Text.AlignVCenter
-                            wrapMode: Text.WordWrap
+                            anchors.margins: 8
+                            spacing: 4
+
+                            Text {
+                                width: parent.width
+                                height: parent.height - (musicLineText.visible ? 22 : 0)
+                                text: (mainModel && mainModel.ttsText) ? mainModel.ttsText : "待命"
+                                font.pixelSize: Theme.fontSizeSm
+                                color: Theme.textSecondary
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                                wrapMode: Text.WordWrap
+                                elide: Text.ElideRight
+                            }
+
+                            Text {
+                                id: musicLineText
+                                width: parent.width
+                                visible: mainModel && mainModel.musicLine && mainModel.musicLine.length > 0
+                                text: mainModel ? mainModel.musicLine : ""
+                                font.pixelSize: Theme.fontSizeXs
+                                color: Theme.textPlaceholder
+                                horizontalAlignment: Text.AlignHCenter
+                                elide: Text.ElideRight
+                            }
                         }
                     }
                 }

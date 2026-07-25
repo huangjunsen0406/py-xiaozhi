@@ -14,7 +14,7 @@ Rectangle {
         anchors.margins: Theme.spacingLg
         spacing: Theme.spacingMd
 
-        // TTS 文本显示区域
+        // 对话
         Rectangle {
             Layout.fillWidth: true
             Layout.fillHeight: true
@@ -34,6 +34,27 @@ Rectangle {
                     wrapMode: Text.Wrap
                     lineHeight: 1.5
                 }
+            }
+        }
+
+        // 音乐 / 歌词
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.preferredHeight: mainModel.musicLine ? 48 : 0
+            visible: mainModel.musicLine && mainModel.musicLine.length > 0
+            radius: Theme.radiusMd
+            color: Theme.backgroundSecondary
+
+            Text {
+                anchors.fill: parent
+                anchors.margins: Theme.spacingSm
+                text: mainModel.musicLine || ""
+                font.family: Theme.fontFamily
+                font.pixelSize: Theme.fontSizeSm
+                color: Theme.textPlaceholder
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
+                elide: Text.ElideRight
             }
         }
     }

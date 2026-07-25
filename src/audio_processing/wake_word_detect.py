@@ -8,7 +8,7 @@ import numpy as np
 
 from src.constants.constants import AudioConfig
 from src.logging import get_logger
-from src.utils.config_manager import ConfigManager
+from src.utils.config_manager import ConfigManager, get_config
 from src.utils.resource_finder import get_app_root, get_user_keywords_path
 
 logger = get_logger()
@@ -52,7 +52,7 @@ class WakeWordDetector:
     async def initialize(self, model_path: Optional[str] = None) -> bool:
         try:
             # 1. 检查配置是否启用
-            config = ConfigManager.get_instance()
+            config = get_config()
             if not config.get_config("WAKE_WORD_OPTIONS.USE_WAKE_WORD", False):
                 logger.info("唤醒词功能已禁用")
                 self.enabled = False
@@ -121,7 +121,7 @@ class WakeWordDetector:
             joiner_path = self._model_dir / "joiner.onnx"
             tokens_path = self._model_dir / "tokens.txt"
 
-            lang = ConfigManager.get_instance().get_config("WAKE_WORD_OPTIONS.WAKE_WORD_LANG", "zh")
+            lang = get_config().get_config("WAKE_WORD_OPTIONS.WAKE_WORD_LANG", "zh")
             keywords_path = get_user_keywords_path(lang)
 
             required_files = [encoder_path, decoder_path, joiner_path, tokens_path, keywords_path]
@@ -362,7 +362,7 @@ class WakeWordDetector:
                 if "no running event loop" in str(e) or "Event loop is closed" in str(e):
                     break
                 error_count += 1
-                logger.error(f"检测循环错误 ({error_count}/{MAX_ERRORS}): {e}")
+                logger.error(f"检测循环错误 ({error_count}/{MAX_ERRORS}): {e}", exc_info=True)
 
                 if error_count >= MAX_ERRORS:
                     logger.critical("达到最大错误次数，停止检测")
@@ -371,7 +371,7 @@ class WakeWordDetector:
                 await asyncio.sleep(1)
             except Exception as e:
                 error_count += 1
-                logger.error(f"检测循环错误 ({error_count}/{MAX_ERRORS}): {e}")
+                logger.error(f"检测循环错误 ({error_count}/{MAX_ERRORS}): {e}", exc_info=True)
 
                 if self.on_error:
                     try:
@@ -445,7 +445,7 @@ class WakeWordDetector:
                     else:
                         self.on_detected_callback(result, result)
                 except Exception as e:
-                    logger.error(f"唤醒词回调执行失败: {e}")
+                    logger.error(f"唤醒词回调执行失败: {e}", exc_info=True)
         finally:
             # 快速退出：正在停止时跳过延迟和队列清理
             if self._stopping:

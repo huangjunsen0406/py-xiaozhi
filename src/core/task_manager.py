@@ -96,7 +96,8 @@ class TaskManager:
             if not t.cancelled():
                 exc = t.exception()
                 if exc:
-                    logger.error(f"任务 {name} 异常结束: {exc}", exc_info=True)
+                    # done callback 无 active exception context，必须传 exc 本体
+                    logger.error(f"任务 {name} 异常结束: {exc}", exc_info=exc)
 
         task.add_done_callback(_on_done)
         return task
