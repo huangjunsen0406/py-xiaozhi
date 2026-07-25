@@ -347,6 +347,154 @@ ScrollView {
             }
         }
 
+        // 分隔线
+        Rectangle {
+            Layout.fillWidth: true
+            height: 1
+            color: Theme.divider
+        }
+
+        // 可写目录（缓存 / 日志 / 音乐等）
+        ColumnLayout {
+            Layout.fillWidth: true
+            spacing: Theme.spacingMd
+
+            Text {
+                text: "数据目录"
+                font.pixelSize: Theme.fontSizeMd
+                font.weight: Font.Medium
+                color: Theme.textSecondary
+            }
+
+            Text {
+                Layout.fillWidth: true
+                text: "配置文件仍在用户数据目录；以下可自定义。留空=默认。保存后下次启动会从旧目录复制到新路径（不删旧数据）。"
+                font.pixelSize: Theme.fontSizeXs
+                color: Theme.textSecondary
+                wrapMode: Text.WordWrap
+            }
+
+            GridLayout {
+                Layout.fillWidth: true
+                columns: 2
+                rowSpacing: Theme.spacingMd
+                columnSpacing: Theme.spacingLg
+
+                Text {
+                    text: "缓存目录"
+                    font.pixelSize: Theme.fontSizeSm
+                    color: Theme.textSecondary
+                    Layout.preferredWidth: 100
+                }
+                TextField {
+                    id: pathCacheField
+                    Layout.fillWidth: true
+                    text: settingsModel ? settingsModel.pathCacheDir : ""
+                    onTextEdited: if (settingsModel) settingsModel.pathCacheDir = text
+                    onEditingFinished: if (settingsModel) settingsModel.pathCacheDir = text
+                    placeholderText: "默认: {用户数据}/cache"
+                    font.pixelSize: Theme.fontSizeSm
+                    background: Rectangle {
+                        radius: Theme.radiusSm
+                        color: Theme.backgroundSecondary
+                        border.color: pathCacheField.activeFocus ? Theme.primary : "transparent"
+                    }
+                }
+
+                Text {
+                    text: "日志目录"
+                    font.pixelSize: Theme.fontSizeSm
+                    color: Theme.textSecondary
+                    Layout.preferredWidth: 100
+                }
+                TextField {
+                    id: pathLogField
+                    Layout.fillWidth: true
+                    text: settingsModel ? settingsModel.pathLogDir : ""
+                    onTextEdited: if (settingsModel) settingsModel.pathLogDir = text
+                    onEditingFinished: if (settingsModel) settingsModel.pathLogDir = text
+                    placeholderText: "默认: {用户数据}/logs"
+                    font.pixelSize: Theme.fontSizeSm
+                    background: Rectangle {
+                        radius: Theme.radiusSm
+                        color: Theme.backgroundSecondary
+                        border.color: pathLogField.activeFocus ? Theme.primary : "transparent"
+                    }
+                }
+
+                Text {
+                    text: "音乐缓存"
+                    font.pixelSize: Theme.fontSizeSm
+                    color: Theme.textSecondary
+                    Layout.preferredWidth: 100
+                }
+                TextField {
+                    id: pathMusicField
+                    Layout.fillWidth: true
+                    text: settingsModel ? settingsModel.pathMusicCacheDir : ""
+                    onTextEdited: if (settingsModel) settingsModel.pathMusicCacheDir = text
+                    onEditingFinished: if (settingsModel) settingsModel.pathMusicCacheDir = text
+                    placeholderText: "默认: {缓存}/music"
+                    font.pixelSize: Theme.fontSizeSm
+                    background: Rectangle {
+                        radius: Theme.radiusSm
+                        color: Theme.backgroundSecondary
+                        border.color: pathMusicField.activeFocus ? Theme.primary : "transparent"
+                    }
+                }
+
+                Text {
+                    text: "唤醒词目录"
+                    font.pixelSize: Theme.fontSizeSm
+                    color: Theme.textSecondary
+                    Layout.preferredWidth: 100
+                }
+                TextField {
+                    id: pathKeywordsField
+                    Layout.fillWidth: true
+                    text: settingsModel ? settingsModel.pathKeywordsDir : ""
+                    onTextEdited: if (settingsModel) settingsModel.pathKeywordsDir = text
+                    onEditingFinished: if (settingsModel) settingsModel.pathKeywordsDir = text
+                    placeholderText: "默认: {用户数据}/keywords"
+                    font.pixelSize: Theme.fontSizeSm
+                    background: Rectangle {
+                        radius: Theme.radiusSm
+                        color: Theme.backgroundSecondary
+                        border.color: pathKeywordsField.activeFocus ? Theme.primary : "transparent"
+                    }
+                }
+
+                Text {
+                    text: "MCP 插件目录"
+                    font.pixelSize: Theme.fontSizeSm
+                    color: Theme.textSecondary
+                    Layout.preferredWidth: 100
+                }
+                TextField {
+                    id: pathMcpField
+                    Layout.fillWidth: true
+                    text: settingsModel ? settingsModel.pathMcpPluginsDir : ""
+                    onTextEdited: if (settingsModel) settingsModel.pathMcpPluginsDir = text
+                    onEditingFinished: if (settingsModel) settingsModel.pathMcpPluginsDir = text
+                    placeholderText: "默认: {用户数据}/mcp_plugins"
+                    font.pixelSize: Theme.fontSizeSm
+                    background: Rectangle {
+                        radius: Theme.radiusSm
+                        color: Theme.backgroundSecondary
+                        border.color: pathMcpField.activeFocus ? Theme.primary : "transparent"
+                    }
+                }
+            }
+
+            Text {
+                Layout.fillWidth: true
+                text: settingsModel ? settingsModel.pathHints : ""
+                font.pixelSize: Theme.fontSizeXs
+                color: Theme.textSecondary
+                wrapMode: Text.WordWrap
+            }
+        }
+
         Item { Layout.fillHeight: true }
     }
 }

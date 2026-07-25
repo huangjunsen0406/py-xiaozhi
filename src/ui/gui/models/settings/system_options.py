@@ -135,3 +135,56 @@ class SettingsSystemOptionsMixin:
     def _set_aecEnabled(self, value: bool):
         self._set_value("AEC_OPTIONS.ENABLED", value)
 
+    # ========== 可写目录 PATHS（config 目录不由此改）==========
+
+    def _get_pathCacheDir(self) -> str:
+        return self._get_value("PATHS.CACHE_DIR", "") or ""
+
+    def _set_pathCacheDir(self, value: str):
+        self._set_value("PATHS.CACHE_DIR", value.strip() if value else "")
+
+    def _get_pathLogDir(self) -> str:
+        return self._get_value("PATHS.LOG_DIR", "") or ""
+
+    def _set_pathLogDir(self, value: str):
+        self._set_value("PATHS.LOG_DIR", value.strip() if value else "")
+
+    def _get_pathMusicCacheDir(self) -> str:
+        return self._get_value("PATHS.MUSIC_CACHE_DIR", "") or ""
+
+    def _set_pathMusicCacheDir(self, value: str):
+        self._set_value("PATHS.MUSIC_CACHE_DIR", value.strip() if value else "")
+
+    def _get_pathKeywordsDir(self) -> str:
+        return self._get_value("PATHS.KEYWORDS_DIR", "") or ""
+
+    def _set_pathKeywordsDir(self, value: str):
+        self._set_value("PATHS.KEYWORDS_DIR", value.strip() if value else "")
+
+    def _get_pathMcpPluginsDir(self) -> str:
+        return self._get_value("MCP_PLUGINS.DIR", "") or ""
+
+    def _set_pathMcpPluginsDir(self, value: str):
+        self._set_value("MCP_PLUGINS.DIR", value.strip() if value else "")
+
+    def _get_pathHints(self) -> str:
+        """只读：当前生效路径提示（默认路径说明）."""
+        try:
+            from src.utils.resource_finder import (
+                get_music_cache_dir,
+                get_user_cache_dir,
+                get_user_data_dir,
+                get_user_log_dir,
+            )
+
+            data = get_user_data_dir()
+            return (
+                f"数据根(配置固定在此): {data}\n"
+                f"当前缓存: {get_user_cache_dir()}\n"
+                f"当前日志: {get_user_log_dir()}\n"
+                f"当前音乐缓存: {get_music_cache_dir()}\n"
+                f"留空=使用默认；保存后下次启动会从旧目录复制到新目录"
+            )
+        except Exception:
+            return "留空使用默认路径；保存后下次启动迁移"
+

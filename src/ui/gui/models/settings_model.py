@@ -229,6 +229,39 @@ class SettingsModel(
     aecEnabled = Property(
         bool, SettingsSystemOptionsMixin._get_aecEnabled, SettingsSystemOptionsMixin._set_aecEnabled, notify=settingsChanged
     )
+    pathCacheDir = Property(
+        str,
+        SettingsSystemOptionsMixin._get_pathCacheDir,
+        SettingsSystemOptionsMixin._set_pathCacheDir,
+        notify=settingsChanged,
+    )
+    pathLogDir = Property(
+        str,
+        SettingsSystemOptionsMixin._get_pathLogDir,
+        SettingsSystemOptionsMixin._set_pathLogDir,
+        notify=settingsChanged,
+    )
+    pathMusicCacheDir = Property(
+        str,
+        SettingsSystemOptionsMixin._get_pathMusicCacheDir,
+        SettingsSystemOptionsMixin._set_pathMusicCacheDir,
+        notify=settingsChanged,
+    )
+    pathKeywordsDir = Property(
+        str,
+        SettingsSystemOptionsMixin._get_pathKeywordsDir,
+        SettingsSystemOptionsMixin._set_pathKeywordsDir,
+        notify=settingsChanged,
+    )
+    pathMcpPluginsDir = Property(
+        str,
+        SettingsSystemOptionsMixin._get_pathMcpPluginsDir,
+        SettingsSystemOptionsMixin._set_pathMcpPluginsDir,
+        notify=settingsChanged,
+    )
+    pathHints = Property(
+        str, SettingsSystemOptionsMixin._get_pathHints, notify=settingsChanged
+    )
     wakeWordEnabled = Property(
         bool, SettingsWakeWordMixin._get_wakeWordEnabled, SettingsWakeWordMixin._set_wakeWordEnabled, notify=settingsChanged
     )
