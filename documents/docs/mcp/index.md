@@ -222,4 +222,4 @@ Prefer **`str`** (or bool/int). Use `json.dumps(..., ensure_ascii=False)` for st
 | Music | `music/` | `register.py` | `register_music_tools` (injected MusicPlayer) | [music.md](music.md) |
 | Weather | `weather/` | `register.py` + `service.py` | `register_weather_tools` (mock for now) | — |
 
-User-directory **external** Python plugins (`mcp_plugins`) are described in the repo’s MCP extension design note; they coexist with built-in `register_*` and do not bring back decorator discovery.
+User-directory **external** plugins (vendored deps, install-and-run) are documented in [External Plugins](./plugins.md). They coexist with built-in `register_*` and do not bring back decorator discovery.

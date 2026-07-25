@@ -39,6 +39,7 @@ export default defineConfig({
             text: "MCP",
             items: [
               { text: "MCP Guide", link: "/mcp/" },
+              { text: "External Plugins", link: "/mcp/plugins" },
               { text: "Camera", link: "/mcp/camera" },
               { text: "Home Assistant (HA)", link: "/mcp/ha" },
               { text: "Music", link: "/mcp/music" },
@@ -98,6 +99,7 @@ export default defineConfig({
             text: "MCP",
             items: [
               { text: "开发指南", link: "/zh/mcp/" },
+              { text: "外挂扩展", link: "/zh/mcp/plugins" },
               { text: "相机 (Camera)", link: "/zh/mcp/camera" },
               { text: "Home Assistant (HA)", link: "/zh/mcp/ha" },
               { text: "音乐 (Music)", link: "/zh/mcp/music" },
