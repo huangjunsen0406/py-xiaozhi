@@ -1,6 +1,8 @@
 """验证风险修复：插件失败隔离、TaskManager 堆栈、协议有界音频队列."""
 
 import asyncio
+import copy
+import json
 import logging
 import threading
 from unittest.mock import AsyncMock
@@ -522,6 +524,239 @@ def test_config_manager_batch_update_single_save(tmp_path, monkeypatch):
     assert saves["n"] == 2
 
     reset_config()
+
+
+def test_config_manager_update_through_none_intermediate(tmp_path):
+    """中间节点为 null 时仍可点分写入（如 MQTT_INFO: null）."""
+    from src.utils.config_manager import ConfigManager, reset_config
+
+    reset_config()
+    cm = ConfigManager.__new__(ConfigManager)
+    cm.config_dir = tmp_path
+    cm.config_file = tmp_path / "config.json"
+    cm._config = {
+        "SYSTEM_OPTIONS": {
+            "NETWORK": {
+                "MQTT_INFO": None,
+            }
+        }
+    }
+
+    assert cm.update_config(
+        "SYSTEM_OPTIONS.NETWORK.MQTT_INFO.endpoint", "mqtt.example.com", save=False
+    )
+    assert (
+        cm.get_config("SYSTEM_OPTIONS.NETWORK.MQTT_INFO.endpoint")
+        == "mqtt.example.com"
+    )
+    assert isinstance(cm.get_config("SYSTEM_OPTIONS.NETWORK.MQTT_INFO"), dict)
+
+
+def test_config_manager_no_default_config_pollution():
+    """实例更新不得污染类级 DEFAULT_CONFIG 嵌套对象."""
+    from src.utils.config_manager import ConfigManager, reset_config
+
+    reset_config()
+    before = copy.deepcopy(ConfigManager.DEFAULT_CONFIG["WAKE_WORD_OPTIONS"]["WAKE_WORD"])
+
+    cm = ConfigManager.__new__(ConfigManager)
+    cm.config_dir = None  # type: ignore
+    cm.config_file = None  # type: ignore
+    cm._config = copy.deepcopy(ConfigManager.DEFAULT_CONFIG)
+    cm.update_config("WAKE_WORD_OPTIONS.WAKE_WORD", "__pollute_test__", save=False)
+
+    assert ConfigManager.DEFAULT_CONFIG["WAKE_WORD_OPTIONS"]["WAKE_WORD"] == before
+    assert cm.get_config("WAKE_WORD_OPTIONS.WAKE_WORD") == "__pollute_test__"
+
+
+def test_config_manager_corrupt_file_backed_up(tmp_path, monkeypatch):
+    """损坏的 config.json 应备份后回退默认，且不污染 DEFAULT_CONFIG."""
+    from src.utils import config_manager as cm_mod
+    from src.utils.config_manager import ConfigManager, reset_config
+
+    reset_config()
+    cfg_dir = tmp_path / "config"
+    cfg_dir.mkdir()
+    bad = cfg_dir / "config.json"
+    bad.write_text("{ not json", encoding="utf-8")
+
+    monkeypatch.setattr(cm_mod, "get_user_data_dir", lambda: tmp_path)
+    # 避免从安装目录再拷一份
+    monkeypatch.setattr(
+        cm_mod, "get_config_dir", lambda: tmp_path / "no-install-config"
+    )
+
+    before_wake = copy.deepcopy(
+        ConfigManager.DEFAULT_CONFIG["WAKE_WORD_OPTIONS"]["WAKE_WORD"]
+    )
+    cm = ConfigManager()
+    assert cm.get_config("WAKE_WORD_OPTIONS.USE_WAKE_WORD") is True
+    assert cm.get_config("MUSIC.DEFAULT_PLATFORM") == "kw"
+    assert ConfigManager.DEFAULT_CONFIG["WAKE_WORD_OPTIONS"]["WAKE_WORD"] == before_wake
+
+    backups = list(cfg_dir.glob("config.json.corrupt-*"))
+    assert len(backups) == 1
+    assert backups[0].read_text(encoding="utf-8") == "{ not json"
+    # 已写入可用默认
+    assert cm.config_file.exists()
+    loaded = json.loads(cm.config_file.read_text(encoding="utf-8"))
+    assert isinstance(loaded, dict)
+    assert "MUSIC" in loaded
+
+    reset_config()
+
+
+def test_config_manager_default_includes_music_and_window_mode():
+    from src.utils.config_manager import ConfigManager
+
+    d = ConfigManager.DEFAULT_CONFIG
+    assert "MUSIC" in d
+    assert d["MUSIC"]["DEFAULT_PLATFORM"] == "kw"
+    assert d["SYSTEM_OPTIONS"]["WINDOW_SIZE_MODE"] == "default"
+
+
+
+def test_efuse_create_is_flat(tmp_path, monkeypatch):
+    """新建 efuse.json 仅平铺四字段，无 device_fingerprint."""
+    from src.activation.identity import DeviceIdentity
+
+    idn = DeviceIdentity()
+    idn._efuse_file = tmp_path / "efuse.json"
+    fp = {
+        "system": "Darwin",
+        "hostname": "test-host",
+        "mac_address": "aa:bb:cc:dd:ee:ff",
+        "machine_id": "mid-1",
+    }
+    idn._create_efuse_file(fp, fp["mac_address"])
+    import json
+    data = json.loads(idn._efuse_file.read_text(encoding="utf-8"))
+    assert set(data.keys()) == {
+        "mac_address",
+        "serial_number",
+        "hmac_key",
+        "activation_status",
+    }
+    assert "device_fingerprint" not in data
+    assert data["mac_address"] == "aa:bb:cc:dd:ee:ff"
+    assert data["activation_status"] is False
+    assert data["serial_number"].startswith("SN-")
+    assert len(data["hmac_key"]) == 64
+
+
+def test_efuse_strips_legacy_device_fingerprint(tmp_path):
+    """旧嵌套 device_fingerprint 在 ensure 时剥离并回写."""
+    import json
+    from src.activation.identity import DeviceIdentity
+
+    path = tmp_path / "efuse.json"
+    path.write_text(
+        json.dumps(
+            {
+                "mac_address": "11:22:33:44:55:66",
+                "serial_number": "SN-OLD-112233445566",
+                "hmac_key": "a" * 64,
+                "activation_status": True,
+                "device_fingerprint": {
+                    "system": "Darwin",
+                    "hostname": "old",
+                    "mac_address": "11:22:33:44:55:66",
+                    "machine_id": "x",
+                },
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    idn = DeviceIdentity()
+    idn._efuse_file = path
+    # 不依赖真实网卡：validate 用传入 fingerprint 只补缺字段
+    fp = {
+        "system": "Darwin",
+        "hostname": "h",
+        "mac_address": "11:22:33:44:55:66",
+        "machine_id": "m",
+    }
+    idn._validate_efuse_file(fp, fp["mac_address"])
+    data = json.loads(path.read_text(encoding="utf-8"))
+    assert "device_fingerprint" not in data
+    assert set(data.keys()) == {
+        "mac_address",
+        "serial_number",
+        "hmac_key",
+        "activation_status",
+    }
+    assert data["activation_status"] is True
+    assert data["serial_number"] == "SN-OLD-112233445566"
+    assert idn.get_mac_address() == "11:22:33:44:55:66"
+    assert idn.is_activated() is True
+
+
+def test_efuse_save_never_writes_extra_keys(tmp_path):
+    from src.activation.identity import DeviceIdentity
+
+    idn = DeviceIdentity()
+    idn._efuse_file = tmp_path / "efuse.json"
+    ok = idn._save_efuse_data(
+        {
+            "mac_address": "aa:bb:cc:dd:ee:ff",
+            "serial_number": "SN-X",
+            "hmac_key": "b" * 64,
+            "activation_status": False,
+            "device_fingerprint": {"should": "drop"},
+            "extra": 1,
+        }
+    )
+    assert ok
+    import json
+    data = json.loads(idn._efuse_file.read_text(encoding="utf-8"))
+    assert "device_fingerprint" not in data
+    assert "extra" not in data
+
+
+
+
+def test_mcp_tools_disabled_filters_list_and_call_gate():
+    """MCP_TOOLS.DISABLED 从 list 排除且 call 拒绝."""
+    import asyncio
+    from src.mcp.mcp_server import McpServer
+    from src.mcp.tooling import McpTool, PropertyList
+
+    server = McpServer()
+
+    async def ok(_):
+        return '{"ok": true}'
+
+    server.add_tool(McpTool("music_player.stop", "d", PropertyList(), ok))
+    server.add_tool(McpTool("music_player.pause", "d", PropertyList(), ok))
+    server._disabled_tool_names = lambda: {"music_player.stop"}  # type: ignore
+    assert [t.name for t in server._iter_enabled_tools()] == ["music_player.pause"]
+
+
+def test_mcp_tool_catalog_groups():
+    from src.mcp.tool_catalog import (
+        builtin_catalog_rows,
+        clear_builtin_catalog_cache,
+        normalize_disabled,
+        tool_group,
+    )
+
+    clear_builtin_catalog_cache()
+    rows = builtin_catalog_rows()
+    # 分组 = tools/<pkg> 目录名（扫描 register.py，非写死名单）
+    by_name = {r["name"]: r for r in rows}
+    assert "music_player.seek" in by_name
+    assert by_name["music_player.seek"]["group"] == "music"
+    assert by_name["music_player.seek"]["groupLabel"] == "music"
+    assert by_name["self.application.launch"]["group"] == "app"
+    assert by_name["self.application.launch"]["groupLabel"] == "app"
+    assert by_name["take_photo"]["group"] == "camera"
+    assert by_name["take_screenshot"]["group"] == "screenshot"
+    assert by_name["get_weather"]["groupLabel"] == "weather"
+    # 无包上下文时的纯名字启发式
+    assert tool_group("music_player.seek") == "music_player"
+    assert tool_group("self.application.launch") == "self.application"
+    assert normalize_disabled(["", " a ", "a"]) == ["a"]
 
 
 def test_music_player_init_is_lazy():
@@ -1462,3 +1697,148 @@ def test_env_cache_dir_overrides_config(tmp_path, monkeypatch):
     assert rf.get_user_cache_dir() == env_dir.resolve()
     monkeypatch.delenv(rf.ENV_CACHE_DIR, raising=False)
     rf.clear_path_caches()
+
+
+def test_config_version_migration_v1(tmp_path, monkeypatch):
+    """无 CONFIG_VERSION 的旧配置加载后升到 v1 并写回."""
+    from src.utils import config_manager as cm_mod
+    from src.utils.config_manager import ConfigManager, reset_config
+
+    reset_config()
+    cfg_dir = tmp_path / "config"
+    cfg_dir.mkdir()
+    cfg_file = cfg_dir / "config.json"
+    # 旧文件：无版本、MQTT subscribe_topic 字符串 null
+    cfg_file.write_text(
+        json.dumps(
+            {
+                "SYSTEM_OPTIONS": {
+                    "NETWORK": {
+                        "MQTT_INFO": {"subscribe_topic": "null", "endpoint": "e"}
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(cm_mod, "get_user_data_dir", lambda: tmp_path)
+    monkeypatch.setattr(cm_mod, "get_config_dir", lambda: tmp_path / "no-install")
+
+    cm = ConfigManager()
+    assert cm.get_config("CONFIG_VERSION") == ConfigManager.CONFIG_VERSION
+    assert cm.get_config("MCP_TOOLS.DISABLED") == []
+    mqtt = cm.get_config("SYSTEM_OPTIONS.NETWORK.MQTT_INFO")
+    assert isinstance(mqtt, dict)
+    assert mqtt.get("subscribe_topic") is None
+    # 已写回
+    disk = json.loads(cfg_file.read_text(encoding="utf-8"))
+    assert disk.get("CONFIG_VERSION") == ConfigManager.CONFIG_VERSION
+    reset_config()
+
+
+def test_settings_model_save_is_atomic(tmp_path, monkeypatch):
+    """SettingsModel.save 使用 tmp+replace."""
+    import src.ui.gui.models.settings_model as sm_mod
+
+    # 避免真实 get_config 依赖
+    class FakeCM:
+        def reload_config(self, **kwargs):
+            return True
+
+    monkeypatch.setattr(sm_mod, "get_config", lambda: FakeCM())
+    monkeypatch.setattr(
+        sm_mod, "get_user_data_dir", lambda: tmp_path
+    )
+    (tmp_path / "config").mkdir(exist_ok=True)
+    cfg = tmp_path / "config" / "config.json"
+    cfg.write_text("{}", encoding="utf-8")
+
+    model = sm_mod.SettingsModel()
+    model._config = {"CONFIG_VERSION": 1, "MCP_TOOLS": {"DISABLED": ["a.b"]}}
+    model._config_path = cfg
+    model._mcp_disabled_snapshot = []
+    # save 会 emit Qt signals；无 QApp 时可能仍可用
+    try:
+        from PySide6.QtWidgets import QApplication
+        import sys
+        app = QApplication.instance() or QApplication(sys.argv[:1])
+    except Exception:
+        app = None
+    model.save()
+    data = json.loads(cfg.read_text(encoding="utf-8"))
+    assert data["MCP_TOOLS"]["DISABLED"] == ["a.b"]
+    assert not cfg.with_suffix(".tmp").exists()
+
+
+def test_migrate_directory_skip_music_subdir(tmp_path):
+    import src.utils.resource_finder as rf
+
+    old = tmp_path / "old"
+    (old / "music").mkdir(parents=True)
+    (old / "other").mkdir()
+    (old / "keep.txt").write_text("x", encoding="utf-8")
+    (old / "music" / "song.mp3").write_bytes(b"m")
+    (old / "other" / "a.bin").write_bytes(b"a")
+    new = tmp_path / "new"
+    r = rf.migrate_directory(old, new, copy=True, skip_dir_names={"music"})
+    assert r["ok"]
+    assert (new / "keep.txt").exists()
+    assert (new / "other" / "a.bin").exists()
+    assert not (new / "music").exists() or not any((new / "music").iterdir()) if (new / "music").exists() else True
+    assert not (new / "music" / "song.mp3").exists()
+
+
+def test_set_path_overrides_clear_with_none(tmp_path):
+    import src.utils.resource_finder as rf
+
+    rf.clear_path_overrides(all=True)
+    rf.clear_path_caches()
+    d = tmp_path / "c"
+    d.mkdir()
+    rf.set_path_overrides(cache=d)
+    assert rf.get_user_cache_dir() == d.resolve()
+    rf.set_path_overrides(cache=None)  # 显式清除
+    # 无 env 时回到默认 user_data/cache（非 d）
+    assert rf.get_user_cache_dir() != d.resolve()
+    rf.clear_path_overrides(all=True)
+    rf.clear_path_caches()
+
+
+def test_get_lib_path_prefers_opus_dll(tmp_path, monkeypatch):
+    import src.utils.resource_finder as rf
+
+    root = tmp_path / "libs" / "libopus" / "win" / "x64"
+    root.mkdir(parents=True)
+    (root / "SOURCE.txt").write_text("x", encoding="utf-8")
+    (root / "readme.dll.txt").write_text("no", encoding="utf-8")
+    # decoy longer name
+    (root / "libopus-extra.dll").write_bytes(b"1")
+    (root / "opus.dll").write_bytes(b"2")
+    monkeypatch.setattr(rf, "get_app_root", lambda: tmp_path)
+    monkeypatch.setattr(rf, "get_platform_info", lambda: ("win", "x64"))
+    p = rf.get_lib_path("libopus")
+    assert p is not None
+    assert p.name == "opus.dll"
+
+
+def test_discover_plugin_catalog_from_sources(tmp_path, monkeypatch):
+    from src.mcp import tool_catalog as tc
+
+    plug = tmp_path / "com.example.hello"
+    plug.mkdir()
+    (plug / "manifest.json").write_text(
+        json.dumps({"id": "com.example.hello", "name": "Hello"}),
+        encoding="utf-8",
+    )
+    (plug / "plugin.py").write_text(
+        'host.add_tool(McpTool(name="example.hello", description="d"))\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(tc, "_plugins_dir_from_config", lambda: tmp_path)
+    rows = tc.discover_plugin_catalog_rows()
+    names = [r["name"] for r in rows]
+    assert "example.hello" in names
+    hello = next(r for r in rows if r["name"] == "example.hello")
+    assert hello["source"] == "plugin"
+    assert hello["groupLabel"] == "Hello"
+

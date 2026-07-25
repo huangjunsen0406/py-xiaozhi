@@ -243,11 +243,28 @@ class McpServer:
 
         await self._reply_result(request_id, result)
 
+    def _disabled_tool_names(self) -> set[str]:
+        """从配置读取 MCP_TOOLS.DISABLED（黑名单）."""
+        try:
+            from src.mcp.tool_catalog import normalize_disabled
+            from src.utils.config_manager import get_config
+
+            raw = get_config().get_config("MCP_TOOLS.DISABLED", []) or []
+            return set(normalize_disabled(raw))
+        except Exception:
+            return set()
+
+    def _iter_enabled_tools(self):
+        disabled = self._disabled_tool_names()
+        for tool in self.tools:
+            if tool.name not in disabled:
+                yield tool
+
     async def _handle_tools_list(
         self, request_id: int, params: dict[str, Any]
     ):
         """
-        处理工具列表请求.
+        处理工具列表请求（已按 MCP_TOOLS.DISABLED 过滤）.
         """
         cursor = params.get("cursor", "")
         max_payload_size = 8000
@@ -257,7 +274,7 @@ class McpServer:
         found_cursor = not cursor
         next_cursor = ""
 
-        for tool in self.tools:
+        for tool in self._iter_enabled_tools():
             # 如果还没找到起始位置，继续搜索
             if not found_cursor:
                 if tool.name == cursor:
@@ -298,6 +315,12 @@ class McpServer:
             return
 
         logger.info(f"[MCP] 尝试调用工具: {tool_name}")
+
+        if tool_name in self._disabled_tool_names():
+            await self._reply_error(
+                request_id, f"Tool disabled: {tool_name}"
+            )
+            return
 
         # 查找工具
         tool = None

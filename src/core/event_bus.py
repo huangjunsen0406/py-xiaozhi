@@ -64,6 +64,8 @@ class Events:
 
     # 配置变更事件
     CONFIG_CHANGED = "config_changed"  # 配置已变更（需要热重载）
+    # MCP 工具暴露变更后：断开并重连协议，使服务端重新 tools/list
+    PROTOCOL_RECONNECT_REQUEST = "protocol_reconnect_request"
 
 
 # 已知事件名集合：拼写错误时在 on/emit 打 warning（debug 友好）

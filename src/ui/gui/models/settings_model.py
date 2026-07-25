@@ -5,6 +5,7 @@
 """
 
 import json
+import os
 import threading
 from typing import Any
 
@@ -18,6 +19,7 @@ from src.ui.gui.models.base_model import BaseModel
 from src.ui.gui.models.settings.audio_devices import SettingsAudioDevicesMixin
 from src.ui.gui.models.settings.camera_devices import SettingsCameraDevicesMixin
 from src.ui.gui.models.settings.camera_options import SettingsCameraOptionsMixin
+from src.ui.gui.models.settings.mcp_tools import SettingsMcpToolsMixin
 from src.ui.gui.models.settings.shortcuts import SettingsShortcutsMixin
 from src.ui.gui.models.settings.system_options import SettingsSystemOptionsMixin
 from src.ui.gui.models.settings.wake_word import SettingsWakeWordMixin
@@ -27,6 +29,7 @@ logger = get_logger()
 
 class SettingsModel(
     SettingsSystemOptionsMixin,
+    SettingsMcpToolsMixin,
     SettingsWakeWordMixin,
     SettingsCameraOptionsMixin,
     SettingsAudioDevicesMixin,
@@ -42,6 +45,8 @@ class SettingsModel(
     testComplete = Signal(str, bool)
     wakeWordChanged = Signal()
     configSaved = Signal()
+    # MCP 工具禁用列表相对打开/上次保存是否变化 → 保存后可能触发重连
+    mcpToolsNeedReconnect = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -63,10 +68,13 @@ class SettingsModel(
         self._wake_word: str = ""
         self._wake_word_lang: str = "zh"
         self._wake_word_preview: str = ""
+        # 打开设置时快照，保存时对比是否变更 MCP 工具暴露
+        self._mcp_disabled_snapshot: list[str] = []
 
         # 启动仅读配置；音频/摄像头/唤醒词预览延后到打开设置时再处理
         self._load_config()
         self._load_wake_word(update_preview=False)
+        self._snapshot_mcp_disabled()
 
     def _run_worker(
         self,
@@ -144,18 +152,42 @@ class SettingsModel(
         config[keys[-1]] = value
         self.settingsChanged.emit()
 
+    def _snapshot_mcp_disabled(self) -> None:
+        from src.mcp.tool_catalog import normalize_disabled
+
+        raw = self._get_value("MCP_TOOLS.DISABLED", []) or []
+        self._mcp_disabled_snapshot = list(normalize_disabled(raw))
+
     @Slot()
     def save(self):
         """保存配置到文件，并让运行中的 ConfigManager 重新读盘."""
         try:
-            with open(self._config_path, "w", encoding="utf-8") as f:
-                json.dump(self._config, f, ensure_ascii=False, indent=2)
+            from src.mcp.tool_catalog import normalize_disabled
+
+            new_disabled = normalize_disabled(
+                self._get_value("MCP_TOOLS.DISABLED", []) or []
+            )
+            mcp_changed = sorted(new_disabled) != sorted(self._mcp_disabled_snapshot)
+
+            # 原子写：临时文件 + replace，与 ConfigManager 一致
+            self._config_path.parent.mkdir(parents=True, exist_ok=True)
+            tmp_path = self._config_path.with_suffix(".tmp")
+            tmp_path.write_text(
+                json.dumps(self._config, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+            os.replace(tmp_path, self._config_path)
             try:
                 self._config_manager.reload_config()
             except Exception as e:
                 logger.warning(f"ConfigManager 重载失败: {e}", exc_info=True)
             logger.info("设置已保存")
-            self.statusMessage.emit("配置已保存")
+            self._snapshot_mcp_disabled()
+            if mcp_changed:
+                self.statusMessage.emit("配置已保存（MCP 工具变更，将重连以更新）")
+                self.mcpToolsNeedReconnect.emit()
+            else:
+                self.statusMessage.emit("配置已保存")
             self.configSaved.emit()
         except Exception as e:
             logger.error(f"保存配置失败: {e}", exc_info=True)
@@ -168,6 +200,7 @@ class SettingsModel(
         self._load_audio_devices(force=True)
         self._load_cameras(force=True)
         self._load_wake_word()
+        self._snapshot_mcp_disabled()
         self.settingsChanged.emit()
         logger.info("设置已重新加载")
 
@@ -259,6 +292,27 @@ class SettingsModel(
         SettingsSystemOptionsMixin._set_pathMcpPluginsDir,
         notify=settingsChanged,
     )
+    pathDefaultCacheDir = Property(
+        str, SettingsSystemOptionsMixin._get_pathDefaultCacheDir, notify=settingsChanged
+    )
+    pathDefaultLogDir = Property(
+        str, SettingsSystemOptionsMixin._get_pathDefaultLogDir, notify=settingsChanged
+    )
+    pathDefaultMusicCacheDir = Property(
+        str,
+        SettingsSystemOptionsMixin._get_pathDefaultMusicCacheDir,
+        notify=settingsChanged,
+    )
+    pathDefaultKeywordsDir = Property(
+        str,
+        SettingsSystemOptionsMixin._get_pathDefaultKeywordsDir,
+        notify=settingsChanged,
+    )
+    pathDefaultMcpPluginsDir = Property(
+        str,
+        SettingsSystemOptionsMixin._get_pathDefaultMcpPluginsDir,
+        notify=settingsChanged,
+    )
     pathHints = Property(
         str, SettingsSystemOptionsMixin._get_pathHints, notify=settingsChanged
     )
@@ -294,7 +348,7 @@ class SettingsModel(
         if which not in getters:
             return ""
         current = getters[which]()
-        path = self._browse_directory(titles[which], current)
+        path = self._browse_directory(titles[which], current, which)
         if path:
             setters[which](path)
         return path
@@ -312,6 +366,25 @@ class SettingsModel(
         }
         if which in setters:
             setters[which]("")
+
+    mcpToolsCatalogJson = Property(
+        str, SettingsMcpToolsMixin._get_mcpToolsCatalogJson, notify=settingsChanged
+    )
+    mcpToolsDisabledJson = Property(
+        str,
+        SettingsMcpToolsMixin._get_mcpToolsDisabledJson,
+        SettingsMcpToolsMixin._set_mcpToolsDisabledJson,
+        notify=settingsChanged,
+    )
+
+    @Slot(str, bool)
+    def setMcpToolEnabled(self, name: str, enabled: bool) -> None:
+        self._set_mcpToolEnabled(name, enabled)
+
+    @Slot(str, bool)
+    def setMcpToolGroupEnabled(self, group: str, enabled: bool) -> None:
+        self._set_mcpToolGroupEnabled(group, enabled)
+
     wakeWordEnabled = Property(
         bool, SettingsWakeWordMixin._get_wakeWordEnabled, SettingsWakeWordMixin._set_wakeWordEnabled, notify=settingsChanged
     )

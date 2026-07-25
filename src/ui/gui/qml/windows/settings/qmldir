@@ -4,3 +4,5 @@ WakeWordTab 1.0 WakeWordTab.qml
 CameraTab 1.0 CameraTab.qml
 AudioDeviceTab 1.0 AudioDeviceTab.qml
 ShortcutsTab 1.0 ShortcutsTab.qml
+MusicTab 1.0 MusicTab.qml
+McpToolsTab 1.0 McpToolsTab.qml

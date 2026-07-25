@@ -49,6 +49,9 @@ class ConversationSession:
         # 注意：INCOMING_AUDIO 走直连通道，不再通过 EventBus
         event_bus.on(Events.NETWORK_ERROR, self._on_network_error)
         event_bus.on(Events.DEVICE_STATE_CHANGED, self._on_device_state_changed)
+        event_bus.on(
+            Events.PROTOCOL_RECONNECT_REQUEST, self._on_protocol_reconnect_request
+        )
 
     # -------------------------
     # 事件处理器
@@ -140,6 +143,22 @@ class ConversationSession:
         if opened:
             await self.plugins.notify_protocol_connected(self.protocol.protocol)
         return opened
+
+    async def _on_protocol_reconnect_request(self, _=None) -> None:
+        """设置保存后 MCP 工具列表变更：已连接则断开并重连，便于服务端重新 list."""
+        try:
+            if not self.protocol.is_audio_channel_opened():
+                logger.info("MCP 工具配置已更新（当前未连接，下次连接生效）")
+                return
+            logger.info("MCP 工具配置已更新，正在重连协议…")
+            await self.protocol.disconnect()
+            ok = await self.connect_protocol()
+            if ok:
+                logger.info("协议重连成功（新 tools/list 将在握手时生效）")
+            else:
+                logger.warning("协议重连失败，请手动重新连接")
+        except Exception as e:
+            logger.error(f"协议重连失败: {e}", exc_info=True)
 
     async def start_listening(self, mode: ListeningMode) -> None:
         ok = await self.connect_protocol()

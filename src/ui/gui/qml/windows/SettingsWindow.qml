@@ -19,6 +19,7 @@ AppWindow {
     // Tab 配置
     readonly property var tabConfig: [
         { name: "系统选项", component: "SystemOptionsTab.qml" },
+        { name: "MCP 工具", component: "McpToolsTab.qml" },
         { name: "唤醒词", component: "WakeWordTab.qml" },
         { name: "摄像头", component: "CameraTab.qml" },
         { name: "音频设备", component: "AudioDeviceTab.qml" },
@@ -136,6 +137,9 @@ AppWindow {
 
                             // 系统选项
                             SystemOptionsTab {}
+
+                            // MCP 工具
+                            McpToolsTab {}
 
                             // 唤醒词
                             WakeWordTab {}
