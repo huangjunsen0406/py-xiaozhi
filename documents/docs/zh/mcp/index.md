@@ -20,7 +20,7 @@
 ```
 src/mcp/tools/light/
 ├── __init__.py          # 导出 register_light_tools
-├── _tools.py            # register_light_tools 实现
+├── register.py            # register_light_tools 实现
 └── light_manager.py     # 业务逻辑（可选）
 ```
 
@@ -59,7 +59,7 @@ class LightManager:
         return f"灯状态: {state}, 亮度: {self._brightness}%"
 ```
 
-### 第 3 步：`register_light_tools`（`_tools.py`）
+### 第 3 步：`register_light_tools`（`register.py`）
 
 ```python
 """灯光 MCP 工具注册."""
@@ -139,7 +139,7 @@ def register_light_tools(
 ```python
 """灯光控制工具."""
 
-from ._tools import register_light_tools
+from .register import register_light_tools
 
 __all__ = ["register_light_tools"]
 ```

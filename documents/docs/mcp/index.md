@@ -20,7 +20,7 @@ Inject runtime objects from the container / plugin — **do not** use module-lev
 ```
 src/mcp/tools/light/
 ├── __init__.py          # export register_light_tools
-├── _tools.py            # register_light_tools
+├── register.py            # register_light_tools
 └── light_manager.py     # optional business logic
 ```
 
@@ -59,7 +59,7 @@ class LightManager:
         return f"Light status: {state}, brightness: {self._brightness}%"
 ```
 
-### Step 3: `register_light_tools` (`_tools.py`)
+### Step 3: `register_light_tools` (`register.py`)
 
 ```python
 """Light MCP tool registration."""
@@ -139,7 +139,7 @@ def register_light_tools(
 ```python
 """Light control tools."""
 
-from ._tools import register_light_tools
+from .register import register_light_tools
 
 __all__ = ["register_light_tools"]
 ```
