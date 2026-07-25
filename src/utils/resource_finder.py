@@ -154,14 +154,24 @@ def clear_path_caches() -> None:
     get_app_root.cache_clear()
 
 
-def migrate_directory(src: Path, dst: Path, *, copy: bool = True) -> dict:
+def migrate_directory(
+    src: Path,
+    dst: Path,
+    *,
+    copy: bool = True,
+    skip_dir_names: set[str] | frozenset[str] | None = None,
+) -> dict:
     """将旧目录内容复制到新目录（默认不删除源，安全）.
+
+    skip_dir_names: 顶层（相对 src）目录名集合，整棵子树跳过不拷
+        （例如 cache 迁移时 music 已单独配置则跳过 music/）。
 
     Returns:
         {ok, src, dst, files_copied, error?}
     """
     src = src.expanduser().resolve()
     dst = dst.expanduser().resolve()
+    skip = set(skip_dir_names or ())
     result: dict = {
         "ok": False,
         "src": str(src),
@@ -179,8 +189,16 @@ def migrate_directory(src: Path, dst: Path, *, copy: bool = True) -> dict:
     try:
         dst.mkdir(parents=True, exist_ok=True)
         count = 0
-        for root, _dirs, files in os.walk(src):
+        for root, dirs, files in os.walk(src):
             rel = Path(root).relative_to(src)
+            # 顶层目录过滤：os.walk 可改 dirs in-place
+            if rel == Path("."):
+                dirs[:] = [d for d in dirs if d not in skip]
+            else:
+                # 若相对路径第一段在 skip 中（防御）
+                if rel.parts and rel.parts[0] in skip:
+                    dirs[:] = []
+                    continue
             target_root = dst / rel
             target_root.mkdir(parents=True, exist_ok=True)
             for name in files:
@@ -249,44 +267,84 @@ def apply_path_overrides_from_config(
     if not migrate:
         return migrations
 
-    pairs = [
-        ("cache", old_cache, get_user_cache_dir()),
-        ("logs", old_log, get_user_log_dir()),
-        ("music", old_music, get_music_cache_dir()),
-        ("keywords", old_kw, get_keywords_dir()),
-    ]
-    for kind, src, dst in pairs:
-        if src.resolve() == dst.resolve():
-            continue
-        # 仅当新路径来自配置/env 覆盖时迁移（dst 与默认不同）
-        r = migrate_directory(src, dst, copy=True)
-        r["kind"] = kind
-        migrations.append(r)
-        try:
-            from src.logging import get_logger
+    new_cache = get_user_cache_dir()
+    new_log = get_user_log_dir()
+    new_music = get_music_cache_dir()
+    new_kw = get_keywords_dir()
 
-            get_logger().info(
-                "路径迁移 %s: %s -> %s (copied=%s, ok=%s)",
-                kind,
-                src,
-                dst,
-                r.get("files_copied"),
-                r.get("ok"),
-            )
-        except Exception:
-            pass
+    # cache 迁移时：若 music 已单独指到其它目录（或即将单独迁），跳过 cache/music 子树
+    cache_skip: set[str] = set()
+    try:
+        music_under_old_cache = old_music.resolve() == (old_cache / "music").resolve()
+        music_stays_default_under_new = new_music.resolve() == (
+            new_cache / "music"
+        ).resolve()
+        # 旧 music 在 cache 下，但新 music 不是「新 cache/music」→ 由 music 项单独迁，cache 勿再拷
+        if music_under_old_cache and not music_stays_default_under_new:
+            cache_skip.add("music")
+        # 即使 music 仍默认挂 cache：若 old→new cache 会先拷 music，再 music 对 同内容
+        # 一般 ok；仅当 music 路径显式独立时跳过
+    except Exception:
+        pass
+
+    if old_cache.resolve() != new_cache.resolve():
+        r = migrate_directory(
+            old_cache, new_cache, copy=True, skip_dir_names=cache_skip or None
+        )
+        r["kind"] = "cache"
+        migrations.append(r)
+        _log_migration("cache", old_cache, new_cache, r)
+
+    if old_log.resolve() != new_log.resolve():
+        r = migrate_directory(old_log, new_log, copy=True)
+        r["kind"] = "logs"
+        migrations.append(r)
+        _log_migration("logs", old_log, new_log, r)
+
+    if old_music.resolve() != new_music.resolve():
+        r = migrate_directory(old_music, new_music, copy=True)
+        r["kind"] = "music"
+        migrations.append(r)
+        _log_migration("music", old_music, new_music, r)
+
+    if old_kw.resolve() != new_kw.resolve():
+        r = migrate_directory(old_kw, new_kw, copy=True)
+        r["kind"] = "keywords"
+        migrations.append(r)
+        _log_migration("keywords", old_kw, new_kw, r)
 
     return migrations
 
 
+def _log_migration(kind: str, src: Path, dst: Path, r: dict) -> None:
+    try:
+        from src.logging import get_logger
+
+        get_logger().info(
+            "路径迁移 %s: %s -> %s (copied=%s, ok=%s)",
+            kind,
+            src,
+            dst,
+            r.get("files_copied"),
+            r.get("ok"),
+        )
+    except Exception:
+        pass
+
+
 def set_path_overrides(
     *,
-    cache: Path | str | None = None,
-    log: Path | str | None = None,
-    music: Path | str | None = None,
-    keywords: Path | str | None = None,
+    cache: Path | str | None | object = ...,
+    log: Path | str | None | object = ...,
+    music: Path | str | None | object = ...,
+    keywords: Path | str | None | object = ...,
 ) -> None:
-    """测试或编程方式设置覆盖（env 仍优先）."""
+    """测试或编程方式设置覆盖（env 仍优先）.
+
+    - 不传某参数：保持该覆盖不变
+    - 传路径字符串/Path：设置覆盖
+    - 显式传 None：清除该覆盖（恢复默认/仅 env）
+    """
     global _override_cache, _override_log, _override_music, _override_keywords
 
     def _p(v):
@@ -294,14 +352,34 @@ def set_path_overrides(
             return None
         return Path(v).expanduser().resolve()
 
-    if cache is not None:
+    if cache is not ...:
         _override_cache = _p(cache)
-    if log is not None:
+    if log is not ...:
         _override_log = _p(log)
-    if music is not None:
+    if music is not ...:
         _override_music = _p(music)
-    if keywords is not None:
+    if keywords is not ...:
         _override_keywords = _p(keywords)
+
+
+def clear_path_overrides(
+    *,
+    cache: bool = False,
+    log: bool = False,
+    music: bool = False,
+    keywords: bool = False,
+    all: bool = False,
+) -> None:
+    """清除运行时路径覆盖（测试或恢复默认）."""
+    global _override_cache, _override_log, _override_music, _override_keywords
+    if all or cache:
+        _override_cache = None
+    if all or log:
+        _override_log = None
+    if all or music:
+        _override_music = None
+    if all or keywords:
+        _override_keywords = None
 
 
 @lru_cache(maxsize=1)
@@ -309,13 +387,20 @@ def get_platform_info() -> tuple[str, str]:
     """获取平台和架构信息.
 
     Returns:
-        (platform_dir, arch_dir) 如 ("mac", "arm64")
+        (platform_dir, arch_dir) 如 ("mac", "arm64") / ("win", "x64")
     """
     machine = plat.machine().lower()
-    is_arm = "arm" in machine or "aarch64" in machine
+    # Windows ARM 常见为 ARM64；部分环境仅环境变量可靠
+    env_arch = (os.environ.get("PROCESSOR_ARCHITECTURE") or "").lower()
+    env_arch_w6432 = (os.environ.get("PROCESSOR_ARCHITEW6432") or "").lower()
+    is_arm = any(
+        token in s
+        for s in (machine, env_arch, env_arch_w6432)
+        for token in ("arm", "aarch64")
+    )
 
     if sys.platform == "win32":
-        return "win", "x64"
+        return "win", "arm64" if is_arm else "x64"
     elif sys.platform == "darwin":
         return "mac", "arm64" if is_arm else "x64"
     else:
@@ -341,19 +426,48 @@ def get_lib_path(lib_name: str) -> Path | None:
         "linux": ["linux"],
     }
 
-    # 扩展名
+    # 扩展名与优先文件名（避免目录里多个候选时捡错）
     ext_map = {"mac": ".dylib", "win": ".dll", "linux": ".so"}
     ext = ext_map.get(plat_dir, ".so")
+    preferred_names = {
+        "libopus": {
+            "mac": ["libopus.dylib", "libopus.0.dylib"],
+            "linux": ["libopus.so", "libopus.so.0"],
+            "win": ["opus.dll", "libopus.dll", "libopus-0.dll"],
+        },
+        "webrtc_apm": {
+            "mac": ["libwebrtc_apm.dylib", "webrtc_apm.dylib"],
+            "linux": ["libwebrtc_apm.so", "webrtc_apm.so"],
+            "win": ["webrtc_apm.dll", "libwebrtc_apm.dll"],
+        },
+    }
+    prefer = preferred_names.get(lib_name, {}).get(plat_dir, [])
 
-    # 尝试所有可能的平台目录名
     for plat_name in plat_aliases.get(plat_dir, [plat_dir]):
         lib_dir = root / plat_name / arch
-        if not lib_dir.exists():
+        if not lib_dir.is_dir():
             continue
 
+        # 1) 精确优先名
+        for pname in prefer:
+            cand = lib_dir / pname
+            if cand.is_file():
+                return cand
+
+        # 2) 回退：按扩展名，优先「短名字 / 无多余后缀」
+        candidates: list[Path] = []
         for f in lib_dir.iterdir():
-            if f.is_file() and (f.suffix == ext or ext in f.name):
-                return f
+            if not f.is_file():
+                continue
+            # 跳过说明文件
+            if f.suffix.lower() in {".txt", ".md", ".json"}:
+                continue
+            if f.suffix == ext or ext in f.name:
+                candidates.append(f)
+        if not candidates:
+            continue
+        candidates.sort(key=lambda p: (len(p.name), p.name))
+        return candidates[0]
 
     return None
 
