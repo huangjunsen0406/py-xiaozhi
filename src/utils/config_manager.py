@@ -22,6 +22,13 @@ def initialize_config() -> "ConfigManager":
     global _current
     if _current is None:
         _current = ConfigManager()
+        # 应用 PATHS 覆盖并迁移 cache/logs/music/keywords（config 目录不迁）
+        try:
+            from src.utils.resource_finder import apply_path_overrides_from_config
+
+            apply_path_overrides_from_config(_current, migrate=True)
+        except Exception as e:
+            logger.warning("应用 PATHS 目录覆盖失败: %s", e, exc_info=True)
     return _current
 
 
@@ -102,6 +109,16 @@ class ConfigManager:
             "FRAME_DELAY": 3,
             "FILTER_LENGTH_RATIO": 0.4,
             "ENABLE_PREPROCESS": True,
+        },
+        # 可写目录覆盖（config 仍固定在用户数据/config；null=默认）
+        # 环境变量优先：XIAOZHI_CACHE_DIR / XIAOZHI_LOG_DIR /
+        # XIAOZHI_MUSIC_CACHE_DIR / XIAOZHI_KEYWORDS_DIR / XIAOZHI_DATA_DIR
+        # 更改 CACHE/LOG/MUSIC/KEYWORDS 后启动时会从旧目录复制到新目录（不删旧）
+        "PATHS": {
+            "CACHE_DIR": None,
+            "LOG_DIR": None,
+            "MUSIC_CACHE_DIR": None,
+            "KEYWORDS_DIR": None,
         },
         # 外挂 MCP 插件（用户目录 mcp_plugins，自带 lib/）
         "MCP_PLUGINS": {

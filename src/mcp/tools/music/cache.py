@@ -7,7 +7,7 @@ import time
 from pathlib import Path
 
 from src.logging import get_logger
-from src.utils.resource_finder import get_user_cache_dir
+from src.utils.resource_finder import get_music_cache_dir
 
 logger = get_logger()
 
@@ -16,7 +16,7 @@ class MusicCache:
     """管理 music 缓存目录和临时文件."""
 
     def __init__(self, root: Path | None = None) -> None:
-        base = root or (get_user_cache_dir() / "music")
+        base = root or get_music_cache_dir()
         self.root = base
         self.temp_dir = base / "temp"
         self._ready = False

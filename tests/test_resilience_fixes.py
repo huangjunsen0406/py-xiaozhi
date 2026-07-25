@@ -1412,3 +1412,53 @@ def test_check_mcp_plugin_script(tmp_path):
     (root / "plugin.py").write_text("def register(host):\n    pass\n", encoding="utf-8")
     assert check_plugin(root) == []
     assert check_plugin(tmp_path / "missing") != []
+
+
+def test_path_override_and_migrate(tmp_path, monkeypatch):
+    """自定义 CACHE 目录时从旧目录复制文件."""
+    import src.utils.resource_finder as rf
+
+    # reset overrides
+    rf.set_path_overrides(cache=None, log=None, music=None, keywords=None)
+    rf.clear_path_caches()
+
+    old_cache = tmp_path / "old_cache"
+    old_cache.mkdir()
+    (old_cache / "keep.bin").write_bytes(b"abc")
+    new_cache = tmp_path / "new_cache"
+
+    # simulate old path by temporarily overriding then migrating
+    rf.set_path_overrides(cache=old_cache)
+    assert rf.get_user_cache_dir() == old_cache.resolve()
+    assert (old_cache / "keep.bin").exists()
+
+    # migrate to new
+    r = rf.migrate_directory(old_cache, new_cache, copy=True)
+    assert r["ok"] is True
+    assert r["files_copied"] >= 1
+    assert (new_cache / "keep.bin").read_bytes() == b"abc"
+    # source kept
+    assert (old_cache / "keep.bin").exists()
+
+    rf.set_path_overrides(cache=new_cache)
+    assert rf.get_user_cache_dir() == new_cache.resolve()
+
+    # music defaults under cache
+    rf.set_path_overrides(music=None)
+    assert rf.get_music_cache_dir() == (new_cache / "music").resolve()
+
+    # cleanup overrides for other tests
+    rf.set_path_overrides(cache=None, log=None, music=None, keywords=None)
+    rf.clear_path_caches()
+
+
+def test_env_cache_dir_overrides_config(tmp_path, monkeypatch):
+    import src.utils.resource_finder as rf
+
+    rf.set_path_overrides(cache=None, log=None, music=None, keywords=None)
+    rf.clear_path_caches()
+    env_dir = tmp_path / "env_cache"
+    monkeypatch.setenv(rf.ENV_CACHE_DIR, str(env_dir))
+    assert rf.get_user_cache_dir() == env_dir.resolve()
+    monkeypatch.delenv(rf.ENV_CACHE_DIR, raising=False)
+    rf.clear_path_caches()

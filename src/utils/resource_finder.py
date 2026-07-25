@@ -1,33 +1,30 @@
 """
 统一资源路径解析器 - 开发/打包通用
 
-所有用户数据统一存放在用户数据目录下：
+默认用户数据目录（platformdirs）：
 - Windows: C:/Users/xxx/AppData/Local/{app_name}/
 - macOS:   ~/Library/Application Support/{app_name}/
 - Linux:   ~/.local/share/{app_name}/
 
-目录结构：
-├── config/      配置文件
-├── cache/       缓存文件
-├── logs/        日志文件
-└── keywords/    唤醒词文件
+默认子目录：config/ cache/ logs/ keywords/ mcp_plugins/
+
+可覆盖（config 目录建议保持默认；其它可迁）：
+- 环境变量：XIAOZHI_DATA_DIR / XIAOZHI_CACHE_DIR / XIAOZHI_LOG_DIR /
+  XIAOZHI_MUSIC_CACHE_DIR / XIAOZHI_KEYWORDS_DIR
+- 配置 PATHS.*（见 apply_path_overrides_from_config；改后可迁移旧目录）
 
 核心 API：
-- get_app_root()      应用根目录（安装目录，只读）
-- get_app_name()      应用名称（固定值）
-- get_user_data_dir() 用户数据目录（可写）
-- get_user_cache_dir() 缓存目录（用户数据目录/cache）
-- get_user_log_dir()  日志目录（用户数据目录/logs）
-- get_lib_path()      动态库路径
-- get_models_dir()    模型目录（安装目录，只读）
-- get_assets_dir()    资源目录（安装目录，只读）
-- get_config_dir()    配置目录（安装目录，只读，用于默认配置）
-- get_user_keywords_path() 唤醒词文件路径（用户目录，自动复制）
+- get_app_root() / get_app_name()
+- get_user_data_dir() / get_user_cache_dir() / get_user_log_dir()
+- get_music_cache_dir() / get_keywords_dir()
+- apply_path_overrides_from_config() / migrate_directory()
 """
 
 from __future__ import annotations
 
+import os
 import platform as plat
+import shutil
 import sys
 from functools import lru_cache
 from pathlib import Path
@@ -35,6 +32,26 @@ from pathlib import Path
 import platformdirs
 
 from src.constants.system import SystemConstants
+
+# 环境变量名
+ENV_DATA_DIR = "XIAOZHI_DATA_DIR"
+ENV_CACHE_DIR = "XIAOZHI_CACHE_DIR"
+ENV_LOG_DIR = "XIAOZHI_LOG_DIR"
+ENV_MUSIC_CACHE_DIR = "XIAOZHI_MUSIC_CACHE_DIR"
+ENV_KEYWORDS_DIR = "XIAOZHI_KEYWORDS_DIR"
+
+# 运行时覆盖（config 加载后 apply；env 优先于这些）
+_override_cache: Path | None = None
+_override_log: Path | None = None
+_override_music: Path | None = None
+_override_keywords: Path | None = None
+
+
+def _env_path(name: str) -> Path | None:
+    raw = os.environ.get(name, "").strip()
+    if not raw:
+        return None
+    return Path(raw).expanduser().resolve()
 
 
 @lru_cache(maxsize=1)
@@ -60,51 +77,231 @@ def get_app_name() -> str:
 
 @lru_cache(maxsize=1)
 def get_user_data_dir() -> Path:
-    """用户数据目录（可写，存配置/数据库等）
+    """用户数据目录（可写：默认含 config/）
 
-    使用 platformdirs 确保符合各平台规范：
-    - Windows: C:/Users/xxx/AppData/Local/{app_name}
-    - macOS:   ~/Library/Application Support/{app_name}
-    - Linux:   ~/.local/share/{app_name} 或 $XDG_DATA_HOME/{app_name}
+    优先环境变量 XIAOZHI_DATA_DIR，否则 platformdirs。
+    配置文件建议始终在此目录下的 config/，保证能读到 PATHS 覆盖项。
     """
-    p = Path(platformdirs.user_data_dir(get_app_name()))
+    env = _env_path(ENV_DATA_DIR)
+    if env is not None:
+        p = env
+    else:
+        p = Path(platformdirs.user_data_dir(get_app_name()))
     p.mkdir(parents=True, exist_ok=True)
     return p
 
 
 def get_user_cache_dir() -> Path:
-    """用户缓存目录（可写，存临时文件/缓存）
-
-    统一存放在用户数据目录下：
-    - Windows: C:/Users/xxx/AppData/Local/{app_name}/cache
-    - macOS:   ~/Library/Application Support/{app_name}/cache
-    - Linux:   ~/.local/share/{app_name}/cache
-    """
-    p = get_user_data_dir() / "cache"
+    """缓存目录：XIAOZHI_CACHE_DIR > 运行时覆盖 > {data}/cache."""
+    env = _env_path(ENV_CACHE_DIR)
+    if env is not None:
+        p = env
+    elif _override_cache is not None:
+        p = _override_cache
+    else:
+        p = get_user_data_dir() / "cache"
     p.mkdir(parents=True, exist_ok=True)
     return p
 
 
 def get_user_log_dir() -> Path:
-    """用户日志目录（可写）
-
-    统一存放在用户数据目录下：
-    - Windows: C:/Users/xxx/AppData/Local/{app_name}/logs
-    - macOS:   ~/Library/Application Support/{app_name}/logs
-    - Linux:   ~/.local/share/{app_name}/logs
-    """
-    p = get_user_data_dir() / "logs"
+    """日志目录：XIAOZHI_LOG_DIR > 运行时覆盖 > {data}/logs."""
+    env = _env_path(ENV_LOG_DIR)
+    if env is not None:
+        p = env
+    elif _override_log is not None:
+        p = _override_log
+    else:
+        p = get_user_data_dir() / "logs"
     p.mkdir(parents=True, exist_ok=True)
     return p
 
 
 def get_log_dir() -> Path:
-    """日志目录（用户数据目录下，打包后可写）.
+    """日志目录（用户数据目录下，打包后可写）."""
+    return get_user_log_dir()
+
+
+def get_music_cache_dir() -> Path:
+    """音乐缓存：XIAOZHI_MUSIC_CACHE_DIR > 覆盖 > {cache}/music."""
+    env = _env_path(ENV_MUSIC_CACHE_DIR)
+    if env is not None:
+        p = env
+    elif _override_music is not None:
+        p = _override_music
+    else:
+        p = get_user_cache_dir() / "music"
+    p.mkdir(parents=True, exist_ok=True)
+    return p
+
+
+def get_keywords_dir() -> Path:
+    """唤醒词目录：XIAOZHI_KEYWORDS_DIR > 覆盖 > {data}/keywords."""
+    env = _env_path(ENV_KEYWORDS_DIR)
+    if env is not None:
+        p = env
+    elif _override_keywords is not None:
+        p = _override_keywords
+    else:
+        p = get_user_data_dir() / "keywords"
+    p.mkdir(parents=True, exist_ok=True)
+    return p
+
+
+def clear_path_caches() -> None:
+    """清除 get_user_data_dir 等 lru 缓存（测试或 DATA_DIR 变更后）."""
+    get_user_data_dir.cache_clear()
+    get_app_root.cache_clear()
+
+
+def migrate_directory(src: Path, dst: Path, *, copy: bool = True) -> dict:
+    """将旧目录内容复制到新目录（默认不删除源，安全）.
 
     Returns:
-        日志目录路径
+        {ok, src, dst, files_copied, error?}
     """
-    return get_user_log_dir()
+    src = src.expanduser().resolve()
+    dst = dst.expanduser().resolve()
+    result: dict = {
+        "ok": False,
+        "src": str(src),
+        "dst": str(dst),
+        "files_copied": 0,
+    }
+    if src == dst:
+        result["ok"] = True
+        result["skipped"] = "same_path"
+        return result
+    if not src.is_dir():
+        result["ok"] = True
+        result["skipped"] = "src_missing"
+        return result
+    try:
+        dst.mkdir(parents=True, exist_ok=True)
+        count = 0
+        for root, _dirs, files in os.walk(src):
+            rel = Path(root).relative_to(src)
+            target_root = dst / rel
+            target_root.mkdir(parents=True, exist_ok=True)
+            for name in files:
+                s = Path(root) / name
+                d = target_root / name
+                if d.exists():
+                    continue  # 不覆盖已有
+                if copy:
+                    shutil.copy2(s, d)
+                else:
+                    shutil.move(str(s), str(d))
+                count += 1
+        result["ok"] = True
+        result["files_copied"] = count
+    except Exception as e:
+        result["error"] = str(e)
+    return result
+
+
+def apply_path_overrides_from_config(
+    config,
+    *,
+    migrate: bool = True,
+) -> list[dict]:
+    """从 ConfigManager 读取 PATHS，设置运行时覆盖，并可选迁移旧目录.
+
+    环境变量始终优先于配置。config 目录不由此迁移。
+
+    Returns:
+        迁移结果列表（便于 UI/日志）
+    """
+    global _override_cache, _override_log, _override_music, _override_keywords
+
+    migrations: list[dict] = []
+
+    def _cfg(key: str) -> str | None:
+        try:
+            v = config.get_config(key, None)
+        except Exception:
+            return None
+        if v is None or str(v).strip() == "":
+            return None
+        return str(v).strip()
+
+    # 当前有效路径（应用覆盖前）作为迁移源
+    old_cache = get_user_cache_dir()
+    old_log = get_user_log_dir()
+    old_music = get_music_cache_dir()
+    old_kw = get_keywords_dir()
+
+    cache_s = _cfg("PATHS.CACHE_DIR")
+    log_s = _cfg("PATHS.LOG_DIR")
+    music_s = _cfg("PATHS.MUSIC_CACHE_DIR")
+    kw_s = _cfg("PATHS.KEYWORDS_DIR")
+
+    # 仅当 env 未设时应用 config 覆盖
+    if _env_path(ENV_CACHE_DIR) is None:
+        _override_cache = Path(cache_s).expanduser().resolve() if cache_s else None
+    if _env_path(ENV_LOG_DIR) is None:
+        _override_log = Path(log_s).expanduser().resolve() if log_s else None
+    if _env_path(ENV_MUSIC_CACHE_DIR) is None:
+        _override_music = Path(music_s).expanduser().resolve() if music_s else None
+    if _env_path(ENV_KEYWORDS_DIR) is None:
+        _override_keywords = Path(kw_s).expanduser().resolve() if kw_s else None
+
+    if not migrate:
+        return migrations
+
+    pairs = [
+        ("cache", old_cache, get_user_cache_dir()),
+        ("logs", old_log, get_user_log_dir()),
+        ("music", old_music, get_music_cache_dir()),
+        ("keywords", old_kw, get_keywords_dir()),
+    ]
+    for kind, src, dst in pairs:
+        if src.resolve() == dst.resolve():
+            continue
+        # 仅当新路径来自配置/env 覆盖时迁移（dst 与默认不同）
+        r = migrate_directory(src, dst, copy=True)
+        r["kind"] = kind
+        migrations.append(r)
+        try:
+            from src.logging import get_logger
+
+            get_logger().info(
+                "路径迁移 %s: %s -> %s (copied=%s, ok=%s)",
+                kind,
+                src,
+                dst,
+                r.get("files_copied"),
+                r.get("ok"),
+            )
+        except Exception:
+            pass
+
+    return migrations
+
+
+def set_path_overrides(
+    *,
+    cache: Path | str | None = None,
+    log: Path | str | None = None,
+    music: Path | str | None = None,
+    keywords: Path | str | None = None,
+) -> None:
+    """测试或编程方式设置覆盖（env 仍优先）."""
+    global _override_cache, _override_log, _override_music, _override_keywords
+
+    def _p(v):
+        if v is None or str(v).strip() == "":
+            return None
+        return Path(v).expanduser().resolve()
+
+    if cache is not None:
+        _override_cache = _p(cache)
+    if log is not None:
+        _override_log = _p(log)
+    if music is not None:
+        _override_music = _p(music)
+    if keywords is not None:
+        _override_keywords = _p(keywords)
 
 
 @lru_cache(maxsize=1)
@@ -233,7 +430,7 @@ def get_user_keywords_path(lang: str) -> Path:
     """
     import shutil
 
-    user_keywords_dir = get_user_data_dir() / "keywords"
+    user_keywords_dir = get_keywords_dir()
     user_keywords = user_keywords_dir / f"{lang}_keywords.txt"
 
     if not user_keywords.exists():

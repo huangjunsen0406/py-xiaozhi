@@ -105,9 +105,9 @@ class SettingsWakeWordMixin:
             self._set_value("WAKE_WORD_OPTIONS.MODEL_PATH", model_path)
 
             # 写入 keywords.txt 到用户数据目录
-            from src.utils.resource_finder import get_user_data_dir
+            from src.utils.resource_finder import get_keywords_dir, get_user_data_dir
 
-            keywords_dir = get_user_data_dir() / "keywords"
+            keywords_dir = get_keywords_dir()
             keywords_dir.mkdir(parents=True, exist_ok=True)
             keywords_path = keywords_dir / f"{lang}_keywords.txt"
 
