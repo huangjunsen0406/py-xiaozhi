@@ -183,8 +183,32 @@ class SettingsSystemOptionsMixin:
                 f"当前缓存: {get_user_cache_dir()}\n"
                 f"当前日志: {get_user_log_dir()}\n"
                 f"当前音乐缓存: {get_music_cache_dir()}\n"
-                f"留空=使用默认；保存后下次启动会从旧目录复制到新目录"
+                f"留空=默认；点「选择」用系统对话框；保存后下次启动迁移"
             )
         except Exception:
             return "留空使用默认路径；保存后下次启动迁移"
+
+    def _browse_directory(self, title: str, current: str) -> str:
+        """打开系统文件夹选择对话框；取消返回空串（调用方勿覆盖）."""
+        from pathlib import Path
+
+        from PySide6.QtWidgets import QApplication, QFileDialog
+
+        start = current.strip() if current else ""
+        if not start:
+            try:
+                from src.utils.resource_finder import get_user_data_dir
+
+                start = str(get_user_data_dir())
+            except Exception:
+                start = str(Path.home())
+        parent = QApplication.activeWindow()
+        path = QFileDialog.getExistingDirectory(
+            parent,
+            title,
+            start,
+            QFileDialog.Option.ShowDirsOnly
+            | QFileDialog.Option.DontResolveSymlinks,
+        )
+        return path or ""
 

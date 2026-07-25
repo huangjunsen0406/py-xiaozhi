@@ -262,6 +262,56 @@ class SettingsModel(
     pathHints = Property(
         str, SettingsSystemOptionsMixin._get_pathHints, notify=settingsChanged
     )
+
+    @Slot(str, result=str)
+    def browseDirectory(self, which: str) -> str:
+        """打开系统目录选择框。which: cache|log|music|keywords|mcp.
+
+        返回选中的路径；取消返回空串（QML 勿写回）。
+        """
+        which = (which or "").strip().lower()
+        getters = {
+            "cache": self._get_pathCacheDir,
+            "log": self._get_pathLogDir,
+            "music": self._get_pathMusicCacheDir,
+            "keywords": self._get_pathKeywordsDir,
+            "mcp": self._get_pathMcpPluginsDir,
+        }
+        setters = {
+            "cache": self._set_pathCacheDir,
+            "log": self._set_pathLogDir,
+            "music": self._set_pathMusicCacheDir,
+            "keywords": self._set_pathKeywordsDir,
+            "mcp": self._set_pathMcpPluginsDir,
+        }
+        titles = {
+            "cache": "选择缓存目录",
+            "log": "选择日志目录",
+            "music": "选择音乐缓存目录",
+            "keywords": "选择唤醒词目录",
+            "mcp": "选择 MCP 插件目录",
+        }
+        if which not in getters:
+            return ""
+        current = getters[which]()
+        path = self._browse_directory(titles[which], current)
+        if path:
+            setters[which](path)
+        return path
+
+    @Slot(str)
+    def clearPathDir(self, which: str) -> None:
+        """清空某项自定义路径（恢复默认）."""
+        which = (which or "").strip().lower()
+        setters = {
+            "cache": self._set_pathCacheDir,
+            "log": self._set_pathLogDir,
+            "music": self._set_pathMusicCacheDir,
+            "keywords": self._set_pathKeywordsDir,
+            "mcp": self._set_pathMcpPluginsDir,
+        }
+        if which in setters:
+            setters[which]("")
     wakeWordEnabled = Property(
         bool, SettingsWakeWordMixin._get_wakeWordEnabled, SettingsWakeWordMixin._set_wakeWordEnabled, notify=settingsChanged
     )

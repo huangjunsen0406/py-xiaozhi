@@ -368,18 +368,16 @@ ScrollView {
 
             Text {
                 Layout.fillWidth: true
-                text: "配置文件仍在用户数据目录；以下可自定义。留空=默认。保存后下次启动会从旧目录复制到新路径（不删旧数据）。"
+                text: "配置文件仍在用户数据目录。点「选择」打开系统文件夹对话框；「默认」清空为系统默认。保存后下次启动会从旧目录复制到新路径。"
                 font.pixelSize: Theme.fontSizeXs
                 color: Theme.textSecondary
                 wrapMode: Text.WordWrap
             }
 
-            GridLayout {
+            // 缓存
+            RowLayout {
                 Layout.fillWidth: true
-                columns: 2
-                rowSpacing: Theme.spacingMd
-                columnSpacing: Theme.spacingLg
-
+                spacing: Theme.spacingSm
                 Text {
                     text: "缓存目录"
                     font.pixelSize: Theme.fontSizeSm
@@ -400,7 +398,30 @@ ScrollView {
                         border.color: pathCacheField.activeFocus ? Theme.primary : "transparent"
                     }
                 }
+                Button {
+                    text: "选择"
+                    font.pixelSize: Theme.fontSizeSm
+                    onClicked: {
+                        if (!settingsModel) return
+                        var p = settingsModel.browseDirectory("cache")
+                        if (p) pathCacheField.text = p
+                    }
+                }
+                Button {
+                    text: "默认"
+                    font.pixelSize: Theme.fontSizeSm
+                    onClicked: {
+                        if (!settingsModel) return
+                        settingsModel.clearPathDir("cache")
+                        pathCacheField.text = ""
+                    }
+                }
+            }
 
+            // 日志
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: Theme.spacingSm
                 Text {
                     text: "日志目录"
                     font.pixelSize: Theme.fontSizeSm
@@ -421,7 +442,30 @@ ScrollView {
                         border.color: pathLogField.activeFocus ? Theme.primary : "transparent"
                     }
                 }
+                Button {
+                    text: "选择"
+                    font.pixelSize: Theme.fontSizeSm
+                    onClicked: {
+                        if (!settingsModel) return
+                        var p = settingsModel.browseDirectory("log")
+                        if (p) pathLogField.text = p
+                    }
+                }
+                Button {
+                    text: "默认"
+                    font.pixelSize: Theme.fontSizeSm
+                    onClicked: {
+                        if (!settingsModel) return
+                        settingsModel.clearPathDir("log")
+                        pathLogField.text = ""
+                    }
+                }
+            }
 
+            // 音乐
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: Theme.spacingSm
                 Text {
                     text: "音乐缓存"
                     font.pixelSize: Theme.fontSizeSm
@@ -442,7 +486,30 @@ ScrollView {
                         border.color: pathMusicField.activeFocus ? Theme.primary : "transparent"
                     }
                 }
+                Button {
+                    text: "选择"
+                    font.pixelSize: Theme.fontSizeSm
+                    onClicked: {
+                        if (!settingsModel) return
+                        var p = settingsModel.browseDirectory("music")
+                        if (p) pathMusicField.text = p
+                    }
+                }
+                Button {
+                    text: "默认"
+                    font.pixelSize: Theme.fontSizeSm
+                    onClicked: {
+                        if (!settingsModel) return
+                        settingsModel.clearPathDir("music")
+                        pathMusicField.text = ""
+                    }
+                }
+            }
 
+            // 唤醒词
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: Theme.spacingSm
                 Text {
                     text: "唤醒词目录"
                     font.pixelSize: Theme.fontSizeSm
@@ -463,7 +530,30 @@ ScrollView {
                         border.color: pathKeywordsField.activeFocus ? Theme.primary : "transparent"
                     }
                 }
+                Button {
+                    text: "选择"
+                    font.pixelSize: Theme.fontSizeSm
+                    onClicked: {
+                        if (!settingsModel) return
+                        var p = settingsModel.browseDirectory("keywords")
+                        if (p) pathKeywordsField.text = p
+                    }
+                }
+                Button {
+                    text: "默认"
+                    font.pixelSize: Theme.fontSizeSm
+                    onClicked: {
+                        if (!settingsModel) return
+                        settingsModel.clearPathDir("keywords")
+                        pathKeywordsField.text = ""
+                    }
+                }
+            }
 
+            // MCP 插件
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: Theme.spacingSm
                 Text {
                     text: "MCP 插件目录"
                     font.pixelSize: Theme.fontSizeSm
@@ -482,6 +572,24 @@ ScrollView {
                         radius: Theme.radiusSm
                         color: Theme.backgroundSecondary
                         border.color: pathMcpField.activeFocus ? Theme.primary : "transparent"
+                    }
+                }
+                Button {
+                    text: "选择"
+                    font.pixelSize: Theme.fontSizeSm
+                    onClicked: {
+                        if (!settingsModel) return
+                        var p = settingsModel.browseDirectory("mcp")
+                        if (p) pathMcpField.text = p
+                    }
+                }
+                Button {
+                    text: "默认"
+                    font.pixelSize: Theme.fontSizeSm
+                    onClicked: {
+                        if (!settingsModel) return
+                        settingsModel.clearPathDir("mcp")
+                        pathMcpField.text = ""
                     }
                 }
             }
