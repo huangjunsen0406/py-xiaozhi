@@ -236,11 +236,11 @@ def test_music_player_detach_clears_runtime_bindings():
     from src.mcp.tools.music.music_player import MusicPlayer
 
     player = MusicPlayer()
-    player._audio_codec = object()  # type: ignore
-    player._event_bus = object()  # type: ignore
+    player._engine.audio_codec = object()  # type: ignore
+    player._bus.event_bus = object()  # type: ignore
     player.detach()
-    assert player._audio_codec is None
-    assert player._event_bus is None
+    assert player._engine.audio_codec is None
+    assert player._bus.event_bus is None
 
 
 def test_music_tools_register_with_injected_player():
@@ -265,6 +265,63 @@ def test_music_tools_register_with_injected_player():
     assert not hasattr(mp_mod, "get_music_player_instance")
     assert not hasattr(mp_mod, "bind_music_player")
 
+
+def test_volume_tools_register_without_module_singleton():
+    """音量工具闭包持有注入的 controller，无模块级 _volume_controller."""
+    from src.mcp.mcp_server import McpServer
+    from src.mcp.tools.volume import register_volume_tools
+    import src.mcp.tools.volume._tools as vol_tools
+
+    server = McpServer()
+    # 注入假 controller，避免依赖系统音量 API
+    fake = type(
+        "FakeVol",
+        (),
+        {
+            "get_volume": lambda self: 42,
+            "set_volume": lambda self, v: None,
+        },
+    )()
+    register_volume_tools(server.add_tool, fake)
+
+    names = {t.name for t in server.tools}
+    assert "self.audio_speaker.set_volume" in names
+    assert "self.audio_speaker.get_volume" in names
+    assert "self.audio_speaker.get_volume_status" in names
+
+    assert not hasattr(vol_tools, "_volume_controller")
+    assert not hasattr(vol_tools, "_get_volume_controller")
+
+
+def test_app_and_weather_register_not_decorator_discovery():
+    """app / weather 经 register_* 挂载；生产路径无装饰器全局表."""
+    from src.mcp.mcp_server import McpServer
+    from src.mcp.tools.app import register_app_tools
+    from src.mcp.tools.weather import register_weather_tools
+
+    server = McpServer()
+    register_app_tools(server.add_tool)
+    register_weather_tools(server.add_tool)
+    names = {t.name for t in server.tools}
+    assert "self.application.launch" in names
+    assert "self.application.list_running" in names
+    assert "get_weather" in names
+    assert "get_forecast" in names
+
+    # add_common_tools 一次装齐
+    server2 = McpServer()
+    server2.add_common_tools(music_player=None)
+    names2 = {t.name for t in server2.tools}
+    assert "self.application.launch" in names2
+    assert "get_weather" in names2
+    assert "self.audio_speaker.set_volume" in names2
+
+    # 装饰器模块已移除
+    import importlib.util
+
+    assert (
+        importlib.util.find_spec("src.mcp.decorators") is None
+    ), "src.mcp.decorators should be removed"
 
 def test_mcp_server_detach_clears_callback():
     from src.mcp.mcp_server import McpServer
@@ -360,6 +417,7 @@ async def test_music_player_tick_lyrics_in_playback_path():
     from src.mcp.tools.music.music_player import MusicPlayer
 
     player = MusicPlayer()
+    eng = player._engine
     assert not hasattr(player, "_lyrics_task") or player.__dict__.get("_lyrics_task") is None
 
     emitted = []
@@ -368,14 +426,14 @@ async def test_music_player_tick_lyrics_in_playback_path():
         emitted.append(text)
 
     player.lyrics = [(0.0, "hello"), (5.0, "world")]
-    player.start_play_time = __import__("time").time() - 0.1
-    player.total_duration = 100
-    player.current_lyric_index = -1
-    player._last_lyric_tick = 0.0
-    player._emit_lyrics_update = fake_emit  # type: ignore
+    eng.start_play_time = __import__("time").time() - 0.1
+    eng.total_duration = 100
+    eng.current_lyric_index = -1
+    eng.last_lyric_tick = 0.0
+    player._bus.emit_lyrics_update = fake_emit  # type: ignore
 
     await player._tick_lyrics()
-    assert player.current_lyric_index == 0
+    assert eng.current_lyric_index == 0
     assert emitted and "hello" in emitted[0]
 
     # 节流：立即再 tick 不应重复
@@ -959,24 +1017,25 @@ async def test_music_player_receives_codec_via_event_bus():
 
     bus = EventBus()
     player = MusicPlayer()
+    eng = player._engine
     player.set_event_bus(bus)
     codec = object()
 
     await bus.emit(Events.AUDIO_CODEC_CHANGED, codec)
-    assert player._audio_codec is codec
+    assert eng.audio_codec is codec
 
-    player.is_playing = True
-    player.current_song = "t"
+    eng.is_playing = True
+    eng.current_song = "t"
 
     async def _fake_stop():
-        player.is_playing = False
+        eng.is_playing = False
         return {"status": "success"}
 
     player.stop = _fake_stop  # type: ignore[method-assign]
 
     await bus.emit(Events.AUDIO_CODEC_CHANGED, None)
-    assert player._audio_codec is None
-    assert player.is_playing is False
+    assert eng.audio_codec is None
+    assert eng.is_playing is False
 
     player.detach()
 
@@ -986,6 +1045,9 @@ def test_music_player_has_no_set_audio_codec_api():
 
     assert not hasattr(MusicPlayer, "set_audio_codec")
     assert MusicPlayer.__init__.__code__.co_argcount == 1  # 仅 self
+    # 状态挂在 engine；门面只暴露少量只读属性
+    assert isinstance(MusicPlayer.is_playing, property)
+    assert MusicPlayer.is_playing.fset is None
 
 
 def test_audio_is_fatal_respects_degraded_env(monkeypatch):
