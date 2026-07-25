@@ -36,6 +36,8 @@ class ConversationSession:
         self.plugins = plugins
         self._event_bus = event_bus
         self._aborted = False
+        # MCP 工具配置重连等：通道打开后保持 IDLE，不自动进入聆听
+        self._keep_idle_on_channel_open = False
 
     # -------------------------
     # 事件订阅
@@ -57,6 +59,12 @@ class ConversationSession:
     # 事件处理器
     # -------------------------
     async def _on_audio_channel_opened(self, _=None) -> None:
+        if self._keep_idle_on_channel_open:
+            self._keep_idle_on_channel_open = False
+            self.state.set_keep_listening(False)
+            await self.state.set_device_state(DeviceState.IDLE)
+            logger.info("协议通道已打开（配置重连）：保持空闲，不进入聆听")
+            return
         await self.state.set_device_state(DeviceState.LISTENING)
 
     async def _on_audio_channel_closed(self, _=None) -> None:
@@ -145,19 +153,35 @@ class ConversationSession:
         return opened
 
     async def _on_protocol_reconnect_request(self, _=None) -> None:
-        """设置保存后 MCP 工具列表变更：已连接则断开并重连，便于服务端重新 list."""
+        """设置保存后 MCP 工具列表变更：已连接则断开并重连，便于服务端重新 list.
+
+        仅刷新协议/工具视图，不恢复聆听会话（避免保存设置后进入「聆听中」）。
+        """
         try:
             if not self.protocol.is_audio_channel_opened():
                 logger.info("MCP 工具配置已更新（当前未连接，下次连接生效）")
                 return
             logger.info("MCP 工具配置已更新，正在重连协议…")
-            await self.protocol.disconnect()
-            ok = await self.connect_protocol()
+            # 打断进行中的听/说语义，避免重连后沿用 keep_listening
+            self.state.set_keep_listening(False)
+            self._aborted = False
+            self._keep_idle_on_channel_open = True
+            try:
+                await self.protocol.disconnect()
+                ok = await self.connect_protocol()
+            except Exception:
+                self._keep_idle_on_channel_open = False
+                raise
             if ok:
-                logger.info("协议重连成功（新 tools/list 将在握手时生效）")
+                # 双保险：若 OPENED 回调顺序异常，仍拉回空闲
+                if not self.state.is_idle():
+                    await self.state.set_device_state(DeviceState.IDLE)
+                logger.info("协议重连成功（新 tools/list 将在握手时生效，保持空闲）")
             else:
+                self._keep_idle_on_channel_open = False
                 logger.warning("协议重连失败，请手动重新连接")
         except Exception as e:
+            self._keep_idle_on_channel_open = False
             logger.error(f"协议重连失败: {e}", exc_info=True)
 
     async def start_listening(self, mode: ListeningMode) -> None:
