@@ -108,18 +108,70 @@ You may also use `host.add_tool(McpTool(...))` with the same types as built-ins 
 Default whitelist: `config_readonly`, `logger`.  
 Do **not** rely on removed global `@mcp_tool` or `get_instance` singletons.
 
-## Vendoring dependencies (for packaged apps)
+## Vendoring dependencies and multi-platform releases
 
-On a machine matching the host Python/platform:
+### Rules of thumb
+
+| Dependency type | One zip for all OSes? | What to do |
+|-----------------|----------------------|------------|
+| Pure Python (e.g. `markdown`) | Often yes | Single `lib/` is fine |
+| Native wheels (`.so` / `.pyd` / `.dylib`) | **No** | **Build and publish per OS + arch** |
+| Environment SDKs (ROS2, `rclpy`, vendor SDKs) | **Usually cannot vendor fully** | See “Environment dependencies” below |
+
+### Recommended artifact names (best when natives are involved)
+
+```text
+com.example.foo-1.0.0-macos-arm64.zip
+com.example.foo-1.0.0-windows-amd64.zip
+com.example.foo-1.0.0-linux-x86_64.zip
+```
+
+Each zip contains a full plugin folder; set `manifest.platforms` to that platform and `python_abi` to the host Python tag used at build time (e.g. `cp310`).
+
+Users download **only their platform** and extract into `mcp_plugins/`.
+
+### Build commands (authors)
+
+On the **target OS/arch**, with the **same Python minor** as the host:
 
 ```bash
 uv pip install -r requirements.txt --target lib/ --python /path/to/host/python
 # or: python -m pip install -r requirements.txt -t lib/
 ```
 
-Ship the **whole folder** (zip ok). Users only extract into `mcp_plugins/`—no pip.
+- Use `--target` / `-t` into **plugin `lib/`** — do **not** install into the app venv.  
+- Native wheels must be built on matching CI/runners.  
+- Zip the entire plugin directory including `lib/`.
 
-Note: vendored `lib/` avoids user installs; it is **not** full process isolation. Heavy conflicting native stacks need a future subprocess runtime.
+### Environment dependencies (ROS2 / Unitree Python SDK, etc.)
+
+These usually live in the **robot system environment** (e.g. `source /opt/ros/humble/setup.bash`, vendor site-packages). They are **not** typical portable PyPI trees and often **cannot** be fully vendored into `lib/` for arbitrary PCs.
+
+Recommended practice:
+
+| Practice | Notes |
+|----------|--------|
+| Document runtime requirements | ROS distro, vendor SDK, Python, arch (e.g. `linux-aarch64`) in README / release notes |
+| Vendor only portable PyPI deps in `lib/` | HTTP clients, small pure-Python helpers, etc. |
+| Fail clearly on missing env imports | e.g. `import rclpy` → “source ROS / install SDK first” |
+| Ship per-platform packages | Robot plugins are often `linux-aarch64` / `linux-x86_64` only — do not market as universal desktop zips |
+| Desktop exe/dmg ≠ robot image | A Unitree/ROS plugin is not expected to run on a stock desktop install |
+
+Example:
+
+```python
+def register(host):
+    try:
+        import rclpy  # from system ROS, not lib/
+    except ImportError as e:
+        raise RuntimeError(
+            "ROS2 Python (rclpy) is required. "
+            "Run the host in a sourced ROS environment or install the distro."
+        ) from e
+    ...
+```
+
+Vendored `lib/` avoids end-user pip; it is **not** full process isolation. For heavy native conflicts, a future subprocess runtime may be needed.
 
 ## User install steps
 

@@ -110,9 +110,31 @@ def register(host):
 
 **禁止**依赖已删除的全局 `@mcp_tool` 或 `get_instance` 单例。
 
-## 自带依赖（给 exe/dmg 用）
+## 自带依赖与分平台发布
 
-开发者在与宿主一致的 Python/平台上构建：
+### 原则
+
+| 依赖类型 | 能否一份包三端通用 | 做法 |
+|----------|-------------------|------|
+| 纯 Python（如 `markdown`） | 通常可以 | 一个 `lib/` + 一个 zip 即可 |
+| 带原生扩展（`.so` / `.pyd` / `.dylib`） | **否** | **按系统 + 架构分别构建、分别发布** |
+| 系统/机器人环境 SDK（ROS2、`rclpy`、厂商 SDK） | **一般不能塞进 `lib/`** | 见下文「环境依赖」 |
+
+### 推荐发布命名（有原生库时最合适）
+
+```text
+com.example.foo-1.0.0-macos-arm64.zip
+com.example.foo-1.0.0-windows-amd64.zip
+com.example.foo-1.0.0-linux-x86_64.zip
+```
+
+每个 zip 内为完整插件目录；`manifest.platforms` 建议只写当前平台，`python_abi` 与构建用的宿主 Python 一致（如 `cp310`）。
+
+用户只下载**自己系统**那一份，解压到 `mcp_plugins/`。
+
+### 构建命令（开发者）
+
+在**目标平台**、与宿主**相同的 Python 小版本**上：
 
 ```bash
 # 在插件目录内
@@ -120,9 +142,40 @@ uv pip install -r requirements.txt --target lib/ --python /path/to/host/python
 # 或: python -m pip install -r requirements.txt -t lib/
 ```
 
-然后将**整个插件目录**打成 zip 分发。用户只需解压到 `mcp_plugins/`，**不要**再 pip。
+- 用 `--target lib/` / `-t lib/`，**不要** `pip install` 进主程序环境。  
+- 含二进制的包必须在对应 OS/ARCH 的机器或 CI 上执行上述命令。  
+- 打 zip 时带上整个目录（含 `lib/`）。
 
-说明：同进程加载下，`lib/` 是「自带依赖、免用户安装」，**不是**完美进程级隔离。重型冲突栈需后续子进程方案。
+### 环境依赖（ROS2 / 宇树 Python SDK 等）
+
+这类依赖**通常安装在机器人系统环境**里（如 `source /opt/ros/humble/setup.bash`、厂商提供的 site-packages），**不是**普通 PyPI 小 wheel，也**很难**完整 vendored 进 `lib/` 后在任意 PC 上跑通。
+
+推荐约定：
+
+| 做法 | 说明 |
+|------|------|
+| **插件声明环境要求** | 在 `README` / 发布页写清：需已安装 ROS2 发行版、宇树 SDK、Python 版本、架构（如 `linux-aarch64`） |
+| **`lib/` 只打可搬运的 PyPI 依赖** | HTTP、工具库等可 `--target lib/` |
+| **import 环境包时写清失败信息** | `import rclpy` 失败 → 返回「请先 source ROS 并安装 xxx」 |
+| **分平台发布** | 机器人插件多为 `linux-aarch64` / `linux-x86_64` 专用包，不要发「三端通用」误导用户 |
+| **不要**假设桌面 exe/dmg 用户能跑 ROS 插件 | 桌面安装版与工控机/宇树镜像是不同运行环境 |
+
+示例（插件内）：
+
+```python
+def register(host):
+    try:
+        import rclpy  # 来自系统 ROS，而非 lib/
+    except ImportError as e:
+        raise RuntimeError(
+            "需要 ROS2 Python 环境（rclpy）。"
+            "请在已 source ROS 的环境中运行宿主，或安装对应发行版。"
+        ) from e
+    # 可搬运依赖仍从 lib/ 提供
+    ...
+```
+
+同进程加载下，`lib/` 只解决「免用户 pip」；**不是**进程级隔离。ROS/重型 native 冲突时，后续可考虑子进程运行时。
 
 ## 用户安装步骤
 
