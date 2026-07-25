@@ -1,46 +1,19 @@
-"""天气 MCP 工具：显式 register；数据仍为占位 mock，待接真 API."""
+"""天气 MCP 工具注册（当前 mock，待接真 API）."""
 
 from __future__ import annotations
 
-import json
 from collections.abc import Callable
-from typing import Any
 
 from src.logging import get_logger
 from src.mcp.tooling import McpTool, Property, PropertyList, PropertyType
 
+from .service import get_forecast_payload, get_weather_payload
+
 logger = get_logger()
 
 
-def _get_weather(args: dict[str, Any]) -> str:
-    city = args.get("city", "北京")
-    logger.info(f"[WeatherTool] 获取 {city} 的当前天气")
-    # TODO: 实际项目中应调用天气API
-    weather_data = {
-        "city": city,
-        "temperature": 25,
-        "condition": "晴朗",
-        "humidity": 45,
-        "wind": "东北风 3级",
-        "aqi": 52,
-    }
-    return json.dumps(weather_data, ensure_ascii=False)
-
-
-def _get_forecast(args: dict[str, Any]) -> str:
-    city = args.get("city", "北京")
-    days = args.get("days", 3)
-    logger.info(f"[WeatherTool] 获取 {city} 的 {days} 天天气预报")
-    forecast = [
-        {"date": "今天", "high": 28, "low": 18, "condition": "晴"},
-        {"date": "明天", "high": 26, "low": 17, "condition": "多云"},
-        {"date": "后天", "high": 24, "low": 15, "condition": "小雨"},
-    ]
-    return json.dumps({"city": city, "forecast": forecast[:days]}, ensure_ascii=False)
-
-
 def register_weather_tools(add_tool: Callable[[McpTool], None]) -> None:
-    """向 McpServer 注册天气工具（当前为 mock 数据）."""
+    """向 McpServer 注册天气工具."""
 
     tools: list[McpTool] = [
         McpTool(
@@ -52,7 +25,7 @@ def register_weather_tools(add_tool: Callable[[McpTool], None]) -> None:
             PropertyList(
                 [Property("city", PropertyType.STRING, default_value="北京")]
             ),
-            _get_weather,
+            get_weather_payload,
         ),
         McpTool(
             "get_forecast",
@@ -72,7 +45,7 @@ def register_weather_tools(add_tool: Callable[[McpTool], None]) -> None:
                     ),
                 ]
             ),
-            _get_forecast,
+            get_forecast_payload,
         ),
     ]
 

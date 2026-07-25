@@ -3,6 +3,6 @@
 - register_app_tools: 向 McpServer 显式注册
 """
 
-from ._tools import register_app_tools
+from .register import register_app_tools
 
 __all__ = ["register_app_tools"]

@@ -7,7 +7,7 @@
 - register_music_tools: 向 McpServer 注册工具（闭包持有 player）
 """
 
-from ._tools import register_music_tools
+from .register import register_music_tools
 from .music_player import MusicPlayer
 
 __all__ = [

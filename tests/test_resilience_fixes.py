@@ -270,7 +270,7 @@ def test_volume_tools_register_without_module_singleton():
     """音量工具闭包持有注入的 controller，无模块级 _volume_controller."""
     from src.mcp.mcp_server import McpServer
     from src.mcp.tools.volume import register_volume_tools
-    import src.mcp.tools.volume._tools as vol_tools
+    import src.mcp.tools.volume.register as vol_tools
 
     server = McpServer()
     # 注入假 controller，避免依赖系统音量 API
