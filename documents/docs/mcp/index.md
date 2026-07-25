@@ -20,7 +20,7 @@ Inject runtime objects from the container / plugin — **do not** use module-lev
 ```
 src/mcp/tools/light/
 ├── __init__.py          # export register_light_tools
-├── register.py            # register_light_tools
+├── register.py      # register_light_tools
 └── light_manager.py     # optional business logic
 ```
 
@@ -201,7 +201,8 @@ Prefer **`str`** (or bool/int). Use `json.dumps(..., ensure_ascii=False)` for st
 
 | Rule | Description |
 |------|------|
-| Entry | Export `register_*_tools(add_tool, ...)` from the package |
+| Entry | Export `register_*_tools(add_tool, ...)` implemented in **`register.py`** |
+| Package layout | `__init__.py` (re-export) + `register.py` (registration) + domain modules |
 | Wiring | Call once from `add_common_tools` or `McpPlugin.setup` |
 | Dependencies | Inject into the closure; no module-level singletons |
 | Naming | Prefer `self.module.action`, globally unique |
@@ -212,13 +213,13 @@ Prefer **`str`** (or bool/int). Use `json.dumps(..., ensure_ascii=False)` for st
 
 ## Built-in tool modules
 
-| Module | Path | Registration | Docs |
-|------|------|----------|------|
-| Volume | `volume/` | `register_volume_tools` | [system.md](system.md) |
-| Apps | `app/` | `register_app_tools` | [system.md](system.md) |
-| Camera | `camera/` | `register_camera_tools` (McpPlugin) | [camera.md](camera.md) |
-| Screenshot | `screenshot/` | `register_screenshot_tools` (McpPlugin) | — |
-| Music | `music/` | `register_music_tools` (injected MusicPlayer) | [music.md](music.md) |
-| Weather | `weather/` | `register_weather_tools` (mock for now) | — |
+| Module | Path | Registration file | Registration | Docs |
+|------|------|----------|------|------|
+| Volume | `volume/` | `register.py` | `register_volume_tools` | [system.md](system.md) |
+| Apps | `app/` | `register.py` | `register_app_tools` | [system.md](system.md) |
+| Camera | `camera/` | `register.py` | `register_camera_tools` (McpPlugin) | [camera.md](camera.md) |
+| Screenshot | `screenshot/` | `register.py` | `register_screenshot_tools` (McpPlugin) | — |
+| Music | `music/` | `register.py` | `register_music_tools` (injected MusicPlayer) | [music.md](music.md) |
+| Weather | `weather/` | `register.py` + `service.py` | `register_weather_tools` (mock for now) | — |
 
 User-directory **external** Python plugins (`mcp_plugins`) are described in the repo’s MCP extension design note; they coexist with built-in `register_*` and do not bring back decorator discovery.

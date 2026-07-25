@@ -20,7 +20,7 @@
 ```
 src/mcp/tools/light/
 ├── __init__.py          # 导出 register_light_tools
-├── register.py            # register_light_tools 实现
+├── register.py      # register_light_tools 实现
 └── light_manager.py     # 业务逻辑（可选）
 ```
 
@@ -206,7 +206,8 @@ McpTool(
 
 | 规则 | 说明 |
 |------|------|
-| 入口 | 包导出 `register_*_tools(add_tool, ...)` |
+| 入口 | 包导出 `register_*_tools(add_tool, ...)`，实现放在 **`register.py`** |
+| 包结构 | `__init__.py`（re-export）+ `register.py`（注册）+ 业务模块（如 `music_player.py` / `service.py`） |
 | 挂载 | 在 `add_common_tools` 或 `McpPlugin.setup` 中**显式**调用一次 |
 | 依赖 | 有状态对象用参数注入闭包；禁止模块级全局 `get_instance` |
 | 命名 | 工具名 `self.module.action` 或业务约定名，全局唯一 |
@@ -217,13 +218,13 @@ McpTool(
 
 ## 现有工具模块
 
-| 模块 | 路径 | 注册方式 | 详细文档 |
-|------|------|----------|----------|
-| 音量 | `volume/` | `register_volume_tools` | [system.md](system.md) |
-| 应用 | `app/` | `register_app_tools` | [system.md](system.md) |
-| 相机 | `camera/` | `register_camera_tools`（McpPlugin） | [camera.md](camera.md) |
-| 截图 | `screenshot/` | `register_screenshot_tools`（McpPlugin） | — |
-| 音乐 | `music/` | `register_music_tools`（注入 MusicPlayer） | [music.md](music.md) |
-| 天气 | `weather/` | `register_weather_tools`（当前 mock） | — |
+| 模块 | 路径 | 注册文件 | 注册方式 | 详细文档 |
+|------|------|----------|----------|----------|
+| 音量 | `volume/` | `register.py` | `register_volume_tools` | [system.md](system.md) |
+| 应用 | `app/` | `register.py` | `register_app_tools` | [system.md](system.md) |
+| 相机 | `camera/` | `register.py` | `register_camera_tools`（McpPlugin） | [camera.md](camera.md) |
+| 截图 | `screenshot/` | `register.py` | `register_screenshot_tools`（McpPlugin） | — |
+| 音乐 | `music/` | `register.py` | `register_music_tools`（注入 MusicPlayer） | [music.md](music.md) |
+| 天气 | `weather/` | `register.py` + `service.py` | `register_weather_tools`（当前 mock） | — |
 
 用户目录下的**外挂** Python 插件（`mcp_plugins`）见仓库内《MCP工具扩展方案》；与内置 `register_*` 并存，不恢复全局装饰器发现。

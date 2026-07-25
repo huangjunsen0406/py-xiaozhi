@@ -233,23 +233,24 @@ if playlist.get("playlist"):
 lyrics = await mcp_server.call_tool("music_player.get_lyrics", {})
 ```
 
-> 当前 MCP 接口尚未暴露独立的状态查询工具，播放进度类问题依赖 AI 助手维护的上下文和事件回调。
+> 状态与进度可通过 MCP 工具 `music_player.get_status` 查询；歌词推送等仍可结合 EventBus 事件。
 
 ## 技术架构
 
 ### 音乐播放器核心
 
-- **单例模式**: 通过 `get_music_player_instance()` 提供全局唯一实例，避免并发创建多个播放器。
-- **FFmpeg + AudioCodec**: 使用 `MusicDecoder`(FFmpeg) 解码音频，再交给统一的 `AudioCodec` 播放链路，保证采样率与声道配置一致。
-- **异步任务队列**: 解码后的 PCM 数据通过 `asyncio.Queue` 传递给播放循环，避免阻塞主线程。
-- **事件驱动控制**: 内置 EventBus 订阅暂停/恢复事件，AI 或系统可通过事件实现自动让路与恢复。
+- **容器注入会话**: `MusicPlayer` 由 `ServiceContainer` / 装配层创建，经 `register_music_tools(add_tool, player)` 闭包注入；**无** `get_music_player_instance` 全局单例。
+- **组合结构**: `MusicPlayer` 持有 `PlaybackEngine`（解码队列/启停跳转）与 `MusicEventBridge`（EventBus）；注册入口在 `music/register.py`。
+- **FFmpeg + AudioCodec**: `MusicDecoder`(FFmpeg) 解码后写入统一 `AudioCodec`（经 `AUDIO_CODEC_CHANGED` 注入），保证采样率与声道一致。
+- **异步任务队列**: 解码 PCM 经 `asyncio.Queue` 进入播放循环，避免阻塞主线程。
+- **事件驱动控制**: 订阅 `MUSIC_PAUSE_REQUEST` / `MUSIC_RESUME_REQUEST`（如 TTS `source=tts`），并可向外发状态/歌词事件。
 
 ### 音频处理
 
-- **高精度解码**: `MusicDecoder` 按需拉起 FFmpeg 解码器，支持 MP3/M4A/FLAC/WAV/OGG 等主流格式。
-- **时间轴维护**: 通过 `ffprobe` + 歌词时间戳获取准确时长，并在跳转/恢复时重新初始化解码器。
-- **PCM 规范化**: 解码输出保持 float32，并在写入 `AudioCodec` 前统一处理多声道为单声道。
-- **歌词同步**: 独立的歌词任务根据当前时间动态推送歌词事件，保证显示同步。
+- **高精度解码**: `MusicDecoder` 按需拉起 FFmpeg，支持 MP3/M4A/FLAC/WAV/OGG 等。
+- **时间轴维护**: `ffprobe` + 歌词时间戳估时长；跳转/恢复时重建解码器。
+- **PCM 规范化**: float32 输出，写入 `AudioCodec` 前多声道下混为单声道。
+- **歌词同步**: 由播放主循环 `_tick_lyrics` 节流推送（无独立 lyrics 长驻任务）。
 
 ### 在线服务集成
 

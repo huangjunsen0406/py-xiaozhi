@@ -233,23 +233,24 @@ if playlist.get("playlist"):
 lyrics = await mcp_server.call_tool("music_player.get_lyrics", {})
 ```
 
-> The current MCP interface does not yet expose a standalone status query tool. Playback progress-related questions rely on context and event callbacks maintained by the AI assistant.
+> Status and progress are available via the MCP tool `music_player.get_status`; lyric pushes can still use EventBus events.
 
 ## Technical Architecture
 
 ### Music Player Core
 
-- **Singleton Pattern**: Provides a globally unique instance via `get_music_player_instance()`, avoiding concurrent creation of multiple players.
-- **FFmpeg + AudioCodec**: Uses `MusicDecoder` (FFmpeg) to decode audio, then passes it through the unified `AudioCodec` playback pipeline, ensuring consistent sample rate and channel configuration.
-- **Async Task Queue**: Decoded PCM data is passed to the playback loop through an `asyncio.Queue`, avoiding blocking the main thread.
-- **Event-Driven Control**: Built-in EventBus subscribes to pause/resume events, allowing AI or system to achieve automatic yielding and recovery through events.
+- **Container-injected session**: `MusicPlayer` is created by the service container / wiring layer and passed into `register_music_tools(add_tool, player)` (closure). There is **no** `get_music_player_instance` global singleton.
+- **Composition**: `MusicPlayer` owns `PlaybackEngine` (decode queue / transport controls) and `MusicEventBridge` (EventBus). Registration lives in `music/register.py`.
+- **FFmpeg + AudioCodec**: `MusicDecoder` (FFmpeg) feeds the shared `AudioCodec` (injected via `AUDIO_CODEC_CHANGED`).
+- **Async queue**: Decoded PCM goes through `asyncio.Queue` into the playback loop.
+- **Event-driven control**: Subscribes to `MUSIC_PAUSE_REQUEST` / `MUSIC_RESUME_REQUEST` (e.g. TTS `source=tts`) and emits state/lyric events.
 
 ### Audio Processing
 
-- **High-Precision Decoding**: `MusicDecoder` launches the FFmpeg decoder on demand, supporting mainstream formats such as MP3/M4A/FLAC/WAV/OGG.
-- **Timeline Maintenance**: Obtains accurate duration via `ffprobe` + lyrics timestamps, and re-initializes the decoder during seeking/resuming.
-- **PCM Normalization**: Decoded output is kept as float32 and unified to mono before writing to `AudioCodec`.
-- **Lyrics Sync**: A dedicated lyrics task dynamically pushes lyrics events based on the current time, ensuring display synchronization.
+- **Decoding**: On-demand FFmpeg via `MusicDecoder` (MP3/M4A/FLAC/WAV/OGG, etc.).
+- **Timeline**: Duration from `ffprobe` and/or lyrics; seek/resume rebuilds the decoder.
+- **PCM**: float32, downmixed to mono before `AudioCodec`.
+- **Lyrics**: Driven by the main playback loop (`_tick_lyrics`), not a long-lived separate task.
 
 ### Online Service Integration
 
