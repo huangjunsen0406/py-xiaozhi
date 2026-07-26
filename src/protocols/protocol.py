@@ -306,7 +306,7 @@ class Protocol:
             self._max_reconnect_attempts = 0
             logger.info("禁用自动重连")
 
-    async def _handle_connection_loss(self, reason: str):
+    async def _handle_connection_loss(self, reason: str, *, clean: bool = False):
         """处理连接丢失（公共逻辑）.
 
         流程：
@@ -315,8 +315,15 @@ class Protocol:
         3. 调用子类 _do_cleanup() 清理协议特定资源
         4. 通知观察者（状态变化、音频通道关闭）
         5. 根据配置决定是否自动重连
+
+        Args:
+            clean: 服务端正常关闭（如会话结束）。只收回通道，
+                   不触发自动重连，也不上报网络错误。
         """
-        logger.warning(f"连接丢失: {reason}")
+        if clean:
+            logger.info(f"连接已由服务端正常关闭: {reason}")
+        else:
+            logger.warning(f"连接丢失: {reason}")
 
         was_connected = self.connected
         self.connected = False
@@ -340,6 +347,11 @@ class Protocol:
                 await self._on_audio_channel_closed()
             except Exception as e:
                 logger.error(f"调用音频通道关闭回调失败: {e}", exc_info=True)
+
+        # 服务端正常关闭：会话结束不算故障，不重连也不报错，
+        # 下次交互时按需重新 open_audio_channel
+        if clean:
+            return
 
         # 根据配置决定是否尝试自动重连
         if (
