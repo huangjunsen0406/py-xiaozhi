@@ -10,7 +10,7 @@ Rectangle {
 
     implicitWidth: row.width + Theme.spacingMd * 2
     implicitHeight: 24
-    radius: 12
+    radius: Theme.radiusLg
     color: {
         switch (status) {
             case "online": return Theme.successLight
@@ -27,7 +27,8 @@ Rectangle {
         Rectangle {
             width: 6
             height: 6
-            radius: 3
+            // 小圆点：用 radiusSm(4) 接近满圆，避免魔法数 3
+            radius: Theme.radiusSm
             anchors.verticalCenter: parent.verticalCenter
             color: {
                 switch (root.status) {

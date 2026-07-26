@@ -116,7 +116,7 @@ ScrollView {
                     anchors.right: parent.right
                     anchors.verticalCenter: parent.verticalCenter
                     anchors.margins: Theme.spacingMd
-                    spacing: 4
+                    spacing: Theme.spacingXs
 
                     Text {
                         text: "转换预览"

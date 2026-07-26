@@ -100,8 +100,8 @@ AppWindow {
 
                         Column {
                             anchors.fill: parent
-                            anchors.margins: 8
-                            spacing: 4
+                            anchors.margins: Theme.spacingSm
+                            spacing: Theme.spacingXs
 
                             Text {
                                 width: parent.width

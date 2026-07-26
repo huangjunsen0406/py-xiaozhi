@@ -45,7 +45,7 @@ AppWindow {
             Rectangle {
                 width: 8
                 height: 8
-                radius: 4
+                radius: Theme.radiusSm
                 color: activationModel ? activationModel.statusColor : Theme.textPlaceholder
 
                 // 激活中时闪烁动画
