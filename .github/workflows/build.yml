@@ -16,15 +16,30 @@ jobs:
           - os: macos-latest
             platform: macos-arm64
             artifact: "installer/*.dmg"
+            mac_arch: arm64
+            # host 原生 arm64 Python
+            python_arch: arm64
+          # 在 arm runner 上经 Rosetta 打 Intel 包，避免 macos-13 排队
+          - os: macos-latest
+            platform: macos-x64
+            artifact: "installer/*.dmg"
+            mac_arch: x64
+            python_arch: x64
           - os: windows-latest
             platform: windows-x64
             artifact: "installer/*.exe"
+            mac_arch: ""
+            python_arch: ""
           - os: ubuntu-24.04
             platform: linux-x64
             artifact: "installer/*.deb"
+            mac_arch: ""
+            python_arch: ""
           - os: ubuntu-24.04-arm
             platform: linux-arm64
             artifact: "installer/*.deb"
+            mac_arch: ""
+            python_arch: ""
 
     runs-on: ${{ matrix.os }}
     name: Build (${{ matrix.platform }})
@@ -32,6 +47,24 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      # mac x64：在 arm runner 上启用 Rosetta，后续 x86_64 Python / 构建都走它
+      - name: Install Rosetta (macOS x64 cross-build)
+        if: runner.os == 'macOS' && matrix.python_arch == 'x64'
+        run: |
+          if /usr/bin/pgrep -q oahd; then
+            echo "Rosetta already installed"
+          else
+            softwareupdate --install-rosetta --agree-to-license
+          fi
+
+      # mac x64 必须用 x86_64 Python，否则 PyInstaller 只能冻 arm64 扩展
+      - name: Setup Python (macOS arch-specific)
+        if: runner.os == 'macOS'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          architecture: ${{ matrix.python_arch }}
 
       - name: Install uv
         uses: astral-sh/setup-uv@v6
@@ -69,7 +102,18 @@ jobs:
         run: echo "C:/Program Files (x86)/Inno Setup 6" >> $GITHUB_PATH
 
       - name: Install Python dependencies
-        run: uv sync --extra gui --group dev
+        shell: bash
+        run: |
+          # mac x64：强制使用 setup-python 提供的 x86_64 解释器
+          if [ "${{ runner.os }}" = "macOS" ] && [ -n "${{ matrix.python_arch }}" ]; then
+            PY="$(command -v python)"
+            echo "Using Python: $PY"
+            file "$PY" || true
+            python -c "import platform; print(platform.machine(), platform.platform())"
+            uv sync --python "$PY" --extra gui --group dev
+          else
+            uv sync --extra gui --group dev
+          fi
 
       - name: Install unifypy
         run: uv pip install --upgrade unifypy
@@ -94,8 +138,9 @@ jobs:
           chmod +x scripts/bundle_ffmpeg.sh
           if [ "$RUNNER_OS" = "macOS" ]; then
             # mac 无官方多架构 static CDN；从 static-ffmpeg 提取，禁止 Homebrew
+            # x64 job 的 Python 是 x86_64，static_ffmpeg 会拉对应架构二进制
             uv pip install static-ffmpeg
-            ./scripts/bundle_ffmpeg.sh mac arm64
+            ./scripts/bundle_ffmpeg.sh mac "${{ matrix.mac_arch }}"
           elif [ "$RUNNER_OS" = "Windows" ]; then
             ./scripts/bundle_ffmpeg.sh win x64
           else
@@ -105,6 +150,26 @@ jobs:
               ./scripts/bundle_ffmpeg.sh linux x64
             fi
           fi
+
+      - name: Configure macOS target architecture for unifypy
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          # unifypy 透传 pyinstaller.target_architecture
+          # arm64 job：显式 arm64；x64 job：x86_64（需 x86_64 Python，见上）
+          TARGET="arm64"
+          if [ "${{ matrix.mac_arch }}" = "x64" ]; then
+            TARGET="x86_64"
+          fi
+          python - <<PY
+          import json
+          from pathlib import Path
+          path = Path("build.json")
+          cfg = json.loads(path.read_text(encoding="utf-8"))
+          cfg.setdefault("pyinstaller", {})["target_architecture"] = "${TARGET}"
+          path.write_text(json.dumps(cfg, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+          print(f"pyinstaller.target_architecture = {cfg['pyinstaller']['target_architecture']}")
+          PY
 
       - name: Build package
         shell: bash
@@ -118,6 +183,36 @@ jobs:
             --app-version ${{ steps.version.outputs.version }} \
             --verbose \
             --clean
+
+      - name: Verify macOS binary architecture
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          # 找到 .app 内主可执行文件，确认架构符合 matrix
+          app="$(find dist -name '*.app' -type d | head -1 || true)"
+          if [ -z "$app" ]; then
+            echo "::warning::未找到 .app，跳过架构校验（仍依赖 installer 产物检查）"
+            exit 0
+          fi
+          bin="$app/Contents/MacOS/$(basename "$app" .app)"
+          if [ ! -f "$bin" ]; then
+            bin="$(find "$app/Contents/MacOS" -type f -perm -111 | head -1)"
+          fi
+          echo "Binary: $bin"
+          file "$bin"
+          lipo -info "$bin" || true
+          EXPECT="arm64"
+          if [ "${{ matrix.mac_arch }}" = "x64" ]; then
+            EXPECT="x86_64"
+          fi
+          if ! lipo -info "$bin" 2>/dev/null | grep -q "$EXPECT"; then
+            if ! file "$bin" | grep -q "$EXPECT"; then
+              echo "::error::期望架构 $EXPECT，实际: $(file "$bin")"
+              exit 1
+            fi
+          fi
+          echo "Architecture OK: $EXPECT"
 
       - name: Rename artifact with platform suffix
         shell: bash
@@ -136,6 +231,7 @@ jobs:
             name="$(basename "$base")"
             cp "$f" "dist/release/${name}-${{ matrix.platform }}.${ext}"
           done
+          ls -lh dist/release
 
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v2
