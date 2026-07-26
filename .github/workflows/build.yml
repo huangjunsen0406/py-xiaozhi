@@ -138,7 +138,8 @@ jobs:
         shell: bash
         run: |
           # 与 uv sync 同一项目 venv（x64 job 的 venv 已基于 x86_64 Python）
-          uv pip install --upgrade unifypy
+          # pyinstaller 必须在 PATH 可发现（unifypy environment_check 查可执行文件）
+          uv pip install --upgrade unifypy pyinstaller
 
       - name: Extract version from tag
         id: version
@@ -218,14 +219,17 @@ jobs:
           rm -f *.spec
           # unifypy>=2.0.18: --version 仅打印工具版本并退出；应用版本用 --app-version
           #
-          # 注意：不要 arch -x86_64 uv —— uv 本体是 arm64，会报
-          # "Bad CPU type in executable"。arm64 uv 拉起 x86_64 venv
-          # 时内核会自动走 Rosetta。
+          # 不要 arch -x86_64 uv（uv 本体 arm64 → Bad CPU type）。
+          # mac x64：把 .venv/bin 放进 PATH，让 unifypy 能找到 x86_64 的 pyinstaller；
+          # 用 venv 的 x86_64 python -m unifypy，内核自动走 Rosetta。
+          export PATH="${PWD}/.venv/bin:${PATH}"
           if [ "${{ runner.os }}" = "macOS" ] && [ "${{ matrix.mac_arch }}" = "x64" ]; then
             VENV_PY="${PWD}/.venv/bin/python"
             file "$VENV_PY"
-            # 直接用 x86_64 解释器跑 unifypy，避免 uv 二进制架构问题
-            arch -x86_64 "$VENV_PY" -m unifypy . \
+            command -v pyinstaller
+            pyinstaller --version || true
+            "$VENV_PY" -c "import PyInstaller, platform; print(PyInstaller.__version__, platform.machine())"
+            "$VENV_PY" -m unifypy . \
               --config build.json \
               --app-version ${{ steps.version.outputs.version }} \
               --verbose \
