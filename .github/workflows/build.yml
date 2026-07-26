@@ -17,29 +17,23 @@ jobs:
             platform: macos-arm64
             artifact: "installer/*.dmg"
             mac_arch: arm64
-            # host 原生 arm64 Python
-            python_arch: arm64
           # 在 arm runner 上经 Rosetta 打 Intel 包，避免 macos-13 排队
           - os: macos-latest
             platform: macos-x64
             artifact: "installer/*.dmg"
             mac_arch: x64
-            python_arch: x64
           - os: windows-latest
             platform: windows-x64
             artifact: "installer/*.exe"
             mac_arch: ""
-            python_arch: ""
           - os: ubuntu-24.04
             platform: linux-x64
             artifact: "installer/*.deb"
             mac_arch: ""
-            python_arch: ""
           - os: ubuntu-24.04-arm
             platform: linux-arm64
             artifact: "installer/*.deb"
             mac_arch: ""
-            python_arch: ""
 
     runs-on: ${{ matrix.os }}
     name: Build (${{ matrix.platform }})
@@ -48,9 +42,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # mac x64：在 arm runner 上启用 Rosetta，后续 x86_64 Python / 构建都走它
+      # mac x64：Rosetta + 自包含 x86_64 Python
+      # 不用 actions/setup-python 的 darwin-x64（依赖 /usr/local/opt/gettext 的 Intel Homebrew）
       - name: Install Rosetta (macOS x64 cross-build)
-        if: runner.os == 'macOS' && matrix.python_arch == 'x64'
+        if: runner.os == 'macOS' && matrix.mac_arch == 'x64'
         run: |
           if /usr/bin/pgrep -q oahd; then
             echo "Rosetta already installed"
@@ -58,21 +53,46 @@ jobs:
             softwareupdate --install-rosetta --agree-to-license
           fi
 
-      # mac x64 必须用 x86_64 Python，否则 PyInstaller 只能冻 arm64 扩展
-      - name: Setup Python (macOS arch-specific)
-        if: runner.os == 'macOS'
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.10"
-          architecture: ${{ matrix.python_arch }}
+      - name: Install standalone x86_64 Python (macOS x64)
+        if: runner.os == 'macOS' && matrix.mac_arch == 'x64'
+        shell: bash
+        run: |
+          set -euo pipefail
+          # python-build-standalone：自带 lib，不依赖 Intel Homebrew
+          # 版本与 tag 对齐时可随 upstream 升级；安装后用 file/platform 校验架构
+          RELEASE_TAG="20260718"
+          PY_VER="3.10.20"
+          ASSET="cpython-${PY_VER}+${RELEASE_TAG}-x86_64-apple-darwin-install_only.tar.gz"
+          URL="https://github.com/astral-sh/python-build-standalone/releases/download/${RELEASE_TAG}/${ASSET}"
+          DEST="${RUNNER_TEMP}/python-x86_64"
+          mkdir -p "$DEST"
+          echo "Downloading $URL"
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/py-x64.tgz" "$URL"
+          tar -xzf "$RUNNER_TEMP/py-x64.tgz" -C "$DEST"
+          # install_only 解压后为 python/ 目录
+          if [ -x "$DEST/python/bin/python3" ]; then
+            PY="$DEST/python/bin/python3"
+          elif [ -x "$DEST/bin/python3" ]; then
+            PY="$DEST/bin/python3"
+          else
+            echo "::error::python3 not found after extract"; find "$DEST" -maxdepth 3 -type f -name 'python*' | head
+            exit 1
+          fi
+          echo "PY_X64=$PY" >> "$GITHUB_ENV"
+          echo "$DEST/python/bin" >> "$GITHUB_PATH"
+          echo "$DEST/bin" >> "$GITHUB_PATH"
+          file "$PY"
+          # 在 Rosetta 下跑 x86_64 解释器
+          arch -x86_64 "$PY" -c "import platform; print(platform.machine(), platform.platform(), platform.python_version())"
 
       - name: Install uv
         uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true
 
-      - name: Install system dependencies (macOS)
-        if: runner.os == 'macOS'
+      # arm64 构建需要系统 portaudio/opus；x64 走 wheel + 项目内 libs，避免 arm Homebrew 混链
+      - name: Install system dependencies (macOS arm64)
+        if: runner.os == 'macOS' && matrix.mac_arch == 'arm64'
         run: brew install portaudio opus
 
       - name: Install system dependencies (Linux)
@@ -104,19 +124,24 @@ jobs:
       - name: Install Python dependencies
         shell: bash
         run: |
-          # mac x64：强制使用 setup-python 提供的 x86_64 解释器
-          if [ "${{ runner.os }}" = "macOS" ] && [ -n "${{ matrix.python_arch }}" ]; then
-            PY="$(command -v python)"
-            echo "Using Python: $PY"
-            file "$PY" || true
-            python -c "import platform; print(platform.machine(), platform.platform())"
-            uv sync --python "$PY" --extra gui --group dev
+          if [ "${{ runner.os }}" = "macOS" ] && [ "${{ matrix.mac_arch }}" = "x64" ]; then
+            echo "Using x86_64 Python: $PY_X64"
+            file "$PY_X64"
+            arch -x86_64 "$PY_X64" -c "import platform; print(platform.machine(), platform.platform())"
+            # uv 用该解释器解析/安装 x86_64 wheel
+            uv sync --python "$PY_X64" --extra gui --group dev
           else
             uv sync --extra gui --group dev
           fi
 
       - name: Install unifypy
-        run: uv pip install --upgrade unifypy
+        shell: bash
+        run: |
+          if [ "${{ runner.os }}" = "macOS" ] && [ "${{ matrix.mac_arch }}" = "x64" ]; then
+            uv pip install --python "$PY_X64" --upgrade unifypy
+          else
+            uv pip install --upgrade unifypy
+          fi
 
       - name: Extract version from tag
         id: version
@@ -138,9 +163,15 @@ jobs:
           chmod +x scripts/bundle_ffmpeg.sh
           if [ "$RUNNER_OS" = "macOS" ]; then
             # mac 无官方多架构 static CDN；从 static-ffmpeg 提取，禁止 Homebrew
-            # x64 job 的 Python 是 x86_64，static_ffmpeg 会拉对应架构二进制
-            uv pip install static-ffmpeg
-            ./scripts/bundle_ffmpeg.sh mac "${{ matrix.mac_arch }}"
+            if [ "${{ matrix.mac_arch }}" = "x64" ]; then
+              uv pip install --python "$PY_X64" static-ffmpeg
+              # static_ffmpeg 按当前解释器 arch 取二进制；用 x86_64 Python 跑
+              arch -x86_64 env PYTHON_CMD="$PY_X64" ./scripts/bundle_ffmpeg.sh mac x64 || \
+                PYTHON_CMD="$PY_X64" ./scripts/bundle_ffmpeg.sh mac x64
+            else
+              uv pip install static-ffmpeg
+              ./scripts/bundle_ffmpeg.sh mac arm64
+            fi
           elif [ "$RUNNER_OS" = "Windows" ]; then
             ./scripts/bundle_ffmpeg.sh win x64
           else
@@ -156,12 +187,17 @@ jobs:
         shell: bash
         run: |
           # unifypy 透传 pyinstaller.target_architecture
-          # arm64 job：显式 arm64；x64 job：x86_64（需 x86_64 Python，见上）
           TARGET="arm64"
           if [ "${{ matrix.mac_arch }}" = "x64" ]; then
             TARGET="x86_64"
           fi
-          python - <<PY
+          # 用任意可用 Python 改 JSON 即可
+          if [ -n "${PY_X64:-}" ] && [ -x "${PY_X64:-}" ]; then
+            PY="$PY_X64"
+          else
+            PY="$(command -v python3 || command -v python)"
+          fi
+          "$PY" - <<PY
           import json
           from pathlib import Path
           path = Path("build.json")
@@ -178,11 +214,20 @@ jobs:
         run: |
           rm -f *.spec
           # unifypy>=2.0.18: --version 仅打印工具版本并退出；应用版本用 --app-version
-          uv run --no-sync unifypy . \
-            --config build.json \
-            --app-version ${{ steps.version.outputs.version }} \
-            --verbose \
-            --clean
+          if [ "${{ runner.os }}" = "macOS" ] && [ "${{ matrix.mac_arch }}" = "x64" ]; then
+            # 确保 uv run 使用 x86_64 环境
+            arch -x86_64 uv run --python "$PY_X64" --no-sync unifypy . \
+              --config build.json \
+              --app-version ${{ steps.version.outputs.version }} \
+              --verbose \
+              --clean
+          else
+            uv run --no-sync unifypy . \
+              --config build.json \
+              --app-version ${{ steps.version.outputs.version }} \
+              --verbose \
+              --clean
+          fi
 
       - name: Verify macOS binary architecture
         if: runner.os == 'macOS'
