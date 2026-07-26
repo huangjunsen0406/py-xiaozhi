@@ -265,6 +265,15 @@ class SettingsModel(
     aecEnabled = Property(
         bool, SettingsSystemOptionsMixin._get_aecEnabled, SettingsSystemOptionsMixin._set_aecEnabled, notify=settingsChanged
     )
+    aecMusicParallel = Property(
+        bool, SettingsSystemOptionsMixin._get_aecMusicParallel, SettingsSystemOptionsMixin._set_aecMusicParallel, notify=settingsChanged
+    )
+    aecFrameDelay = Property(
+        int, SettingsSystemOptionsMixin._get_aecFrameDelay, SettingsSystemOptionsMixin._set_aecFrameDelay, notify=settingsChanged
+    )
+    aecEnablePreprocess = Property(
+        bool, SettingsSystemOptionsMixin._get_aecEnablePreprocess, SettingsSystemOptionsMixin._set_aecEnablePreprocess, notify=settingsChanged
+    )
     pathCacheDir = Property(
         str,
         SettingsSystemOptionsMixin._get_pathCacheDir,

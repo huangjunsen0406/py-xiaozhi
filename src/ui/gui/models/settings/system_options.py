@@ -135,6 +135,30 @@ class SettingsSystemOptionsMixin:
     def _set_aecEnabled(self, value: bool):
         self._set_value("AEC_OPTIONS.ENABLED", value)
 
+    # AEC 在位时 TTS 与音乐并行播放（闪避混音）
+    def _get_aecMusicParallel(self) -> bool:
+        return self._get_value("AEC_OPTIONS.MUSIC_PARALLEL", True)
+
+    def _set_aecMusicParallel(self, value: bool):
+        self._set_value("AEC_OPTIONS.MUSIC_PARALLEL", value)
+
+    # 延迟补偿帧数（40ms + N × 协议帧长）
+    def _get_aecFrameDelay(self) -> int:
+        try:
+            return int(self._get_value("AEC_OPTIONS.FRAME_DELAY", 3))
+        except (TypeError, ValueError):
+            return 3
+
+    def _set_aecFrameDelay(self, value: int):
+        self._set_value("AEC_OPTIONS.FRAME_DELAY", int(value))
+
+    # 噪声抑制/高通预处理
+    def _get_aecEnablePreprocess(self) -> bool:
+        return self._get_value("AEC_OPTIONS.ENABLE_PREPROCESS", True)
+
+    def _set_aecEnablePreprocess(self, value: bool):
+        self._set_value("AEC_OPTIONS.ENABLE_PREPROCESS", value)
+
     # ========== 可写目录 PATHS（config 目录不由此改）==========
 
     def _get_pathCacheDir(self) -> str:

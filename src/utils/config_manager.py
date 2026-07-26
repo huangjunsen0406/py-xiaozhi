@@ -119,9 +119,9 @@ class ConfigManager:
             "ENABLED": False,
             # AEC 在位时 TTS 不暂停音乐，混音闪避并行播放（引擎旁路则自动回退暂停）
             "MUSIC_PARALLEL": True,
-            "BUFFER_MAX_LENGTH": 200,
+            # 延迟补偿（协议帧数），实际 delay_ms = 40 + N * 帧长
             "FRAME_DELAY": 3,
-            "FILTER_LENGTH_RATIO": 0.4,
+            # 噪声抑制/高通预处理
             "ENABLE_PREPROCESS": True,
         },
         # 可写目录覆盖（config 仍固定在用户数据/config；null=默认）
