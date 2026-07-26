@@ -3,7 +3,7 @@
 职责：sounddevice 流创建、生命周期管理
 """
 
-from typing import Callable
+from collections.abc import Callable
 
 import numpy as np
 import sounddevice as sd
@@ -30,6 +30,7 @@ class AudioStreamManager:
         self.device_config = device_config
         self.input_stream = None
         self.output_stream = None
+        self._stopped = False
 
     def create_streams(
         self, input_callback: Callable, output_callback: Callable
@@ -43,6 +44,8 @@ class AudioStreamManager:
         Raises:
             Exception: 创建流失败
         """
+        # 允许 stop() 后再 create（热重载路径）
+        self._stopped = False
         try:
             # 使用 ALSAErrorSuppressor 抑制 Linux 上的 ALSA 警告
             with ALSAErrorSuppressor():
@@ -97,7 +100,7 @@ class AudioStreamManager:
 
     def stop(self) -> None:
         """停止音频流，幂等可重复调用"""
-        if getattr(self, '_stopped', False):
+        if getattr(self, "_stopped", False):
             return
         self._stopped = True
 
@@ -115,6 +118,10 @@ class AudioStreamManager:
             logger.info("音频流已停止")
         except Exception as e:
             logger.error(f"停止音频流失败: {e}", exc_info=True)
+
+    def is_active(self) -> bool:
+        """是否仍持有未关闭的输入/输出流."""
+        return bool(self.input_stream or self.output_stream)
 
     def reinitialize_stream(
         self,

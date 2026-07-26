@@ -1,5 +1,6 @@
 import threading
-from typing import Callable, List, Optional, Protocol
+from collections.abc import Callable
+from typing import Protocol
 
 import numpy as np
 
@@ -54,12 +55,12 @@ class AudioCodec:
         self.output_buffer = AudioBuffer(maxsize=500)
 
         # 监听器（线程安全）
-        self._encoded_callback: Optional[Callable] = None
-        self._audio_listeners: List[AudioListener] = []
+        self._encoded_callback: Callable | None = None
+        self._audio_listeners: list[AudioListener] = []
         self._listeners_lock = threading.Lock()
 
         # 设备配置（初始化后填充）
-        self.device_config: Optional[DeviceConfig] = None
+        self.device_config: DeviceConfig | None = None
 
         # 状态标记
         self._is_closing = False
@@ -325,14 +326,27 @@ class AudioCodec:
                 is_input=False, output_callback=self._output_callback
             )
 
-    async def reload_devices(self):
+    def stop_streams_for_enumeration(self) -> None:
+        """停掉本编解码器占用的 sounddevice 流，供热插拔枚举前调用.
+
+        调用后必须再 ``reload_devices()`` 或自行 ``create_streams``，否则无采集/播放。
+        """
+        if self.stream_manager:
+            self.stream_manager.stop()
+            logger.info("AudioCodec: 已停止音频流（供设备枚举）")
+
+    async def reload_devices(self, *, reenumerate: bool = True):
         """热重载音频设备配置
 
         流程：
         1. 停止当前音频流
-        2. 重新加载设备配置 + 协议配置
-        3. 重建格式转换器 + Opus 编解码器
-        4. 重新创建并启动音频流
+        2. （可选）重初始化 PortAudio 并重新枚举（利于后连蓝牙出现）
+        3. 重新加载设备配置 + 协议配置
+        4. 重建格式转换器 + Opus 编解码器
+        5. 重新创建并启动音频流
+
+        Args:
+            reenumerate: 是否在停流后强制刷新 PortAudio 设备表
 
         Returns:
             bool: 是否成功
@@ -340,17 +354,27 @@ class AudioCodec:
         logger.info("AudioCodec: 开始热重载音频设备...")
 
         try:
-            # 1. 停止当前流
+            # 1. 停止当前流（必须在 PortAudio reinit 之前）
             if self.stream_manager:
                 self.stream_manager.stop()
                 logger.debug("AudioCodec: 已停止当前音频流")
 
-            # 2. 重新加载设备配置
+            # 2. 热插拔：重建 PortAudio 上下文后再按名称匹配
+            if reenumerate:
+                from src.utils.audio_utils import refresh_portaudio_devices
+
+                refresh_portaudio_devices(reinitialize=True)
+
+            # 3. 重新加载设备配置
             self.device_manager.config.reload_config()
             self.device_config = self.device_manager.load_or_detect_devices()
-            logger.info(f"AudioCodec: 新设备配置 - 输入ID: {self.device_config.input_device_id}, 输出ID: {self.device_config.output_device_id}")
+            logger.info(
+                "AudioCodec: 新设备配置 - 输入ID: "
+                f"{self.device_config.input_device_id}, 输出ID: "
+                f"{self.device_config.output_device_id}"
+            )
 
-            # 3. 刷新协议配置并重建 Opus 编解码器
+            # 4. 刷新协议配置并重建 Opus 编解码器
             AudioConfig.reload()
             self.opus_codec.close()
             self.opus_codec = OpusCodec(
@@ -360,18 +384,18 @@ class AudioCodec:
             )
             self.opus_codec.initialize()
 
-            # 4. 重建格式转换器
+            # 5. 重建格式转换器
             self.converter.clear_buffers()
             self._configure_pipeline()
 
-            # 5. 重新创建音频流
+            # 6. 重新创建音频流
             self.stream_manager = AudioStreamManager(self.device_config)
             self.stream_manager.create_streams(
                 input_callback=self._input_callback,
                 output_callback=self._output_callback,
             )
 
-            # 6. 启动音频流
+            # 7. 启动音频流
             self.stream_manager.start()
 
             logger.info("AudioCodec: 音频设备热重载完成")
@@ -443,7 +467,9 @@ class AudioCodec:
                 with self._listeners_lock:
                     self._audio_listeners.clear()
             except Exception as e:
-                logger.warning(f"清理音频监听器失败（锁可能已损坏）: {e}", exc_info=True)
+                logger.warning(
+                    f"清理音频监听器失败（锁可能已损坏）: {e}", exc_info=True
+                )
 
             logger.debug("AudioCodec 析构清理完成")
 

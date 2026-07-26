@@ -31,7 +31,10 @@ class SettingsController:
         if self._settings_model is None:
             from src.ui.gui.models import SettingsModel
 
-            self._settings_model = SettingsModel()
+            self._settings_model = SettingsModel(
+                event_bus=self._event_bus,
+                task_manager=self._tasks,
+            )
             self._settings_model.configSaved.connect(self._on_config_saved)
             self._settings_model.mcpToolsNeedReconnect.connect(
                 self._on_mcp_tools_need_reconnect
