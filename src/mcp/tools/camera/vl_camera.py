@@ -42,9 +42,9 @@ class VLCamera(BaseCamera):
 
     def capture(self) -> bool:
         """
-        捕获图像（使用基类的通用实现）.
+        捕获图像（OpenCV/V4L2 或 picamera2，见 capture_backend）.
         """
-        return self.capture_with_cv2()
+        return self.capture_frame()
 
     def analyze(self, question: str, image_data: bytes | None = None) -> str:
         try:
@@ -98,9 +98,7 @@ class VLCamera(BaseCamera):
 
             # 记录响应
             logger.info(f"VL analysis completed, question={question}")
-            return json.dumps(
-                {"success": True, "text": result}, ensure_ascii=False
-            )
+            return json.dumps({"success": True, "text": result}, ensure_ascii=False)
 
         except Exception as e:
             error_msg = f"Failed to analyze image with VL: {e}"

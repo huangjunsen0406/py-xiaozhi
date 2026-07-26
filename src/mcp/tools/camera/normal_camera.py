@@ -38,9 +38,9 @@ class NormalCamera(BaseCamera):
 
     def capture(self) -> bool:
         """
-        捕获图像（使用基类的通用实现）.
+        捕获图像（OpenCV/V4L2 或 picamera2，见 capture_backend）.
         """
-        return self.capture_with_cv2()
+        return self.capture_frame()
 
     def analyze(self, question: str, image_data: bytes | None = None) -> str:
         if not self.explain_url:
@@ -50,18 +50,12 @@ class NormalCamera(BaseCamera):
 
         buf = image_data if image_data is not None else self.jpeg_data["buf"]
         if not buf:
-            return json.dumps(
-                {"success": False, "message": "Camera buffer is empty"}
-            )
+            return json.dumps({"success": False, "message": "Camera buffer is empty"})
 
         # 准备请求头
         headers = {
-            "Device-Id": get_config().get_config(
-                "SYSTEM_OPTIONS.DEVICE_ID"
-            ),
-            "Client-Id": get_config().get_config(
-                "SYSTEM_OPTIONS.CLIENT_ID"
-            ),
+            "Device-Id": get_config().get_config("SYSTEM_OPTIONS.DEVICE_ID"),
+            "Client-Id": get_config().get_config("SYSTEM_OPTIONS.CLIENT_ID"),
         }
 
         if self.explain_token:

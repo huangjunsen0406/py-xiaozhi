@@ -90,9 +90,15 @@ class ConfigManager:
         },
         "CAMERA": {
             "camera_index": 0,
+            # 设备路径优先于 index，如 "/dev/video0"（树莓派 USB/V4L2）
+            "device": "",
+            # auto | opencv | picamera2；auto 先 OpenCV，失败再试 CSI(picamera2)
+            "backend": "auto",
             "frame_width": 640,
             "frame_height": 480,
             "fps": 30,
+            # 打开后丢弃的预热帧数（USB/Pi 前几帧常无效）
+            "warm_up_frames": 5,
             "Local_VL_url": "https://open.bigmodel.cn/api/paas/v4/",
             "VLapi_key": "",
             "models": "glm-4v-plus",
