@@ -137,11 +137,8 @@ jobs:
       - name: Install unifypy
         shell: bash
         run: |
-          if [ "${{ runner.os }}" = "macOS" ] && [ "${{ matrix.mac_arch }}" = "x64" ]; then
-            uv pip install --python "$PY_X64" --upgrade unifypy
-          else
-            uv pip install --upgrade unifypy
-          fi
+          # 与 uv sync 同一项目 venv（x64 job 的 venv 已基于 x86_64 Python）
+          uv pip install --upgrade unifypy
 
       - name: Extract version from tag
         id: version
@@ -163,13 +160,19 @@ jobs:
           chmod +x scripts/bundle_ffmpeg.sh
           if [ "$RUNNER_OS" = "macOS" ]; then
             # mac 无官方多架构 static CDN；从 static-ffmpeg 提取，禁止 Homebrew
+            # 装进项目 venv（x64 job 的 venv 已是 x86_64）
+            uv pip install static-ffmpeg
             if [ "${{ matrix.mac_arch }}" = "x64" ]; then
-              uv pip install --python "$PY_X64" static-ffmpeg
-              # static_ffmpeg 按当前解释器 arch 取二进制；用 x86_64 Python 跑
-              arch -x86_64 env PYTHON_CMD="$PY_X64" ./scripts/bundle_ffmpeg.sh mac x64 || \
-                PYTHON_CMD="$PY_X64" ./scripts/bundle_ffmpeg.sh mac x64
+              # PYTHON 指向 venv，确保 static_ffmpeg 可 import；arch -x86_64 让 platform.machine=x86_64
+              VENV_PY="${PWD}/.venv/bin/python"
+              file "$VENV_PY" || true
+              arch -x86_64 env PYTHON="$VENV_PY" ./scripts/bundle_ffmpeg.sh mac x64
+              file libs/ffmpeg/mac/x64/ffmpeg libs/ffmpeg/mac/x64/ffprobe
+              if ! file libs/ffmpeg/mac/x64/ffmpeg | grep -Eq 'x86_64|i386'; then
+                echo "::error::ffmpeg 不是 x86_64: $(file libs/ffmpeg/mac/x64/ffmpeg)"
+                exit 1
+              fi
             else
-              uv pip install static-ffmpeg
               ./scripts/bundle_ffmpeg.sh mac arm64
             fi
           elif [ "$RUNNER_OS" = "Windows" ]; then
@@ -215,8 +218,8 @@ jobs:
           rm -f *.spec
           # unifypy>=2.0.18: --version 仅打印工具版本并退出；应用版本用 --app-version
           if [ "${{ runner.os }}" = "macOS" ] && [ "${{ matrix.mac_arch }}" = "x64" ]; then
-            # 确保 uv run 使用 x86_64 环境
-            arch -x86_64 uv run --python "$PY_X64" --no-sync unifypy . \
+            # 项目 venv 已是 x86_64；arch -x86_64 保证子进程也在 Rosetta 下
+            arch -x86_64 uv run --no-sync unifypy . \
               --config build.json \
               --app-version ${{ steps.version.outputs.version }} \
               --verbose \

@@ -18,12 +18,21 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-# Prefer project venv / uv so `static_ffmpeg` installed via uv pip is visible
+# Prefer explicit PYTHON / PYTHON_CMD (cross-arch CI) over project .venv
 resolve_python() {
-  if [[ -n "${PYTHON:-}" ]] && command -v "$PYTHON" >/dev/null 2>&1; then
-    echo "$PYTHON"
-    return
-  fi
+  local candidate
+  for candidate in "${PYTHON:-}" "${PYTHON_CMD:-}"; do
+    [[ -z "$candidate" ]] && continue
+    # absolute path or executable name
+    if [[ -x "$candidate" ]]; then
+      echo "$candidate"
+      return
+    fi
+    if command -v "$candidate" >/dev/null 2>&1; then
+      command -v "$candidate"
+      return
+    fi
+  done
   if [[ -x "$ROOT/.venv/bin/python" ]]; then
     echo "$ROOT/.venv/bin/python"
     return
