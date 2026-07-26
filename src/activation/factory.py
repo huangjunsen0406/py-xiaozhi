@@ -4,7 +4,7 @@ from typing import Any
 
 
 def create_activation_ui(mode: str, activation_service, init_result: dict) -> Any:
-    """gui → GuiActivation；cli/gpio → CliActivation.
+    """gui → GuiActivation；tui/cli/gpio → CliActivation.
 
     Args:
         mode: 运行模式
@@ -17,6 +17,7 @@ def create_activation_ui(mode: str, activation_service, init_result: dict) -> An
 
         return GuiActivation(activation_service, init_result)
 
+    # tui / cli / gpio：激活阶段用简单终端交互
     from src.ui.cli import CliActivation
 
     return CliActivation(activation_service, init_result)

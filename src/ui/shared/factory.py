@@ -18,7 +18,7 @@ def create_viewport(
     event_bus: "EventBus",
     task_manager: Optional["TaskManager"] = None,
 ) -> "ViewPort":
-    """gui / cli / gpio；gpio 仅 Linux，其它平台回退 cli."""
+    """gui / cli / tui / gpio；gpio 仅 Linux，其它平台回退 cli."""
     normalized = (mode or "cli").lower()
 
     if normalized == "gui":
@@ -27,11 +27,15 @@ def create_viewport(
         logger.debug("create_viewport: gui")
         return GuiViewManager(event_bus=event_bus, task_manager=task_manager)
 
+    if normalized == "tui":
+        from src.ui.tui import TuiViewManager
+
+        logger.info("create_viewport: tui")
+        return TuiViewManager(event_bus=event_bus, task_manager=task_manager)
+
     if normalized == "gpio":
         if sys.platform != "linux":
-            logger.warning(
-                f"GPIO 仅支持 Linux（当前 {sys.platform}），回退到 cli 界面"
-            )
+            logger.warning(f"GPIO 仅支持 Linux（当前 {sys.platform}），回退到 cli 界面")
         else:
             from src.ui.gpio import GpioViewManager
 
