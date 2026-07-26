@@ -33,7 +33,7 @@ English | [简体中文](README.zh.md)
 
 ## ❤️ Sponsors
 
-> [Want to appear here?](mailto:huangjunsen0406@gmail.com)
+> [Want to appear here?](mailto:95134130@qq.com)
 
 <details open>
 <summary>Click to collapse</summary>
@@ -44,9 +44,9 @@ Thanks to GitDo.net for sponsoring this project! GitDo.net is an AI API aggregat
 
 ---
 
-| | |
-|---|---|
-| [**Token能量站**](https://factory.pub/register?aff=3rXc) | Thanks to Token能量站 (Factory.pub) for sponsoring this project! Providing API relay for **GPT, Grok, Claude** and other major models — stable, reliable, and affordable. **[Register here](https://factory.pub/register?aff=3rXc)** |
+|                                                                     |                                                                                                                                                                                                                                             |
+| ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [**Token能量站**](https://factory.pub/register?aff=3rXc)            | Thanks to Token能量站 (Factory.pub) for sponsoring this project! Providing API relay for **GPT, Grok, Claude** and other major models — stable, reliable, and affordable. **[Register here](https://factory.pub/register?aff=3rXc)**        |
 | [**良心AI**](https://www.openailaozu.com/register?aff=5Y7JEH5HBTXS) | Thanks to 良心AI for sponsoring this project! Providing API relay for **GPT, Claude, Gemini** and other major models — direct connection, stable and high-speed. **[Register here](https://www.openailaozu.com/register?aff=5Y7JEH5HBTXS)** |
 
 </details>

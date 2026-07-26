@@ -31,7 +31,7 @@
 
 ## ❤️赞助商
 
-> [想出现在这里？](mailto:huangjunsen0406@gmail.com)
+> [想出现在这里？](mailto:95134130@qq.com)
 
 <details open>
 <summary>点击折叠</summary>
@@ -42,9 +42,9 @@
 
 ---
 
-| | |
-|---|---|
-| [**Token能量站**](https://factory.pub/register?aff=3rXc) | 感谢 Token能量站 赞助了本项目！提供 **GPT、Grok、Claude** 等主流模型的 API 中转服务，稳定可靠，价格实惠。**[点击注册](https://factory.pub/register?aff=3rXc)** |
+|                                                                     |                                                                                                                                                                             |
+| ------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [**Token能量站**](https://factory.pub/register?aff=3rXc)            | 感谢 Token能量站 赞助了本项目！提供 **GPT、Grok、Claude** 等主流模型的 API 中转服务，稳定可靠，价格实惠。**[点击注册](https://factory.pub/register?aff=3rXc)**              |
 | [**良心AI**](https://www.openailaozu.com/register?aff=5Y7JEH5HBTXS) | 感谢 良心AI 赞助了本项目！提供 **GPT、Claude、Gemini** 等主流模型的 API 中转服务，国内直连，稳定高速。**[点击注册](https://www.openailaozu.com/register?aff=5Y7JEH5HBTXS)** |
 
 </details>
