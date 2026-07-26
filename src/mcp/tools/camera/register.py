@@ -2,7 +2,7 @@
 
 import asyncio
 import json
-from typing import Callable
+from collections.abc import Callable
 
 from src.logging import get_logger
 from src.mcp.tooling import McpTool, Property, PropertyList, PropertyType
@@ -12,6 +12,7 @@ from .normal_camera import NormalCamera
 from .vl_camera import VLCamera
 
 logger = get_logger()
+
 
 def create_camera():
     """
@@ -29,8 +30,8 @@ def create_camera():
     logger.info("VL configuration not found, using normal Camera implementation")
     return NormalCamera()
 
+
 def register_camera_tools(add_tool: Callable[[McpTool], None], camera) -> None:
-    
     async def take_photo(arguments: dict) -> str:
         logger.info(f"Using camera implementation: {camera.__class__.__name__}")
         question = arguments.get("question", "")
@@ -39,9 +40,7 @@ def register_camera_tools(add_tool: Callable[[McpTool], None], camera) -> None:
         success = await asyncio.to_thread(camera.capture)
         if not success:
             logger.error("Failed to capture photo")
-            return json.dumps(
-                {"success": False, "message": "Failed to capture photo"}
-            )
+            return json.dumps({"success": False, "message": "Failed to capture photo"})
 
         logger.info("Photo captured, starting analysis...")
         return await asyncio.to_thread(camera.analyze, question)

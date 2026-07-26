@@ -123,19 +123,24 @@ result = await mcp_server.call_tool("take_photo", {
 ## Technical Architecture
 
 ### Camera Management
-- **Singleton Pattern**: Ensures only one global camera instance exists
-- **Thread Safety**: Supports safe access in multi-threaded environments
-- **Resource Management**: Automatically manages camera resource acquisition and release
+- **Container injection**: `McpPlugin` creates the camera and calls `register_camera_tools` (no global singleton)
+- **Pluggable capture backends** (`src/mcp/tools/camera/capture_backend.py`):
+  - **OpenCV / V4L2**: Desktop USB; on Linux prefers `CAP_V4L2`
+  - **picamera2**: Raspberry Pi official CSI (Bookworm libcamera stack)
+  - **`backend=auto`**: try OpenCV first, then fall back to picamera2
+- **Warm-up frames**: drop a few frames after open (USB/Pi often return empty early frames)
+- **Timeout**: capture runs in a thread pool so a stuck driver cannot hang the app forever
+- **Resource lifecycle**: open → read → release/stop per shot (no long-lived exclusive hold)
 
 ### Image Processing
-- **OpenCV Integration**: Uses OpenCV for image capture and processing
-- **Smart Scaling**: Automatically adjusts image dimensions for optimal results
-- **Format Optimization**: Converts to JPEG format to reduce transmission load
+- **OpenCV encode**: resize (default max side 320) and JPEG-encode
+- **Format optimization**: smaller upload payload
 
 ### Vision Service
-- **Remote Analysis**: Supports connecting to remote visual analysis services
-- **Authentication**: Supports Token and device ID verification
-- **Error Handling**: Comprehensive network error handling mechanisms
+- **Remote analysis**: `NormalCamera` + explain URL
+- **Zhipu VL**: when both `VLapi_key` and `Local_VL_url` are set → `VLCamera`
+- **Authentication**: Token and device ID
+- **Errors**: capture/network failures return JSON error messages
 
 ## Configuration
 
@@ -145,21 +150,55 @@ Camera-related settings are located in the configuration file:
 ```json
 {
   "CAMERA": {
+    "backend": "auto",
+    "device": "",
     "camera_index": 0,
     "frame_width": 640,
-    "frame_height": 480
+    "frame_height": 480,
+    "fps": 30,
+    "warm_up_frames": 5,
+    "Local_VL_url": "https://open.bigmodel.cn/api/paas/v4/",
+    "VLapi_key": "",
+    "models": "glm-4v-plus"
   }
 }
 ```
 
 **Configuration Items:**
-- `camera_index`: Camera device index, default 0
-- `frame_width`: Image width, default 640
-- `frame_height`: Image height, default 480
+
+| Key | Type | Default | Description |
+| --- | ---- | ------- | ----------- |
+| `backend` | String | `"auto"` | `auto` / `opencv` / `picamera2` |
+| `device` | String | `""` | Path such as `"/dev/video0"`; overrides `camera_index` when set |
+| `camera_index` | Integer | `0` | OpenCV device index (desktop) |
+| `frame_width` / `frame_height` | Integer | 640 / 480 | Preferred resolution (driver may fall back) |
+| `warm_up_frames` | Integer | `5` | Frames to discard after open |
+| `Local_VL_url` / `VLapi_key` / `models` | — | — | Optional Zhipu-style VL analysis |
+
+### Platform / Backend Guide
+
+| Scenario | Recommendation |
+| -------- | ---------------- |
+| macOS / Windows built-in or USB | `backend=auto` or `opencv`, use `camera_index` |
+| Linux / Pi **USB UVC** | `backend=opencv`, set `device` to `/dev/videoX` |
+| Pi **official CSI** | install system `python3-picamera2`, `backend=auto` or `picamera2` |
+| **Do not** pip-install picamera2 on macOS | pulls `python-prctl` and breaks the build |
+
+### Scan & Test Capture
+
+```bash
+python scripts/camera_scanner.py
+python scripts/camera_scanner.py --test
+python scripts/camera_scanner.py --select 0 --test
+python scripts/camera_scanner.py --device /dev/video0 --test
+python scripts/camera_scanner.py --backend picamera2 --test
+```
+
+GUI: Settings → Camera → Refresh → pick **Camera N / V4L2 path / Pi CSI** → Test.
 
 ### Vision Service Configuration
 The visual analysis service requires configuration of:
-- **Service URL**: The interface address of the visual analysis service
+- **Service URL**: explain URL or VL base URL
 - **Authentication**: Token or API key
 - **Device Information**: Device ID and client ID
 
@@ -190,10 +229,10 @@ The visual analysis service requires configuration of:
 ## Image Processing Flow
 
 ### 1. Image Capture
-1. Initialize camera device
-2. Set capture parameters (resolution, frame rate, etc.)
-3. Capture a single frame
-4. Release camera resources
+1. Choose backend from `CAMERA.backend` / `device` / `camera_index`
+2. OpenCV: open (V4L2 on Linux) → try resolution → warm-up → read a valid frame
+3. Or picamera2: still config → start → warm-up → `capture_array` → convert to BGR
+4. Resize, JPEG-encode, release the device
 
 ### 2. Image Preprocessing
 1. Obtain image dimensions
@@ -269,15 +308,20 @@ The visual analysis service requires configuration of:
 ## Troubleshooting
 
 ### Common Issues
-1. **Camera Cannot Open**: Check device connection and permissions
-2. **Blurry Image**: Check lighting conditions and focus
-3. **Analysis Failed**: Check network connection and service status
-4. **Inaccurate Results**: Optimize image quality and question description
+1. **Camera cannot open**: connection, permissions (Linux `video` group), `camera_index` / `device`
+2. **Works on PC, fails on Pi CSI**: need libcamera + `python3-picamera2`, not bare `VideoCapture(0)`
+3. **Index 0 fails on Pi**: check `ls /dev/video*`, set `--device /dev/videoX` or another index
+4. **Opens but black/empty frame**: increase `warm_up_frames` or relax resolution
+5. **Analysis fails**: network, explain URL / VL key
+6. **macOS uv fails on picamera2 / python-prctl**: never install picamera2 on Mac; use apt only on Pi
 
 ### Debugging Methods
-1. Check camera device status
-2. Verify network connection
-3. View log error messages
-4. Test different shooting conditions
+```bash
+ls -l /dev/video*
+groups   # should include video
+rpicam-hello -t 1000   # or libcamera-hello
+
+python scripts/camera_scanner.py --test
+```
 
 With the camera tool, you can easily achieve intelligent visual recognition and image analysis, bringing convenience to daily life and work.

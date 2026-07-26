@@ -10,10 +10,6 @@ logger = get_logger()
 class SettingsCameraDevicesMixin:
     # ========== 摄像头设备列表 ==========
 
-    # 最多探测到该 index（含）；连续失败达到阈值则提前结束
-    _CAMERA_MAX_INDEX = 5
-    _CAMERA_MAX_CONSECUTIVE_FAIL = 2
-
     def _load_cameras(self, force: bool = False):
         """在后台线程加载摄像头列表，避免阻塞 Qt 主线程.
 
@@ -32,62 +28,23 @@ class SettingsCameraDevicesMixin:
         )
 
     def _do_load_cameras(self):
-        """执行摄像头扫描（后台线程；早停 + 压低 OpenCV 日志噪声）."""
+        """执行摄像头扫描（OpenCV/V4L2 + 可选 picamera2）."""
         cameras: list[dict] = []
         try:
-            import os
+            from src.mcp.tools.camera.capture_backend import list_camera_devices
 
-            # 压低 OpenCV 对无效 index 的 stderr 刷屏
-            os.environ.setdefault("OPENCV_LOG_LEVEL", "ERROR")
-            import cv2
-
-            try:
-                # OpenCV 4.x
-                if hasattr(cv2, "setLogLevel"):
-                    cv2.setLogLevel(0)
-                if hasattr(cv2, "utils") and hasattr(cv2.utils, "logging"):
-                    cv2.utils.logging.setLogLevel(cv2.utils.logging.LOG_LEVEL_ERROR)
-            except Exception:
-                pass
-
-            preferred = int(self._get_value("CAMERA.camera_index", 0) or 0)
-            preferred = max(0, min(preferred, self._CAMERA_MAX_INDEX))
-            # 先试配置中的 index，再扫其余；连续失败则停
-            order = [preferred] + [
-                i for i in range(self._CAMERA_MAX_INDEX + 1) if i != preferred
-            ]
-
-            consecutive_fail = 0
-            for i in order:
-                try:
-                    cap = cv2.VideoCapture(i)
-                    opened = bool(cap.isOpened())
-                    if opened:
-                        cameras.append({"index": i, "name": f"摄像头 {i}"})
-                        cap.release()
-                        consecutive_fail = 0
-                    else:
-                        consecutive_fail += 1
-                        try:
-                            cap.release()
-                        except Exception:
-                            pass
-                        # 已有成功设备后，连续失败达到阈值则认为后面没有了
-                        # 一个都没有时，也在连续失败达到阈值后放弃（避免 0–9 全扫）
-                        if consecutive_fail >= self._CAMERA_MAX_CONSECUTIVE_FAIL:
-                            break
-                except Exception as e:
-                    consecutive_fail += 1
-                    logger.debug(f"探测摄像头 index={i} 失败: {e}")
-                    if consecutive_fail >= self._CAMERA_MAX_CONSECUTIVE_FAIL:
-                        break
-
-            logger.info(
-                f"摄像头扫描完成: 找到 {len(cameras)} 个 "
-                f"(探测上限 index≤{self._CAMERA_MAX_INDEX}, 连续失败早停)"
-            )
-        except ImportError:
-            logger.warning("cv2 未安装，无法扫描摄像头")
+            devices = list_camera_devices(max_index=5, consecutive_fail_limit=2)
+            for d in devices:
+                cameras.append(
+                    {
+                        "key": d.key,
+                        "index": d.index if d.index is not None else -1,
+                        "name": d.name,
+                        "kind": d.kind,
+                        "path": d.path,
+                    }
+                )
+            logger.info(f"摄像头扫描完成: 找到 {len(cameras)} 个")
         except Exception as e:
             logger.error(f"扫描摄像头失败: {e}", exc_info=True)
             raise
@@ -98,7 +55,7 @@ class SettingsCameraDevicesMixin:
             self.statusMessage.emit(
                 f"摄像头列表已刷新（{len(cameras)} 个）"
                 if cameras
-                else "未检测到摄像头"
+                else "未检测到摄像头（Pi CSI 需安装 picamera2）"
             )
 
     @Slot(result=list)
@@ -111,20 +68,47 @@ class SettingsCameraDevicesMixin:
         """刷新摄像头列表（非阻塞）."""
         self._load_cameras(force=True)
 
+    def _current_camera_key(self) -> str:
+        """从配置还原当前选中的枚举 key."""
+        device = str(self._get_value("CAMERA.device", "") or "").strip()
+        backend = (
+            str(self._get_value("CAMERA.backend", "auto") or "auto").strip().lower()
+        )
+        if backend == "picamera2":
+            return "picamera2"
+        if device:
+            return device
+        try:
+            return str(int(self._get_value("CAMERA.camera_index", 0) or 0))
+        except (TypeError, ValueError):
+            return "0"
+
     def _get_selectedCameraIndex(self) -> int:
-        """获取当前选中的摄像头索引."""
-        current_idx = self._get_value("CAMERA.camera_index", 0)
+        """获取当前选中的摄像头在列表中的下标."""
+        current_key = self._current_camera_key()
         for i, c in enumerate(self._cameras):
-            if c["index"] == current_idx:
+            if c.get("key") == current_key:
+                return i
+        # 兼容旧逻辑：只配了 index
+        try:
+            current_idx = int(self._get_value("CAMERA.camera_index", 0) or 0)
+        except (TypeError, ValueError):
+            current_idx = 0
+        for i, c in enumerate(self._cameras):
+            if c.get("index") == current_idx and c.get("kind") in ("opencv", "v4l2"):
                 return i
         return 0
 
     def _set_selectedCameraIndex(self, index: int):
-        """设置选中的摄像头."""
+        """设置选中的摄像头（写入 backend/device/index）."""
         if 0 <= index < len(self._cameras):
             camera = self._cameras[index]
-            self._set_value("CAMERA.camera_index", camera["index"])
-            logger.info(f"选择摄像头: {camera['name']}")
+            from src.mcp.tools.camera.capture_backend import apply_device_selection
+
+            updates = apply_device_selection(str(camera.get("key", "")))
+            for path, value in updates.items():
+                self._set_value(path, value)
+            logger.info(f"选择摄像头: {camera['name']} -> {updates}")
 
     @Slot()
     def testCamera(self):
@@ -149,40 +133,46 @@ class SettingsCameraDevicesMixin:
         )
 
     def _do_camera_test(self, camera: dict):
-        """执行摄像头测试（异常由 _run_worker 兜底）."""
+        """执行摄像头测试（走统一 capture_backend）."""
+        from src.mcp.tools.camera.capture_backend import (
+            CaptureConfig,
+            apply_device_selection,
+            capture_jpeg,
+        )
+
+        updates = apply_device_selection(str(camera.get("key", "")))
+        backend = updates.get("CAMERA.backend", "auto")
+        device = updates.get("CAMERA.device", "") or ""
         try:
-            import cv2
-        except ImportError:
-            self.statusMessage.emit("[错误] cv2 未安装")
+            cam_index = int(updates.get("CAMERA.camera_index", 0) or 0)
+        except (TypeError, ValueError):
+            cam_index = 0
+
+        try:
+            width = int(self._get_value("CAMERA.frame_width", 640) or 640)
+            height = int(self._get_value("CAMERA.frame_height", 480) or 480)
+            warm = int(self._get_value("CAMERA.warm_up_frames", 5) or 5)
+        except (TypeError, ValueError):
+            width, height, warm = 640, 480, 5
+
+        cfg = CaptureConfig(
+            camera_index=cam_index,
+            device=device,
+            backend=str(backend),
+            frame_width=width,
+            frame_height=height,
+            warm_up_frames=warm,
+            jpeg_max_side=640,
+        )
+        jpeg = capture_jpeg(cfg)
+        if not jpeg:
+            self.statusMessage.emit(
+                "[失败] 无法捕获图像（Pi CSI 请装 python3-picamera2 或改选 USB）"
+            )
             self.testComplete.emit("camera", False)
             return
 
-        camera_id = camera["index"]
-        cap = cv2.VideoCapture(camera_id)
-
-        if not cap.isOpened():
-            self.statusMessage.emit("[失败] 无法打开摄像头")
-            self.testComplete.emit("camera", False)
-            return
-
-        width = self._get_value("CAMERA.frame_width", 640)
-        height = self._get_value("CAMERA.frame_height", 480)
-        cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
-        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
-
-        for _ in range(5):
-            cap.read()
-
-        ret, frame = cap.read()
-        cap.release()
-
-        if not ret or frame is None:
-            self.statusMessage.emit("[失败] 无法捕获图像")
-            self.testComplete.emit("camera", False)
-            return
-
-        actual_height, actual_width = frame.shape[:2]
         self.statusMessage.emit(
-            f"[成功] 摄像头正常 (分辨率: {actual_width}x{actual_height})"
+            f"[成功] 摄像头正常 (JPEG {len(jpeg)} bytes, {camera['name']})"
         )
         self.testComplete.emit("camera", True)

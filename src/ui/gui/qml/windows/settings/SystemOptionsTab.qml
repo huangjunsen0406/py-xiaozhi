@@ -81,16 +81,99 @@ ScrollView {
                     }
                 }
 
+            }
+        }
+
+        // 分隔线
+        Rectangle {
+            Layout.fillWidth: true
+            height: 1
+            color: Theme.divider
+        }
+
+        // 回声消除区域
+        ColumnLayout {
+            Layout.fillWidth: true
+            spacing: Theme.spacingMd
+
+            Text {
+                text: "回声消除"
+                font.pixelSize: Theme.fontSizeMd
+                font.weight: Font.Medium
+                color: Theme.textSecondary
+            }
+
+            GridLayout {
+                Layout.fillWidth: true
+                columns: 2
+                rowSpacing: Theme.spacingMd
+                columnSpacing: Theme.spacingLg
+
                 Text {
-                    text: "回声消除"
+                    text: "启用"
                     font.pixelSize: Theme.fontSizeSm
                     color: Theme.textSecondary
                     Layout.preferredWidth: 100
                 }
                 XSwitch {
+                    id: aecEnabledSwitch
                     checked: settingsModel ? settingsModel.aecEnabled : false
                     onToggled: if (settingsModel) settingsModel.aecEnabled = checked
                 }
+
+                Text {
+                    text: "音乐并行播放"
+                    font.pixelSize: Theme.fontSizeSm
+                    color: Theme.textSecondary
+                    Layout.preferredWidth: 100
+                    opacity: aecEnabledSwitch.checked ? 1 : 0.45
+                }
+                XSwitch {
+                    enabled: aecEnabledSwitch.checked
+                    opacity: aecEnabledSwitch.checked ? 1 : 0.45
+                    checked: settingsModel ? settingsModel.aecMusicParallel : true
+                    onToggled: if (settingsModel) settingsModel.aecMusicParallel = checked
+                }
+
+                Text {
+                    text: "延迟补偿帧数"
+                    font.pixelSize: Theme.fontSizeSm
+                    color: Theme.textSecondary
+                    Layout.preferredWidth: 100
+                    opacity: aecEnabledSwitch.checked ? 1 : 0.45
+                }
+                XSpinBox {
+                    Layout.preferredWidth: 120
+                    enabled: aecEnabledSwitch.checked
+                    opacity: aecEnabledSwitch.checked ? 1 : 0.45
+                    from: 0
+                    to: 20
+                    value: settingsModel ? settingsModel.aecFrameDelay : 3
+                    onValueModified: if (settingsModel) settingsModel.aecFrameDelay = value
+                    font.pixelSize: Theme.fontSizeSm
+                }
+
+                Text {
+                    text: "噪声抑制预处理"
+                    font.pixelSize: Theme.fontSizeSm
+                    color: Theme.textSecondary
+                    Layout.preferredWidth: 100
+                    opacity: aecEnabledSwitch.checked ? 1 : 0.45
+                }
+                XSwitch {
+                    enabled: aecEnabledSwitch.checked
+                    opacity: aecEnabledSwitch.checked ? 1 : 0.45
+                    checked: settingsModel ? settingsModel.aecEnablePreprocess : true
+                    onToggled: if (settingsModel) settingsModel.aecEnablePreprocess = checked
+                }
+            }
+
+            Text {
+                Layout.fillWidth: true
+                text: "消除本应用 TTS/音乐的回声，启用后进入实时对话模式；音乐并行=TTS 播放时音乐闪避不暂停；延迟补偿=40ms+N×协议帧长，蓝牙设备可适当调大。修改后重启生效。"
+                font.pixelSize: Theme.fontSizeXs
+                color: Theme.textSecondary
+                wrapMode: Text.WordWrap
             }
         }
 

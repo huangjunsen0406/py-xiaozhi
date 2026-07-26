@@ -1,5 +1,4 @@
 from collections import deque
-from typing import Optional
 
 import numpy as np
 import soxr
@@ -83,7 +82,7 @@ class AudioConverter:
 
     def convert_input(
         self, audio: np.ndarray, target_size: int
-    ) -> Optional[np.ndarray]:
+    ) -> np.ndarray | None:
         """输入转换：多声道/高采样率 → 单声道/16kHz
 
         Args:
@@ -117,7 +116,7 @@ class AudioConverter:
 
     def convert_output(
         self, audio: np.ndarray, target_frames: int
-    ) -> Optional[np.ndarray]:
+    ) -> np.ndarray | None:
         """输出转换：单声道/24kHz → 多声道/高采样率
 
         Args:
@@ -148,7 +147,7 @@ class AudioConverter:
 
         return audio
 
-    def drain_output_buffer(self, target_frames: int) -> Optional[np.ndarray]:
+    def drain_output_buffer(self, target_frames: int) -> np.ndarray | None:
         """排出 resampler 缓冲区中的剩余数据（带上混）。
 
         用于队列耗尽但缓冲区差少量样本时，避免整帧静音。

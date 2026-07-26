@@ -4,10 +4,10 @@ import QtQuick.Window
 
 import "windows"
 
-// 主窗口作为根元素
+// 主窗口作为根元素；初始隐藏，由 QmlAppHost.show_root 决定是否抢前台
 MainWindow {
     id: mainWindow
-    visible: true
+    visible: false
 
     // 设置窗口 - 使用 Loader 延迟加载（作为独立窗口）
     Loader {

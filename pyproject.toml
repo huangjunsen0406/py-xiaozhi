@@ -85,6 +85,15 @@ linux = [
     "gpiozero>=2.0.1",
     "lgpio>=0.2.2.0",
 ]
+# TUI 全屏终端模式：uv sync --extra tui
+tui = [
+    "textual>=0.80.0",
+]
+
+# 注意：树莓派 CSI 不要用 pip extra 装 picamera2。
+# picamera2 依赖 python-prctl（仅 Linux），在 macOS 上 uv sync/run 会直接编译失败。
+# Pi Bookworm 请用系统包：sudo apt install python3-picamera2
+# 代码在 import 到 picamera2 时自动启用 CSI 后端（CAMERA.backend=auto/picamera2）。
 
 [project.scripts]
 xiaozhi = "main:main"

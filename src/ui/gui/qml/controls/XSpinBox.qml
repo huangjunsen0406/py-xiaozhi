@@ -47,7 +47,7 @@ SpinBox {
 
         Rectangle {
             anchors.fill: parent
-            anchors.margins: 4
+            anchors.margins: Theme.spacingXs
             anchors.rightMargin: 2
             radius: Theme.radiusSm
             color: root.down.pressed ? Theme.backgroundHover : (root.down.hovered ? Theme.backgroundSecondary : "transparent")
@@ -56,7 +56,7 @@ SpinBox {
         Text {
             anchors.centerIn: parent
             text: "−"
-            font.pixelSize: 16
+            font.pixelSize: Theme.fontSizeLg
             font.weight: Font.Medium
             color: root.enabled ? Theme.textSecondary : Theme.textPlaceholder
         }
@@ -70,7 +70,7 @@ SpinBox {
 
         Rectangle {
             anchors.fill: parent
-            anchors.margins: 4
+            anchors.margins: Theme.spacingXs
             anchors.leftMargin: 2
             radius: Theme.radiusSm
             color: root.up.pressed ? Theme.backgroundHover : (root.up.hovered ? Theme.backgroundSecondary : "transparent")
@@ -79,7 +79,7 @@ SpinBox {
         Text {
             anchors.centerIn: parent
             text: "+"
-            font.pixelSize: 16
+            font.pixelSize: Theme.fontSizeLg
             font.weight: Font.Medium
             color: root.enabled ? Theme.textSecondary : Theme.textPlaceholder
         }

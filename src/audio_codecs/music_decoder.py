@@ -1,8 +1,8 @@
 import asyncio
 import subprocess
 import sys
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Mapping
 from urllib.parse import urlparse
 
 import numpy as np
@@ -236,8 +236,6 @@ class MusicDecoder:
             return False
 
     async def _read_pcm_stream(self, output_queue: asyncio.Queue):
-        import time
-
         frame_duration_ms = AudioConfig.FRAME_DURATION
         frame_size_samples = int(self.sample_rate * (frame_duration_ms / 1000))
         frame_size_bytes = frame_size_samples * 2 * self.channels
@@ -248,7 +246,6 @@ class MusicDecoder:
 
         eof_reached = False
         frame_count = 0
-        start_time = time.time()
 
         try:
             while not self._stopped:
@@ -285,37 +282,11 @@ class MusicDecoder:
                 if self.channels > 1:
                     audio_array = audio_array.reshape(-1, self.channels)
 
-                queue_ratio = (
-                    output_queue.qsize() / output_queue.maxsize
-                    if output_queue.maxsize > 0
-                    else 0
-                )
-
-                if queue_ratio < 0.3:
-                    queue_based_sleep = 0
-                elif queue_ratio < 0.7:
-                    queue_based_sleep = 0.03
-                else:
-                    queue_based_sleep = 0.06
-
-                expected_elapsed = frame_count * (frame_duration_ms / 1000.0)
-                actual_elapsed = time.time() - start_time
-
-                if actual_elapsed < expected_elapsed:
-                    time_based_sleep = expected_elapsed - actual_elapsed
-                else:
-                    time_based_sleep = 0
-
-                target_sleep = max(queue_based_sleep, time_based_sleep)
-
-                if target_sleep > 0:
-                    await asyncio.sleep(target_sleep)
-
-                try:
-                    await asyncio.wait_for(output_queue.put(audio_array), timeout=5.0)
-                except asyncio.TimeoutError:
-                    logger.warning(f"音频队列写入超时，跳过帧 {frame_count}")
-                    continue
+                # 节拍完全由下游背压决定：queue 满则在 put 处等位
+                # （AudioCodec.write_pcm_direct 按缓冲水位放行）。
+                # 不再用「墙钟-起播时刻」限速——暂停期间墙钟照走，
+                # 恢复后会误判落后而全速灌数据，把播放队列冲爆。
+                await output_queue.put(audio_array)
 
         except asyncio.CancelledError:
             logger.debug("解码任务被取消")

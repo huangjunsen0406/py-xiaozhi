@@ -2,7 +2,7 @@ import asyncio
 import os
 import re
 import sys
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 import numpy as np
 import sounddevice as sd
@@ -95,12 +95,12 @@ def _is_virtual(name: str) -> bool:
 
 
 def downmix_to_mono(
-    pcm: Union[np.ndarray, bytes],
+    pcm: np.ndarray | bytes,
     *,
     keepdims: bool = True,
-    dtype: Union[np.dtype, str] = np.int16,
-    in_channels: Optional[int] = None,
-) -> Union[np.ndarray, bytes]:
+    dtype: np.dtype | str = np.int16,
+    in_channels: int | None = None,
+) -> np.ndarray | bytes:
     """将任意格式的音频下混为单声道.
 
     支持两种输入:
@@ -201,7 +201,7 @@ def upmix_mono_to_channels(mono_data: np.ndarray, num_channels: int) -> np.ndarr
     return np.tile(mono_data.reshape(-1, 1), (1, num_channels))
 
 
-def _valid(devs: List[dict], idx: int, kind: str, include_virtual: bool) -> bool:
+def _valid(devs: list[dict], idx: int, kind: str, include_virtual: bool) -> bool:
     if not isinstance(idx, int) or idx < 0 or idx >= len(devs):
         return False
     d = devs[idx]
@@ -213,9 +213,115 @@ def _valid(devs: List[dict], idx: int, kind: str, include_virtual: bool) -> bool
     return True
 
 
+def refresh_portaudio_devices(*, reinitialize: bool = True) -> list[dict]:
+    """重新枚举 PortAudio 设备列表（热插拔友好）.
+
+    调用方须先停掉本进程内所有 sounddevice 流，再调本函数；
+    有活跃流时 ``sd._terminate`` 不安全。
+
+    Args:
+        reinitialize: True 时尝试 ``_terminate`` + ``_initialize`` 强制
+            重建 PortAudio 上下文（有利于 macOS 后连蓝牙出现在列表中）。
+            失败则降级为普通 ``query_devices``。
+
+    Returns:
+        设备信息 dict 列表（与 ``list(sd.query_devices())`` 同形）
+    """
+    if reinitialize:
+        terminate = getattr(sd, "_terminate", None)
+        initialize = getattr(sd, "_initialize", None)
+        if callable(terminate) and callable(initialize):
+            try:
+                terminate()
+                initialize()
+                logger.info("PortAudio 已重新初始化，准备重新枚举设备")
+            except Exception as e:
+                logger.warning(
+                    f"PortAudio 重初始化失败，降级为普通枚举: {e}",
+                    exc_info=True,
+                )
+        else:
+            logger.debug("当前 sounddevice 无 _terminate/_initialize，跳过重初始化")
+
+    try:
+        devices = list(sd.query_devices())
+    except Exception as e:
+        logger.error(f"query_devices 失败: {e}", exc_info=True)
+        return []
+
+    logger.info(f"音频设备枚举完成: {len(devices)} 个")
+    return devices
+
+
+def list_audio_devices(
+    *, include_virtual: bool = True
+) -> dict[str, list[dict[str, Any]]]:
+    """列出输入/输出设备（设置页与调试用）.
+
+    不主动重初始化 PortAudio；需要热插拔刷新时先
+    ``refresh_portaudio_devices()``，再调本函数。
+
+    Returns:
+        ``{"input": [...], "output": [...]}``，每项含 index/name/sample_rate/channels
+    """
+    try:
+        devices = list(sd.query_devices())
+    except Exception as e:
+        logger.error(f"列出音频设备失败: {e}", exc_info=True)
+        return {"input": [], "output": []}
+
+    default_input = None
+    default_output = None
+    try:
+        if sd.default.device is not None:
+            default_input = sd.default.device[0]
+            default_output = sd.default.device[1]
+    except Exception:
+        pass
+
+    inputs: list[dict[str, Any]] = []
+    outputs: list[dict[str, Any]] = []
+
+    for i, d in enumerate(devices):
+        name = d.get("name", "Unknown")
+        if not include_virtual and _is_virtual(name):
+            continue
+        sr = d.get("default_samplerate", 48000)
+        sample_rate = int(sr) if isinstance(sr, (int, float)) else 48000
+        idx = int(d.get("index", i))
+
+        in_ch = int(d.get("max_input_channels", 0) or 0)
+        out_ch = int(d.get("max_output_channels", 0) or 0)
+
+        if in_ch > 0:
+            mark = " (默认)" if idx == default_input else ""
+            inputs.append(
+                {
+                    "index": idx,
+                    "name": name + mark,
+                    "raw_name": name,
+                    "sample_rate": sample_rate,
+                    "channels": in_ch,
+                }
+            )
+        if out_ch > 0:
+            mark = " (默认)" if idx == default_output else ""
+            outputs.append(
+                {
+                    "index": idx,
+                    "name": name + mark,
+                    "raw_name": name,
+                    "sample_rate": sample_rate,
+                    "channels": out_ch,
+                }
+            )
+
+    return {"input": inputs, "output": outputs}
+
+
 def find_device_by_name(
     kind: str, device_name: str, *, include_virtual: bool = False
-) -> Optional[Dict[str, Any]]:
+) -> dict[str, Any] | None:
     """按名称查找设备（模糊匹配）
 
     Args:
@@ -268,7 +374,7 @@ def find_device_by_name(
 
 def select_audio_device(
     kind: str, *, include_virtual: bool = False
-) -> Optional[Dict[str, Any]]:
+) -> dict[str, Any] | None:
     """自动选择音频设备（简化版）
 
     策略：
@@ -291,7 +397,7 @@ def select_audio_device(
 
     key_channels = "max_input_channels" if kind == "input" else "max_output_channels"
 
-    def pack(idx: int, base: Optional[dict] = None) -> Optional[Dict[str, Any]]:
+    def pack(idx: int, base: dict | None = None) -> dict[str, Any] | None:
         if base is None:
             if not _valid(devices, idx, kind, include_virtual):
                 return None
@@ -318,7 +424,7 @@ def select_audio_device(
         logger.debug(f"查询系统默认{kind}设备失败，尝试兜底策略")
 
     # 2. 兜底：第一个可用的非虚拟设备
-    for i, d in enumerate(devices):
+    for i, _d in enumerate(devices):
         if _valid(devices, i, kind, include_virtual):
             return pack(i)
 

@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 import ssl
 
 import websockets
@@ -229,10 +230,12 @@ class WebsocketProtocol(Protocol):
         except asyncio.CancelledError:
             logger.debug("消息处理任务被取消")
             return
-        except websockets.ConnectionClosed as e:
+        except websockets.ConnectionClosedOK as e:
             if not self._is_closing:
-                logger.info(f"WebSocket连接已关闭: {e}")
-                await self._handle_connection_loss(f"连接关闭: {e.code} {e.reason}")
+                logger.info(f"WebSocket连接已由服务端正常关闭: {e}")
+                await self._handle_connection_loss(
+                    f"服务端关闭连接: {e.code}", clean=True
+                )
         except websockets.ConnectionClosedError as e:
             if not self._is_closing:
                 logger.info(f"WebSocket连接错误关闭: {e}")
@@ -259,12 +262,15 @@ class WebsocketProtocol(Protocol):
 
         try:
             await self.websocket.send(data)
-        except websockets.ConnectionClosed as e:
-            logger.warning(f"发送音频时连接已关闭: {e}", exc_info=True)
-            await self._handle_connection_loss(f"发送音频失败: {e.code} {e.reason}")
+        except websockets.ConnectionClosedOK as e:
+            # 服务端正常收回会话（如 TTS 结束后关闭），不算网络错误
+            logger.info(f"发送音频时连接已由服务端正常关闭: {e}")
+            await self._handle_connection_loss(
+                f"发送音频时服务端关闭: {e.code}", clean=True
+            )
         except websockets.ConnectionClosedError as e:
-            logger.warning(f"发送音频时连接错误: {e}", exc_info=True)
-            await self._handle_connection_loss(f"发送音频错误: {e.code} {e.reason}")
+            logger.warning(f"发送音频时连接异常关闭: {e}")
+            await self._handle_connection_loss(f"发送音频失败: {e.code} {e.reason}")
         except Exception as e:
             logger.error(f"发送音频数据失败: {e}", exc_info=True)
             # 不要在这里调用网络错误回调，让连接处理器处理
@@ -283,24 +289,29 @@ class WebsocketProtocol(Protocol):
         except Exception:
             close_code = None
         if close_code is not None:
-            logger.warning(f"WebSocket 已关闭 (code={close_code})，跳过发送文本")
+            # 1000/1001/1005 视为正常关闭（服务端收回会话）
+            clean = close_code in (1000, 1001, 1005)
+            logger.log(
+                logging.INFO if clean else logging.WARNING,
+                f"WebSocket 已关闭 (code={close_code})，跳过发送文本",
+            )
             if self.connected:
                 await self._handle_connection_loss(
-                    f"发送文本失败: 连接已关闭 {close_code}"
+                    f"发送文本失败: 连接已关闭 {close_code}", clean=clean
                 )
             return
 
         try:
             await self.websocket.send(message)
-        except websockets.ConnectionClosed as e:
-            # 正常断连（含 1005），warning 就够了
-            logger.warning(f"发送文本时连接已关闭: {e}", exc_info=True)
+        except websockets.ConnectionClosedOK as e:
+            # 服务端正常收回会话，不算网络错误
+            logger.info(f"发送文本时连接已由服务端正常关闭: {e}")
             if self.connected and not self._is_closing:
                 await self._handle_connection_loss(
-                    f"发送文本失败: {e.code} {e.reason}"
+                    f"发送文本时服务端关闭: {e.code}", clean=True
                 )
         except websockets.ConnectionClosedError as e:
-            logger.warning(f"发送文本时连接错误: {e}", exc_info=True)
+            logger.warning(f"发送文本时连接异常关闭: {e}")
             if self.connected and not self._is_closing:
                 await self._handle_connection_loss(
                     f"发送文本错误: {e.code} {e.reason}"

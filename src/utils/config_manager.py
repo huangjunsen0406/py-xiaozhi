@@ -90,9 +90,15 @@ class ConfigManager:
         },
         "CAMERA": {
             "camera_index": 0,
+            # 设备路径优先于 index，如 "/dev/video0"（树莓派 USB/V4L2）
+            "device": "",
+            # auto | opencv | picamera2；auto 先 OpenCV，失败再试 CSI(picamera2)
+            "backend": "auto",
             "frame_width": 640,
             "frame_height": 480,
             "fps": 30,
+            # 打开后丢弃的预热帧数（USB/Pi 前几帧常无效）
+            "warm_up_frames": 5,
             "Local_VL_url": "https://open.bigmodel.cn/api/paas/v4/",
             "VLapi_key": "",
             "models": "glm-4v-plus",
@@ -111,9 +117,11 @@ class ConfigManager:
         },
         "AEC_OPTIONS": {
             "ENABLED": False,
-            "BUFFER_MAX_LENGTH": 200,
+            # AEC 在位时 TTS 不暂停音乐，混音闪避并行播放（引擎旁路则自动回退暂停）
+            "MUSIC_PARALLEL": True,
+            # 延迟补偿（协议帧数），实际 delay_ms = 40 + N * 帧长
             "FRAME_DELAY": 3,
-            "FILTER_LENGTH_RATIO": 0.4,
+            # 噪声抑制/高通预处理
             "ENABLE_PREPROCESS": True,
         },
         # 可写目录覆盖（config 仍固定在用户数据/config；null=默认）

@@ -27,19 +27,21 @@ def parse_args():
     parser = argparse.ArgumentParser(description=SystemConstants.APP_DISPLAY_NAME)
     # 运行模式选择
     # - gui: 图形界面模式，使用 PySide6 + QML
-    # - cli: 命令行模式，使用终端交互
+    # - cli: 命令行模式，使用终端交互（轻量，适合无屏/SSH）
+    # - tui: 全屏 TUI（Textual），可编辑配置；需 uv sync --extra tui
     # - gpio: GPIO 按键模式，仅支持 Linux（树莓派），通过物理按键控制
     parser.add_argument(
         "--mode",
-        choices=["gui", "cli", "gpio"],
+        choices=["gui", "cli", "tui", "gpio"],
         default="gui",
-        help="运行模式：gui(图形界面)、cli(命令行) 或 gpio(GPIO按键，仅Linux)",
+        help="运行模式（默认 gui）：gui / cli / tui(全屏终端) / gpio(仅Linux)",
     )
     parser.add_argument(
         "--protocol",
         choices=["mqtt", "websocket"],
         default="websocket",
-        help="通信协议：mqtt 或 websocket",
+        metavar="PROTOCOL",
+        help="通信协议：mqtt 或 websocket（默认 websocket；须写 --protocol mqtt）",
     )
     parser.add_argument(
         "--skip-activation",
@@ -58,9 +60,9 @@ initialize_config()
 
 from src.logging import load_logging_config, setup_logging  # noqa: E402
 
-# CLI 模式禁用控制台日志输出（由 CLIDisplay 接管）
+# CLI/TUI 模式禁用控制台日志输出（由界面接管）
 setup_logging(
-    enable_console=(_args.mode != "cli"),
+    enable_console=(_args.mode not in ("cli", "tui")),
     config=load_logging_config(),
 )
 
@@ -75,7 +77,7 @@ async def handle_activation(mode: str) -> bool:
     """处理设备激活流程.
 
     Args:
-        mode: 运行模式，"gui"、"cli" 或 "gpio"
+        mode: 运行模式，"gui"、"cli"、"tui" 或 "gpio"
 
     Returns:
         bool: 激活是否成功
@@ -161,10 +163,16 @@ if __name__ == "__main__":
                 from PySide6.QtWidgets import QApplication
             except ImportError as e:
                 logger.error(
-                    "GUI 模式需要 PySide6 + qasync,但未安装。请运行:\n"
-                    "  uv sync --extra gui          # 推荐 (uv 用户)\n"
-                    "  pip install '.[gui]'         # pip 用户\n"
-                    "若改用 CLI 或 GPIO 模式: python main.py --mode cli  "
+                    "GUI 模式需要 PySide6 + qasync，当前环境未安装。\n"
+                    "请用项目 venv 安装 GUI 依赖后重试：\n"
+                    "  uv sync --extra gui\n"
+                    "  # 或: pip install '.[gui]'\n"
+                    "然后：\n"
+                    "  uv run python main.py\n"
+                    "  # 或: .venv/bin/python main.py\n"
+                    "不要 GUI 时可用：\n"
+                    "  python main.py --mode cli\n"
+                    "  python main.py --mode tui   # 需 uv sync --extra tui\n"
                     f"(原始错误: {e})"
                 )
                 sys.exit(1)
@@ -211,6 +219,20 @@ if __name__ == "__main__":
                 else:
                     raise
         else:
+            # CLI / TUI / GPIO：标准 asyncio
+            if args.mode == "tui":
+                try:
+                    import textual  # noqa: F401
+                except ImportError as e:
+                    logger.error(
+                        "TUI 模式需要 textual。请运行:\n"
+                        "  uv sync --extra tui\n"
+                        "  pip install '.[tui]'\n"
+                        "无屏/SSH 请继续用: python main.py --mode cli\n"
+                        f"(原始错误: {e})"
+                    )
+                    sys.exit(1)
+
             # CLI / GPIO 模式：标准 asyncio；SIGINT 请求 TaskManager 关闭
             shutdown_state = {"requested": False}
 

@@ -13,7 +13,8 @@ AppWindow {
     minimumWidth: 360
     minimumHeight: 420
     title: ""
-    visible: true
+    // 由 QmlAppHost.show_root 控制显示；避免 QML 加载瞬间抢焦点
+    visible: false
 
     // 直接使用 ColumnLayout，不需要额外的 Rectangle 层
     // AppWindow 已经提供了带圆角的容器
@@ -99,8 +100,8 @@ AppWindow {
 
                         Column {
                             anchors.fill: parent
-                            anchors.margins: 8
-                            spacing: 4
+                            anchors.margins: Theme.spacingSm
+                            spacing: Theme.spacingXs
 
                             Text {
                                 width: parent.width

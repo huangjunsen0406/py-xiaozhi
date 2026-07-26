@@ -123,19 +123,24 @@ result = await mcp_server.call_tool("take_photo", {
 ## 技术架构
 
 ### 摄像头管理
-- **单例模式**: 确保全局只有一个摄像头实例
-- **线程安全**: 支持多线程环境下的安全访问
-- **资源管理**: 自动管理摄像头资源的开启和释放
+- **容器注入**: 由 `McpPlugin` 创建 camera 实例并 `register_camera_tools`，不使用全局单例
+- **可插拔采集后端** (`src/mcp/tools/camera/capture_backend.py`):
+  - **OpenCV / V4L2**: 桌面 USB、Linux USB（Linux 优先 `CAP_V4L2`）
+  - **picamera2**: 树莓派官方 CSI（Bookworm libcamera 栈）
+  - **`backend=auto`**: 先 OpenCV，失败再回退 picamera2
+- **预热帧**: 打开设备后丢弃若干帧再取图（USB / Pi 前几帧常无效）
+- **超时保护**: 采集在线程池中执行，避免驱动挂死拖死主流程
+- **资源管理**: 每次拍照 open → 读帧 → release / stop，不长期占设备
 
 ### 图像处理
-- **OpenCV集成**: 使用OpenCV进行图像捕获和处理
-- **智能缩放**: 自动调整图像尺寸，保持最佳效果
-- **格式优化**: 转换为JPEG格式，减少传输负载
+- **OpenCV 编码**: 采集后缩放（默认最长边 320）并编码为 JPEG
+- **格式优化**: JPEG 降低上传体积
 
 ### 视觉服务
-- **远程分析**: 支持连接远程视觉分析服务
-- **身份验证**: 支持Token和设备ID验证
-- **错误处理**: 完善的网络错误处理机制
+- **远程分析**: 支持连接远程视觉分析服务（`NormalCamera`）
+- **智谱 VL**: 配置 `VLapi_key` + `Local_VL_url` 时使用 `VLCamera`
+- **身份验证**: Token 和设备 ID
+- **错误处理**: 网络与采集失败返回 JSON 错误信息
 
 ## 配置说明
 
@@ -145,23 +150,58 @@ result = await mcp_server.call_tool("take_photo", {
 ```json
 {
   "CAMERA": {
+    "backend": "auto",
+    "device": "",
     "camera_index": 0,
     "frame_width": 640,
-    "frame_height": 480
+    "frame_height": 480,
+    "fps": 30,
+    "warm_up_frames": 5,
+    "Local_VL_url": "https://open.bigmodel.cn/api/paas/v4/",
+    "VLapi_key": "",
+    "models": "glm-4v-plus"
   }
 }
 ```
 
 **配置项说明:**
-- `camera_index`: 摄像头设备索引，默认0
-- `frame_width`: 图像宽度，默认640
-- `frame_height`: 图像高度，默认480
+
+| 配置项 | 类型 | 默认 | 说明 |
+| ------ | ---- | ---- | ---- |
+| `backend` | String | `"auto"` | `auto` / `opencv` / `picamera2` |
+| `device` | String | `""` | 设备路径，如 `"/dev/video0"`；非空时优先于 `camera_index` |
+| `camera_index` | Integer | `0` | OpenCV 设备索引（桌面常用） |
+| `frame_width` / `frame_height` | Integer | 640 / 480 | 期望分辨率（驱动可能回落） |
+| `warm_up_frames` | Integer | `5` | 打开后丢弃的预热帧数 |
+| `Local_VL_url` / `VLapi_key` / `models` | — | — | 智谱等多模态 VL；二者都配齐则走 VL 分析 |
+
+### 平台与后端选择
+
+| 场景 | 推荐 |
+| ---- | ---- |
+| macOS / Windows USB 或内置摄像头 | `backend=auto` 或 `opencv`，用 `camera_index` |
+| Linux / 树莓派 **USB UVC** | `backend=opencv`，优先配置 `device` 为 `/dev/videoX` |
+| 树莓派 **官方 CSI** | 安装系统 `python3-picamera2`，`backend=auto` 或 `picamera2` |
+| 桌面 macOS **不要** pip 安装 picamera2 | 会拉 `python-prctl` 导致构建失败 |
+
+### 扫描与试拍
+
+```bash
+# 列出设备；可选写入配置并试拍
+python scripts/camera_scanner.py
+python scripts/camera_scanner.py --test
+python scripts/camera_scanner.py --select 0 --test
+python scripts/camera_scanner.py --device /dev/video0 --test
+python scripts/camera_scanner.py --backend picamera2 --test
+```
+
+GUI：设置 → 摄像头 → 刷新 → 选择 **摄像头 N / V4L2 /dev/videoX / 树莓派 CSI** → 测试。
 
 ### 视觉服务配置
 视觉分析服务需要配置：
-- **服务URL**: 视觉分析服务的接口地址
-- **身份验证**: Token或API密钥
-- **设备信息**: 设备ID和客户端ID
+- **服务URL**: 视觉分析服务的接口地址（服务端下发或 VL URL）
+- **身份验证**: Token 或 API 密钥
+- **设备信息**: 设备 ID 和客户端 ID
 
 ## 数据结构
 
@@ -190,10 +230,10 @@ result = await mcp_server.call_tool("take_photo", {
 ## 图像处理流程
 
 ### 1. 图像捕获
-1. 初始化摄像头设备
-2. 设置捕获参数（分辨率、帧率等）
-3. 捕获单帧图像
-4. 释放摄像头资源
+1. 按 `CAMERA.backend` / `device` / `camera_index` 选择后端
+2. OpenCV：打开设备（Linux 优先 V4L2）→ 尝试设分辨率 → 预热帧 → 读有效帧
+3. 或 picamera2：still 配置 → start → 预热 → `capture_array` → 转 BGR
+4. 缩放并编码 JPEG，释放设备
 
 ### 2. 图像预处理
 1. 获取图像尺寸信息
@@ -269,15 +309,22 @@ result = await mcp_server.call_tool("take_photo", {
 ## 故障排除
 
 ### 常见问题
-1. **摄像头无法打开**: 检查设备连接和权限
-2. **图像模糊**: 检查光线条件和对焦
-3. **分析失败**: 检查网络连接和服务状态
-4. **结果不准确**: 优化图像质量和问题描述
+1. **摄像头无法打开**: 检查连接、权限（Linux `video` 组）、`camera_index` / `device`
+2. **电脑正常、树莓派 CSI 不行**: CSI 需 libcamera + `python3-picamera2`，不要只靠 `VideoCapture(0)`
+3. **Pi 上 index 0 打不开**: 查看 `ls /dev/video*`，用 `--device /dev/videoX` 或换 index
+4. **open 成功但黑图/失败**: 增大 `warm_up_frames`，或放宽分辨率
+5. **分析失败**: 检查网络、explain URL / VL Key
+6. **macOS 上 `uv` 因 picamera2 / python-prctl 失败**: 不要在 Mac 安装 picamera2，仅在 Pi 用 apt
 
 ### 调试方法
-1. 检查摄像头设备状态
-2. 验证网络连接
-3. 查看日志错误信息
-4. 测试不同的拍摄条件
+```bash
+# Linux / Pi
+ls -l /dev/video*
+groups   # 应包含 video
+# CSI 系统栈
+rpicam-hello -t 1000   # 或 libcamera-hello
+
+python scripts/camera_scanner.py --test
+```
 
 通过摄像头工具，您可以轻松实现智能视觉识别和图像分析，为日常生活和工作提供便利。

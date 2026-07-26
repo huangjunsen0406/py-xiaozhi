@@ -5,7 +5,8 @@
 
 import asyncio
 from collections import defaultdict
-from typing import Any, Awaitable, Callable
+from collections.abc import Awaitable, Callable
+from typing import Any
 
 from src.logging import get_logger
 
@@ -35,6 +36,9 @@ class Events:
     AUDIO_CHANNEL_CLOSED = "audio_channel_closed"
     # AudioCodec 生命周期（AudioPlugin → MusicPlayer 等订阅者，避免直连 set）
     AUDIO_CODEC_CHANGED = "audio_codec_changed"
+    # 请求重新枚举音频设备（设置页刷新；需先停流再 PortAudio reinit）
+    # payload: 可选 asyncio.Future，完成时 set_result(list|dict|None)
+    AUDIO_DEVICES_REFRESH_REQUEST = "audio_devices_refresh_request"
 
     # 应用生命周期
     APP_SHUTDOWN = "app_shutdown"

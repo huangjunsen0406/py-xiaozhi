@@ -11,33 +11,33 @@ import {
 // 架构特点
 const architectureFeatures = [
   {
-    title: 'EventBus 事件驱动',
-    description: '基于发布-订阅模式的事件总线，解耦模块间通信，支持异步事件处理和热重载',
+    title: 'Event-driven',
+    description: 'Modules talk via EventBus with less direct coupling',
     icon: ArrowPathIcon
   },
   {
-    title: '异步架构',
-    description: '全面采用 asyncio + qasync 异步编程，支持高并发处理和实时音频流',
+    title: 'Async',
+    description: 'asyncio + qasync for realtime voice',
     icon: BoltIcon
   },
   {
-    title: 'MVVM 视图层',
-    description: 'PySide6 + QML 声明式 UI，Model-View-ViewModel 架构，EventBridge 连接 Python 与 QML',
+    title: 'Multi UI',
+    description: 'GUI / CLI / GPIO share one ViewPort',
     icon: ShareIcon
   },
   {
-    title: '状态机模式',
-    description: '设备状态管理采用状态机模式 (IDLE/LISTENING/SPEAKING)，清晰的状态转换和错误恢复',
+    title: 'State machine',
+    description: 'Idle / listening / speaking transitions',
     icon: ArrowsRightLeftIcon
   },
   {
-    title: '插件化生态',
-    description: 'PluginManager 统一管理插件生命周期，支持 Audio/MCP/UI/Shortcuts/WakeWord 等核心插件',
+    title: 'Plugins',
+    description: 'Audio, MCP, UI, shortcuts, wake word',
     icon: PuzzlePieceIcon
   },
   {
-    title: '跨平台兼容',
-    description: '支持 Windows/macOS/Linux，快捷键采用 Quartz (macOS) / pynput (其他) 双后端',
+    title: 'Cross-platform',
+    description: 'Windows / macOS / Linux (incl. Raspberry Pi)',
     icon: CubeIcon
   }
 ];

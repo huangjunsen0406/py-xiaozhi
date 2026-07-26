@@ -11,7 +11,7 @@
             <h3 class="module-title">{{ module.name }}</h3>
             <ul class="space-y-2">
               <li v-for="(feature, featureIndex) in module.features" :key="featureIndex" class="flex items-start">
-                <CheckCircleIcon class="w-5 h-5 text-green-500 mt-1 mr-2" />
+                <CheckCircleIcon class="w-5 h-5 text-green-500 mt-1 mr-2 shrink-0" />
                 <span class="feature-text">{{ feature }}</span>
               </li>
             </ul>
@@ -36,111 +36,98 @@ import {
   MapIcon,
   BoltIcon
 } from '@heroicons/vue/24/solid';
-import { useData } from 'vitepress';
 
-const { isDark } = useData();
-
-// 模块详情
 const modules = [
   {
     name: 'src/bootstrap/',
     icon: CogIcon,
     features: [
-      'ServiceContainer 聚合核心服务，统一管理生命周期',
-      'PluginContext/PluginCommands 适配器暴露受控 API',
-      '按依赖拓扑排序加载 Audio/WakeWord/UI/Shortcuts/MCP 插件'
+      'ServiceContainer 编排启动与关闭',
+      '会话、健康检查、插件装配拆分',
+      '按依赖加载各插件'
     ]
   },
   {
     name: 'src/core/',
     icon: BoltIcon,
     features: [
-      'EventBus 实现组件间解耦通信，支持异步事件处理',
-      'StateManager 维护 DeviceState/ListeningMode 状态机',
-      'ProtocolManager 封装协议连接与消息发送',
-      'TaskManager 异步任务生命周期管理',
-      'ResourcePool 统一资源注册与逆序释放'
+      'EventBus 事件通信',
+      '设备状态机与协议管理',
+      '任务与资源统一回收'
     ]
   },
   {
     name: 'src/plugins/',
     icon: CpuChipIcon,
     features: [
-      'PluginManager 拓扑排序依赖，统一 setup/start/stop/shutdown',
-      'AudioPlugin 管理音频编解码与音乐播放控制',
-      'UIPlugin 支持 GUI/CLI 双模式，ShortcutsPlugin 处理快捷键'
+      '插件生命周期与依赖隔离',
+      '音频、UI、快捷键、唤醒词、MCP'
     ]
   },
   {
     name: 'src/protocols/',
     icon: ArrowsRightLeftIcon,
     features: [
-      'Protocol 抽象定义音频/文本/控制消息接口',
-      'WebSocket/MQTT 双实现，支持实时音频通道',
-      '广播 AUDIO_CHANNEL_* 事件驱动状态变更'
+      'WebSocket / MQTT 双协议',
+      '实时音频与文本消息'
     ]
   },
   {
     name: 'src/audio_codecs/',
     icon: DocumentIcon,
     features: [
-      'AudioCodec 组合设备管理、Opus编解码、重采样模块',
-      '输入流重采样到 16kHz 单声道 Opus 编码',
-      '支持热重载音频设备与低延迟播放缓冲'
+      'Opus 编解码与重采样',
+      '设备热刷新与热重载'
     ]
   },
   {
     name: 'src/audio_processing/',
     icon: SpeakerXMarkIcon,
     features: [
-      'WakeWordDetector 基于 sherpa-onnx 关键词检测',
-      '重用 AudioCodec PCM 流，异步队列检测循环',
-      '检测结果触发 start_listening/abort_speaking'
+      '离线唤醒词检测',
+      '复用麦克风 PCM 流'
     ]
   },
   {
     name: 'src/mcp/',
     icon: WrenchIcon,
     features: [
-      'McpServer 实现 MCP 规范与 JSON-RPC 2.0',
-      'register_*_tools 显式注册；无装饰器自动发现',
-      '内置工具：音乐/摄像头/截图/应用管理/天气/音量'
+      '音乐、摄像头、截图、音量等工具',
+      '容器注入注册；支持外挂插件',
+      '摄像头支持 USB 与树莓派 CSI'
     ]
   },
   {
     name: 'src/ui/',
     icon: ComputerDesktopIcon,
     features: [
-      'PySide6/QML 实现 GUI，CLIViewManager 实现命令行界面',
-      'EventBridge 连接 Python 与 QML 的双向通信',
-      '系统托盘、情绪表情、设置窗口均由 EventBus 驱动'
+      'GUI / CLI / GPIO 统一 ViewPort',
+      'PySide6 + QML 主界面与设置',
+      '冷启动不抢前台（macOS）'
     ]
   },
   {
     name: 'src/activation/',
     icon: LightBulbIcon,
     features: [
-      'ActivationService 处理设备激活与 OTA 信息',
-      'efuse.json 缓存序列号/HMAC 等设备指纹',
-      '提供激活状态 API 给 UI 显示'
+      '设备激活与 OTA',
+      '独立激活窗口'
     ]
   },
   {
     name: 'src/logging/',
     icon: DocumentIcon,
     features: [
-      '独立日志子系统，支持分级过滤和格式化',
-      '自定义 Handler 支持文件轮转和控制台输出',
-      '日志过滤器按模块/级别精细控制'
+      '分级日志与文件轮转',
+      '显式初始化'
     ]
   },
   {
     name: 'src/utils/',
     icon: MapIcon,
     features: [
-      'ConfigManager 管理配置文件，支持点记法访问和动态更新',
-      'ResourceFinder 解析资源路径，AudioDeviceManager 探测设备',
-      'OpusLoader 跨平台 Opus 库加载，优先内置库'
+      '配置管理（按名匹配音频设备）',
+      '资源路径与跨平台工具'
     ]
   }
 ];
@@ -152,8 +139,11 @@ const moduleColors = [
   'bg-pink-600',
   'bg-red-600',
   'bg-orange-600',
-  'bg-yellow-600',
-  'bg-green-600'
+  'bg-amber-600',
+  'bg-green-600',
+  'bg-teal-600',
+  'bg-cyan-600',
+  'bg-sky-600'
 ];
 </script>
 
@@ -166,8 +156,9 @@ const moduleColors = [
 }
 
 .module-card {
-  transition: all 0.3s ease;
-  padding: 1.5rem;
+  border-radius: 8px;
+  padding: 16px;
+  transition: background-color 0.2s ease;
 }
 
 .module-card:hover {
@@ -178,10 +169,13 @@ const moduleColors = [
   font-size: 1.125rem;
   font-weight: 600;
   color: var(--vp-c-text-1);
-  margin-bottom: 0.5rem;
+  margin-bottom: 8px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
 .feature-text {
   color: var(--vp-c-text-2);
+  line-height: 1.5;
+  font-size: 0.95rem;
 }
 </style>

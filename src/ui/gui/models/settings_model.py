@@ -12,9 +12,6 @@ from typing import Any
 from PySide6.QtCore import Property, Signal, Slot
 
 from src.logging import get_logger
-from src.utils.config_manager import get_config
-from src.utils.resource_finder import get_user_data_dir
-
 from src.ui.gui.models.base_model import BaseModel
 from src.ui.gui.models.settings.audio_devices import SettingsAudioDevicesMixin
 from src.ui.gui.models.settings.camera_devices import SettingsCameraDevicesMixin
@@ -23,6 +20,8 @@ from src.ui.gui.models.settings.mcp_tools import SettingsMcpToolsMixin
 from src.ui.gui.models.settings.shortcuts import SettingsShortcutsMixin
 from src.ui.gui.models.settings.system_options import SettingsSystemOptionsMixin
 from src.ui.gui.models.settings.wake_word import SettingsWakeWordMixin
+from src.utils.config_manager import get_config
+from src.utils.resource_finder import get_user_data_dir
 
 logger = get_logger()
 
@@ -48,11 +47,14 @@ class SettingsModel(
     # MCP 工具禁用列表相对打开/上次保存是否变化 → 保存后可能触发重连
     mcpToolsNeedReconnect = Signal()
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, event_bus=None, task_manager=None):
         super().__init__(parent)
         self._config_manager = get_config()
         self._config_path = get_user_data_dir() / "config" / "config.json"
         self._config: dict = {}
+        # 可选：用于「刷新音频设备」时协调 AudioPlugin 停流重枚举
+        self._event_bus = event_bus
+        self._task_manager = task_manager
 
         self._input_devices: list[dict] = []
         self._output_devices: list[dict] = []
@@ -61,6 +63,7 @@ class SettingsModel(
         self._cameras_loading = False
         self._cameras_loaded_once = False
         self._audio_devices_loaded = False
+        self._audio_devices_refreshing = False
 
         self._testing_input = False
         self._testing_output = False
@@ -261,6 +264,15 @@ class SettingsModel(
     )
     aecEnabled = Property(
         bool, SettingsSystemOptionsMixin._get_aecEnabled, SettingsSystemOptionsMixin._set_aecEnabled, notify=settingsChanged
+    )
+    aecMusicParallel = Property(
+        bool, SettingsSystemOptionsMixin._get_aecMusicParallel, SettingsSystemOptionsMixin._set_aecMusicParallel, notify=settingsChanged
+    )
+    aecFrameDelay = Property(
+        int, SettingsSystemOptionsMixin._get_aecFrameDelay, SettingsSystemOptionsMixin._set_aecFrameDelay, notify=settingsChanged
+    )
+    aecEnablePreprocess = Property(
+        bool, SettingsSystemOptionsMixin._get_aecEnablePreprocess, SettingsSystemOptionsMixin._set_aecEnablePreprocess, notify=settingsChanged
     )
     pathCacheDir = Property(
         str,
