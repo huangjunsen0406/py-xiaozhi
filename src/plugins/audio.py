@@ -141,11 +141,29 @@ class AudioPlugin(Plugin):
             if message.get("type") == "tts":
                 state = message.get("state")
                 if state == "start":
-                    await self._pause_music_for_tts()
+                    if self._music_parallel_enabled():
+                        logger.debug("TTS 开始（并行模式）：音乐继续播放，混音闪避")
+                    else:
+                        await self._pause_music_for_tts()
                 elif state == "stop":
+                    # 并行模式也发恢复：兜底「TTS 期间起播的歌被置为 tts 暂停」
                     await self._resume_music_after_tts()
         except Exception as e:
             logger.error(f"处理 TTS 事件失败: {e}", exc_info=True)
+
+    def _music_parallel_enabled(self) -> bool:
+        """并行播放判定：AEC 引擎在位且配置允许时，TTS 不暂停音乐.
+
+        引擎旁路（库缺失/连续失败自禁）时自动回退为暂停策略，
+        避免无回声消除的裸并行污染识别。
+        """
+        try:
+            config = self._ctx.get_config()
+            if not bool(config.get_config("AEC_OPTIONS.MUSIC_PARALLEL", True)):
+                return False
+            return bool(self.codec and self.codec.aec_active)
+        except Exception:
+            return False
 
     async def on_incoming_audio(self, data: bytes) -> None:
         """
@@ -171,12 +189,13 @@ class AudioPlugin(Plugin):
             logger.warning(f"发送音乐暂停请求失败: {e}", exc_info=True)
 
     async def _resume_music_after_tts(self):
-        """TTS 结束后恢复音乐"""
+        """TTS 结束后恢复音乐（并行模式下仅兜底，多数时候无实际暂停）."""
         try:
             from src.core.event_bus import Events
             from src.mcp.tools.music.events import MusicControlRequest
 
-            logger.info("TTS 播放完成，发送音乐恢复请求")
+            log = logger.debug if self._music_parallel_enabled() else logger.info
+            log("TTS 播放完成，发送音乐恢复请求")
             await self._ctx.event_bus.emit(
                 Events.MUSIC_RESUME_REQUEST, MusicControlRequest(source="tts")
             )

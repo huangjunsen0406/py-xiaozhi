@@ -330,6 +330,12 @@ class AudioCodec:
 
     # === 对外接口（保持兼容） ===
 
+    @property
+    def aec_active(self) -> bool:
+        """AEC 引擎是否在位且工作中（音乐并行策略等依赖此判断）."""
+        aec = self._aec
+        return bool(aec is not None and aec.active)
+
     def set_encoded_callback(self, callback: Callable[[bytes], None]):
         """设置编码回调
 

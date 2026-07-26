@@ -117,6 +117,8 @@ class ConfigManager:
         },
         "AEC_OPTIONS": {
             "ENABLED": False,
+            # AEC 在位时 TTS 不暂停音乐，混音闪避并行播放（引擎旁路则自动回退暂停）
+            "MUSIC_PARALLEL": True,
             "BUFFER_MAX_LENGTH": 200,
             "FRAME_DELAY": 3,
             "FILTER_LENGTH_RATIO": 0.4,
