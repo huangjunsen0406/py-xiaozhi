@@ -2,12 +2,43 @@
 
 from pathlib import Path
 
-from PySide6.QtCore import QUrl
+from PySide6.QtCore import Qt, QUrl
 from PySide6.QtQml import QQmlApplicationEngine
 
 from src.logging import get_logger
 
 logger = get_logger()
+
+
+def _show_window(window, *, activate: bool) -> None:
+    """显示窗口；activate=False 时尽量不抢前台（macOS 全屏 Space 友好）."""
+    if window is None:
+        return
+
+    if activate:
+        window.show()
+        window.raise_()
+        window.requestActivate()
+        return
+
+    # QWidget 路径：ShowWithoutActivating
+    set_attr = getattr(window, "setAttribute", None)
+    if callable(set_attr):
+        set_attr(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
+        try:
+            window.show()
+        finally:
+            set_attr(Qt.WidgetAttribute.WA_ShowWithoutActivating, False)
+        return
+
+    # QQuickWindow / QWindow：临时去掉可获焦，避免成为 key window
+    # （macOS 上 key window 会把其它全屏 App 的 Space 挤掉）
+    flags = window.flags()
+    try:
+        window.setFlags(flags | Qt.WindowType.WindowDoesNotAcceptFocus)
+        window.show()
+    finally:
+        window.setFlags(flags)
 
 
 class QmlAppHost:
@@ -50,13 +81,14 @@ class QmlAppHost:
         roots = self._engine.rootObjects()
         return roots[0] if roots else None
 
-    def show_root(self) -> None:
-        window = self.root_window()
-        if window is None:
-            return
-        window.show()
-        window.raise_()
-        window.requestActivate()
+    def show_root(self, *, activate: bool = True) -> None:
+        """显示主窗口.
+
+        Args:
+            activate: True=抢前台（托盘「显示窗口」/快捷键）；
+                      False=仅显示、不 requestActivate（冷启动，避免挤掉 macOS 全屏 App）
+        """
+        _show_window(self.root_window(), activate=activate)
 
     def toggle_root_visible(self) -> None:
         window = self.root_window()
@@ -65,7 +97,8 @@ class QmlAppHost:
         if window.isVisible():
             window.hide()
         else:
-            self.show_root()
+            # 用户主动切换：需要到前台
+            self.show_root(activate=True)
 
     def shutdown(self) -> None:
         if self._engine:

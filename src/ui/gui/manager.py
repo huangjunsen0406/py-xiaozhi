@@ -59,6 +59,8 @@ class GuiViewManager(QObject):
             }
         )
         self._host.load_main()
+        # 冷启动只显示、不抢前台，避免 macOS 把其它全屏 App 的 Space 挤掉
+        self._host.show_root(activate=False)
         self._setup_tray()
         self._main.set_neutral_emotion()
         logger.info("GuiViewManager: GUI 启动完成")
