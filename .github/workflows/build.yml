@@ -217,9 +217,15 @@ jobs:
         run: |
           rm -f *.spec
           # unifypy>=2.0.18: --version 仅打印工具版本并退出；应用版本用 --app-version
+          #
+          # 注意：不要 arch -x86_64 uv —— uv 本体是 arm64，会报
+          # "Bad CPU type in executable"。arm64 uv 拉起 x86_64 venv
+          # 时内核会自动走 Rosetta。
           if [ "${{ runner.os }}" = "macOS" ] && [ "${{ matrix.mac_arch }}" = "x64" ]; then
-            # 项目 venv 已是 x86_64；arch -x86_64 保证子进程也在 Rosetta 下
-            arch -x86_64 uv run --no-sync unifypy . \
+            VENV_PY="${PWD}/.venv/bin/python"
+            file "$VENV_PY"
+            # 直接用 x86_64 解释器跑 unifypy，避免 uv 二进制架构问题
+            arch -x86_64 "$VENV_PY" -m unifypy . \
               --config build.json \
               --app-version ${{ steps.version.outputs.version }} \
               --verbose \
