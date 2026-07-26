@@ -112,9 +112,10 @@ jobs:
           PYTHONIOENCODING: utf-8
         run: |
           rm -f *.spec
+          # unifypy>=2.0.18: --version 仅打印工具版本并退出；应用版本用 --app-version
           uv run --no-sync unifypy . \
             --config build.json \
-            --version ${{ steps.version.outputs.version }} \
+            --app-version ${{ steps.version.outputs.version }} \
             --verbose \
             --clean
 
@@ -122,18 +123,24 @@ jobs:
         shell: bash
         run: |
           mkdir -p dist/release
-          for f in ${{ matrix.artifact }}; do
-            if [ -f "$f" ]; then
-              ext="${f##*.}"
-              base="${f%.*}"
-              name="$(basename "$base")"
-              cp "$f" "dist/release/${name}-${{ matrix.platform }}.${ext}"
-            fi
+          shopt -s nullglob
+          files=(${{ matrix.artifact }})
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "::error::未找到安装包产物: ${{ matrix.artifact }}（unifypy 可能空跑成功）"
+            ls -la installer 2>/dev/null || true
+            exit 1
+          fi
+          for f in "${files[@]}"; do
+            ext="${f##*.}"
+            base="${f%.*}"
+            name="$(basename "$base")"
+            cp "$f" "dist/release/${name}-${{ matrix.platform }}.${ext}"
           done
 
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: dist/release/*
+          fail_on_unmatched_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
