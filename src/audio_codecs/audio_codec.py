@@ -1,10 +1,12 @@
+import asyncio
 import threading
+import time
 from collections.abc import Callable
 from typing import Protocol
 
 import numpy as np
 
-from src.audio_codecs.audio_buffer import AudioBuffer
+from src.audio_codecs.audio_buffer import PcmFifo
 from src.audio_codecs.audio_converter import AudioConverter
 from src.audio_codecs.opus_codec import OpusCodec, parse_opus_toc
 from src.audio_codecs.stream_manager import AudioStreamManager
@@ -14,6 +16,15 @@ from src.utils.audio_device import AudioDeviceManager, DeviceConfig
 from src.utils.config_manager import get_config
 
 logger = get_logger()
+
+# TTS 存在时音乐的混音增益（闪避），及其保持时长（20ms 块数）
+_MUSIC_DUCK_GAIN = 0.35
+_DUCK_HOLD_CHUNKS = 10
+# 音乐写入端水位背压目标（秒）：越小暂停/插话越跟手，越大抗抖动越强
+_MUSIC_BACKLOG_TARGET_S = 0.30
+# TTS / 音乐 FIFO 容量（秒），超限丢最旧
+_TTS_FIFO_MAX_S = 10.0
+_MUSIC_FIFO_MAX_S = 2.0
 
 
 class AudioListener(Protocol):
@@ -52,7 +63,16 @@ class AudioCodec:
         )
         self.converter = AudioConverter()
         self.stream_manager = None
-        self.output_buffer = AudioBuffer(maxsize=500)
+
+        # TTS 与音乐分流：各自 FIFO，输出回调里混音（互不排队阻塞）
+        self._tts_fifo = PcmFifo(
+            int(AudioConfig.OUTPUT_SAMPLE_RATE * _TTS_FIFO_MAX_S)
+        )
+        self._music_fifo = PcmFifo(
+            int(AudioConfig.OUTPUT_SAMPLE_RATE * _MUSIC_FIFO_MAX_S)
+        )
+        self._mix_chunk = int(AudioConfig.OUTPUT_SAMPLE_RATE * 0.02)  # 20ms
+        self._duck_hold = 0
 
         # 监听器（线程安全）
         self._encoded_callback: Callable | None = None
@@ -62,10 +82,14 @@ class AudioCodec:
         # 设备配置（初始化后填充）
         self.device_config: DeviceConfig | None = None
 
+        # AEC（Self far：播放回调最终 PCM 作参考），initialize 时按配置创建
+        self._aec = None
+
         # 状态标记
         self._is_closing = False
         self._closed = False
         self._server_opus_logged = False
+        self._last_output_status_log = 0.0
 
     async def initialize(self):
         """初始化所有组件
@@ -94,14 +118,17 @@ class AudioCodec:
             # 3. 配置格式转换管线
             self._configure_pipeline()
 
-            # 4. 创建音频流
+            # 4. 按配置创建 AEC（Self far），失败自动旁路
+            self._setup_aec()
+
+            # 5. 创建音频流
             self.stream_manager = AudioStreamManager(self.device_config)
             self.stream_manager.create_streams(
                 input_callback=self._input_callback,
                 output_callback=self._output_callback,
             )
 
-            # 5. 启动音频流
+            # 6. 启动音频流
             self.stream_manager.start()
 
             logger.info("AudioCodec 初始化完成")
@@ -136,6 +163,10 @@ class AudioCodec:
             )
             if audio_converted is None:
                 return  # 数据不足，等待下一帧
+
+            # 1.5 AEC：以播放回调抽取的 far 参考消回声（旁路时原样返回）
+            if self._aec is not None and self._aec.active:
+                audio_converted = self._aec.process_near(audio_converted)
 
             # 2. Opus 编码（float32 输入）
             if self._encoded_callback:
@@ -174,13 +205,17 @@ class AudioCodec:
             status: 状态标志
         """
         if status:
-            logger.warning(f"输出流状态: {status}")
+            # 限流：回调内写日志（文件 IO）本身会加剧欠载，2 秒最多一条
+            now = time.monotonic()
+            if now - self._last_output_status_log > 2.0:
+                self._last_output_status_log = now
+                logger.warning(f"输出流状态: {status}")
 
         try:
             audio_converted = None
 
             while audio_converted is None:
-                audio_data = self.output_buffer.get_nowait()
+                audio_data = self._pull_mixed(self._mix_chunk)
                 if audio_data is None:
                     break
                 audio_converted = self.converter.convert_output(audio_data, frames)
@@ -194,6 +229,10 @@ class AudioCodec:
                     outdata[: len(audio_converted)] = audio_converted
             else:
                 outdata[:] = audio_converted[:frames]
+
+            # AEC far：设备实际写出的最终 PCM（TTS+音乐混合，含静音保持连续）
+            if self._aec is not None and self._aec.active:
+                self._aec.feed_far(outdata)
 
         except Exception as e:
             logger.error(f"输出回调错误: {e}", exc_info=True)
@@ -218,6 +257,76 @@ class AudioCodec:
             from_channels=1,
             to_channels=self.device_config.output_channels,
         )
+
+        # 协议输出采样率可能随配置热重载变化，FIFO/混音块随之重建
+        # （此时音频流已停止，无并发读取）
+        self._tts_fifo = PcmFifo(
+            int(AudioConfig.OUTPUT_SAMPLE_RATE * _TTS_FIFO_MAX_S)
+        )
+        self._music_fifo = PcmFifo(
+            int(AudioConfig.OUTPUT_SAMPLE_RATE * _MUSIC_FIFO_MAX_S)
+        )
+        self._mix_chunk = int(AudioConfig.OUTPUT_SAMPLE_RATE * 0.02)
+        self._duck_hold = 0
+
+    def _pull_mixed(self, n: int) -> np.ndarray | None:
+        """输出回调线程：从 TTS/音乐 FIFO 各取 n 样本并混音.
+
+        规则：
+        - 两路都空 → None（上层进入静音/欠载路径）
+        - TTS 在场时音乐按 _MUSIC_DUCK_GAIN 闪避，并在 TTS
+          帧间隙保持若干块（避免闪避增益抖动）
+        """
+        tts = self._tts_fifo.pull(n)
+        music = self._music_fifo.pull(n)
+
+        if tts is None and music is None:
+            return None
+
+        if tts is not None:
+            self._duck_hold = _DUCK_HOLD_CHUNKS
+        elif self._duck_hold > 0:
+            self._duck_hold -= 1
+
+        if music is None:
+            return tts
+        if tts is None:
+            if self._duck_hold > 0:
+                music *= _MUSIC_DUCK_GAIN
+            return music
+        return np.clip(tts + music * _MUSIC_DUCK_GAIN, -1.0, 1.0)
+
+    def _setup_aec(self):
+        """按 AEC_OPTIONS.ENABLED 创建/重建 AEC 引擎（Self far）。
+
+        设备热重载后 far 采样率可能变化，须随 device_config 重建；
+        创建失败不抛出，引擎自身旁路（active=False）。
+        """
+        if self._aec is not None:
+            self._aec.close()
+            self._aec = None
+
+        try:
+            config = get_config()
+            if not bool(config.get_config("AEC_OPTIONS.ENABLED", False)):
+                logger.info("AEC 未启用（AEC_OPTIONS.ENABLED=false）")
+                return
+
+            from src.audio_processing.aec_engine import AecEngine
+
+            frame_delay = config.get_config("AEC_OPTIONS.FRAME_DELAY", 3)
+            self._aec = AecEngine(
+                near_rate=AudioConfig.INPUT_SAMPLE_RATE,
+                far_rate=self.device_config.output_sample_rate,
+                # FRAME_DELAY 以协议帧为单位，换算毫秒后叠加基础输出延迟
+                delay_ms=40 + int(frame_delay) * AudioConfig.FRAME_DURATION,
+                enable_preprocess=bool(
+                    config.get_config("AEC_OPTIONS.ENABLE_PREPROCESS", True)
+                ),
+            )
+        except Exception as e:
+            logger.warning(f"创建 AEC 引擎失败，已旁路: {e}", exc_info=True)
+            self._aec = None
 
     # === 对外接口（保持兼容） ===
 
@@ -282,28 +391,39 @@ class AudioCodec:
             )
             audio_float32 = self.opus_codec.decode(opus_data, frame_size)
 
-            await self.output_buffer.put(audio_float32, replace_oldest=True)
+            self._tts_fifo.push(audio_float32)
 
         except Exception as e:
             logger.warning(f"音频写入失败: {e}", exc_info=True)
 
     async def write_pcm_direct(self, pcm_float32: np.ndarray):
-        """直接写入 float32 PCM（供 MusicPlayer 使用）
+        """写入音乐 PCM（float32，供 MusicPlayer 使用），带水位背压.
 
-        Args:
-            pcm_float32: float32 PCM 数据
+        写完后若音乐缓冲超过目标水位则等待回放消耗——这是音乐链路
+        唯一的节拍来源（解码器时钟在暂停后会失准，不能作为依据）。
+        背压上限 2 秒兜底退出，FIFO 容量丢最旧保证不会无限膨胀。
         """
-        # replace_oldest=True：输出队列满时丢弃旧帧而非阻塞，
-        # 防止播放回路卡死在 put() 导致 decoder 超时刷屏
-        await self.output_buffer.put(pcm_float32, replace_oldest=True)
+        self._music_fifo.push(pcm_float32)
+
+        target = int(AudioConfig.OUTPUT_SAMPLE_RATE * _MUSIC_BACKLOG_TARGET_S)
+        for _ in range(100):
+            if self._is_closing or self._music_fifo.size <= target:
+                break
+            await asyncio.sleep(0.02)
 
     async def clear_audio_queue(self):
-        """清空音频队列"""
+        """清空 TTS 播放队列（打断/中止时用；音乐队列不受影响）."""
         self._server_opus_logged = False
         self.converter.clear_output_buffer()
-        count = await self.output_buffer.clear()
+        count = self._tts_fifo.clear()
         if count > 0:
-            logger.info(f"清空音频队列，丢弃 {count} 帧")
+            logger.info(f"清空 TTS 队列，丢弃 {count} 样本")
+
+    async def clear_music_queue(self):
+        """清空音乐播放队列（停止/跳转时用；TTS 队列不受影响）."""
+        count = self._music_fifo.clear()
+        if count > 0:
+            logger.info(f"清空音乐队列，丢弃 {count} 样本")
 
     async def reinitialize_stream(self, is_input: bool = True):
         """重建音频流（支持热插拔）
@@ -388,6 +508,9 @@ class AudioCodec:
             self.converter.clear_buffers()
             self._configure_pipeline()
 
+            # 5.5 重建 AEC（far 采样率跟随新输出设备，滤波器状态清零）
+            self._setup_aec()
+
             # 6. 重新创建音频流
             self.stream_manager = AudioStreamManager(self.device_config)
             self.stream_manager.create_streams(
@@ -416,6 +539,12 @@ class AudioCodec:
 
             # 2. 清空队列
             await self.clear_audio_queue()
+            await self.clear_music_queue()
+
+            # 2.5 释放 AEC（须在流停止后）
+            if self._aec is not None:
+                self._aec.close()
+                self._aec = None
 
             # 3. 释放转换器（含 soxr 重采样器）
             self.converter.close()
@@ -449,10 +578,9 @@ class AudioCodec:
                 self.stream_manager.stop()
 
             # 2. 清空队列（同步版本）
-            if self.output_buffer:
-                count = self.output_buffer.clear_sync()
-                if count > 0:
-                    logger.debug(f"析构函数清空了 {count} 帧音频")
+            count = self._tts_fifo.clear() + self._music_fifo.clear()
+            if count > 0:
+                logger.debug(f"析构函数清空了 {count} 样本音频")
 
             # 3. 释放转换器（同步，含 soxr 重采样器）
             if self.converter:

@@ -48,9 +48,9 @@ class PlaybackHooks(Protocol):
 
 @dataclass
 class PlaybackDeps:
-    cache: "MusicCache"
-    downloader: "MusicDownloader"
-    library: "LocalLibrary"
+    cache: MusicCache
+    downloader: MusicDownloader
+    library: LocalLibrary
     hooks: PlaybackHooks
 
 
@@ -63,7 +63,7 @@ class PlaybackEngine:
         self._library = deps.library
         self._hooks = deps.hooks
 
-        self.audio_codec: "AudioCodec | None" = None
+        self.audio_codec: AudioCodec | None = None
         self.decoder: MusicDecoder | None = None
         self._music_queue: asyncio.Queue = asyncio.Queue(maxsize=100)
         self._playback_task: asyncio.Task | None = None
@@ -83,7 +83,7 @@ class PlaybackEngine:
         self.current_lyric_index = -1
         self.last_lyric_tick = 0.0
 
-    def _get_audio_codec(self) -> "AudioCodec | None":
+    def _get_audio_codec(self) -> AudioCodec | None:
         if self.audio_codec is None:
             logger.warning("AudioCodec 未设置，音乐播放功能不可用")
         return self.audio_codec
@@ -124,6 +124,9 @@ class PlaybackEngine:
 
             await self._cancel_playback_task()
             cleared = await self._clear_music_queue()
+            audio_codec = self._get_audio_codec()
+            if audio_codec:
+                await audio_codec.clear_music_queue()
             logger.debug(f"停止时清空 {cleared} 帧音乐数据")
 
             self.is_playing = False
@@ -157,12 +160,26 @@ class PlaybackEngine:
             if self.start_play_time > 0:
                 self.current_position = time.time() - self.start_play_time
 
+            fmt = self._hooks.format_time
+
+            if source == "tts":
+                # TTS 逐句闪避：保留解码器与队列（解码器会在满队列处
+                # 自然等位），恢复零成本，不用逐句重启 ffmpeg
+                logger.info(
+                    f"暂停播放(tts, 保留解码器): {self.current_song} "
+                    f"at {fmt(self.current_position)}"
+                )
+                return {"status": "success", "message": "已暂停"}
+
             if self.decoder:
                 await self.decoder.stop()
                 self.decoder = None
 
             cleared = await self._clear_music_queue()
-            fmt = self._hooks.format_time
+            audio_codec = self._get_audio_codec()
+            if audio_codec:
+                # 手动暂停要立即静音：把 codec 侧音乐余量也清掉
+                await audio_codec.clear_music_queue()
             logger.info(
                 f"暂停播放: {self.current_song} at {fmt(self.current_position)}, "
                 f"来源: {source}, 清空 {cleared} 帧音乐队列"
@@ -178,6 +195,24 @@ class PlaybackEngine:
                 return {"status": "info", "message": "没有正在播放的歌曲"}
             if not self.paused:
                 return {"status": "info", "message": "当前未暂停"}
+
+            if (
+                self.decoder is not None
+                and self.pause_source == "tts"
+                and self._playback_task is not None
+                and not self._playback_task.done()
+            ):
+                # 快速恢复（tts 闪避路径）：解码器与消费循环都在，仅继续消费
+                self.paused = False
+                self.pause_source = None
+                self.start_play_time = time.time() - self.current_position
+                self.last_lyric_tick = 0.0
+                logger.info(
+                    f"恢复播放(tts, 解码器直连): {self.current_song} from "
+                    f"{self._hooks.format_time(self.current_position)}"
+                )
+                await self._hooks.emit_state_change("playing", self.current_song)
+                return {"status": "success", "message": "已恢复播放"}
 
             if self.api_url:
                 if not await self._refresh_stream_source():
@@ -295,7 +330,8 @@ class PlaybackEngine:
             cleared = await self._clear_music_queue()
             audio_codec = self._get_audio_codec()
             if audio_codec:
-                await audio_codec.clear_audio_queue()
+                # 只清音乐播放队列；TTS 队列独立，不受跳转影响
+                await audio_codec.clear_music_queue()
 
             logger.info(f"跳转到 {fmt(target)}，清空 {cleared} 帧音乐数据")
             success = await self.start_playback(
