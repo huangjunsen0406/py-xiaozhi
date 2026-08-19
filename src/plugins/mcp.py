@@ -39,7 +39,9 @@ class McpPlugin(Plugin):
 
         async def _send(msg: str):
             try:
-                await cmd.send_mcp_message(msg)
+                delivered = await cmd.send_mcp_message(msg)
+                if delivered is False:
+                    raise RuntimeError("MCP 响应未发布到当前协议")
             except Exception as e:
                 logger.error(f"MCP 发送响应失败: {e}", exc_info=True)
 

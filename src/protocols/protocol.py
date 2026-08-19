@@ -207,7 +207,7 @@ class Protocol:
         }
         await self.send_text(json.dumps(message))
 
-    async def send_mcp_message(self, payload):
+    async def send_mcp_message(self, payload) -> bool | None:
         """
         发送MCP消息.
         """
@@ -222,7 +222,7 @@ class Protocol:
             "payload": payload_data,
         }
 
-        await self.send_text(json.dumps(message))
+        return await self.send_text(json.dumps(message))
 
     # ============ 连接状态检查（模板方法，子类实现） ============
 

@@ -112,7 +112,7 @@ class PluginCommands(Protocol):
         """
         ...
 
-    async def send_mcp_message(self, payload: str) -> None:
+    async def send_mcp_message(self, payload: str) -> bool | None:
         """
         发送 MCP 消息（会自动包装格式）.
         """

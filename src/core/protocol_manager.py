@@ -339,10 +339,11 @@ class ProtocolGateway:
         if protocol:
             await protocol.send_iot_states(states)
 
-    async def send_mcp_message(self, payload) -> None:
+    async def send_mcp_message(self, payload) -> bool | None:
         protocol = self._transport.protocol
         if protocol:
-            await protocol.send_mcp_message(payload)
+            return await protocol.send_mcp_message(payload)
+        return False
 
 
 class ProtocolManager:
@@ -402,5 +403,5 @@ class ProtocolManager:
     async def send_iot_states(self, states) -> None:
         await self._gateway.send_iot_states(states)
 
-    async def send_mcp_message(self, payload) -> None:
-        await self._gateway.send_mcp_message(payload)
+    async def send_mcp_message(self, payload) -> bool | None:
+        return await self._gateway.send_mcp_message(payload)
