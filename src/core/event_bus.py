@@ -50,6 +50,9 @@ class Events:
     MUSIC_LYRICS_UPDATE = "music_lyrics_update"  # 歌词更新
     MUSIC_PROGRESS_UPDATE = "music_progress_update"  # 进度更新
 
+    # 服务端单向通知字幕（payload: str）
+    NOTIFICATION_SUBTITLE = "notification_subtitle"
+
     # 音乐控制命令（从外部控制 MusicPlayer）
     MUSIC_PAUSE_REQUEST = "music_pause_request"  # 请求暂停（如 TTS）
     MUSIC_RESUME_REQUEST = "music_resume_request"  # 请求恢复

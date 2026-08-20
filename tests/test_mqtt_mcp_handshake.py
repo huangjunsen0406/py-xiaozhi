@@ -336,3 +336,79 @@ async def test_mqtt_closes_only_udp_session_and_reuses_broker(monkeypatch):
     assert client.loop_stop_called
     assert client.disconnect_called
     assert protocol.mqtt_client is None
+
+
+@pytest.mark.asyncio
+async def test_mqtt_start_opens_only_control_connection_until_audio_is_requested(
+    monkeypatch,
+):
+    """启动时 MQTT 可接收 notify/MCP，但必须不提前发 hello 或开 UDP。"""
+    from src.protocols import mqtt_protocol as mqtt_module
+
+    mqtt_info = {
+        "endpoint": "mqtt.example.test:1883",
+        "client_id": "test-client",
+        "username": "test-user",
+        "password": "test-password",
+        "publish_topic": "device-server",
+        "subscribe_topic": "server-device",
+    }
+
+    class _Config:
+        def get_config(self, key):
+            assert key == "SYSTEM_OPTIONS.NETWORK.MQTT_INFO"
+            return mqtt_info
+
+    monkeypatch.setattr(mqtt_module, "get_config", lambda: _Config())
+    protocol = mqtt_module.MqttProtocol(asyncio.get_running_loop())
+    udp = _FakeUdp()
+    protocol._udp = udp
+    clients = []
+
+    def create_client(*args, **kwargs):
+        client = _ConnectedMqttClient(protocol, **kwargs)
+        clients.append(client)
+        return client
+
+    monkeypatch.setattr(mqtt_module.mqtt, "Client", create_client)
+
+    assert await protocol.start() is True
+    assert len(clients) == 1
+    assert clients[0].published == []
+    assert udp.start_count == 0
+    assert protocol.is_audio_channel_opened() is False
+
+    assert await protocol.open_audio_channel() is True
+    assert json.loads(clients[0].published[0][1])["type"] == "hello"
+    assert udp.start_count == 1
+
+
+@pytest.mark.asyncio
+async def test_mqtt_control_reconnect_waits_for_idle_and_never_opens_udp(
+    monkeypatch,
+):
+    from src.protocols import mqtt_protocol as mqtt_module
+
+    monkeypatch.setattr(mqtt_module, "get_config", lambda: object())
+    monkeypatch.setattr(mqtt_module, "_CONTROL_RECONNECT_DELAY", 0)
+
+    protocol = mqtt_module.MqttProtocol(asyncio.get_running_loop())
+    idle = {"value": False}
+    protocol.set_idle_checker(lambda: idle["value"])
+    attempts = []
+    connected = asyncio.Event()
+
+    async def connect_control():
+        attempts.append("control")
+        connected.set()
+        return True
+
+    protocol._connect_control_channel = connect_control
+    protocol._schedule_control_reconnect()
+    await asyncio.sleep(0)
+    assert attempts == []
+
+    idle["value"] = True
+    await asyncio.wait_for(connected.wait(), timeout=1)
+    assert attempts == ["control"]
+    assert protocol.udp_running is False

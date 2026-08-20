@@ -53,7 +53,8 @@ class UIPlugin(Plugin):
         bus.on(Events.SYSTEM_NOTICE, self._on_system_notice)
         bus.on(Events.MUSIC_STATE_CHANGED, self._on_music_state_changed)
         bus.on(Events.MUSIC_LYRICS_UPDATE, self._on_music_lyrics_update)
-        logger.info("UIPlugin 已订阅音乐/网络/系统提示事件")
+        bus.on(Events.NOTIFICATION_SUBTITLE, self._on_notification_subtitle)
+        logger.info("UIPlugin 已订阅音乐/通知/网络/系统提示事件")
 
         if self._session:
             self._session.subscribe(bus)
@@ -93,3 +94,7 @@ class UIPlugin(Plugin):
 
     async def _on_music_lyrics_update(self, data) -> None:
         self._presenter.show_music_lyrics(data)
+
+    async def _on_notification_subtitle(self, text: str = "") -> None:
+        if text:
+            self._presenter.set_chat_text(text)

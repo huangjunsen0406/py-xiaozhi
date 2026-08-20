@@ -20,6 +20,7 @@ from src.utils.config_manager import get_config
 logger = get_logger()
 
 _MQTT_PUBLISH_TIMEOUT = 5.0
+_CONTROL_RECONNECT_DELAY = 60.0
 
 
 def parse_mqtt_endpoint(endpoint: str) -> tuple[str, int]:
@@ -70,6 +71,8 @@ class MqttProtocol(Protocol):
         self._udp.set_audio_handler(self._on_udp_audio)
 
         self.server_hello_event = asyncio.Event()
+        self._control_connect_lock = asyncio.Lock()
+        self._control_reconnect_task: asyncio.Task | None = None
 
     # ---- 兼容旧属性（诊断 / 测试）----
     @property
@@ -138,10 +141,34 @@ class MqttProtocol(Protocol):
                 coro.close()
 
     async def connect(self):
-        """连接到 MQTT 服务器并建立 UDP 音频通道."""
+        """兼容旧调用：连接 MQTT 控制通道后建立 UDP 音频会话。"""
+        return await self.open_audio_channel()
+
+    async def start(self) -> bool:
+        """应用启动时只建立 MQTT 控制连接，不发送 hello 或打开 UDP。"""
+        if self._is_closing:
+            return False
+        connected = await self._connect_control_channel()
+        if not connected:
+            self._schedule_control_reconnect()
+        return connected
+
+    async def _connect_control_channel(self) -> bool:
+        """连接并订阅 Broker 控制通道，不改变音频会话状态。"""
         if self._is_closing:
             logger.warning("连接正在关闭中，取消新的连接尝试")
             return False
+
+        if self.mqtt_client and self.mqtt_client.is_connected():
+            return True
+
+        async with self._control_connect_lock:
+            if self.mqtt_client and self.mqtt_client.is_connected():
+                return True
+            return await self._create_control_connection()
+
+    async def _create_control_connection(self) -> bool:
+        """创建一次新的 Paho client 并等待 CONNACK。"""
 
         try:
             mqtt_config = self.config.get_config("SYSTEM_OPTIONS.NETWORK.MQTT_INFO")
@@ -187,8 +214,7 @@ class MqttProtocol(Protocol):
                 await self._on_network_error(f"解析endpoint失败: {e}")
             return False
 
-        # MQTT 重连需要重新执行 hello -> server hello -> UDP 握手，交由
-        # Protocol 的受控重连逻辑处理，不能让 Paho 在线程中直接重连。
+        # Broker 自动重连由应用控制；Paho 只负责单次连接及 I/O 线程。
         self.mqtt_client = mqtt.Client(
             client_id=self.client_id, reconnect_on_failure=False
         )
@@ -254,28 +280,21 @@ class MqttProtocol(Protocol):
 
         def on_disconnect_callback(client, userdata, rc):
             try:
-                if rc == 0:
-                    logger.info("MQTT连接正常断开")
-                    # 服务端主动结束会话时，按正常关闭清理资源和音频通道；
-                    # 本地主动关闭已由 _handle_goodbye() 处理，无需重复通知。
-                    if self.connected and not self._is_closing:
-                        self._schedule_coro(
-                            self._handle_connection_loss(
-                                "MQTT连接正常断开", clean=True
-                            ),
-                            name="connection_loss:clean",
-                        )
+                # 已被完整清理/替换的旧 client 的迟到回调不能干扰当前连接。
+                if client is not self.mqtt_client:
                     return
-
-                logger.warning(f"MQTT连接异常断开，返回码: {rc}")
                 if self._is_closing:
                     return
-
-                # 和 WSS 一样，所有状态变更、资源释放和可选重连都通过
-                # Protocol 的统一路径完成，避免 Paho 回调线程直接操作状态。
+                reason = (
+                    "MQTT连接正常断开" if rc == 0 else f"MQTT连接断开: {rc}"
+                )
+                if rc == 0:
+                    logger.info(reason)
+                else:
+                    logger.warning(reason)
                 self._schedule_coro(
-                    self._handle_connection_loss(f"MQTT连接断开: {rc}"),
-                    name=f"connection_loss:rc={rc}",
+                    self._handle_broker_disconnect(reason),
+                    name=f"broker_disconnect:rc={rc}",
                 )
             except Exception as e:
                 logger.error(f"处理MQTT断开连接失败: {e}", exc_info=True)
@@ -304,17 +323,12 @@ class MqttProtocol(Protocol):
 
             if self.subscribe_topic:
                 self.mqtt_client.subscribe(self.subscribe_topic, qos=1)
-
-            opened = await self._open_udp_audio_session()
-            if not opened:
-                # 初始连接的协商失败与旧行为一致：不保留半初始化的 broker。
-                await self._do_cleanup()
-            return opened
+            logger.info("MQTT控制连接已建立")
+            return True
 
         except Exception as e:
             logger.error(f"连接MQTT服务器失败: {e}", exc_info=True)
-            # loop_start() 的首次连接重试独立于 reconnect_on_failure；连接
-            # 或握手失败后必须显式停止它，避免迟到回调绕过应用状态机。
+            # 首次连接失败必须停止 Paho 网络线程，避免迟到回调绕过应用状态机。
             await self._do_cleanup()
             if self._on_network_error:
                 await self._on_network_error(f"连接MQTT服务器失败: {e}")
@@ -479,9 +493,10 @@ class MqttProtocol(Protocol):
     async def open_audio_channel(self):
         if self.is_audio_channel_opened():
             return True
-        if self.mqtt_client and self.mqtt_client.is_connected():
-            return await self._open_udp_audio_session()
-        return await self.connect()
+        if not await self._connect_control_channel():
+            self._schedule_control_reconnect()
+            return False
+        return await self._open_udp_audio_session()
 
     async def close_audio_channel(self):
         """结束当前 UDP 会话，保留 MQTT 控制连接以便下次复用."""
@@ -527,6 +542,76 @@ class MqttProtocol(Protocol):
         if was_open and self._on_audio_channel_closed:
             await self._on_audio_channel_closed()
 
+    async def _handle_broker_disconnect(self, reason: str) -> None:
+        """Broker 断线：关闭 UDP 会话，稍后仅重连 MQTT 控制通道。"""
+        if self.mqtt_client is None:
+            return
+
+        was_audio_open = self.connected or self._udp.is_ready()
+        await self._cancel_monitor_task()
+        self._disconnect_mqtt_client()
+
+        if was_audio_open:
+            await self._close_udp_audio_session()
+        else:
+            self._udp.reset_session()
+            self.session_id = ""
+
+        if not self._is_closing and self._on_network_error:
+            await self._on_network_error(f"连接丢失: {reason}")
+        if not self._is_closing:
+            self._schedule_control_reconnect()
+
+    def _can_reconnect_control(self) -> bool:
+        checker = self._idle_checker
+        if checker is None:
+            return True
+        try:
+            return bool(checker())
+        except Exception as e:
+            logger.debug(f"检查 MQTT 重连空闲状态失败: {e}", exc_info=True)
+            return False
+
+    def _schedule_control_reconnect(self) -> None:
+        """安排 ESP32 同款固定 60 秒、仅空闲时的 Broker 重连。"""
+        task = self._control_reconnect_task
+        if task is not None and not task.done():
+            return
+        self._control_reconnect_task = asyncio.create_task(
+            self._control_reconnect_loop(), name="mqtt:control_reconnect"
+        )
+
+    async def _control_reconnect_loop(self) -> None:
+        current_task = asyncio.current_task()
+        try:
+            while not self._is_closing:
+                await asyncio.sleep(_CONTROL_RECONNECT_DELAY)
+                if self._is_closing:
+                    return
+                if not self._can_reconnect_control():
+                    logger.info("MQTT 控制连接重连等待设备空闲")
+                    continue
+                logger.info("MQTT 控制连接断开，开始固定间隔重连")
+                if await self._connect_control_channel():
+                    logger.info("MQTT 控制连接重连成功（未打开 UDP 会话）")
+                    return
+        except asyncio.CancelledError:
+            logger.debug("MQTT 控制连接重连任务已取消")
+        finally:
+            if self._control_reconnect_task is current_task:
+                self._control_reconnect_task = None
+
+    async def _cancel_control_reconnect_task(self) -> None:
+        task = self._control_reconnect_task
+        if task is None or task.done() or task is asyncio.current_task():
+            return
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+        self._control_reconnect_task = None
+
     def _disconnect_mqtt_client(self) -> None:
         """停止 Paho 网络线程并丢弃 MQTT 客户端（仅完整清理路径调用）."""
         client = self.mqtt_client
@@ -542,6 +627,7 @@ class MqttProtocol(Protocol):
 
     async def _shutdown_control_channel(self):
         """应用退出时关闭可跨会话复用的 MQTT 控制连接."""
+        await self._cancel_control_reconnect_task()
         self._disconnect_mqtt_client()
 
     def _stop_udp_receiver(self):
@@ -549,6 +635,9 @@ class MqttProtocol(Protocol):
         self._udp.stop()
 
     def __del__(self):
+        task = getattr(self, "_control_reconnect_task", None)
+        if task is not None and not task.done():
+            task.cancel()
         try:
             self._udp.stop()
         except Exception:
@@ -571,6 +660,7 @@ class MqttProtocol(Protocol):
 
     async def _do_cleanup(self):
         self._udp.reset_session()
+        self.connected = False
         self.session_id = ""
         self._disconnect_mqtt_client()
 

@@ -72,6 +72,10 @@ class ProtocolTransport:
         self._incoming_audio_handler = handler
         self._ensure_audio_consumer()
 
+    def set_idle_checker(self, checker: Callable[[], bool]) -> None:
+        if self._protocol:
+            self._protocol.set_idle_checker(checker)
+
     def _setup_callbacks(self) -> None:
         if not self._protocol:
             return
@@ -276,6 +280,17 @@ class ProtocolTransport:
                 logger.error(f"协议连接异常: {e}", exc_info=True)
                 return False
 
+    async def start(self) -> bool:
+        """启动协议的常驻控制链路（若该协议需要）。"""
+        if not self._protocol:
+            logger.error("协议未初始化")
+            return False
+        try:
+            return bool(await self._protocol.start())
+        except Exception as e:
+            logger.error(f"启动协议控制链路失败: {e}", exc_info=True)
+            return False
+
     async def disconnect(self) -> None:
         """结束当前音频会话，但允许协议复用其控制连接."""
         if self._protocol:
@@ -380,11 +395,17 @@ class ProtocolManager:
     def set_audio_handler(self, handler: Optional[AudioCallback]) -> None:
         self._transport.set_audio_handler(handler)
 
+    def set_idle_checker(self, checker: Callable[[], bool]) -> None:
+        self._transport.set_idle_checker(checker)
+
     def is_audio_channel_opened(self) -> bool:
         return self._transport.is_audio_channel_opened()
 
     async def connect(self, timeout: float = 12.0) -> bool:
         return await self._transport.connect(timeout)
+
+    async def start(self) -> bool:
+        return await self._transport.start()
 
     async def disconnect(self) -> None:
         await self._transport.disconnect()
