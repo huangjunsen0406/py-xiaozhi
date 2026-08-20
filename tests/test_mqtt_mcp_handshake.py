@@ -47,6 +47,7 @@ class _ConnectedMqttClient:
         self.kwargs = kwargs
         self.loop_stop_called = False
         self.disconnect_called = False
+        self.published: list[tuple[str, str, int]] = []
         self.on_connect = None
         self.on_disconnect = None
 
@@ -68,6 +69,7 @@ class _ConnectedMqttClient:
         pass
 
     def publish(self, topic, payload, qos=0):
+        self.published.append((topic, payload, qos))
         if json.loads(payload).get("type") == "hello":
             self.protocol._handle_mqtt_message(
                 json.dumps(
@@ -97,20 +99,30 @@ class _ConnectedMqttClient:
 
 
 class _FakeUdp:
-    server = "127.0.0.1"
-    port = 9000
+    def __init__(self):
+        self.server = "127.0.0.1"
+        self.port = 9000
+        self.start_count = 0
+        self.reset_count = 0
+        self._ready = False
 
     def configure(self, **kwargs):
-        pass
+        self.server = kwargs["server"]
+        self.port = kwargs["port"]
 
     def start(self):
-        pass
+        self.start_count += 1
+        self._ready = True
 
     def stop(self):
-        pass
+        self._ready = False
+
+    def reset_session(self):
+        self.reset_count += 1
+        self._ready = False
 
     def is_ready(self):
-        return True
+        return self._ready
 
 
 async def _tool(_arguments):
@@ -256,3 +268,71 @@ async def test_mqtt_connection_uses_controlled_reconnect_and_disconnects_cleanly
     assert protocol.connected is False
     assert clients[0].loop_stop_called
     assert errors == ["连接丢失: MQTT连接断开: 7"]
+
+
+@pytest.mark.asyncio
+async def test_mqtt_closes_only_udp_session_and_reuses_broker(monkeypatch):
+    """正常 goodbye 释放 UDP，下一轮 hello 必须复用已连 broker。"""
+    from src.protocols import mqtt_protocol as mqtt_module
+
+    mqtt_info = {
+        "endpoint": "mqtt.example.test:1883",
+        "client_id": "test-client",
+        "username": "test-user",
+        "password": "test-password",
+        "publish_topic": "device-server",
+        "subscribe_topic": "server-device",
+    }
+
+    class _Config:
+        def get_config(self, key):
+            assert key == "SYSTEM_OPTIONS.NETWORK.MQTT_INFO"
+            return mqtt_info
+
+    monkeypatch.setattr(mqtt_module, "get_config", lambda: _Config())
+
+    protocol = mqtt_module.MqttProtocol(asyncio.get_running_loop())
+    udp = _FakeUdp()
+    protocol._udp = udp
+    clients = []
+
+    def create_client(*args, **kwargs):
+        client = _ConnectedMqttClient(protocol, **kwargs)
+        clients.append(client)
+        return client
+
+    monkeypatch.setattr(mqtt_module.mqtt, "Client", create_client)
+
+    closed = asyncio.Event()
+
+    async def on_closed():
+        closed.set()
+
+    protocol.on_audio_channel_closed(on_closed)
+
+    assert await protocol.connect() is True
+    client = clients[0]
+    assert protocol.is_audio_channel_opened()
+    assert udp.start_count == 1
+
+    await protocol.close_audio_channel()
+
+    assert await asyncio.wait_for(closed.wait(), timeout=1.0) is True
+    assert protocol.mqtt_client is client
+    assert client.loop_stop_called is False
+    assert client.disconnect_called is False
+    assert protocol.is_audio_channel_opened() is False
+    assert json.loads(client.published[-1][1]) == {
+        "type": "goodbye",
+        "session_id": "test-session",
+    }
+
+    assert await protocol.open_audio_channel() is True
+    assert len(clients) == 1
+    assert udp.start_count == 2
+    assert protocol.is_audio_channel_opened()
+
+    await protocol.shutdown()
+    assert client.loop_stop_called
+    assert client.disconnect_called
+    assert protocol.mqtt_client is None

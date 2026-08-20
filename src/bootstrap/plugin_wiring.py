@@ -107,8 +107,8 @@ def register_cleanup_resources(container: "ServiceContainer") -> None:
     for plugin in container.plugins._plugins:
         plugin.register_resources(pool)
 
-    # 网络连接
-    pool.register("protocol", container.protocol.disconnect)
+    # 网络连接：退出时关闭控制通道和其后台线程；会话内重连仍走 disconnect。
+    pool.register("protocol", container.protocol.shutdown)
 
     # 异步任务
     pool.register("tasks", container.tasks.cancel_all)

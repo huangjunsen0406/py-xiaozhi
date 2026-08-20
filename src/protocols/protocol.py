@@ -103,6 +103,18 @@ class Protocol:
         """
         raise NotImplementedError("close_audio_channel方法必须由子类实现")
 
+    async def shutdown(self):
+        """彻底释放协议资源（应用退出路径）.
+
+        先结束当前音频会话，使协议有机会发送其正常的会话关闭消息；随后
+        关闭仍可能存活的控制通道。WSS 的控制通道就是 WebSocket 会话，
+        默认钩子无需额外操作；MQTT 则通过子类钩子关闭 Broker/Paho 资源。
+        """
+        try:
+            await self.close_audio_channel()
+        finally:
+            await self._shutdown_control_channel()
+
     async def send_abort_speaking(self, reason):
         """
         发送中止语音的消息.
@@ -251,6 +263,14 @@ class Protocol:
         - 取消 self._connection_monitor_task（基类 _handle_connection_loss 负责）
         """
         raise NotImplementedError("_do_cleanup方法必须由子类实现")
+
+    async def _shutdown_control_channel(self):
+        """关闭会话结束后仍存活的控制通道（应用退出时调用）.
+
+        大多数协议的音频会话与控制通道共用一条连接，
+        ``close_audio_channel`` 已完成释放。MQTT 可覆写此钩子关闭可复用的
+        Broker 连接及其后台线程。
+        """
 
     # ============ 连接监控（公共，子类可覆盖 _monitor_interval） ============
 

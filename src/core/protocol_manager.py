@@ -277,11 +277,21 @@ class ProtocolTransport:
                 return False
 
     async def disconnect(self) -> None:
+        """结束当前音频会话，但允许协议复用其控制连接."""
         if self._protocol:
             try:
                 await self._protocol.close_audio_channel()
             except Exception as e:
                 logger.error(f"关闭协议失败: {e}", exc_info=True)
+        await self._stop_audio_consumer()
+
+    async def shutdown(self) -> None:
+        """彻底关闭协议及其后台资源（应用退出路径）."""
+        if self._protocol:
+            try:
+                await self._protocol.shutdown()
+            except Exception as e:
+                logger.error(f"彻底关闭协议失败: {e}", exc_info=True)
         await self._stop_audio_consumer()
 
 
@@ -378,6 +388,9 @@ class ProtocolManager:
 
     async def disconnect(self) -> None:
         await self._transport.disconnect()
+
+    async def shutdown(self) -> None:
+        await self._transport.shutdown()
 
     async def send_audio(self, data: bytes) -> None:
         await self._gateway.send_audio(data)
