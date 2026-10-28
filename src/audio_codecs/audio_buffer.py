@@ -53,9 +53,18 @@ class PcmFifo:
 
     def pull(self, n: int) -> np.ndarray | None:
         """取 n 个样本；无数据返回 None，不足补零."""
+        data, _ = self.pull_with_count(n)
+        return data
+
+    def pull_with_count(self, n: int) -> tuple[np.ndarray | None, int]:
+        """取 n 个样本，并返回实际读取的样本数.
+
+        ``pull`` 为兼容旧调用保留。播放需要精确获知通知音频的消费进度时，
+        使用这个方法可避免把末尾补齐的静音也计入媒体时间。
+        """
         with self._lock:
             if self._size == 0:
-                return None
+                return None, 0
             out = np.zeros(n, dtype=np.float32)
             filled = 0
             while filled < n and self._chunks:
@@ -71,7 +80,7 @@ class PcmFifo:
                 if self._offset >= len(head):
                     self._chunks.popleft()
                     self._offset = 0
-            return out
+            return out, filled
 
     def clear(self) -> int:
         """清空，返回丢弃的样本数."""

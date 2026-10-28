@@ -30,6 +30,7 @@ class DeviceState(str, Enum):
     IDLE = "idle"
     LISTENING = "listening"
     SPEAKING = "speaking"
+    NOTIFYING = "notifying"
 
 
 class EventType:

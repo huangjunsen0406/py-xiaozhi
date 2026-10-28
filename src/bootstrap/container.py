@@ -52,6 +52,7 @@ class ServiceContainer:
         # 容器持有的跨插件共享服务（启动时 bind，关闭时 unbind）
         self.mcp_server = None
         self.music_player = None
+        self.notification_player = None
 
         # 会话控制（听/说/打断/TTS 回环）
         self.session = ConversationSession(
@@ -93,6 +94,7 @@ class ServiceContainer:
             self.tasks.initialize()
             self.protocol.set_task_manager(self.tasks)
             self.protocol.set_protocol(protocol)
+            self.protocol.set_idle_checker(self.state.is_idle)
 
             self.session.bind_events(self.event_bus)
 
@@ -120,6 +122,9 @@ class ServiceContainer:
                     logger.debug(f"降级提示事件失败: {e}", exc_info=True)
 
             await self.plugins.notify_device_state_changed(self.state.device_state)
+
+            # MQTT 的控制连接常驻，用于 MCP/notify；WSS 的默认实现是 no-op。
+            await self.protocol.start()
 
             await self.tasks.wait_shutdown()
             return 0

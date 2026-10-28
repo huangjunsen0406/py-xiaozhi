@@ -18,6 +18,7 @@ class UiPresenter:
         DeviceState.IDLE: "待命",
         DeviceState.LISTENING: "聆听中...",
         DeviceState.SPEAKING: "说话中...",
+        DeviceState.NOTIFYING: "通知播放中...",
     }
 
     MUSIC_STATE_TEXT = {

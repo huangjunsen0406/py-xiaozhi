@@ -17,12 +17,13 @@ logger = get_logger()
 
 
 def bind_shared_services(container: "ServiceContainer") -> None:
-    """创建跨插件共享服务（McpServer / MusicPlayer），仅容器持有.
+    """创建跨插件共享服务（McpServer / MusicPlayer / Notify），仅容器持有.
 
     不再写入模块级单例；插件与 MCP 工具经构造注入 / 闭包拿到同一实例。
     """
     from src.mcp.mcp_server import McpServer
     from src.mcp.tools.music.music_player import MusicPlayer
+    from src.notifications.notification_player import NotificationPlayer
 
     if container.mcp_server is None:
         container.mcp_server = McpServer()
@@ -30,11 +31,21 @@ def bind_shared_services(container: "ServiceContainer") -> None:
     if container.music_player is None:
         container.music_player = MusicPlayer()
 
-    logger.debug("共享服务已创建: McpServer, MusicPlayer")
+    if container.notification_player is None:
+        container.notification_player = NotificationPlayer()
+        container.notification_player.set_event_bus(container.event_bus)
+        container.session.set_notification_player(container.notification_player)
+
+    logger.debug("共享服务已创建: McpServer, MusicPlayer, NotificationPlayer")
 
 
 def unbind_shared_services(container: "ServiceContainer") -> None:
     """释放共享服务引用（资源池最后阶段调用）."""
+    if container.notification_player is not None:
+        try:
+            container.notification_player.detach()
+        except Exception as e:
+            logger.debug(f"detach NotificationPlayer 失败: {e}", exc_info=True)
     if container.music_player is not None:
         try:
             container.music_player.detach()
@@ -47,6 +58,7 @@ def unbind_shared_services(container: "ServiceContainer") -> None:
             logger.debug(f"detach McpServer 失败: {e}", exc_info=True)
     container.music_player = None
     container.mcp_server = None
+    container.notification_player = None
 
 
 async def setup_plugins(
@@ -107,8 +119,12 @@ def register_cleanup_resources(container: "ServiceContainer") -> None:
     for plugin in container.plugins._plugins:
         plugin.register_resources(pool)
 
-    # 网络连接
-    pool.register("protocol", container.protocol.disconnect)
+    # 通知必须先于 AudioCodec 清理，停止其解码任务并释放播放 FIFO。
+    if container.notification_player is not None:
+        pool.register("notification_player", container.notification_player.stop)
+
+    # 网络连接：退出时关闭控制通道和其后台线程；会话内重连仍走 disconnect。
+    pool.register("protocol", container.protocol.shutdown)
 
     # 异步任务
     pool.register("tasks", container.tasks.cancel_all)

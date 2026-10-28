@@ -19,6 +19,9 @@ from src.utils.config_manager import get_config
 
 logger = get_logger()
 
+_MQTT_PUBLISH_TIMEOUT = 5.0
+_CONTROL_RECONNECT_DELAY = 60.0
+
 
 def parse_mqtt_endpoint(endpoint: str) -> tuple[str, int]:
     """解析 endpoint：hostname 或 hostname:port；默认端口 8883."""
@@ -68,6 +71,8 @@ class MqttProtocol(Protocol):
         self._udp.set_audio_handler(self._on_udp_audio)
 
         self.server_hello_event = asyncio.Event()
+        self._control_connect_lock = asyncio.Lock()
+        self._control_reconnect_task: asyncio.Task | None = None
 
     # ---- 兼容旧属性（诊断 / 测试）----
     @property
@@ -136,12 +141,34 @@ class MqttProtocol(Protocol):
                 coro.close()
 
     async def connect(self):
-        """连接到 MQTT 服务器并建立 UDP 音频通道."""
+        """兼容旧调用：连接 MQTT 控制通道后建立 UDP 音频会话。"""
+        return await self.open_audio_channel()
+
+    async def start(self) -> bool:
+        """应用启动时只建立 MQTT 控制连接，不发送 hello 或打开 UDP。"""
+        if self._is_closing:
+            return False
+        connected = await self._connect_control_channel()
+        if not connected:
+            self._schedule_control_reconnect()
+        return connected
+
+    async def _connect_control_channel(self) -> bool:
+        """连接并订阅 Broker 控制通道，不改变音频会话状态。"""
         if self._is_closing:
             logger.warning("连接正在关闭中，取消新的连接尝试")
             return False
 
-        self.server_hello_event = asyncio.Event()
+        if self.mqtt_client and self.mqtt_client.is_connected():
+            return True
+
+        async with self._control_connect_lock:
+            if self.mqtt_client and self.mqtt_client.is_connected():
+                return True
+            return await self._create_control_connection()
+
+    async def _create_control_connection(self) -> bool:
+        """创建一次新的 Paho client 并等待 CONNACK。"""
 
         try:
             mqtt_config = self.config.get_config("SYSTEM_OPTIONS.NETWORK.MQTT_INFO")
@@ -172,11 +199,7 @@ class MqttProtocol(Protocol):
             logger.info("订阅主题为null，将不订阅任何主题")
 
         if self.mqtt_client:
-            try:
-                self.mqtt_client.loop_stop()
-                self.mqtt_client.disconnect()
-            except Exception as e:
-                logger.warning(f"断开MQTT客户端连接时出错: {e}", exc_info=True)
+            self._disconnect_mqtt_client()
 
         try:
             host, port = parse_mqtt_endpoint(self.endpoint)
@@ -191,7 +214,10 @@ class MqttProtocol(Protocol):
                 await self._on_network_error(f"解析endpoint失败: {e}")
             return False
 
-        self.mqtt_client = mqtt.Client(client_id=self.client_id)
+        # Broker 自动重连由应用控制；Paho 只负责单次连接及 I/O 线程。
+        self.mqtt_client = mqtt.Client(
+            client_id=self.client_id, reconnect_on_failure=False
+        )
         self.mqtt_client.username_pw_set(self.username, self.password)
 
         if use_tls:
@@ -217,17 +243,32 @@ class MqttProtocol(Protocol):
 
         connect_future = self.loop.create_future()
 
+        def settle_connect(success: bool, error: Exception | None = None) -> None:
+            """仅完成本次 connect() 创建的 Future 一次.
+
+            Paho 的网络回调在独立线程运行。连接超时、取消或旧客户端的
+            迟到回调都可能发生在 Future 完成后，必须忽略以免异常泄漏到
+            asyncio 事件循环。
+            """
+            if connect_future.done():
+                logger.debug("忽略已完成 MQTT 连接等待结果")
+                return
+            if success:
+                connect_future.set_result(True)
+            else:
+                connect_future.set_exception(error or RuntimeError("MQTT连接失败"))
+
         def on_connect_callback(client, userdata, flags, rc, properties=None):
             if rc == 0:
                 logger.info("已连接到MQTT服务器")
                 self._last_activity_time = time.time()
-                self.loop.call_soon_threadsafe(lambda: connect_future.set_result(True))
+                self.loop.call_soon_threadsafe(settle_connect, True)
             else:
                 logger.error(f"连接MQTT服务器失败，返回码: {rc}")
                 self.loop.call_soon_threadsafe(
-                    lambda: connect_future.set_exception(
-                        Exception(f"连接MQTT服务器失败，返回码: {rc}")
-                    )
+                    settle_connect,
+                    False,
+                    Exception(f"连接MQTT服务器失败，返回码: {rc}"),
                 )
 
         def on_message_callback(client, userdata, msg):
@@ -240,49 +281,22 @@ class MqttProtocol(Protocol):
 
         def on_disconnect_callback(client, userdata, rc):
             try:
+                # 已被完整清理/替换的旧 client 的迟到回调不能干扰当前连接。
+                if client is not self.mqtt_client:
+                    return
+                if self._is_closing:
+                    return
+                reason = (
+                    "MQTT连接正常断开" if rc == 0 else f"MQTT连接断开: {rc}"
+                )
                 if rc == 0:
-                    logger.info("MQTT连接正常断开")
+                    logger.info(reason)
                 else:
-                    logger.warning(f"MQTT连接异常断开，返回码: {rc}")
-
-                was_connected = self.connected
-                self.connected = False
-
-                if self._on_connection_state_changed and was_connected:
-                    reason = "正常断开" if rc == 0 else f"异常断开(rc={rc})"
-                    self.loop.call_soon_threadsafe(
-                        lambda: self._on_connection_state_changed(False, reason)
-                    )
-
-                self._udp.stop()
-
-                if (
-                    rc != 0
-                    and not self._is_closing
-                    and self._auto_reconnect_enabled
-                    and self._reconnect_attempts < self._max_reconnect_attempts
-                ):
-                    self._schedule_coro(
-                        self._attempt_reconnect(f"MQTT断开(rc={rc})"),
-                        name=f"reconnect:rc={rc}",
-                    )
-                else:
-                    if self._on_audio_channel_closed:
-                        self._schedule_coro(
-                            self._on_audio_channel_closed(),
-                            name="audio_channel_closed",
-                        )
-                    if rc != 0 and self._on_network_error:
-                        error_msg = f"MQTT连接断开: {rc}"
-                        if (
-                            self._auto_reconnect_enabled
-                            and self._reconnect_attempts >= self._max_reconnect_attempts
-                        ):
-                            error_msg += " (重连失败)"
-                        self._schedule_coro(
-                            self._on_network_error(error_msg),
-                            name="network_error",
-                        )
+                    logger.warning(reason)
+                self._schedule_coro(
+                    self._handle_broker_disconnect(reason),
+                    name=f"broker_disconnect:rc={rc}",
+                )
             except Exception as e:
                 logger.error(f"处理MQTT断开连接失败: {e}", exc_info=True)
 
@@ -310,53 +324,64 @@ class MqttProtocol(Protocol):
 
             if self.subscribe_topic:
                 self.mqtt_client.subscribe(self.subscribe_topic, qos=1)
-
-            self._start_connection_monitor()
-
-            hello_message = {
-                "type": "hello",
-                "version": 3,
-                "features": {"mcp": True},
-                "transport": "udp",
-                "audio_params": {
-                    "format": "opus",
-                    "sample_rate": AudioConfig.INPUT_SAMPLE_RATE,
-                    "channels": AudioConfig.CHANNELS,
-                    "frame_duration": AudioConfig.FRAME_DURATION,
-                },
-            }
-
-            if not await self.send_text(json.dumps(hello_message)):
-                logger.error("发送hello消息失败")
-                return False
-
-            try:
-                await asyncio.wait_for(self.server_hello_event.wait(), timeout=10.0)
-            except asyncio.TimeoutError:
-                logger.error("等待服务器hello消息超时")
-                if self._on_network_error:
-                    await self._on_network_error("等待响应超时")
-                return False
-
-            try:
-                self._udp.start()
-                self.connected = True
-                self._reconnect_attempts = 0
-
-                if self._on_connection_state_changed:
-                    self._on_connection_state_changed(True, "连接成功")
-
-                return True
-            except Exception as e:
-                logger.error(f"创建UDP套接字失败: {e}", exc_info=True)
-                if self._on_network_error:
-                    await self._on_network_error(f"创建UDP连接失败: {e}")
-                return False
+            logger.info("MQTT控制连接已建立")
+            return True
 
         except Exception as e:
             logger.error(f"连接MQTT服务器失败: {e}", exc_info=True)
+            # 首次连接失败必须停止 Paho 网络线程，避免迟到回调绕过应用状态机。
+            await self._do_cleanup()
             if self._on_network_error:
                 await self._on_network_error(f"连接MQTT服务器失败: {e}")
+            return False
+
+    async def _open_udp_audio_session(self) -> bool:
+        """在已连接的 MQTT 控制通道上协商并打开一个 UDP 音频会话."""
+        self.server_hello_event = asyncio.Event()
+        self.session_id = ""
+        self._udp.reset_session()
+
+        hello_message = {
+            "type": "hello",
+            "version": 3,
+            "features": {"mcp": True},
+            "transport": "udp",
+            "audio_params": {
+                "format": "opus",
+                "sample_rate": AudioConfig.INPUT_SAMPLE_RATE,
+                "channels": AudioConfig.CHANNELS,
+                "frame_duration": AudioConfig.FRAME_DURATION,
+            },
+        }
+
+        if not await self.send_text(json.dumps(hello_message)):
+            logger.error("发送hello消息失败")
+            return False
+
+        try:
+            await asyncio.wait_for(self.server_hello_event.wait(), timeout=10.0)
+        except asyncio.TimeoutError:
+            logger.error("等待服务器hello消息超时")
+            if self._on_network_error:
+                await self._on_network_error("等待响应超时")
+            return False
+
+        try:
+            self._udp.start()
+            self.connected = True
+            self._reconnect_attempts = 0
+            self._start_connection_monitor()
+
+            if self._on_audio_channel_opened:
+                await self._on_audio_channel_opened()
+            if self._on_connection_state_changed:
+                self._on_connection_state_changed(True, "连接成功")
+            return True
+        except Exception as e:
+            logger.error(f"创建UDP套接字失败: {e}", exc_info=True)
+            self._udp.reset_session()
+            if self._on_network_error:
+                await self._on_network_error(f"创建UDP连接失败: {e}")
             return False
 
     def _handle_mqtt_message(self, payload):
@@ -399,12 +424,18 @@ class MqttProtocol(Protocol):
 
                 self.loop.call_soon_threadsafe(self.server_hello_event.set)
 
-                if self._on_audio_channel_opened:
-                    self._schedule_coro(
-                        self._on_audio_channel_opened(),
-                        name="audio_channel_opened",
-                    )
                 return
+
+            if msg_type == "mcp":
+                mcp_payload = data.get("payload")
+                if isinstance(mcp_payload, dict):
+                    logger.info(
+                        "[MQTT MCP] 收到服务端请求: method=%s, id=%s",
+                        mcp_payload.get("method"),
+                        mcp_payload.get("id"),
+                    )
+                else:
+                    logger.warning("[MQTT MCP] 收到无效 MCP payload")
 
             if self._on_incoming_json:
 
@@ -428,8 +459,19 @@ class MqttProtocol(Protocol):
             return False
 
         try:
-            result = self.mqtt_client.publish(self.publish_topic, message)
-            result.wait_for_publish()
+            result = self.mqtt_client.publish(self.publish_topic, message, qos=0)
+            if result.rc not in (mqtt.MQTT_ERR_SUCCESS, mqtt.MQTT_ERR_AGAIN):
+                logger.error("MQTT消息入队失败: rc=%s", result.rc)
+                return False
+
+            # Paho 的网络循环独立于 asyncio；在工作线程等待避免阻塞 MCP
+            # 握手期间的事件处理，并限制异常网络状态下的等待时间。
+            await asyncio.to_thread(
+                result.wait_for_publish, timeout=_MQTT_PUBLISH_TIMEOUT
+            )
+            if not result.is_published():
+                logger.error("MQTT消息发布超时: %.1fs", _MQTT_PUBLISH_TIMEOUT)
+                return False
             return True
         except Exception as e:
             logger.error(f"发送MQTT消息失败: {e}", exc_info=True)
@@ -450,21 +492,28 @@ class MqttProtocol(Protocol):
             return False
 
     async def open_audio_channel(self):
-        if not self.connected:
-            return await self.connect()
-        return True
+        if self.is_audio_channel_opened():
+            return True
+        if not await self._connect_control_channel():
+            self._schedule_control_reconnect()
+            return False
+        return await self._open_udp_audio_session()
 
     async def close_audio_channel(self):
+        """结束当前 UDP 会话，保留 MQTT 控制连接以便下次复用."""
         self._is_closing = True
         try:
-            if self.session_id:
+            await self._cancel_monitor_task()
+            if (
+                self.session_id
+                and self.mqtt_client
+                and self.mqtt_client.is_connected()
+            ):
                 goodbye_msg = {"type": "goodbye", "session_id": self.session_id}
                 await self.send_text(json.dumps(goodbye_msg))
-            await self._handle_goodbye()
+            await self._close_udp_audio_session()
         except Exception as e:
             logger.error(f"关闭音频通道时出错: {e}", exc_info=True)
-            if self._on_audio_channel_closed:
-                await self._on_audio_channel_closed()
         finally:
             self._is_closing = False
 
@@ -476,41 +525,125 @@ class MqttProtocol(Protocol):
         return self._udp.is_ready()
 
     async def _handle_goodbye(self):
+        """服务端主动结束会话：仅释放 UDP，不回发 goodbye。"""
         try:
-            self._udp.reset_session()
-            logger.info("UDP接收线程已停止")
-
-            if self.mqtt_client:
-                try:
-                    self.mqtt_client.loop_stop()
-                    self.mqtt_client.disconnect()
-                except Exception as e:
-                    logger.error(f"断开MQTT连接失败: {e}", exc_info=True)
-                self.mqtt_client = None
-
-            self.connected = False
-            self.session_id = None
-
-            if self._on_audio_channel_closed:
-                await self._on_audio_channel_closed()
+            await self._cancel_monitor_task()
+            await self._close_udp_audio_session()
         except Exception as e:
             logger.error(f"处理goodbye消息时出错: {e}", exc_info=True)
+
+    async def _close_udp_audio_session(self) -> None:
+        """释放 UDP 会话状态，不触碰仍可复用的 MQTT broker 连接."""
+        was_open = self.connected or self._udp.is_ready()
+        self._udp.reset_session()
+        self.connected = False
+        self.session_id = ""
+        logger.info("UDP音频会话已关闭，保留MQTT控制连接")
+
+        if was_open and self._on_audio_channel_closed:
+            await self._on_audio_channel_closed()
+
+    async def _handle_broker_disconnect(self, reason: str) -> None:
+        """Broker 断线：关闭 UDP 会话，稍后仅重连 MQTT 控制通道。"""
+        if self.mqtt_client is None:
+            return
+
+        was_audio_open = self.connected or self._udp.is_ready()
+        await self._cancel_monitor_task()
+        self._disconnect_mqtt_client()
+
+        if was_audio_open:
+            await self._close_udp_audio_session()
+        else:
+            self._udp.reset_session()
+            self.session_id = ""
+
+        if not self._is_closing and self._on_network_error:
+            await self._on_network_error(f"连接丢失: {reason}")
+        if not self._is_closing:
+            self._schedule_control_reconnect()
+
+    def _can_reconnect_control(self) -> bool:
+        checker = self._idle_checker
+        if checker is None:
+            return True
+        try:
+            return bool(checker())
+        except Exception as e:
+            logger.debug(f"检查 MQTT 重连空闲状态失败: {e}", exc_info=True)
+            return False
+
+    def _schedule_control_reconnect(self) -> None:
+        """安排 ESP32 同款固定 60 秒、仅空闲时的 Broker 重连。"""
+        task = self._control_reconnect_task
+        if task is not None and not task.done():
+            return
+        self._control_reconnect_task = asyncio.create_task(
+            self._control_reconnect_loop(), name="mqtt:control_reconnect"
+        )
+
+    async def _control_reconnect_loop(self) -> None:
+        current_task = asyncio.current_task()
+        try:
+            while not self._is_closing:
+                await asyncio.sleep(_CONTROL_RECONNECT_DELAY)
+                if self._is_closing:
+                    return
+                if not self._can_reconnect_control():
+                    logger.info("MQTT 控制连接重连等待设备空闲")
+                    continue
+                logger.info("MQTT 控制连接断开，开始固定间隔重连")
+                if await self._connect_control_channel():
+                    logger.info("MQTT 控制连接重连成功（未打开 UDP 会话）")
+                    return
+        except asyncio.CancelledError:
+            logger.debug("MQTT 控制连接重连任务已取消")
+        finally:
+            if self._control_reconnect_task is current_task:
+                self._control_reconnect_task = None
+
+    async def _cancel_control_reconnect_task(self) -> None:
+        task = self._control_reconnect_task
+        if task is None or task.done() or task is asyncio.current_task():
+            return
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+        self._control_reconnect_task = None
+
+    def _disconnect_mqtt_client(self) -> None:
+        """停止 Paho 网络线程并丢弃 MQTT 客户端（仅完整清理路径调用）."""
+        client = self.mqtt_client
+        self.mqtt_client = None
+        self._last_activity_time = None
+        if not client:
+            return
+        try:
+            client.loop_stop()
+            client.disconnect()
+        except Exception as e:
+            logger.warning(f"断开MQTT客户端连接时出错: {e}", exc_info=True)
+
+    async def _shutdown_control_channel(self):
+        """应用退出时关闭可跨会话复用的 MQTT 控制连接."""
+        await self._cancel_control_reconnect_task()
+        self._disconnect_mqtt_client()
 
     def _stop_udp_receiver(self):
         """停止 UDP（断开回调等路径）."""
         self._udp.stop()
 
     def __del__(self):
+        task = getattr(self, "_control_reconnect_task", None)
+        if task is not None and not task.done():
+            task.cancel()
         try:
             self._udp.stop()
         except Exception:
             pass
-        if getattr(self, "mqtt_client", None):
-            try:
-                self.mqtt_client.loop_stop()
-                self.mqtt_client.disconnect()
-            except Exception as e:
-                logger.error(f"断开MQTT连接失败: {e}", exc_info=True)
+        self._disconnect_mqtt_client()
 
     # ============ 模板方法实现 ============
 
@@ -527,14 +660,10 @@ class MqttProtocol(Protocol):
         return True
 
     async def _do_cleanup(self):
-        self._udp.stop()
-        if self.mqtt_client:
-            try:
-                self.mqtt_client.loop_stop()
-                self.mqtt_client.disconnect()
-            except Exception as e:
-                logger.error(f"断开MQTT连接时出错: {e}", exc_info=True)
-        self._last_activity_time = None
+        self._udp.reset_session()
+        self.connected = False
+        self.session_id = ""
+        self._disconnect_mqtt_client()
 
     def get_connection_info(self) -> dict:
         info = super().get_connection_info()

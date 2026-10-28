@@ -38,6 +38,14 @@ class TestPcmFifo:
         assert np.all(out[100:] == 0)
         assert f.size == 0
 
+    def test_pull_with_count_excludes_padding(self):
+        f = PcmFifo(1000)
+        f.push(np.ones(100, dtype=np.float32))
+        out, count = f.pull_with_count(200)
+        assert count == 100
+        assert np.all(out[:100] == 1)
+        assert np.all(out[100:] == 0)
+
     def test_pull_empty_returns_none(self):
         f = PcmFifo(1000)
         assert f.pull(10) is None
@@ -82,6 +90,28 @@ class TestMixing:
         codec._tts_fifo.push(np.full(n, 0.5, dtype=np.float32))
         out = codec._pull_mixed(n)
         assert np.allclose(out, 0.5)
+
+    def test_notification_has_voice_priority_and_reports_drain_after_output(
+        self, codec
+    ):
+        n = codec._mix_chunk
+        progress = []
+        drained = []
+        codec.set_notification_playback_callbacks(
+            progress.append, lambda: drained.append(True)
+        )
+        codec._notification_fifo.push(np.full(n, 0.5, dtype=np.float32))
+        codec._music_fifo.push(np.full(n, 0.4, dtype=np.float32))
+
+        out = codec._pull_mixed(n)
+        assert np.allclose(out, 0.5 + _MUSIC_DUCK_GAIN * 0.4)
+        assert progress == [n]
+
+        codec._pull_mixed(n)
+        codec._notify_notification_drained_after_output()
+        assert drained == []
+        codec._notify_notification_drained_after_output()
+        assert drained == [True]
 
     def test_tts_and_music_mixed_with_duck(self, codec):
         n = codec._mix_chunk

@@ -6,7 +6,8 @@ listen / abort / TTS 回环等应用级会话逻辑。
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Optional
+import asyncio
+from typing import TYPE_CHECKING
 
 from src.constants.constants import DeviceState, ListeningMode
 from src.core.event_bus import Events
@@ -16,6 +17,7 @@ if TYPE_CHECKING:
     from src.core.event_bus import EventBus
     from src.core.protocol_manager import ProtocolManager
     from src.core.state_manager import StateManager
+    from src.notifications.notification_player import NotificationPlayer
     from src.plugins.manager import PluginManager
 
 logger = get_logger()
@@ -26,10 +28,11 @@ class ConversationSession:
 
     def __init__(
         self,
-        state: "StateManager",
-        protocol: "ProtocolManager",
-        plugins: "PluginManager",
-        event_bus: Optional["EventBus"] = None,
+        state: StateManager,
+        protocol: ProtocolManager,
+        plugins: PluginManager,
+        event_bus: EventBus | None = None,
+        notification_player: NotificationPlayer | None = None,
     ) -> None:
         self.state = state
         self.protocol = protocol
@@ -38,11 +41,18 @@ class ConversationSession:
         self._aborted = False
         # MCP 工具配置重连等：通道打开后保持 IDLE，不自动进入聆听
         self._keep_idle_on_channel_open = False
+        self._notification_player = notification_player
+        self._notification_generation = 0
+        self._notification_lock = asyncio.Lock()
+
+    def set_notification_player(self, player: NotificationPlayer) -> None:
+        """由容器注入 notify 播放服务。"""
+        self._notification_player = player
 
     # -------------------------
     # 事件订阅
     # -------------------------
-    def bind_events(self, event_bus: "EventBus") -> None:
+    def bind_events(self, event_bus: EventBus) -> None:
         """订阅协议/状态相关事件（可重复调用，以最后一次为准）."""
         self._event_bus = event_bus
         event_bus.on(Events.AUDIO_CHANNEL_OPENED, self._on_audio_channel_opened)
@@ -68,11 +78,13 @@ class ConversationSession:
         await self.state.set_device_state(DeviceState.LISTENING)
 
     async def _on_audio_channel_closed(self, _=None) -> None:
+        await self._cancel_notification()
         await self.state.set_device_state(DeviceState.IDLE)
 
     async def _on_network_error(self, error_message: str = None) -> None:
         """网络错误：停止持续监听并复位设备状态到 IDLE."""
         self.state.set_keep_listening(False)
+        await self._cancel_notification()
         try:
             if not self.state.is_idle():
                 await self.state.set_device_state(DeviceState.IDLE)
@@ -97,6 +109,8 @@ class ConversationSession:
                     await self._handle_tts_start()
                 elif state == "stop":
                     await self._handle_tts_stop()
+            elif msg_type == "notify":
+                await self._handle_notify(json_data)
 
             await self.plugins.notify_incoming_json(json_data)
 
@@ -104,6 +118,7 @@ class ConversationSession:
             logger.error(f"处理 JSON 消息失败: {e}", exc_info=True)
 
     async def _handle_tts_start(self) -> None:
+        await self._cancel_notification()
         if (
             self.state.keep_listening
             and self.state.listening_mode == ListeningMode.REALTIME
@@ -139,6 +154,67 @@ class ConversationSession:
             logger.warning(f"清空音频队列失败: {e}", exc_info=True)
 
         await self.state.set_device_state(DeviceState.LISTENING)
+
+    async def _handle_notify(self, message: dict) -> None:
+        """仅在空闲时接收服务端单向音频通知。"""
+        player = self._notification_player
+        if player is None:
+            logger.debug("未配置 NotificationPlayer，忽略 notify")
+            return
+
+        from src.notifications.notification_player import parse_notification
+
+        parsed = parse_notification(message)
+        if parsed is None:
+            logger.warning("忽略格式无效的 notify 消息")
+            return
+        audio_url, subtitles = parsed
+
+        async with self._notification_lock:
+            if not self.state.is_idle():
+                logger.info("设备忙碌，忽略 notify")
+                return
+
+            generation = None
+            try:
+                await self.state.set_device_state(DeviceState.NOTIFYING)
+                generation = await player.start(
+                    audio_url,
+                    subtitles,
+                    self._on_notification_finished,
+                )
+            finally:
+                if generation is None and self._is_notifying():
+                    await self.state.set_device_state(DeviceState.IDLE)
+            if generation is None:
+                return
+            self._notification_generation = generation
+            logger.info("开始播放服务端通知: %s", audio_url)
+
+    async def _on_notification_finished(self, generation: int, success: bool) -> None:
+        async with self._notification_lock:
+            if generation != self._notification_generation:
+                return
+            self._notification_generation = 0
+            if self._is_notifying():
+                await self.state.set_device_state(DeviceState.IDLE)
+            logger.info("通知播放%s", "完成" if success else "失败")
+
+    def _is_notifying(self) -> bool:
+        return getattr(self.state, "device_state", None) == DeviceState.NOTIFYING
+
+    async def _cancel_notification(self) -> None:
+        """打断 notify；调用方随后可进入 listen / TTS / idle。"""
+        player = self._notification_player
+        if player is None:
+            return
+        async with self._notification_lock:
+            if not player.is_active and not self._is_notifying():
+                return
+            self._notification_generation = 0
+            await player.stop()
+            if self._is_notifying():
+                await self.state.set_device_state(DeviceState.IDLE)
 
     # -------------------------
     # 操作方法
@@ -185,6 +261,7 @@ class ConversationSession:
             logger.error(f"协议重连失败: {e}", exc_info=True)
 
     async def start_listening(self, mode: ListeningMode) -> None:
+        await self._cancel_notification()
         ok = await self.connect_protocol()
         if not ok:
             return
@@ -200,6 +277,7 @@ class ConversationSession:
         await self.state.set_device_state(DeviceState.IDLE)
 
     async def start_listening_manual(self) -> None:
+        await self._cancel_notification()
         ok = await self.connect_protocol()
         if not ok:
             return
@@ -219,6 +297,7 @@ class ConversationSession:
         await self.state.set_device_state(DeviceState.IDLE)
 
     async def start_auto_conversation(self) -> None:
+        await self._cancel_notification()
         ok = await self.connect_protocol()
         if not ok:
             return
@@ -235,6 +314,9 @@ class ConversationSession:
         await self.state.set_device_state(DeviceState.LISTENING)
 
     async def abort_speaking(self, reason: str) -> None:
+        if self._is_notifying():
+            await self._cancel_notification()
+            return
         # 自动对话还在持续听时，打断后回到 listening，别停在 idle
         if self._aborted:
             logger.debug(f"已经中止，忽略重复请求: {reason}")

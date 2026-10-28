@@ -79,7 +79,9 @@ class AudioPlugin(Plugin):
         """配置变更时重新加载音频设备（含 PortAudio 重枚举）."""
         if self.codec:
             logger.info("AudioPlugin: 收到配置变更事件，重新加载音频设备")
-            await self.codec.reload_devices(reenumerate=True)
+            await self._publish_audio_codec(None)
+            if await self.codec.reload_devices(reenumerate=True):
+                await self._publish_audio_codec(self.codec)
 
     async def _on_devices_refresh_request(self, data=None):
         """设置页请求刷新设备列表：停流 → 重枚举 → 再开流.
@@ -92,6 +94,7 @@ class AudioPlugin(Plugin):
         result = {"input": [], "output": []}
         try:
             if self.codec:
+                await self._publish_audio_codec(None)
                 # 停流后才能安全 _terminate PortAudio
                 self.codec.stop_streams_for_enumeration()
                 refresh_portaudio_devices(reinitialize=True)
@@ -100,6 +103,8 @@ class AudioPlugin(Plugin):
                 ok = await self.codec.reload_devices(reenumerate=False)
                 if not ok:
                     logger.error("AudioPlugin: 设备刷新后重新打开音频流失败")
+                else:
+                    await self._publish_audio_codec(self.codec)
             else:
                 # 无 codec（禁用音频）时仍尽量枚举，供设置页展示
                 refresh_portaudio_devices(reinitialize=True)

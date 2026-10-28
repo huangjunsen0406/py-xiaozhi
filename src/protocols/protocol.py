@@ -26,6 +26,7 @@ class Protocol:
         self._max_reconnect_attempts = 5  # 默认重连5次
         self._auto_reconnect_enabled = False  # 默认禁用自动重连
         self._connection_monitor_task = None
+        self._idle_checker = None
 
     def on_incoming_json(self, callback):
         """
@@ -97,11 +98,35 @@ class Protocol:
         """
         raise NotImplementedError("open_audio_channel方法必须由子类实现")
 
+    async def start(self) -> bool:
+        """启动协议的应用级后台能力。
+
+        WSS 的控制与音频会话同寿命，因此默认不做任何事；MQTT 可覆写为
+        仅连接 Broker 控制通道，而不建立 UDP 音频会话。
+        """
+        return True
+
+    def set_idle_checker(self, checker) -> None:
+        """注入应用空闲判定，供拥有常驻控制通道的协议选择重连时机。"""
+        self._idle_checker = checker
+
     async def close_audio_channel(self):
         """
         关闭音频通道的抽象方法，需要在子类中实现.
         """
         raise NotImplementedError("close_audio_channel方法必须由子类实现")
+
+    async def shutdown(self):
+        """彻底释放协议资源（应用退出路径）.
+
+        先结束当前音频会话，使协议有机会发送其正常的会话关闭消息；随后
+        关闭仍可能存活的控制通道。WSS 的控制通道就是 WebSocket 会话，
+        默认钩子无需额外操作；MQTT 则通过子类钩子关闭 Broker/Paho 资源。
+        """
+        try:
+            await self.close_audio_channel()
+        finally:
+            await self._shutdown_control_channel()
 
     async def send_abort_speaking(self, reason):
         """
@@ -207,7 +232,7 @@ class Protocol:
         }
         await self.send_text(json.dumps(message))
 
-    async def send_mcp_message(self, payload):
+    async def send_mcp_message(self, payload) -> bool | None:
         """
         发送MCP消息.
         """
@@ -222,7 +247,7 @@ class Protocol:
             "payload": payload_data,
         }
 
-        await self.send_text(json.dumps(message))
+        return await self.send_text(json.dumps(message))
 
     # ============ 连接状态检查（模板方法，子类实现） ============
 
@@ -251,6 +276,14 @@ class Protocol:
         - 取消 self._connection_monitor_task（基类 _handle_connection_loss 负责）
         """
         raise NotImplementedError("_do_cleanup方法必须由子类实现")
+
+    async def _shutdown_control_channel(self):
+        """关闭会话结束后仍存活的控制通道（应用退出时调用）.
+
+        大多数协议的音频会话与控制通道共用一条连接，
+        ``close_audio_channel`` 已完成释放。MQTT 可覆写此钩子关闭可复用的
+        Broker 连接及其后台线程。
+        """
 
     # ============ 连接监控（公共，子类可覆盖 _monitor_interval） ============
 
