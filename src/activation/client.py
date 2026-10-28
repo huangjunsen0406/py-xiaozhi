@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import ssl
 from typing import TYPE_CHECKING, Callable, Optional
 
 import aiohttp
@@ -71,7 +72,14 @@ class ActivationHttpClient:
         retry_interval = 5
         timeout = aiohttp.ClientTimeout(total=10)
 
-        async with aiohttp.ClientSession(timeout=timeout) as session:
+        ssl_context = ssl.create_default_context()
+        ssl_context.check_hostname = False
+        ssl_context.verify_mode = ssl.CERT_NONE
+        connector = aiohttp.TCPConnector(ssl=ssl_context)
+
+        async with aiohttp.ClientSession(
+            timeout=timeout, connector=connector
+        ) as session:
             for attempt in range(max_retries):
                 try:
                     logger.info(f"激活尝试 {attempt + 1}/{max_retries}")
