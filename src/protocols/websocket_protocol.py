@@ -10,9 +10,8 @@ from src.logging import get_logger
 from src.protocols.protocol import Protocol
 from src.utils.config_manager import get_config
 
-# 服务器可能使用自签名证书，暂时跳过客户端证书验证
-# 以避免生产环境中非正规SSL证书导致连接失败
-ssl_context = ssl._create_unverified_context()
+# 使用系统默认 CA 校验服务器证书（不再跳过验证）
+ssl_context = ssl.create_default_context()
 
 logger = get_logger()
 

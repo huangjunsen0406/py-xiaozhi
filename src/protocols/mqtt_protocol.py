@@ -226,11 +226,10 @@ class MqttProtocol(Protocol):
                     ca_certs=None,
                     certfile=None,
                     keyfile=None,
-                    cert_reqs=mqtt.ssl.CERT_NONE,
+                    cert_reqs=mqtt.ssl.CERT_REQUIRED,
                     tls_version=mqtt.ssl.PROTOCOL_TLS,
                 )
-                self.mqtt_client.tls_insecure_set(True)
-                logger.info("已配置TLS加密连接 (跳过证书验证)")
+                logger.info("已配置TLS加密连接 (已启用证书验证)")
             except Exception as e:
                 logger.error(
                     f"TLS配置失败，无法安全连接到MQTT服务器: {e}", exc_info=True

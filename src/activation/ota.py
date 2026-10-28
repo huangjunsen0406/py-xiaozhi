@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import socket
-import ssl
 from typing import TYPE_CHECKING, Dict, Optional
 
 import aiohttp
@@ -67,15 +66,9 @@ class OtaConfigClient:
         payload = self._build_ota_payload()
         logger.debug(f"OTA请求: {ota_url}")
 
-        ssl_context = ssl.create_default_context()
-        ssl_context.check_hostname = False
-        ssl_context.verify_mode = ssl.CERT_NONE
         timeout = aiohttp.ClientTimeout(total=10)
-        connector = aiohttp.TCPConnector(ssl=ssl_context)
 
-        async with aiohttp.ClientSession(
-            timeout=timeout, connector=connector
-        ) as session:
+        async with aiohttp.ClientSession(timeout=timeout) as session:
             async with session.post(ota_url, headers=headers, json=payload) as response:
                 if response.status != 200:
                     raise ValueError(f"OTA服务器返回错误: {response.status}")
