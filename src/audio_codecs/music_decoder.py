@@ -108,7 +108,9 @@ class MusicDecoder:
             if process.returncode == 0:
                 duration_str = stdout.decode("utf-8").strip()
                 duration = float(duration_str)
-                logger.debug(f"解析音频时长: {duration:.2f}秒 ({_source_label(source)})")
+                logger.debug(
+                    f"解析音频时长: {duration:.2f}秒 ({_source_label(source)})"
+                )
                 return duration
             else:
                 error_msg = stderr.decode("utf-8", errors="ignore")
@@ -122,9 +124,47 @@ class MusicDecoder:
     def __init__(self, sample_rate: int = 24000, channels: int = 1):
         self.sample_rate = sample_rate
         self.channels = channels
-        self._process: subprocess.Process | None = None
+        self._process: asyncio.subprocess.Process | None = None
+        self._probe_process: asyncio.subprocess.Process | None = None
         self._decode_task: asyncio.Task | None = None
         self._stopped = False
+        self.completed_successfully = False
+
+    @staticmethod
+    async def _terminate_process(process: asyncio.subprocess.Process | None) -> None:
+        """终止并回收一个可能仍在运行的子进程。"""
+        if process is None or process.returncode is not None:
+            return
+        try:
+            process.terminate()
+            await asyncio.wait_for(process.wait(), timeout=2.0)
+        except asyncio.TimeoutError:
+            try:
+                process.kill()
+                await process.wait()
+            except Exception as e:
+                logger.debug(f"强制结束 FFmpeg 失败: {e}")
+        except ProcessLookupError:
+            pass
+        except Exception as e:
+            if str(e).strip():
+                logger.debug(f"结束 FFmpeg 进程: {e}")
+
+    @staticmethod
+    async def _spawn_process(*args, **kwargs) -> asyncio.subprocess.Process:
+        """在启动协程取消时仍取得并回收已创建的子进程。"""
+        spawn_task = asyncio.create_task(
+            asyncio.create_subprocess_exec(*args, **kwargs)
+        )
+        try:
+            return await asyncio.shield(spawn_task)
+        except asyncio.CancelledError:
+            try:
+                process = await asyncio.shield(spawn_task)
+            except asyncio.CancelledError:
+                process = await spawn_task
+            await MusicDecoder._terminate_process(process)
+            raise
 
     async def start_decode(
         self,
@@ -148,18 +188,27 @@ class MusicDecoder:
             source = path
 
         self._stopped = False
+        self.completed_successfully = False
 
         try:
             ffmpeg = get_ffmpeg_path()
             try:
-                result = await asyncio.create_subprocess_exec(
+                result = await self._spawn_process(
                     ffmpeg,
                     "-version",
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
                     **_SUBPROCESS_KW,
                 )
+                self._probe_process = result
+                if self._stopped:
+                    await self._terminate_process(result)
+                    self._probe_process = None
+                    return False
                 await result.wait()
+                self._probe_process = None
+                if self._stopped:
+                    return False
                 if result.returncode not in (0, None):
                     logger.error(
                         f"FFmpeg 无法启动（退出码 {result.returncode}）: {ffmpeg}。"
@@ -217,9 +266,12 @@ class MusicDecoder:
                 ]
             )
 
-            self._process = await asyncio.create_subprocess_exec(
+            self._process = await self._spawn_process(
                 *cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, **_SUBPROCESS_KW
             )
+            if self._stopped:
+                await self.stop()
+                return False
 
             self._decode_task = asyncio.create_task(self._read_pcm_stream(output_queue))
 
@@ -231,113 +283,90 @@ class MusicDecoder:
             )
             return True
 
+        except asyncio.CancelledError:
+            await self.stop()
+            raise
         except Exception as e:
             logger.error(f"启动音频解码失败: {e}", exc_info=True)
+            await self.stop()
             return False
 
     async def _read_pcm_stream(self, output_queue: asyncio.Queue):
-        frame_duration_ms = AudioConfig.FRAME_DURATION
-        frame_size_samples = int(self.sample_rate * (frame_duration_ms / 1000))
-        frame_size_bytes = frame_size_samples * 2 * self.channels
-        logger.info(
-            f"解码器参数: 帧大小={frame_size_samples}样本, "
-            f"{frame_size_bytes}字节, {frame_duration_ms}ms"
-        )
-
-        eof_reached = False
-        frame_count = 0
-
+        frame_size_samples = int(self.sample_rate * AudioConfig.FRAME_DURATION / 1000)
+        sample_bytes = 2 * self.channels
+        frame_size_bytes = frame_size_samples * sample_bytes
+        process = self._process
+        pending = b""
+        cancelled = False
+        stderr_task = asyncio.create_task(self._read_stderr(process))
         try:
             while not self._stopped:
-                chunk = await self._process.stdout.read(frame_size_bytes)
-
+                chunk = await process.stdout.read(frame_size_bytes)
                 if not chunk:
-                    duration_decoded = frame_count * frame_duration_ms / 1000
-                    logger.info(
-                        f"音频解码完成，共 {frame_count} 帧，时长约 {duration_decoded:.1f}秒"
-                    )
-
-                    if self._process:
-                        try:
-                            await asyncio.wait_for(self._process.wait(), timeout=2.0)
-                        except (asyncio.TimeoutError, Exception):
-                            pass
-                        try:
-                            stderr_output = await self._process.stderr.read()
-                            if stderr_output:
-                                err = stderr_output.decode("utf-8", errors="ignore")
-                                if err.strip():
-                                    logger.warning(f"FFmpeg: {err.strip()[:300]}")
-                        except Exception as e:
-                            logger.debug(f"读取 FFmpeg stderr 失败: {e}")
-
-                    eof_reached = True
+                    returncode = await asyncio.wait_for(process.wait(), timeout=2.0)
+                    self.completed_successfully = returncode == 0 and not pending
+                    if not self.completed_successfully:
+                        logger.warning(
+                            "FFmpeg 解码失败或 PCM 截断，退出码: %s", returncode
+                        )
                     break
 
-                frame_count += 1
-
-                audio_array_int16 = np.frombuffer(chunk, dtype=np.int16)
-                audio_array = audio_array_int16.astype(np.float32) / 32768.0
-
+                pending += chunk
+                usable = len(pending) - len(pending) % sample_bytes
+                if not usable:
+                    continue
+                audio = np.frombuffer(pending[:usable], dtype="<i2")
+                audio = audio.astype(np.float32) / 32768.0
+                pending = pending[usable:]
                 if self.channels > 1:
-                    audio_array = audio_array.reshape(-1, self.channels)
-
-                # 节拍完全由下游背压决定：queue 满则在 put 处等位
-                # （AudioCodec.write_pcm_direct 按缓冲水位放行）。
-                # 不再用「墙钟-起播时刻」限速——暂停期间墙钟照走，
-                # 恢复后会误判落后而全速灌数据，把播放队列冲爆。
-                await output_queue.put(audio_array)
-
+                    audio = audio.reshape(-1, self.channels)
+                # 有界队列提供背压，不因网络短读丢弃半个 PCM 样本。
+                await output_queue.put(audio)
         except asyncio.CancelledError:
-            logger.debug("解码任务被取消")
+            cancelled = True
+            raise
         except Exception as e:
+            self.completed_successfully = False
             logger.error(f"读取 PCM 流失败: {e}", exc_info=True)
         finally:
-            if eof_reached:
-                try:
-                    await output_queue.put(None)
-                except Exception as e:
-                    logger.debug(f"发送 EOF 信号失败: {e}")
+            if not self.completed_successfully:
+                await self._terminate_process(process)
+            if not stderr_task.done():
+                stderr_task.cancel()
+            await asyncio.gather(stderr_task, return_exceptions=True)
+            # 所有非取消终态都唤醒下游；调用方可检查成功标志区分失败。
+            if not cancelled and not self._stopped:
+                await output_queue.put(None)
+
+    @staticmethod
+    async def _read_stderr(process) -> None:
+        # 同时排空 stderr，防止大量错误日志填满管道而阻塞 stdout。
+        tail = b""
+        while chunk := await process.stderr.read(4096):
+            tail = (tail + chunk)[-300:]
+        if tail.strip():
+            logger.warning("FFmpeg: %s", tail.decode("utf-8", errors="replace").strip())
 
     async def stop(self):
-        if self._stopped:
-            return
-
         self._stopped = True
         logger.debug("停止音频解码器")
+        task = self._decode_task
+        self._decode_task = None
+        if task is not None and task is not asyncio.current_task():
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
 
-        if self._decode_task and not self._decode_task.done():
-            self._decode_task.cancel()
-            try:
-                await self._decode_task
-            except asyncio.CancelledError:
-                pass
-            except Exception as e:
-                logger.error(f"解码任务异常: {e}", exc_info=True)
-
-        proc = self._process
+        process, probe = self._process, self._probe_process
         self._process = None
-        if proc is not None and proc.returncode is None:
-            try:
-                proc.terminate()
-                await asyncio.wait_for(proc.wait(), timeout=2.0)
-            except asyncio.TimeoutError:
-                try:
-                    proc.kill()
-                    await proc.wait()
-                except Exception as e:
-                    logger.debug(f"强制结束 FFmpeg 失败: {e}")
-            except ProcessLookupError:
-                pass
-            except Exception as e:
-                if str(e).strip():
-                    logger.debug(f"结束 FFmpeg 进程: {e}")
+        self._probe_process = None
+        await self._terminate_process(process)
+        await self._terminate_process(probe)
 
     def is_running(self) -> bool:
         return (
             not self._stopped
-            and self._process is not None
-            and self._process.returncode is None
+            and self._decode_task is not None
+            and not self._decode_task.done()
         )
 
     async def wait_completion(self):

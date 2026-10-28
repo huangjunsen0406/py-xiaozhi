@@ -7,7 +7,7 @@ listen / abort / TTS 回环等应用级会话逻辑。
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from src.constants.constants import DeviceState, ListeningMode
 from src.core.event_bus import Events
@@ -16,8 +16,8 @@ from src.logging import get_logger
 if TYPE_CHECKING:
     from src.core.event_bus import EventBus
     from src.core.protocol_manager import ProtocolManager
-    from src.notifications.notification_player import NotificationPlayer
     from src.core.state_manager import StateManager
+    from src.notifications.notification_player import NotificationPlayer
     from src.plugins.manager import PluginManager
 
 logger = get_logger()
@@ -28,11 +28,11 @@ class ConversationSession:
 
     def __init__(
         self,
-        state: "StateManager",
-        protocol: "ProtocolManager",
-        plugins: "PluginManager",
-        event_bus: Optional["EventBus"] = None,
-        notification_player: Optional["NotificationPlayer"] = None,
+        state: StateManager,
+        protocol: ProtocolManager,
+        plugins: PluginManager,
+        event_bus: EventBus | None = None,
+        notification_player: NotificationPlayer | None = None,
     ) -> None:
         self.state = state
         self.protocol = protocol
@@ -45,14 +45,14 @@ class ConversationSession:
         self._notification_generation = 0
         self._notification_lock = asyncio.Lock()
 
-    def set_notification_player(self, player: "NotificationPlayer") -> None:
+    def set_notification_player(self, player: NotificationPlayer) -> None:
         """由容器注入 notify 播放服务。"""
         self._notification_player = player
 
     # -------------------------
     # 事件订阅
     # -------------------------
-    def bind_events(self, event_bus: "EventBus") -> None:
+    def bind_events(self, event_bus: EventBus) -> None:
         """订阅协议/状态相关事件（可重复调用，以最后一次为准）."""
         self._event_bus = event_bus
         event_bus.on(Events.AUDIO_CHANNEL_OPENED, self._on_audio_channel_opened)
@@ -175,15 +175,18 @@ class ConversationSession:
                 logger.info("设备忙碌，忽略 notify")
                 return
 
-            await self.state.set_device_state(DeviceState.NOTIFYING)
-            generation = await player.start(
-                audio_url,
-                subtitles,
-                self._on_notification_finished,
-            )
-            if generation is None:
-                if self._is_notifying():
+            generation = None
+            try:
+                await self.state.set_device_state(DeviceState.NOTIFYING)
+                generation = await player.start(
+                    audio_url,
+                    subtitles,
+                    self._on_notification_finished,
+                )
+            finally:
+                if generation is None and self._is_notifying():
                     await self.state.set_device_state(DeviceState.IDLE)
+            if generation is None:
                 return
             self._notification_generation = generation
             logger.info("开始播放服务端通知: %s", audio_url)
