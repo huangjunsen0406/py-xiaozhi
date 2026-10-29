@@ -116,18 +116,23 @@ def check_wheel(wheel: Path) -> None:
         )
         for args in (
             [str(command), "--help"],
-            [str(python), "-I", "-B", "-m", "src", "--help"],
+            [str(python), "-I", "-X", "utf8", "-B", "-m", "src", "--help"],
         ):
             result = subprocess.run(
                 args,
                 cwd=root,
                 env=env,
-                check=True,
+                check=False,
                 capture_output=True,
                 text=True,
                 encoding="utf-8",
                 timeout=30,
             )
+            if result.returncode:
+                raise RuntimeError(
+                    f"Help command failed ({result.returncode}): {args}\n"
+                    f"{result.stdout}\n{result.stderr}"
+                )
             if "--mode" not in result.stdout:
                 raise RuntimeError(f"Help output is incomplete: {result.stdout}")
         if (root / "data").exists() or (root / "logs").exists():
