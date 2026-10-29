@@ -68,6 +68,9 @@ class PluginCommandsAdapter:
     async def abort_speaking(self, reason: str) -> None:
         await self._container.session.abort_speaking(reason)
 
+    async def sync_audio_state(self) -> bool:
+        return await self._container.session.sync_audio_state()
+
     async def send_audio(self, data: bytes) -> None:
         await self._container.protocol.send_audio(data)
 

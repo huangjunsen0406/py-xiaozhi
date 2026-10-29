@@ -36,13 +36,9 @@ class ServiceContainer:
 
         self.config = get_config()
 
-        try:
-            aec_enabled = bool(self.config.get_config("AEC_OPTIONS.ENABLED", True))
-        except Exception:
-            aec_enabled = True
-
         self.event_bus = EventBus()
-        self.state = StateManager(self.event_bus, aec_enabled=aec_enabled)
+        # AEC 是否可用由会话根据 AudioCodec 的实际状态同步。
+        self.state = StateManager(self.event_bus)
         self.tasks = TaskManager()
         # Protocol 入站任务走 TaskManager，避免 fire-and-forget
         self.protocol = ProtocolManager(self.event_bus, task_manager=self.tasks)

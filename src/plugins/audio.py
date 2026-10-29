@@ -244,7 +244,8 @@ class AudioPlugin(Plugin):
             try:
                 if not self._ctx.is_audio_channel_opened():
                     return
-                if self._should_send_microphone_audio():
+                capture_allowed = await self._cmd.sync_audio_state()
+                if capture_allowed and self._should_send_microphone_audio():
                     await self._cmd.send_audio(encoded_data)
             except Exception as e:
                 logger.error(f"发送音频数据失败: {e}", exc_info=True)

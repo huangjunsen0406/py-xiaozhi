@@ -149,9 +149,16 @@ def generate_build_json(constants: dict) -> None:
     )
 
 
+def update_lockfile() -> None:
+    """同步动态包版本，避免发布后 uv sync --locked 失败。"""
+    subprocess.run(["uv", "lock"], check=True)
+
+
 def run_git(new_version: str) -> None:
     """git commit + tag + push。"""
-    subprocess.run(["git", "add", str(SYSTEM_PY), str(BUILD_JSON)], check=True)
+    subprocess.run(
+        ["git", "add", str(SYSTEM_PY), str(BUILD_JSON), "uv.lock"], check=True
+    )
     subprocess.run(
         ["git", "commit", "-m", f"chore: release v{new_version}"], check=True
     )
@@ -191,18 +198,21 @@ def main():
 
     if dry_run:
         print("\n[dry-run] 将执行以下操作:")
-        print(f"  1. 更新 {SYSTEM_PY}: APP_VERSION = \"{new_version}\"")
+        print(f'  1. 更新 {SYSTEM_PY}: APP_VERSION = "{new_version}"')
         print(f"  2. 生成 {BUILD_JSON}")
-        print(f"  3. git commit + tag v{new_version} + push")
+        print("  3. uv lock 同步包版本")
+        print(f"  4. git commit + tag v{new_version} + push")
         print("\n[dry-run] 未实际执行任何操作。")
         return
 
     update_system_py(new_version)
     constants["APP_VERSION"] = new_version
     generate_build_json(constants)
+    update_lockfile()
 
     print(f"\n✅ 已更新 {SYSTEM_PY}")
     print(f"✅ 已生成 {BUILD_JSON}")
+    print("✅ 已同步 uv.lock")
 
     run_git(new_version)
 

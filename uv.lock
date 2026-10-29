@@ -1594,7 +1594,6 @@ wheels = [
 
 [[package]]
 name = "py-xiaozhi"
-version = "1.0.0"
 source = { editable = "." }
 dependencies = [
     { name = "aiohttp" },
@@ -1707,7 +1706,7 @@ requires-dist = [
     { name = "textual", marker = "extra == 'tui'", specifier = ">=0.80.0" },
     { name = "websockets", specifier = ">=11.0.3" },
 ]
-provides-extras = ["gui", "macos", "windows", "linux", "tui"]
+provides-extras = ["gui", "linux", "macos", "tui", "windows"]
 
 [package.metadata.requires-dev]
 dev = [
