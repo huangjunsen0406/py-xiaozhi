@@ -1,6 +1,6 @@
 [project]
 name = "py-xiaozhi"
-version = "1.0.0"
+dynamic = ["version"]
 description = "小智 AI 客户端 - 跨平台语音助手"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -190,6 +190,11 @@ sections = ["FUTURE", "STDLIB", "THIRDPARTY", "FIRSTPARTY", "LOCALFOLDER"]
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+# Extract the runtime constant without importing application modules.
+[tool.hatch.version]
+path = "src/constants/system.py"
+pattern = '(?m)^\s*APP_VERSION\s*=\s*"(?P<version>[^"]+)"'
 
 [tool.hatch.build]
 dev-mode-dirs = ["."]

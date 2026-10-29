@@ -1156,12 +1156,20 @@ async def test_handle_tts_stop_relisten_before_state():
         def is_listening(self):
             return self._state == DeviceState.LISTENING
 
+        def should_capture_audio(self):
+            return True
+
+        def set_aec_enabled(self, enabled):
+            self.aec_enabled = enabled
+
         async def set_device_state(self, state):
             # 模拟慢插件：若 listen 在这之后发就会踩延迟
             order.append(("state", state))
             self._state = state
 
     class FakeCodec:
+        aec_active = False
+
         async def clear_audio_queue(self):
             order.append("clear_queue")
 
@@ -1207,12 +1215,26 @@ async def test_handle_tts_stop_realtime_skips_relisten():
         keep_listening = True
         listening_mode = ListeningMode.REALTIME
 
+        def should_capture_audio(self):
+            return True
+
+        def set_aec_enabled(self, enabled):
+            self.aec_enabled = enabled
+
         async def set_device_state(self, state):
             order.append(("state", state))
 
+    class FakeCodec:
+        aec_active = True
+
+        async def clear_audio_queue(self):
+            pass
+
     class FakePlugins:
         def get_plugin(self, name):
-            return None
+            from types import SimpleNamespace
+
+            return SimpleNamespace(codec=FakeCodec())
 
     session = ConversationSession(
         state=FakeState(),

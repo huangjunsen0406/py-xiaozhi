@@ -19,6 +19,12 @@ class _FakeState:
     def is_idle(self):
         return self.device_state == DeviceState.IDLE
 
+    def should_capture_audio(self):
+        return self.device_state == DeviceState.LISTENING
+
+    def set_aec_enabled(self, enabled):
+        self.aec_enabled = enabled
+
     def set_listening_mode(self, mode):
         self.listening_mode = mode
 
@@ -31,6 +37,9 @@ class _FakeState:
 
 
 class _FakePlugins:
+    def get_plugin(self, _name):
+        return None
+
     async def notify_incoming_json(self, _message):
         return None
 

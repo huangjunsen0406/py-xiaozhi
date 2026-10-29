@@ -36,7 +36,7 @@ class StateManager:
             ...
     """
 
-    def __init__(self, event_bus: EventBus, aec_enabled: bool = True):
+    def __init__(self, event_bus: EventBus, aec_enabled: bool = False):
         self._event_bus = event_bus
         self._lock = asyncio.Lock()
 
@@ -147,10 +147,11 @@ class StateManager:
 
     @property
     def aec_enabled(self) -> bool:
-        """
-        AEC 是否启用.
-        """
+        """AEC 引擎是否实际可用，由会话同步。"""
         return self._aec_enabled
+
+    def set_aec_enabled(self, enabled: bool) -> None:
+        self._aec_enabled = bool(enabled)
 
     # -------------------------
     # 中止状态

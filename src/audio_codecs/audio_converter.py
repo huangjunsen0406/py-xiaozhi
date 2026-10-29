@@ -37,6 +37,8 @@ class AudioConverter:
             from_channels: 设备声道数
             to_channels: 协议声道数（通常1）
         """
+        self.input_resampler = None
+        self._input_buffer.clear()
         self.input_channels = from_channels
         self.needs_input_downmix = from_channels > to_channels
 
@@ -64,6 +66,8 @@ class AudioConverter:
             from_channels: 协议声道数（通常1）
             to_channels: 设备声道数
         """
+        self.output_resampler = None
+        self._output_buffer.clear()
         self.output_channels = to_channels
         self.needs_output_upmix = to_channels > from_channels
 
@@ -80,9 +84,7 @@ class AudioConverter:
         if self.needs_output_upmix:
             logger.info(f"输出声道上混: {from_channels}ch → {to_channels}ch")
 
-    def convert_input(
-        self, audio: np.ndarray, target_size: int
-    ) -> np.ndarray | None:
+    def convert_input(self, audio: np.ndarray, target_size: int) -> np.ndarray | None:
         """输入转换：多声道/高采样率 → 单声道/16kHz
 
         Args:
@@ -126,18 +128,16 @@ class AudioConverter:
         Returns:
             转换后的 float32 数据
         """
-        # 1. 重采样
+        # 1. 重采样后统一缓冲，同采样率也需凑够设备回调帧数
         if self.output_resampler:
-            resampled = self.output_resampler.resample_chunk(audio, last=False)
-            if len(resampled) > 0:
-                self._output_buffer.extend(resampled)
+            audio = self.output_resampler.resample_chunk(audio, last=False)
+        self._output_buffer.extend(audio)
 
-            # 取出目标帧数
-            if len(self._output_buffer) < target_frames:
-                return None
+        if len(self._output_buffer) < target_frames:
+            return None
 
-            frame_data = [self._output_buffer.popleft() for _ in range(target_frames)]
-            audio = np.array(frame_data, dtype=np.float32)
+        frame_data = [self._output_buffer.popleft() for _ in range(target_frames)]
+        audio = np.array(frame_data, dtype=np.float32)
 
         # 2. 上混（使用 audio_utils）
         if self.needs_output_upmix:
@@ -148,7 +148,7 @@ class AudioConverter:
         return audio
 
     def drain_output_buffer(self, target_frames: int) -> np.ndarray | None:
-        """排出 resampler 缓冲区中的剩余数据（带上混）。
+        """排出输出缓冲区中的剩余数据（带上混）。
 
         用于队列耗尽但缓冲区差少量样本时，避免整帧静音。
         """

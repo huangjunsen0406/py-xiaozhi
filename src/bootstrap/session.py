@@ -39,11 +39,17 @@ class ConversationSession:
         self.plugins = plugins
         self._event_bus = event_bus
         self._aborted = False
+        self._tts_active = False
+        self._tts_generation = 0
         # MCP 工具配置重连等：通道打开后保持 IDLE，不自动进入聆听
         self._keep_idle_on_channel_open = False
         self._notification_player = notification_player
         self._notification_generation = 0
         self._notification_lock = asyncio.Lock()
+
+    def _reset_tts(self) -> None:
+        self._tts_generation += 1
+        self._tts_active = False
 
     def set_notification_player(self, player: NotificationPlayer) -> None:
         """由容器注入 notify 播放服务。"""
@@ -78,11 +84,13 @@ class ConversationSession:
         await self.state.set_device_state(DeviceState.LISTENING)
 
     async def _on_audio_channel_closed(self, _=None) -> None:
+        self._reset_tts()
         await self._cancel_notification()
         await self.state.set_device_state(DeviceState.IDLE)
 
     async def _on_network_error(self, error_message: str = None) -> None:
         """网络错误：停止持续监听并复位设备状态到 IDLE."""
+        self._reset_tts()
         self.state.set_keep_listening(False)
         await self._cancel_notification()
         try:
@@ -117,8 +125,50 @@ class ConversationSession:
         except Exception as e:
             logger.error(f"处理 JSON 消息失败: {e}", exc_info=True)
 
+    async def sync_audio_state(self, *, update_protocol: bool = True) -> bool:
+        """同步实际 AEC 状态，返回本次检查时是否允许上传音频。"""
+        audio = self.plugins.get_plugin("audio")
+        codec = audio.codec if audio else None
+        active = bool(codec and codec.aec_active)
+        self.state.set_aec_enabled(active)
+        capture_allowed = self.state.should_capture_audio() and (
+            active or not self._tts_active
+        )
+        if active or self.state.listening_mode != ListeningMode.REALTIME:
+            return capture_allowed
+
+        self.state.set_listening_mode(ListeningMode.AUTO_STOP)
+        generation = self._tts_generation
+        if self._tts_active:
+            # 必须先关闭上行门闩，再 await 网络操作。
+            await self.state.set_device_state(DeviceState.SPEAKING)
+        if generation != self._tts_generation:
+            return False
+        logger.warning("AEC 不可用，实时对话已降级为自动停止监听")
+        if (
+            update_protocol
+            and self.state.keep_listening
+            and self.protocol.is_audio_channel_opened()
+        ):
+            try:
+                if self._tts_active:
+                    await self.protocol.send_stop_listening()
+                else:
+                    await self.protocol.send_start_listening(ListeningMode.AUTO_STOP)
+            except Exception as e:
+                logger.warning("同步半双工监听模式失败: %s", e, exc_info=True)
+        return capture_allowed
+
     async def _handle_tts_start(self) -> None:
+        self._tts_generation += 1
+        generation = self._tts_generation
+        self._tts_active = True
         await self._cancel_notification()
+        if generation != self._tts_generation:
+            return
+        await self.sync_audio_state()
+        if generation != self._tts_generation:
+            return
         if (
             self.state.keep_listening
             and self.state.listening_mode == ListeningMode.REALTIME
@@ -128,6 +178,9 @@ class ConversationSession:
             await self.state.set_device_state(DeviceState.SPEAKING)
 
     async def _handle_tts_stop(self) -> None:
+        self._reset_tts()
+        generation = self._tts_generation
+        await self.sync_audio_state(update_protocol=False)
         # 还要继续听的话，尽量先发 listen，再清队列、改状态
         if not self.state.keep_listening:
             await self.state.set_device_state(DeviceState.IDLE)
@@ -146,6 +199,8 @@ class ConversationSession:
             else:
                 logger.warning("TTS 结束但协议通道已关闭，跳过重新 listen")
 
+        if generation != self._tts_generation:
+            return
         try:
             audio_plugin = self.plugins.get_plugin("audio")
             if audio_plugin and audio_plugin.codec:
@@ -153,7 +208,8 @@ class ConversationSession:
         except Exception as e:
             logger.warning(f"清空音频队列失败: {e}", exc_info=True)
 
-        await self.state.set_device_state(DeviceState.LISTENING)
+        if generation == self._tts_generation:
+            await self.state.set_device_state(DeviceState.LISTENING)
 
     async def _handle_notify(self, message: dict) -> None:
         """仅在空闲时接收服务端单向音频通知。"""
@@ -266,17 +322,23 @@ class ConversationSession:
         if not ok:
             return
 
+        self._reset_tts()
+        await self.sync_audio_state(update_protocol=False)
+        if mode == ListeningMode.REALTIME and not self.state.aec_enabled:
+            mode = ListeningMode.AUTO_STOP
         self.state.set_listening_mode(mode)
         self.state.set_keep_listening(mode != ListeningMode.MANUAL)
         await self.protocol.send_start_listening(mode)
         await self.state.set_device_state(DeviceState.LISTENING)
 
     async def stop_listening(self) -> None:
+        self._reset_tts()
         self.state.set_keep_listening(False)
         await self.protocol.send_stop_listening()
         await self.state.set_device_state(DeviceState.IDLE)
 
     async def start_listening_manual(self) -> None:
+        self._reset_tts()
         await self._cancel_notification()
         ok = await self.connect_protocol()
         if not ok:
@@ -293,25 +355,12 @@ class ConversationSession:
         await self.state.set_device_state(DeviceState.LISTENING)
 
     async def stop_listening_manual(self) -> None:
+        self._reset_tts()
         await self.protocol.send_stop_listening()
         await self.state.set_device_state(DeviceState.IDLE)
 
     async def start_auto_conversation(self) -> None:
-        await self._cancel_notification()
-        ok = await self.connect_protocol()
-        if not ok:
-            return
-
-        mode = (
-            ListeningMode.REALTIME
-            if self.state.aec_enabled
-            else ListeningMode.AUTO_STOP
-        )
-        self.state.set_listening_mode(mode)
-        self.state.set_keep_listening(True)
-
-        await self.protocol.send_start_listening(mode)
-        await self.state.set_device_state(DeviceState.LISTENING)
+        await self.start_listening(ListeningMode.REALTIME)
 
     async def abort_speaking(self, reason: str) -> None:
         if self._is_notifying():
@@ -323,6 +372,7 @@ class ConversationSession:
             return
 
         logger.info(f"中止语音输出: {reason}")
+        self._reset_tts()
         self._aborted = True
         self.state.set_aborted(True)
         try:

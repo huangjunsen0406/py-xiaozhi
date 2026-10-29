@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Install a wheel outside the checkout and smoke-test its entry point/resources.
 
-Only platformdirs is installed alongside the wheel: audio/Qt dependencies are not
-needed for this packaging check. The normal test job validates runtime imports.
+Only platformdirs and packaging are installed alongside the wheel: audio/Qt
+dependencies are not needed for this packaging check. The normal test job
+validates runtime imports.
 """
 
 import argparse
@@ -41,6 +42,11 @@ IMPORT_CHECK = textwrap.dedent("""
     assert 'src.bootstrap.container' not in sys.modules
     assert 'PySide6' not in sys.modules
     assert 'sounddevice' not in sys.modules
+    from packaging.version import Version
+    from src.constants.system import SystemConstants
+    assert Version(importlib.metadata.version('py-xiaozhi')) == Version(
+        SystemConstants.APP_VERSION
+    )
     entry, = [e for e in importlib.metadata.distribution('py-xiaozhi').entry_points
               if e.group == 'console_scripts' and e.name == 'xiaozhi']
     assert entry.load() is main
@@ -101,6 +107,7 @@ def check_wheel(wheel: Path) -> None:
                 "--no-deps",
                 str(wheel),
                 "platformdirs>=4.0.0",
+                "packaging",
             ],
             cwd=root,
             env=env,

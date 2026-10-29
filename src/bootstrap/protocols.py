@@ -3,7 +3,8 @@
 定义插件、窗口与核心服务之间的契约，实现松耦合。
 """
 
-from typing import TYPE_CHECKING, Any, Awaitable, Callable, Coroutine, Protocol
+from collections.abc import Awaitable, Callable, Coroutine
+from typing import TYPE_CHECKING, Any, Protocol
 
 if TYPE_CHECKING:
     from src.constants.constants import DeviceState, ListeningMode
@@ -92,6 +93,10 @@ class PluginCommands(Protocol):
         """
         中止语音输出.
         """
+        ...
+
+    async def sync_audio_state(self) -> bool:
+        """上传前同步 AEC 可用性，返回当前帧是否允许发送。"""
         ...
 
     async def send_audio(self, data: bytes) -> None:
