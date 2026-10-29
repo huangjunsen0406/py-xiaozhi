@@ -27,6 +27,9 @@ class McpServer:
         self._camera = None
         # 外挂插件 tool_name -> plugin_id
         self._plugin_tool_owner: dict[str, str] = {}
+        # 会话按容器隔离，包含尚未注册任何工具的插件。
+        self._plugin_session_scope = object()
+        self._common_tool_names: set[str] = set()
 
     def set_send_callback(self, callback: Callable | None):
         """
@@ -42,7 +45,8 @@ class McpServer:
         return self._camera
 
     def detach(self) -> None:
-        """容器关闭时解绑运行时依赖，保留工具列表便于同进程再启动."""
+        """容器关闭时回收外挂和运行时依赖；内置工具保留。"""
+        self._unload_external_plugins()
         self._send_callback = None
         self._camera = None
 
@@ -57,13 +61,18 @@ class McpServer:
             name, description, properties, callback = tool
             tool = McpTool(name, description, properties, callback)
 
-        # 检查是否已存在
-        if any(t.name == tool.name for t in self.tools):
-            logger.warning(f"Tool {tool.name} already added（拒绝重复注册）")
-            return
+        self.add_tools_atomic([tool])
 
-        logger.info(f"Add tool: {tool.name}")
-        self.tools.append(tool)
+    def add_tools_atomic(self, tools: list[McpTool]) -> None:
+        """整批校验成功后提交；冲突不改变现有工具列表。"""
+        names = {tool.name for tool in self.tools}
+        for tool in tools:
+            if tool.name in names:
+                raise ValueError(f"Tool name conflict: {tool.name}")
+            names.add(tool.name)
+        self.tools.extend(tools)
+        for tool in tools:
+            logger.info(f"Add tool: {tool.name}")
 
     def remove_tools_by_names(self, names: set[str] | list[str]) -> int:
         """按名称移除工具，返回移除数量."""
@@ -81,6 +90,13 @@ class McpServer:
         reg = PluginRegistry(tool_owner=self._plugin_tool_owner)
         return reg.unload_plugin(self, plugin_id)
 
+    def _unload_external_plugins(self) -> None:
+        from src.mcp.plugins.subprocess_runtime import drop_all_sessions
+
+        drop_all_sessions(scope=self._plugin_session_scope)
+        self.remove_tools_by_names(set(self._plugin_tool_owner))
+        self._plugin_tool_owner.clear()
+
     def reload_external_plugins(
         self, music_player=None, volume_controller=None
     ) -> list:
@@ -88,11 +104,7 @@ class McpServer:
 
         注意：不会重新 register 内置工具；内置应已在 tools 中。
         """
-        # 卸掉当前登记的全部外挂工具
-        if self._plugin_tool_owner:
-            names = set(self._plugin_tool_owner.keys())
-            self.remove_tools_by_names(names)
-            self._plugin_tool_owner.clear()
+        self._unload_external_plugins()
 
         from src.mcp.plugins.loader import load_mcp_plugins_from_config
 
@@ -120,22 +132,34 @@ class McpServer:
         volume_controller: 可选注入的 VolumeController；未提供时由 register 内创建。
         camera / screenshot 由 McpPlugin 在 setup 中单独 register。
         """
-        # 备份原有工具列表
-        original_tools = self.tools.copy()
-        self.tools.clear()
-
+        # 先暂存新工具，注册失败时保留现有工具和外挂会话。
+        common_tools: list[McpTool] = []
         if music_player is not None:
             from src.mcp.tools.music import register_music_tools
 
-            register_music_tools(self.add_tool, music_player)
+            register_music_tools(common_tools.append, music_player)
 
         from src.mcp.tools.app import register_app_tools
         from src.mcp.tools.volume import register_volume_tools
         from src.mcp.tools.weather import register_weather_tools
 
-        register_volume_tools(self.add_tool, volume_controller)
-        register_app_tools(self.add_tool)
-        register_weather_tools(self.add_tool)
+        register_volume_tools(common_tools.append, volume_controller)
+        register_app_tools(common_tools.append)
+        register_weather_tools(common_tools.append)
+
+        preserved = [
+            tool for tool in self.tools
+            if tool.name not in self._common_tool_names
+            and tool.name not in self._plugin_tool_owner
+        ]
+        names = {tool.name for tool in preserved}
+        for tool in common_tools:
+            if tool.name in names:
+                raise ValueError(f"Tool name conflict: {tool.name}")
+            names.add(tool.name)
+        self._unload_external_plugins()
+        self.tools = common_tools + preserved
+        self._common_tool_names = {tool.name for tool in common_tools}
 
         # 外挂：用户目录插件包（自带 lib/），失败隔离
         try:
@@ -158,9 +182,6 @@ class McpServer:
             )
         except Exception as e:
             logger.error(f"加载外挂 MCP 插件失败: {e}", exc_info=True)
-
-        # 恢复原有工具
-        self.tools.extend(original_tools)
 
     async def parse_message(self, message: str | dict[str, Any]):
         """

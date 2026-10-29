@@ -144,7 +144,10 @@ class ServiceContainer:
         logger.info("正在关闭 ServiceContainer...")
 
         try:
-            await self.resource_pool.shutdown()
+            try:
+                await self.plugins.stop_all()
+            finally:
+                await self.resource_pool.shutdown()
             logger.info("ServiceContainer 关闭完成")
         except Exception as e:
             logger.error(f"关闭时出错: {e}", exc_info=True)

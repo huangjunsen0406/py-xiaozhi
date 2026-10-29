@@ -42,39 +42,50 @@ class WakeWordPlugin(Plugin):
 
     async def start(self) -> None:
         try:
+            if not self.ctx.get_config().get_config(
+                "WAKE_WORD_OPTIONS.USE_WAKE_WORD", False
+            ):
+                logger.info("唤醒词功能已禁用")
+                return
+
             # 延迟加载模型到 start() 阶段，避免 setup() 时与 PortAudio DLL 冲突
             if self.detector is None:
                 from src.audio_processing.wake_word_detect import WakeWordDetector
 
                 self.detector = WakeWordDetector()
                 if not await self.detector.initialize():
-                    logger.info("唤醒词检测器未启用或初始化失败")
-                    self.detector = None
-                    return
+                    raise RuntimeError("唤醒词检测器初始化失败")
                 self.detector.on_detected(self._on_detected)
                 self.detector.on_error = self._on_error
 
             if not self._audio_plugin or not self._audio_plugin.codec:
-                logger.warning("未找到 audio_codec，无法启动唤醒词检测")
-                return
-            await self.detector.start(self._audio_plugin.codec)
-        except ImportError as e:
-            logger.error(f"无法导入唤醒词检测器: {e}", exc_info=True)
-            self.detector = None
-        except Exception as e:
-            logger.error(f"启动唤醒词检测器失败: {e}", exc_info=True)
+                raise RuntimeError("未找到 audio_codec，无法启动唤醒词检测")
+            if await self.detector.start(self._audio_plugin.codec) is False:
+                raise RuntimeError("唤醒词检测器启动失败")
+            await super().start()
+        except Exception:
+            self.mark_failed()
+            try:
+                await self._shutdown_detector()
+            except Exception as e:
+                logger.warning(f"清理失败的唤醒词检测器失败: {e}", exc_info=True)
+            raise
 
     async def stop(self) -> None:
-        if self.detector:
-            try:
+        try:
+            if self.detector is not None:
                 await self.detector.stop()
-            except Exception as e:
-                logger.warning(f"停止唤醒词检测器失败: {e}", exc_info=True)
+        finally:
+            await super().stop()
+
+    async def _shutdown_detector(self) -> None:
+        # 在释放时取当前实例，不能捕获 register_resources 时尚未创建的 detector。
+        if self.detector is not None:
+            await self.detector.shutdown()
+            self.detector = None
 
     def register_resources(self, pool) -> None:
-        detector = self.detector
-        if detector:
-            pool.register("wake_word.detector", detector.shutdown)
+        pool.register("wake_word.detector", self._shutdown_detector)
 
     async def reload_model(self, model_path: Optional[str] = None) -> bool:
         """热重载唤醒词模型.

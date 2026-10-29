@@ -94,9 +94,10 @@ async def setup_plugins(
         shortcuts_plugin,
     )
 
-    await container.plugins.setup_all(ctx, cmd)
-
-    register_cleanup_resources(container)
+    try:
+        await container.plugins.setup_all(ctx, cmd)
+    finally:
+        register_cleanup_resources(container)
 
     # 设置音频直连通道（TTS 音频不经过 EventBus，减少延迟）
     if not audio_plugin.failed:

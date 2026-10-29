@@ -15,6 +15,7 @@ from typing import Any
 from src.constants.system import SystemConstants
 from src.logging import get_logger
 from src.mcp.plugins.host import DEFAULT_ALLOW_GET, McpHost
+from src.mcp.tooling import McpTool
 from src.utils.resource_finder import get_user_data_dir
 
 logger = get_logger()
@@ -91,6 +92,7 @@ class PluginLoader:
         require_platforms: bool = False,
         tool_owner: dict[str, str] | None = None,
         raw_add_tool=None,
+        remove_tools_by_names=None,
     ) -> None:
         self._base_host = host
         self.plugins_dir = Path(plugins_dir) if plugins_dir else default_plugins_dir()
@@ -101,6 +103,11 @@ class PluginLoader:
         self.require_platforms = require_platforms
         self.tool_owner = tool_owner
         self._raw_add_tool = raw_add_tool or host._add_tool
+        server = getattr(self._raw_add_tool, "__self__", None)
+        self._add_tools_atomic = getattr(server, "add_tools_atomic", None)
+        self._remove_tools = remove_tools_by_names or getattr(server, "remove_tools_by_names", None)
+        self._session_scope = getattr(server, "_plugin_session_scope", None)
+        self._loaded_ids: set[str] = set()
         self.loaded: list[LoadedPlugin] = []
         self._platform = current_platform_tag()
         self._abi = current_python_abi()
@@ -108,6 +115,7 @@ class PluginLoader:
 
     def load_all(self) -> list[LoadedPlugin]:
         self.loaded.clear()
+        self._loaded_ids.clear()
         root = self.plugins_dir
         if not root.is_dir():
             logger.info("[MCP插件] 目录不存在，跳过: %s", root)
@@ -144,6 +152,9 @@ class PluginLoader:
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         except Exception as e:
             self._record(path.name, path, error=f"manifest 无效: {e}")
+            return
+        if not isinstance(manifest, dict):
+            self._record(path.name, path, error="manifest 须为对象")
             return
         plugin_id = str(manifest.get("id") or path.name)
         try:
@@ -215,6 +226,7 @@ class PluginLoader:
             logger.info("[MCP插件] 已禁用，跳过: %s", plugin_id)
             return
 
+        self._check_plugin_id(plugin_id)
         runtime = str(manifest.get("runtime") or "python-inprocess")
         if runtime not in SUPPORTED_RUNTIMES:
             raise RuntimeError(
@@ -239,7 +251,8 @@ class PluginLoader:
         self, path: Path, plugin_id: str, *, entry: str, prefix: Any, manifest: dict[str, Any]
     ) -> None:
         module_part, attr_part = entry.split(":", 1)
-        host = self._base_host.bind_plugin(plugin_id)
+        staged: list[McpTool] = []
+        host = self._staging_host(plugin_id, staged)
         extra_paths: list[Path] = [path]
         lib = path / "lib"
         if lib.is_dir():
@@ -267,18 +280,11 @@ class PluginLoader:
                 raise RuntimeError(
                     f"入口 {entry} 不可调用（模块 {module_part} 无属性 {attr_part}）"
                 )
-            register_fn(host)
-            names = host.registered_tool_names
-            if prefix:
-                bad = [n for n in names if not n.startswith(str(prefix))]
-                if bad:
-                    msg = f"工具名未使用前缀 {prefix}: {bad}"
-                    if self.enforce_prefix:
-                        raise RuntimeError(msg)
-                    logger.warning("[MCP插件:%s] %s", plugin_id, msg)
-            if self.tool_owner is not None:
-                for n in names:
-                    self.tool_owner[n] = plugin_id
+            try:
+                register_fn(host)
+            finally:
+                host.close_registration()
+            names = self._commit_tools(plugin_id, staged, prefix=prefix)
             self._record(
                 plugin_id, path, tool_names=names, runtime="python-inprocess"
             )
@@ -286,8 +292,8 @@ class PluginLoader:
                 "[MCP插件] 已加载 %s (%d 工具, inprocess) from %s",
                 plugin_id, len(names), path,
             )
-        except Exception:
-            raise
+        finally:
+            host.close_registration()
 
     def _load_subprocess_package(
         self, path: Path, plugin_id: str, *, entry: str, prefix: Any, manifest: dict[str, Any]
@@ -300,6 +306,7 @@ class PluginLoader:
 
         allow = list(self._base_host._allow_get)
         caps = dict(self._base_host._capabilities)
+        staged: list[McpTool] = []
         timeout = float(manifest.get("call_timeout") or 60)
         session = PluginSubprocessSession(
             plugin_id=plugin_id,
@@ -312,14 +319,14 @@ class PluginLoader:
         )
         try:
             session.start_and_bootstrap()
-            names = register_subprocess_plugin_tools(
-                self._raw_add_tool,
+            register_subprocess_plugin_tools(
+                staged.append,
                 session=session,
-                tool_owner=self.tool_owner,
                 enforce_prefix=self.enforce_prefix,
                 prefix=str(prefix) if prefix else None,
             )
-            track_session(plugin_id, session)
+            names = self._commit_tools(plugin_id, staged, prefix=prefix)
+            track_session(plugin_id, session, scope=self._session_scope)
             self._record(
                 plugin_id, path, tool_names=names, runtime="python-subprocess"
             )
@@ -336,8 +343,10 @@ class PluginLoader:
         if not self._is_enabled(plugin_id, True):
             self._record(plugin_id, path, error="disabled")
             return
-        host = self._base_host.bind_plugin(plugin_id)
+        staged: list[McpTool] = []
+        host = self._staging_host(plugin_id, staged)
         try:
+            self._check_plugin_id(plugin_id)
             unique_name = f"mcp_plugin_{_safe_mod_name(plugin_id)}"
             spec = importlib.util.spec_from_file_location(unique_name, path)
             if spec is None or spec.loader is None:
@@ -348,11 +357,11 @@ class PluginLoader:
             register_fn = getattr(mod, "register", None)
             if not callable(register_fn):
                 raise RuntimeError("单文件插件须定义 register(host)")
-            register_fn(host)
-            names = host.registered_tool_names
-            if self.tool_owner is not None:
-                for n in names:
-                    self.tool_owner[n] = plugin_id
+            try:
+                register_fn(host)
+            finally:
+                host.close_registration()
+            names = self._commit_tools(plugin_id, staged)
             self._record(
                 plugin_id, path, tool_names=names, runtime="python-inprocess"
             )
@@ -364,6 +373,55 @@ class PluginLoader:
                 "[MCP插件] 单文件加载失败 %s: %s", plugin_id, e, exc_info=True
             )
             self._record(plugin_id, path, error=str(e))
+        finally:
+            host.close_registration()
+
+    def _check_plugin_id(self, plugin_id: str) -> None:
+        if plugin_id in self._loaded_ids or (
+            self.tool_owner is not None and plugin_id in self.tool_owner.values()
+        ):
+            raise ValueError(f"插件 id 冲突: {plugin_id}")
+
+    def _staging_host(self, plugin_id: str, staged: list[McpTool]) -> McpHost:
+        return McpHost(
+            staged.append,
+            capabilities=self._base_host._capabilities,
+            allow_get=self._base_host._allow_get,
+            plugin_id=plugin_id,
+        )
+
+    def _commit_tools(self, plugin_id: str, tools: list[McpTool], *, prefix=None) -> list[str]:
+        """注册函数和 schema 校验结束后整批提交；失败时不登记归属。"""
+        names = [tool.name for tool in tools]
+        if len(names) != len(set(names)):
+            raise ValueError(f"插件工具名称冲突: {plugin_id}")
+        if self.tool_owner is not None and set(names) & self.tool_owner.keys():
+            raise ValueError(f"插件工具归属冲突: {plugin_id}")
+        bad = [name for name in names if prefix and not name.startswith(str(prefix))]
+        if bad:
+            message = f"工具名未使用前缀 {prefix}: {bad}"
+            if self.enforce_prefix:
+                raise ValueError(message)
+            logger.warning("[MCP插件:%s] %s", plugin_id, message)
+        if self._add_tools_atomic is not None:
+            self._add_tools_atomic(tools)
+        else:
+            # 自定义宿主须提供回滚接口；McpServer 使用上面的原子批量接口。
+            if len(tools) > 1 and self._remove_tools is None:
+                raise RuntimeError("批量注册须提供 remove_tools_by_names 回滚接口")
+            added: list[str] = []
+            try:
+                for tool in tools:
+                    self._raw_add_tool(tool)
+                    added.append(tool.name)
+            except Exception:
+                if added and self._remove_tools is not None:
+                    self._remove_tools(added)
+                raise
+        if self.tool_owner is not None:
+            self.tool_owner.update(dict.fromkeys(names, plugin_id))
+        self._loaded_ids.add(plugin_id)
+        return names
 
     def _record(
         self,
@@ -431,7 +489,7 @@ def load_mcp_plugins_from_config(
         return []
 
     dir_cfg = _get("MCP_PLUGINS.DIR", None)
-    plugins_dir = Path(dir_cfg) if dir_cfg else default_plugins_dir()
+    plugins_dir = Path(dir_cfg).expanduser() if dir_cfg else default_plugins_dir()
     allow = _get("MCP_PLUGINS.ALLOW_HOST_GET", list(DEFAULT_ALLOW_GET))
     if not isinstance(allow, list):
         allow = list(DEFAULT_ALLOW_GET)

@@ -106,7 +106,18 @@ You may also use `host.add_tool(McpTool(...))` with the same types as built-ins 
 | `host.tool(name, description, props=None)` | Decorator sugar (**no** global registry) |
 | `host.get(name)` | Whitelisted capabilities; otherwise `None` |
 
-Default whitelist: `config_readonly`, `logger`.  
+Default whitelist: `config_readonly`, `logger`. Setting `ALLOW_HOST_GET` explicitly to `[]` denies all Host capabilities.
+
+Both runtimes expose `config_readonly` as an independent, recursively read-only snapshot with `get_config(path, default=None)` and mapping access, without configuration write methods. Only these paths are available:
+
+- `CONFIG_VERSION`
+- `SYSTEM_OPTIONS.WINDOW_SIZE_MODE`
+- `SYSTEM_OPTIONS.NETWORK.OTA_VERSION_URL`
+- `SYSTEM_OPTIONS.NETWORK.AUTHORIZATION_URL`
+- `SYSTEM_OPTIONS.NETWORK.ACTIVATION_VERSION`
+
+URLs omit credentials, query strings and fragments. All other paths, including tokens, MQTT credentials and camera API keys, return the requested default. Plugins that previously used the full configuration manager must migrate. Workers receive only authorized capability snapshots.
+
 Do **not** rely on removed global `@mcp_tool` or `get_instance` singletons.
 
 ## Vendoring dependencies and multi-platform releases
@@ -183,7 +194,7 @@ Vendored `lib/` avoids end-user pip; it is **not** process isolation by itself.
 | Process | Same as host | Dedicated worker (JSON lines over stdin/stdout) |
 | Crash / hang isolation | Poor (can take down the app) | Better (timeout can kill the child) |
 | `host.get("logger")` | Host logger | Local logger in the worker |
-| `host.get("config_readonly")` | Config object / read-only view | **JSON-serializable config snapshot** |
+| `host.get("config_readonly")` | Redacted read-only snapshot with `get_config` | Same interface, built from a redacted JSON snapshot |
 | Live objects (e.g. `music_player`) | Allowed if whitelisted | **Not available** (not serializable) |
 | Best for | Light, trusted plugins needing host services | Heavy native deps / isolation from UI & audio |
 
@@ -246,7 +257,9 @@ python scripts/check_mcp_plugin.py /path/to/plugin --strict
 ## Naming and conflicts
 
 - Prefer `tool_name_prefix` (e.g. `example.`).  
-- **Duplicate tool names are rejected** (built-ins are not overwritten).  
+- A duplicate tool name rejects the entire plugin registration and preserves existing tools and ownership. Tools are committed together after `register(host)` returns and prefix/name checks pass; exceptions publish no partial tools. Cached Hosts cannot register tools after this registration window closes.
+- Unload, reload and application shutdown reap workers belonging to that container, including zero-tool workers. In-process unload removes tools but does not clean up plugin-created threads, module caches or other side effects.
+- Worker JSON uses UTF-8; plugin standard output is redirected to the logging channel, separate from responses.
 - Disable: add id to `DISABLED_IDS` and restart, or delete the folder.
 
 ## Runtime APIs (host)
