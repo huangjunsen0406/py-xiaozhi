@@ -44,7 +44,11 @@ jobs:
       - name: Install native runtime and build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y portaudio19-dev libopus-dev swig libegl1 libopengl0 libxkbcommon0
+          sudo apt-get install -y portaudio19-dev libopus-dev swig libegl1 libopengl0 libxkbcommon0 pulseaudio
+      - name: Start virtual audio server
+        run: |
+          pulseaudio --start --exit-idle-time=-1
+          pactl load-module module-null-sink sink_name=ci
       - name: Install locked development dependencies
         run: uv sync --locked --extra gui --extra tui --group dev
       - name: Verify editable entry point without the current directory
