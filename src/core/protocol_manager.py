@@ -5,7 +5,7 @@
 """
 
 import asyncio
-from typing import TYPE_CHECKING, Awaitable, Callable, Optional
+from typing import TYPE_CHECKING, Any, Awaitable, Callable, Coroutine, Optional
 
 from src.constants.constants import ListeningMode
 from src.core.event_bus import EventBus, Events
@@ -86,14 +86,11 @@ class ProtocolTransport:
         self._protocol.on_audio_channel_opened(self._on_audio_channel_opened)
         self._protocol.on_audio_channel_closed(self._on_audio_channel_closed)
 
-    def _spawn(self, coro: Awaitable, name: str) -> None:
-        """优先走 TaskManager；否则本地 create_task 并记录异常."""
+    def _spawn(self, coro: Coroutine[Any, Any, Any], name: str) -> None:
+        """接管原生协程，优先交给 TaskManager；否则本地创建任务并记录异常."""
         if self._task_manager is not None:
-            task = self._task_manager.spawn(coro, name=name)
-            if task is None:
-                # 关闭中：关闭未调度协程避免警告
-                if asyncio.iscoroutine(coro):
-                    coro.close()
+            # spawn 接管协程，包括拒绝或创建失败时的关闭。
+            self._task_manager.spawn(coro, name=name)
             return
 
         try:

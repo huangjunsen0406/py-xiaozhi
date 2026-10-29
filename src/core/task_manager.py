@@ -4,7 +4,8 @@
 """
 
 import asyncio
-from typing import Any, Awaitable, Callable, Optional
+import inspect
+from typing import Any, Callable, Coroutine, Optional
 
 from src.logging import get_logger
 
@@ -71,24 +72,39 @@ class TaskManager:
         """
         return self._shutdown_event
 
-    def spawn(self, coro: Awaitable[Any], name: str) -> Optional[asyncio.Task]:
-        """创建异步任务并追踪.
+    def spawn(
+        self, coro: Coroutine[Any, Any, Any], name: str
+    ) -> Optional[asyncio.Task]:
+        """接管新建原生协程，创建异步任务并追踪.
+
+        原生协程交给本方法后，调用方不再负责关闭：拒绝调度或创建任务
+        失败时由本方法关闭，成功时交由任务管理。仅接受 async def 返回
+        的原生协程；Future、Task 等其他 Awaitable 会抛出 TypeError，
+        且不会被关闭或取消。必须在事件循环线程内调用。
 
         Args:
-            coro: 协程对象
+            coro: 新建、尚未调度的原生协程对象
             name: 任务名称
 
         Returns:
-            创建的任务对象，如果应用正在关闭则返回 None
+            创建的任务对象；未初始化或正在关闭时返回 None
         """
-        # 检查是否正在关闭
+        if not inspect.iscoroutine(coro):
+            raise TypeError("TaskManager.spawn requires a native coroutine")
+
+        # 拒绝时仍负责释放已接管的协程。
         if not self._running or (
             self._shutdown_event and self._shutdown_event.is_set()
         ):
-            logger.debug(f"跳过任务创建（应用正在关闭）: {name}")
+            coro.close()
+            logger.debug(f"跳过任务创建（未运行或应用正在关闭）: {name}")
             return None
 
-        task = asyncio.create_task(coro, name=name)
+        try:
+            task = asyncio.create_task(coro, name=name)
+        except BaseException:
+            coro.close()
+            raise
         self._tasks.add(task)
 
         def _on_done(t: asyncio.Task):
@@ -125,12 +141,10 @@ class TaskManager:
         def _runner():
             try:
                 result = fn(*args, **kwargs)
-                if asyncio.iscoroutine(result):
-                    task = self.spawn(
+                if inspect.iscoroutine(result):
+                    self.spawn(
                         result, name=f"scheduled:{getattr(fn, '__name__', 'anon')}"
                     )
-                    if task is None:
-                        result.close()
             except Exception as e:
                 logger.error(f"调度的可调用执行失败: {e}", exc_info=True)
 
