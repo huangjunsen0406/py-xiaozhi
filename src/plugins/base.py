@@ -70,6 +70,7 @@ class Plugin:
     def mark_failed(self) -> None:
         """标记插件失败，后续 start/notify 将被跳过."""
         self._failed = True
+        self._started = False
 
     def get_dep(self, name: str) -> Optional["Plugin"]:
         """获取指定名称的依赖插件."""

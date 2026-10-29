@@ -33,6 +33,9 @@ def check_plugin(path: Path, *, strict: bool = False) -> list[str]:
             errors.append("严格模式要求 manifest.json")
         manifest = {"id": path.name, "entry": "plugin:register"}
 
+    if not isinstance(manifest, dict):
+        return ["manifest.json 须为对象"]
+
     pid = manifest.get("id") or path.name
     if not pid:
         errors.append("manifest.id 为空")
@@ -47,8 +50,8 @@ def check_plugin(path: Path, *, strict: bool = False) -> list[str]:
             errors.append(f"找不到入口模块文件: {py}")
 
     runtime = manifest.get("runtime", "python-inprocess")
-    if runtime != "python-inprocess":
-        errors.append(f"当前仅支持 runtime=python-inprocess，得到: {runtime}")
+    if runtime not in {"python-inprocess", "python-subprocess"}:
+        errors.append(f"不支持的 runtime: {runtime}")
 
     if strict:
         if "api_version" not in manifest:

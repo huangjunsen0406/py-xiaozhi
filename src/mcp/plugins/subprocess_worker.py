@@ -21,11 +21,14 @@ import asyncio
 import importlib
 import importlib.util
 import json
+import os
 import sys
 import traceback
 from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
+
+_PROTOCOL_STDOUT = sys.stdout
 
 
 def _log(msg: str) -> None:
@@ -64,11 +67,18 @@ class _WorkerHost:
             import logging
 
             return logging.getLogger(f"mcp_plugin.{self._plugin_id}")
-        return self._capabilities.get(name)
+        value = self._capabilities.get(name)
+        if name == "config_readonly" and value is not None:
+            from src.mcp.plugins.host import ReadOnlyConfig
+
+            return ReadOnlyConfig(value)
+        return value
 
     def add_tool(self, tool: Any) -> None:
         """接受 McpTool 或具备 name/description/properties/callback 的对象."""
         name = tool.name
+        if name in self._callbacks:
+            raise ValueError(f"Tool name conflict: {name}")
         desc = getattr(tool, "description", "") or ""
         props_obj = getattr(tool, "properties", None)
         callback = getattr(tool, "callback", None)
@@ -170,11 +180,17 @@ def _read_msg() -> dict[str, Any] | None:
 
 
 def _write_msg(obj: dict[str, Any]) -> None:
-    sys.stdout.write(json.dumps(obj, ensure_ascii=False) + "\n")
-    sys.stdout.flush()
+    _PROTOCOL_STDOUT.write(json.dumps(obj, ensure_ascii=False) + "\n")
+    _PROTOCOL_STDOUT.flush()
 
 
 def main() -> int:
+    global _PROTOCOL_STDOUT
+    # 独立协议 fd；Python print、os.write(1, ...) 和原生库输出均送往 stderr。
+    _PROTOCOL_STDOUT = os.fdopen(os.dup(sys.stdout.fileno()), "w", encoding="utf-8", buffering=1)
+    sys.stdout.flush()
+    os.dup2(sys.stderr.fileno(), sys.stdout.fileno())
+    sys.stdout = sys.stderr
     host: _WorkerHost | None = None
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
@@ -198,7 +214,7 @@ def main() -> int:
                 plugin_id = str(params.get("plugin_id") or plugin_root.name)
                 entry = str(params.get("entry") or "plugin:register")
                 platform_tag = str(params.get("platform_tag") or "")
-                allow_get = params.get("allow_get") or ["config_readonly", "logger"]
+                allow_get = params.get("allow_get", ["config_readonly", "logger"])
                 capabilities = params.get("capabilities") or {}
                 # 宿主工程根（含 src/）供 import src.mcp.*
                 app_root = params.get("app_root")

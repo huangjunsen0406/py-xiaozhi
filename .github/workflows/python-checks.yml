@@ -1,0 +1,76 @@
+name: Python checks
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: python-checks-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      # Keep existing style debt separate from syntax/undefined-name regressions.
+      - name: Check critical rules across the project
+        run: uvx ruff check --select E9,F63,F7,F82 main.py src scripts tests
+      - name: Check entry-point and verification code with all configured rules
+        run: >-
+          uvx ruff check main.py src/cli.py src/__main__.py scripts/check_wheel.py
+          tests/test_cli.py tests/test_package_resources.py tests/test_task_manager.py
+          tests/test_tui_logging.py
+
+  tests:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.10", "3.12"]
+    env:
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: ${{ matrix.python }}
+          enable-cache: true
+      - name: Install native runtime and build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y portaudio19-dev libopus-dev swig libegl1 libopengl0 libxkbcommon0 pulseaudio
+      - name: Start virtual audio server
+        run: |
+          pulseaudio --start --exit-idle-time=-1
+          pactl load-module module-null-sink sink_name=ci
+      - name: Install locked development dependencies
+        run: uv sync --locked --extra gui --extra tui --group dev
+      - name: Verify editable entry point without the current directory
+        run: uv run --no-sync python -I -c "from src.cli import main; assert callable(main)"
+      - name: Run unit and regression tests
+        run: uv run --no-sync python -m pytest -q -W error::RuntimeWarning
+
+  wheel:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      - name: Install isolated build frontend
+        run: python -m pip install build
+      - name: Build source distribution and wheel from it
+        run: python -m build
+      - name: Verify an installed wheel outside the checkout
+        shell: bash
+        run: python scripts/check_wheel.py dist/*.whl

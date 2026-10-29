@@ -107,7 +107,17 @@ def register(host):
 | `host.get(name)` | 白名单能力；未授权返回 `None` |
 
 默认 `get` 白名单：`config_readonly`、`logger`。  
-`music_player` 等需在配置 `ALLOW_HOST_GET` 中显式允许。
+`music_player` 等需在配置 `ALLOW_HOST_GET` 中显式允许；显式设置 `[]` 会禁用全部 Host 能力。
+
+`config_readonly` 在两种运行时均提供独立的递归只读快照，保留 `get_config(path, default=None)` 和映射读取接口，没有 `update_config` / `save_config` 等写入方法。公开字段仅包括：
+
+- `CONFIG_VERSION`
+- `SYSTEM_OPTIONS.WINDOW_SIZE_MODE`
+- `SYSTEM_OPTIONS.NETWORK.OTA_VERSION_URL`
+- `SYSTEM_OPTIONS.NETWORK.AUTHORIZATION_URL`
+- `SYSTEM_OPTIONS.NETWORK.ACTIVATION_VERSION`
+
+URL 会移除用户信息、查询串和片段。其余字段（含 token、MQTT 凭据和摄像头 API Key）不提供，读取返回默认值；依赖完整配置管理器的旧插件需要调整。子进程只接收已授权能力的快照。
 
 **禁止**依赖已删除的全局 `@mcp_tool` 或 `get_instance` 单例。
 
@@ -187,7 +197,7 @@ def register(host):
 | 进程 | 与宿主同进程 | 独立 worker 进程（stdin/stdout JSON 行协议） |
 | 崩溃/堵死隔离 | 差（可拖垮宿主） | 较好（可超时结束子进程） |
 | `host.get("logger")` | 宿主 logger | 子进程本地 logger |
-| `host.get("config_readonly")` | 配置对象/只读视图 | **可 JSON 序列化的配置快照** |
+| `host.get("config_readonly")` | 脱敏只读快照，支持 `get_config` | 相同接口，由脱敏 JSON 快照构造 |
 | `host.get("music_player")` 等活对象 | 白名单允许时可用 | **不可用**（无法跨进程传对象） |
 | 适用 | 轻量、可信、需宿主能力 | 重型 native、依赖冲突、希望与 UI/音频隔离 |
 
@@ -252,7 +262,9 @@ python scripts/check_mcp_plugin.py /path/to/plugin --strict
 ## 命名与冲突
 
 - 工具名建议使用 `manifest.tool_name_prefix` 前缀（如 `example.`）。  
-- 与**已有工具同名**时：宿主 **拒绝重复注册**（不覆盖内置）。  
+- 与**已有工具同名**时：宿主拒绝整个插件的本次注册，保留原工具及其归属。工具在 `register(host)` 返回并通过前缀/重名检查后整批提交；注册抛错不会暴露半成品工具。注册窗口结束后不能再通过缓存的 Host 注册工具。
+- 卸载、重载和应用退出会回收当前容器的子进程插件，包括没有注册工具的 worker；同进程插件卸载仍只移除工具，不清理插件自行创建的线程、模块缓存或其他副作用。
+- 子进程 JSON 协议使用 UTF-8，插件标准输出重定向到日志通道，不混入工具响应。
 - 关闭插件：`MCP_PLUGINS.DISABLED_IDS` 加入 `id` 后重启；或删除目录。
 
 ## 运行时 API（程序侧）

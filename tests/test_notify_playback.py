@@ -306,9 +306,9 @@ async def test_decode_failure_after_partial_audio_is_not_reported_as_success(
     generation = await player.start("https://example.test/a.ogg", [], on_finished)
     try:
         await _wait_for_pcm(codec, 1)
-        codec.progress_callback(240)
-        codec.drained_callback()
         assert await asyncio.wait_for(finished.get(), 1) == (generation, False)
+        assert codec.progress_callback is None
+        assert codec.drained_callback is None
         assert codec.clear_count == 1
     finally:
         await player.stop()

@@ -348,7 +348,9 @@ class XiaozhiTuiApp(App[None]):
             def emit(self, record: logging.LogRecord) -> None:
                 try:
                     msg = self.format(record)
-                    app.call_from_thread(app.write_log, msg)
+                    # Never wait for the UI while holding the logging handler's
+                    # lock: the UI thread may be logging to this handler too.
+                    app.call_later(app.write_log, msg)
                 except Exception:
                     pass
 

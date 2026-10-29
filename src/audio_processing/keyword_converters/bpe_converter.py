@@ -19,8 +19,9 @@ class BpeConverter(KeywordConverter):
             return Path(self._tokens_path)
 
         # Default path: models/en/tokens.txt
-        from src.utils.resource_finder import get_app_root
-        return get_app_root() / "models" / "en" / "tokens.txt"
+        from src.utils.resource_finder import get_models_dir
+
+        return get_models_dir() / "en" / "tokens.txt"
 
     def _load_tokens(self):
         """Load tokens from tokens.txt file."""

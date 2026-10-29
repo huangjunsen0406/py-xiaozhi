@@ -12,12 +12,12 @@ import numpy as np
 import sounddevice as sd
 
 from src.logging import get_logger
-from src.utils.resource_finder import get_app_root
+from src.utils.resource_finder import get_assets_dir
 
 logger = get_logger()
 
 # 音频资源目录
-_ASSETS_DIR = get_app_root() / "assets" / "sounds"
+_ASSETS_DIR = get_assets_dir() / "sounds"
 # 资源默认采样率（与 assets/sounds 中预置 WAV 对齐）
 _DEFAULT_SAMPLE_RATE = 24000
 

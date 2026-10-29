@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from src.logging import get_logger
+from src.mcp.plugins.host import config_readonly_snapshot
 from src.mcp.tooling import McpTool, Property, PropertyList, PropertyType
 from src.utils.resource_finder import get_app_root
 
@@ -67,6 +68,7 @@ class PluginSubprocessSession:
         env = os.environ.copy()
         # 避免子进程继承 GUI/Qt 相关干扰（可选）
         env.setdefault("PYTHONUNBUFFERED", "1")
+        env["PYTHONIOENCODING"] = "utf-8:replace"
 
         self._proc = subprocess.Popen(
             [self.python_executable, str(worker)],
@@ -74,6 +76,8 @@ class PluginSubprocessSession:
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             bufsize=1,
             env=env,
             cwd=str(self.plugin_root),
@@ -115,24 +119,17 @@ class PluginSubprocessSession:
         """capabilities 须可 JSON 序列化；对象类能力子进程无法使用，仅传快照."""
         out: dict[str, Any] = {}
         for k, v in caps.items():
+            if k not in self.allow_get:
+                continue
             if k == "config_readonly":
-                # ConfigManager → 只读 dict 快照
-                try:
-                    if hasattr(v, "get_config") and hasattr(v, "_config"):
-                        out[k] = dict(getattr(v, "_config", {}) or {})
-                    elif isinstance(v, dict):
-                        out[k] = v
-                    else:
-                        out[k] = {}
-                except Exception:
-                    out[k] = {}
+                out[k] = config_readonly_snapshot(v)
             elif isinstance(v, (dict, list, str, int, float, bool)) or v is None:
                 try:
-                    json.dumps(v)
-                    out[k] = v
-                except Exception:
+                    # JSON roundtrip copies nested containers as well.
+                    out[k] = json.loads(json.dumps(v))
+                except (TypeError, ValueError):
                     pass
-            # music_player 等不可序列化对象：子进程侧拿不到（与隔离目标一致）
+            # music_player 等对象能力不跨进程传递。
         return out
 
     def _drain_stderr(self) -> None:
@@ -235,27 +232,19 @@ class PluginSubprocessSession:
         if proc is None:
             return
         try:
-            if proc.poll() is None and proc.stdin:
-                try:
-                    req = json.dumps(
-                        {"id": self._next_id(), "method": "shutdown", "params": {}}
-                    )
-                    proc.stdin.write(req + "\n")
-                    proc.stdin.flush()
-                except Exception:
-                    pass
+            if proc.poll() is None:
+                proc.terminate()
                 try:
                     proc.wait(timeout=2)
-                except Exception:
+                except subprocess.TimeoutExpired:
                     proc.kill()
+                    proc.wait(timeout=2)
         except Exception as e:
-            logger.debug(
-                "[MCP插件:%s] 结束子进程: %s", self.plugin_id, e, exc_info=True
-            )
-            try:
-                proc.kill()
-            except Exception:
-                pass
+            logger.debug("[MCP插件:%s] 结束子进程: %s", self.plugin_id, e, exc_info=True)
+        finally:
+            for stream in (proc.stdin, proc.stdout, proc.stderr):
+                if stream is not None:
+                    stream.close()
 
     def __del__(self) -> None:
         try:
@@ -336,23 +325,26 @@ def register_subprocess_plugin_tools(
     return names
 
 
-# 进程内会话表，供卸载时 terminate
-_SESSIONS: dict[str, PluginSubprocessSession] = {}
+# 同一 plugin_id 可存在于不同容器；默认 scope 保留独立 Loader 的兼容性。
+_SESSIONS: dict[tuple[object | None, str], PluginSubprocessSession] = {}
+_ALL_SCOPES = object()
 
 
-def track_session(plugin_id: str, session: PluginSubprocessSession) -> None:
-    old = _SESSIONS.pop(plugin_id, None)
+def track_session(plugin_id: str, session: PluginSubprocessSession, *, scope=None) -> None:
+    key = (scope, plugin_id)
+    old = _SESSIONS.pop(key, None)
     if old is not None:
         old.terminate()
-    _SESSIONS[plugin_id] = session
+    _SESSIONS[key] = session
 
 
-def drop_session(plugin_id: str) -> None:
-    session = _SESSIONS.pop(plugin_id, None)
+def drop_session(plugin_id: str, *, scope=None) -> None:
+    session = _SESSIONS.pop((scope, plugin_id), None)
     if session is not None:
         session.terminate()
 
 
-def drop_all_sessions() -> None:
-    for pid in list(_SESSIONS.keys()):
-        drop_session(pid)
+def drop_all_sessions(*, scope=_ALL_SCOPES) -> None:
+    for session_scope, plugin_id in list(_SESSIONS):
+        if scope is _ALL_SCOPES or session_scope is scope:
+            drop_session(plugin_id, scope=session_scope)

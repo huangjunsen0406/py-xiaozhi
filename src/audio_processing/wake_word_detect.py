@@ -9,7 +9,7 @@ import numpy as np
 from src.constants.constants import AudioConfig
 from src.logging import get_logger
 from src.utils.config_manager import ConfigManager, get_config
-from src.utils.resource_finder import get_app_root, get_user_keywords_path
+from src.utils.resource_finder import get_resource_root, get_user_keywords_path
 
 logger = get_logger()
 
@@ -65,7 +65,7 @@ class WakeWordDetector:
             if model_path is None:
                 model_path = config.get_config("WAKE_WORD_OPTIONS.MODEL_PATH", "models")
 
-            self._model_dir = get_app_root() / model_path
+            self._model_dir = get_resource_root() / model_path
 
             if not self._model_dir.exists():
                 logger.error(f"模型目录不存在: {self._model_dir}")

@@ -59,12 +59,18 @@ class McpPlugin(Plugin):
             server.add_common_tools(music_player=self._music_player)
         except Exception as e:
             logger.error(f"MCP 工具注册失败: {e}", exc_info=True)
+            self.mark_failed()
+            server.detach()
+            raise
 
         try:
             self._music_player.set_event_bus(ctx.event_bus, ctx)
             logger.info("MusicPlayer EventBus 已注入")
         except Exception as e:
-            logger.warning(f"设置 MusicPlayer EventBus 失败: {e}", exc_info=True)
+            logger.error(f"设置 MusicPlayer EventBus 失败: {e}", exc_info=True)
+            self.mark_failed()
+            server.detach()
+            raise
 
     async def on_incoming_json(self, message: Any) -> None:
         if not isinstance(message, dict):

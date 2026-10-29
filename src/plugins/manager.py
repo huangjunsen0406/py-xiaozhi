@@ -36,16 +36,21 @@ class PluginManager:
 
         先按 priority 排序，后续 setup_all 时会按依赖拓扑排序。
         """
+        # 先校验整批名称，避免冲突时留下部分注册或覆盖已有依赖索引。
+        by_name = dict(self._by_name)
+        for p in plugins:
+            name = getattr(p, "name", None)
+            if isinstance(name, str) and name:
+                existing = by_name.get(name)
+                if existing is not None and existing is not p:
+                    raise ValueError(f"插件名称重复: {name}")
+                by_name[name] = p
+
         sorted_plugins = sorted(plugins, key=lambda p: getattr(p, "priority", 50))
         for p in sorted_plugins:
             if p not in self._plugins:
                 self._plugins.append(p)
-                try:
-                    name = getattr(p, "name", None)
-                    if isinstance(name, str) and name:
-                        self._by_name[name] = p
-                except Exception as e:
-                    logger.error(f"插件注册失败: {e}", exc_info=True)
+        self._by_name = by_name
         self._sorted = False
 
     def get_plugin(self, name: str) -> Optional[Plugin]:
@@ -172,9 +177,10 @@ class PluginManager:
                     f"插件拓扑排序完成: {[p.name for p in self._plugins if hasattr(p, 'name')]}"
                 )
             except ValueError as e:
+                for p in self._plugins:
+                    p.mark_failed()
                 logger.error(f"插件排序失败: {e}", exc_info=True)
-                # 降级为优先级排序
-                self._plugins.sort(key=lambda p: getattr(p, "priority", 50))
+                raise
 
         # 注入依赖
         self._inject_dependencies()

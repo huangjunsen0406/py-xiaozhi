@@ -40,9 +40,9 @@ def _import_webrtc_apm():
 
         return webrtc_apm
     except ImportError:
-        from src.utils.resource_finder import get_app_root
+        from src.utils.resource_finder import get_resource_root
 
-        root = str(get_app_root())
+        root = str(get_resource_root())
         if root not in sys.path:
             sys.path.insert(0, root)
         from libs import webrtc_apm

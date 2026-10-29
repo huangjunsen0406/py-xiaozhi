@@ -14,7 +14,7 @@
 - 配置 PATHS.*（见 apply_path_overrides_from_config；改后可迁移旧目录）
 
 核心 API：
-- get_app_root() / get_app_name()
+- get_app_root() / get_resource_root() / get_app_name()
 - get_user_data_dir() / get_user_cache_dir() / get_user_log_dir()
 - get_music_cache_dir() / get_keywords_dir()
 - apply_path_overrides_from_config() / migrate_directory()
@@ -65,6 +65,14 @@ def get_app_root() -> Path:
         return Path(sys._MEIPASS)
     # src/utils/resource_finder.py → 往上 3 级
     return Path(__file__).resolve().parent.parent.parent
+
+
+def get_resource_root() -> Path:
+    """只读资源根：wheel 放在包内；源码和 PyInstaller 保留原布局。"""
+    if getattr(sys, "frozen", False):
+        return get_app_root()
+    bundled = Path(__file__).resolve().parent.parent / "_resources"
+    return bundled if bundled.is_dir() else get_app_root()
 
 
 def get_app_name() -> str:
@@ -417,7 +425,7 @@ def get_lib_path(lib_name: str) -> Path | None:
         库文件的完整路径，找不到返回 None
     """
     plat_dir, arch = get_platform_info()
-    root = get_app_root() / "libs" / lib_name
+    root = get_resource_root() / "libs" / lib_name
 
     # 平台目录别名（mac/macos, win/windows）
     plat_aliases = {
@@ -489,7 +497,7 @@ def get_ffmpeg_path() -> str:
 
     plat_dir, arch = get_platform_info()
     ext = ".exe" if sys.platform == "win32" else ""
-    bundled = get_app_root() / "libs" / "ffmpeg" / plat_dir / arch / f"ffmpeg{ext}"
+    bundled = get_resource_root() / "libs" / "ffmpeg" / plat_dir / arch / f"ffmpeg{ext}"
     if bundled.exists():
         return str(bundled)
     return shutil.which("ffmpeg") or "ffmpeg"
@@ -504,7 +512,7 @@ def get_ffprobe_path() -> str:
 
     plat_dir, arch = get_platform_info()
     ext = ".exe" if sys.platform == "win32" else ""
-    bundled = get_app_root() / "libs" / "ffmpeg" / plat_dir / arch / f"ffprobe{ext}"
+    bundled = get_resource_root() / "libs" / "ffmpeg" / plat_dir / arch / f"ffprobe{ext}"
     if bundled.exists():
         return str(bundled)
     return shutil.which("ffprobe") or "ffprobe"
@@ -514,21 +522,21 @@ def get_models_dir() -> Path:
     """
     模型目录（只读，安装目录内）.
     """
-    return get_app_root() / "models"
+    return get_resource_root() / "models"
 
 
 def get_assets_dir() -> Path:
     """
     资源目录（只读，安装目录内）.
     """
-    return get_app_root() / "assets"
+    return get_resource_root() / "assets"
 
 
 def get_config_dir() -> Path:
     """
     配置目录（应用内置，只读）
     """
-    return get_app_root() / "config"
+    return get_resource_root() / "config"
 
 
 def get_user_keywords_path(lang: str) -> Path:
@@ -549,7 +557,7 @@ def get_user_keywords_path(lang: str) -> Path:
 
     if not user_keywords.exists():
         # 从安装目录复制默认文件
-        default_keywords = get_app_root() / "models" / lang / "keywords.txt"
+        default_keywords = get_resource_root() / "models" / lang / "keywords.txt"
         if default_keywords.exists():
             user_keywords_dir.mkdir(parents=True, exist_ok=True)
             shutil.copy2(default_keywords, user_keywords)

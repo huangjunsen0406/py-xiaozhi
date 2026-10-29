@@ -205,6 +205,38 @@ python main.py --protocol websocket  # WebSocket (default)
 python main.py --protocol mqtt       # MQTT protocol
 ```
 
+### Entry points and verification
+
+Source checkouts, installed wheels and frozen builds share `src.cli.main(argv=None)`.
+Importing the launcher does not parse arguments, initialize configuration/logging,
+or load Qt/audio. `--help` and invalid arguments exit before runtime initialization.
+
+```bash
+# Installed command (GUI still needs the gui extra)
+xiaozhi --mode cli
+# Equivalent module entry point
+python -m src --mode cli
+
+# Full regression suite, including Qt model tests without a display
+uv run --extra gui --extra tui python -m pytest -q -W error::RuntimeWarning
+
+# Build sdist, then build the wheel from that sdist
+uvx --from build pyproject-build
+# Install the wheel into a temporary venv outside the checkout and verify it
+python scripts/check_wheel.py dist/*.whl
+```
+
+The wheel contains assets, wake-word models and the supplied native libraries under
+`src/_resources`; source and PyInstaller layouts keep their existing resource paths.
+FFmpeg is resolved from the system PATH for wheel installs. The wheel check installs
+only `platformdirs` alongside the wheel to verify entry points and resources; it does
+not exercise audio hardware, GUI rendering or the full runtime dependency set.
+
+PRs and branch pushes run Python tests on 3.10/3.12 and installed-wheel checks on
+Linux, macOS and Windows. Lint gates critical syntax/undefined-name rules across the
+project and all configured rules for the new entry-point/verification code. Existing
+style warnings elsewhere remain a separate cleanup task.
+
 ### Core Development Patterns
 
 - **Async First**: Use `async/await` syntax, avoid blocking operations

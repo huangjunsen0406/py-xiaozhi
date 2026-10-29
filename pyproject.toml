@@ -96,7 +96,7 @@ tui = [
 # 代码在 import 到 picamera2 时自动启用 CSI 后端（CAMERA.backend=auto/picamera2）。
 
 [project.scripts]
-xiaozhi = "main:main"
+xiaozhi = "src.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/huangjunsen0406/py-xiaozhi"
@@ -191,5 +191,18 @@ sections = ["FUTURE", "STDLIB", "THIRDPARTY", "FIRSTPARTY", "LOCALFOLDER"]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+[tool.hatch.build]
+dev-mode-dirs = ["."]
+
 [tool.hatch.build.targets.wheel]
-packages = ["src"]
+only-include = ["src", "assets", "models", "libs/libopus", "libs/webrtc_apm"]
+exclude = ["**/__pycache__", "**/*.pyc"]
+
+[tool.hatch.build.targets.wheel.sources]
+"assets" = "src/_resources/assets"
+"models" = "src/_resources/models"
+"libs" = "src/_resources/libs"
+
+[tool.hatch.build.targets.sdist]
+only-include = ["src", "assets", "models", "libs", "main.py", "README.md", "LICENSE", "pyproject.toml"]
+exclude = ["**/__pycache__", "**/*.pyc", "libs/ffmpeg"]

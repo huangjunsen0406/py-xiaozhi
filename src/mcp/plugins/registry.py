@@ -31,7 +31,7 @@ class PluginRegistry:
         try:
             from src.mcp.plugins.subprocess_runtime import drop_session
 
-            drop_session(plugin_id)
+            drop_session(plugin_id, scope=server._plugin_session_scope)
         except Exception:
             pass
         names = set(self.tools_for_plugin(plugin_id))
