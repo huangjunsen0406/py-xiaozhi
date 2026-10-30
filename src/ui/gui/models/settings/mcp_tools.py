@@ -25,25 +25,9 @@ class SettingsMcpToolsMixin:
     def _mcp_disabled_list(self) -> list[str]:
         return normalize_disabled(self._get_value("MCP_TOOLS.DISABLED", []) or [])
 
-    def _try_list_runtime_tools(self) -> list[str]:
-        """尽力获取进程内已注册 MCP 工具名（可能为空）."""
-        import gc
-
-        try:
-            from src.mcp.mcp_server import McpServer
-        except Exception:
-            return []
-        for obj in gc.get_objects():
-            try:
-                if isinstance(obj, McpServer) and getattr(obj, "tools", None):
-                    return [t.name for t in obj.tools]
-            except Exception:
-                continue
-        return []
-
     def _all_catalog_base_rows(self) -> list[dict[str, str]]:
         return full_catalog_rows(
-            runtime_names=self._try_list_runtime_tools(),
+            runtime_names=list(self._runtime_tool_names()),
             extra_disabled=self._mcp_disabled_list(),
             config=getattr(self, "_config_manager", None),
         )

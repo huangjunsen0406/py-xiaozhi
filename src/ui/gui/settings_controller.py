@@ -1,5 +1,7 @@
 """设置窗口：SettingsModel 懒加载与打开设置."""
 
+from collections.abc import Callable
+
 from src.core.event_bus import EventBus, Events
 from src.core.task_manager import TaskManager
 from src.logging import get_logger
@@ -18,11 +20,13 @@ class SettingsController:
         tasks: TaskManager,
         bridge: EventBridge,
         config_manager: ConfigManager | None = None,
+        runtime_tool_names: Callable[[], tuple[str, ...]] | None = None,
     ) -> None:
         self._event_bus = event_bus
         self._tasks = tasks
         self._bridge = bridge
         self._config_manager = config_manager
+        self._runtime_tool_names = runtime_tool_names
         self._settings_model = None
         self._bridge.openSettingsRequested.connect(self.open_settings)
 
@@ -39,6 +43,7 @@ class SettingsController:
                 event_bus=self._event_bus,
                 task_manager=self._tasks,
                 config_manager=self._config_manager,
+                runtime_tool_names=self._runtime_tool_names,
             )
             self._settings_model.configSaved.connect(self._on_config_saved)
             self._settings_model.mcpToolsNeedReconnect.connect(
@@ -46,6 +51,12 @@ class SettingsController:
             )
             logger.debug("SettingsController: SettingsModel 已懒加载")
         return self._settings_model
+
+    def close(self) -> None:
+        """Release the runtime provider even if Qt keeps the model alive."""
+        self._runtime_tool_names = None
+        if self._settings_model is not None:
+            self._settings_model._runtime_tool_names = lambda: ()
 
     def _on_config_saved(self) -> None:
         logger.info("SettingsController: 配置已保存，触发热重载")

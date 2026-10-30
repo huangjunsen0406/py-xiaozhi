@@ -257,8 +257,8 @@ class ConfigManager:
         """深拷贝默认配置，避免实例与类属性共享嵌套 dict/list."""
         return copy.deepcopy(self.DEFAULT_CONFIG)
 
-    def _load_config(self) -> dict[str, Any]:
-        """加载配置文件；不存在则创建；损坏则备份后回退默认."""
+    def _load_config(self, *, strict: bool = False) -> dict[str, Any]:
+        """加载配置；启动时允许默认恢复，严格模式将读取错误交给提交方。"""
         try:
             if self.config_file.exists():
                 logger.debug(f"找到配置文件: {self.config_file}")
@@ -266,6 +266,8 @@ class ConfigManager:
                     raw = self.config_file.read_text(encoding="utf-8")
                     config = json.loads(raw)
                 except Exception as e:
+                    if strict:
+                        raise
                     backup = self._backup_corrupt_config(e)
                     logger.error(
                         "配置文件损坏，已备份%s并回退默认: %s",
@@ -278,6 +280,8 @@ class ConfigManager:
                     return defaults
 
                 if not isinstance(config, dict):
+                    if strict:
+                        raise TypeError("配置根节点须为 object")
                     backup = self._backup_corrupt_config(
                         TypeError(f"根节点须为 object，实际为 {type(config).__name__}")
                     )
@@ -297,12 +301,16 @@ class ConfigManager:
                     file_ver = 0
                 return self._migrate_config(merged, from_version=file_ver)
 
+            if strict:
+                raise FileNotFoundError(self.config_file)
             logger.info("配置文件不存在，创建默认配置")
             defaults = self._default_config_copy()
             self._save_config(defaults)
             return defaults
 
         except Exception as e:
+            if strict:
+                raise
             logger.error(f"配置加载错误: {e}", exc_info=True)
             return self._default_config_copy()
 
@@ -485,20 +493,58 @@ class ConfigManager:
             logger.error(f"批量配置更新错误: {e}", exc_info=True)
             return False
 
+    def commit_draft(self, draft: dict) -> str | None:
+        """提交独立草稿；成功返回 None，失败返回可展示的错误信息.
+
+        文件配置先原子写盘，再加载运行时配置；加载失败时仅恢复运行时，
+        保留已经写入的磁盘内容。提交不会应用 PATHS 覆盖或迁移目录。
+        """
+        memory_only = getattr(self, "_memory_only", False)
+        try:
+            candidate = copy.deepcopy(draft)
+            previous = None if memory_only else copy.deepcopy(self._config)
+        except Exception as e:
+            logger.error("配置草稿复制失败: %s", e, exc_info=True)
+            return f"配置草稿复制失败: {e}"
+
+        if memory_only:
+            self._config = candidate
+            return None
+
+        try:
+            if not self._save_config(candidate):
+                return "保存配置失败，请检查文件权限和磁盘空间"
+        except Exception as e:
+            logger.error("保存配置失败: %s", e, exc_info=True)
+            return f"保存配置失败: {e}"
+
+        try:
+            if self.reload_config(apply_paths=False, strict=True):
+                return None
+        except Exception as e:
+            logger.error("草稿写入后运行时加载失败: %s", e, exc_info=True)
+            self._config = previous
+            return f"配置已写入，但运行时加载失败: {e}"
+        self._config = previous
+        return "配置已写入，但运行时加载失败，请重试或重启应用"
+
     def save_config(self) -> bool:
         """将当前内存配置落盘."""
         return self._save_config(self._config)
 
-    def reload_config(self, *, apply_paths: bool = True) -> bool:
+    def reload_config(
+        self, *, apply_paths: bool = True, strict: bool = False
+    ) -> bool:
         """重新加载配置文件.
 
         apply_paths: 是否重新应用 PATHS 覆盖（不迁移目录）。
+        strict: 读取失败时不备份或覆盖为默认配置。
         PATHS 目录迁移仅在 initialize_config 时执行。
         """
         if getattr(self, "_memory_only", False):
             return True
         try:
-            self._config = self._load_config()
+            self._config = self._load_config(strict=strict)
             if apply_paths:
                 try:
                     from src.utils.resource_finder import (

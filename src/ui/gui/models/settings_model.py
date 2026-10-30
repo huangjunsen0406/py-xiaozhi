@@ -4,10 +4,8 @@
 对外 仍为 SettingsModel，QML context 名 settingsModel 不变。
 """
 
-import copy
-import json
-import os
 import threading
+from collections.abc import Callable
 from typing import Any
 
 from PySide6.QtCore import Property, Signal, Slot
@@ -54,13 +52,15 @@ class SettingsModel(
         event_bus=None,
         task_manager=None,
         config_manager: ConfigManager | None = None,
+        runtime_tool_names: Callable[[], tuple[str, ...]] | None = None,
     ):
         super().__init__(parent)
         self._config_manager = (
             config_manager if config_manager is not None else ConfigManager.from_dict()
         )
-        configured_path = getattr(self._config_manager, "config_file", None)
-        self._config_path = configured_path
+        self._runtime_tool_names = (
+            runtime_tool_names if runtime_tool_names is not None else lambda: ()
+        )
         self._config: dict = {}
         # 可选：用于「刷新音频设备」时协调 AudioPlugin 停流重枚举
         self._event_bus = event_bus
@@ -174,31 +174,10 @@ class SettingsModel(
             )
             mcp_changed = sorted(new_disabled) != sorted(self._mcp_disabled_snapshot)
 
-            if self._config_path is None:
-                updates = {
-                    key: copy.deepcopy(value) for key, value in self._config.items()
-                }
-                if not self._config_manager.update_configs(updates):
-                    self.set_error("保存失败（内存配置更新错误）")
-                    return False
-            else:
-                # 原子写：临时文件 + replace，与 ConfigManager 一致
-                self._config_path.parent.mkdir(parents=True, exist_ok=True)
-                tmp_path = self._config_path.with_suffix(".tmp")
-                tmp_path.write_text(
-                    json.dumps(self._config, ensure_ascii=False, indent=2),
-                    encoding="utf-8",
-                )
-                os.replace(tmp_path, self._config_path)
-                try:
-                    applied = self._config_manager.reload_config(apply_paths=False)
-                except Exception as e:
-                    logger.warning(f"ConfigManager 重载失败: {e}", exc_info=True)
-                    self.set_error(f"配置已写入磁盘，但运行时加载失败，请重试保存: {e}")
-                    return False
-                if not applied:
-                    self.set_error("配置已写入磁盘，但运行时加载失败，请重试保存")
-                    return False
+            error = self._config_manager.commit_draft(self._config)
+            if error is not None:
+                self.set_error(error)
+                return False
             logger.info("设置已保存并加载到运行时配置")
             self._snapshot_mcp_disabled()
             if mcp_changed:

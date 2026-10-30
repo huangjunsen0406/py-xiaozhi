@@ -1,6 +1,7 @@
 """UI 插件：起界面、转展示、接用户操作."""
 
 import asyncio
+from collections.abc import Callable
 from typing import TYPE_CHECKING, Optional
 
 from src.logging import get_logger
@@ -26,10 +27,12 @@ class UIPlugin(Plugin):
         self,
         mode: str | None = None,
         task_manager: Optional["TaskManager"] = None,
+        runtime_tool_names: Callable[[], tuple[str, ...]] | None = None,
     ) -> None:
         super().__init__()
         self.mode = (mode or "cli").lower()
         self._task_manager = task_manager
+        self._runtime_tool_names = runtime_tool_names
         self.viewport: ViewPort | None = None
         self._presenter = UiPresenter()
         self._session: SessionActions | None = None
@@ -46,6 +49,7 @@ class UIPlugin(Plugin):
             event_bus=self._ctx.event_bus,
             task_manager=self._task_manager,
             config_manager=self._ctx.get_config(),
+            runtime_tool_names=self._runtime_tool_names,
         )
         self._presenter.bind(self.viewport)
         self._session = SessionActions(self._ctx, self._cmd, self._presenter)
@@ -109,9 +113,12 @@ class UIPlugin(Plugin):
             await self._close_viewport()
 
     async def _close_viewport(self) -> None:
-        if self.viewport is not None and not self._viewport_closed:
-            self._viewport_closed = True
-            await self.viewport.close()
+        try:
+            if self.viewport is not None and not self._viewport_closed:
+                self._viewport_closed = True
+                await self.viewport.close()
+        finally:
+            self._runtime_tool_names = None
 
     async def on_incoming_json(self, message) -> None:
         self._presenter.show_protocol_message(message)

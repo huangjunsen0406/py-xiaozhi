@@ -77,12 +77,22 @@ async def setup_plugins(
         from src.plugins.wake_word import WakeWordPlugin
 
         bind_shared_services(container)
+        server = container.mcp_server
+
+        def runtime_tool_names() -> tuple[str, ...]:
+            # Copy current registrations, including tools disabled in config.
+            return tuple(tool.name for tool in server.tools)
+
         audio = AudioPlugin()
         container.plugins.register(
             audio,
             McpPlugin(server=container.mcp_server, music_player=container.music_player),
             WakeWordPlugin(audio=audio),
-            UIPlugin(mode=mode, task_manager=container.tasks),
+            UIPlugin(
+                mode=mode,
+                task_manager=container.tasks,
+                runtime_tool_names=runtime_tool_names,
+            ),
             ShortcutsPlugin(),
         )
         await container.plugins.setup_all(ctx, cmd)
