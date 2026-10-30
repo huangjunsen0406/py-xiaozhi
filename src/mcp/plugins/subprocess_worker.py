@@ -96,9 +96,7 @@ class _WorkerHost:
                 if getattr(p, "max_value", None) is not None:
                     item["max"] = p.max_value
                 prop_defs.append(item)
-        self._tools.append(
-            {"name": name, "description": desc, "properties": prop_defs}
-        )
+        self._tools.append({"name": name, "description": desc, "properties": prop_defs})
         if callback is not None:
             self._callbacks[name] = callback
 
@@ -113,9 +111,7 @@ class _WorkerHost:
             from src.mcp.plugins.host import _to_property_list
             from src.mcp.tooling import McpTool
 
-            self.add_tool(
-                McpTool(name, description, _to_property_list(props), func)
-            )
+            self.add_tool(McpTool(name, description, _to_property_list(props), func))
             return func
 
         return decorator
@@ -159,8 +155,10 @@ def _setup_sys_path(plugin_root: Path, platform_tag: str) -> None:
     native = plugin_root / "native" / platform_tag
     if not native.is_dir():
         alt = plugin_root / "native" / platform_tag.replace("x86_64", "amd64")
-        native = alt if alt.is_dir() else (
-            plugin_root / "native" / platform_tag.replace("amd64", "x86_64")
+        native = (
+            alt
+            if alt.is_dir()
+            else (plugin_root / "native" / platform_tag.replace("amd64", "x86_64"))
         )
     if native.is_dir():
         paths.append(str(native.resolve()))
@@ -184,10 +182,40 @@ def _write_msg(obj: dict[str, Any]) -> None:
     _PROTOCOL_STDOUT.flush()
 
 
+def _restore_standard_streams() -> None:
+    for name, fd, mode in (("stdin", 0, "r"), ("stdout", 1, "w"), ("stderr", 2, "w")):
+        if getattr(sys, name) is not None:
+            continue
+        if sys.platform == "win32":
+            import ctypes
+            import msvcrt
+
+            get_handle = ctypes.windll.kernel32.GetStdHandle
+            get_handle.argtypes = [ctypes.c_ulong]
+            get_handle.restype = ctypes.c_void_p
+            handle = get_handle(-10 - fd)
+            if handle in (None, ctypes.c_void_p(-1).value):
+                raise RuntimeError(f"worker 缺少继承的 {name} 管道")
+            flags = os.O_RDONLY if fd == 0 else os.O_WRONLY
+            inherited_fd = msvcrt.open_osfhandle(handle, flags)
+            if inherited_fd != fd:
+                os.dup2(inherited_fd, fd)
+                os.close(inherited_fd)
+        stream = os.fdopen(
+            fd, mode, encoding="utf-8", errors="replace", buffering=1, closefd=False
+        )
+        setattr(sys, name, stream)
+        if getattr(sys, f"__{name}__") is None:
+            setattr(sys, f"__{name}__", stream)
+
+
 def main() -> int:
     global _PROTOCOL_STDOUT
+    _restore_standard_streams()
     # 独立协议 fd；Python print、os.write(1, ...) 和原生库输出均送往 stderr。
-    _PROTOCOL_STDOUT = os.fdopen(os.dup(sys.stdout.fileno()), "w", encoding="utf-8", buffering=1)
+    _PROTOCOL_STDOUT = os.fdopen(
+        os.dup(sys.stdout.fileno()), "w", encoding="utf-8", buffering=1
+    )
     sys.stdout.flush()
     os.dup2(sys.stderr.fileno(), sys.stdout.fileno())
     sys.stdout = sys.stderr
@@ -233,9 +261,7 @@ def main() -> int:
                     allow_get=allow_get,
                 )
                 register_fn(host)
-                _write_msg(
-                    {"id": req_id, "result": {"tools": host.export_tools()}}
-                )
+                _write_msg({"id": req_id, "result": {"tools": host.export_tools()}})
 
             elif method == "call":
                 if host is None:
