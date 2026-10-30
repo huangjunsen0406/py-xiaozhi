@@ -7,7 +7,6 @@ import json
 import requests
 
 from src.logging import get_logger
-from src.utils.config_manager import get_config
 
 from .base_camera import BaseCamera
 
@@ -19,11 +18,9 @@ class NormalCamera(BaseCamera):
     普通摄像头实现，使用远程API进行分析.
     """
 
-    def __init__(self):
-        """
-        初始化普通摄像头.
-        """
-        super().__init__()
+    def __init__(self, config=None):
+        """初始化普通摄像头。"""
+        super().__init__(config=config)
         self.explain_url = ""
         self.explain_token = ""
 
@@ -54,8 +51,8 @@ class NormalCamera(BaseCamera):
 
         # 准备请求头
         headers = {
-            "Device-Id": get_config().get_config("SYSTEM_OPTIONS.DEVICE_ID"),
-            "Client-Id": get_config().get_config("SYSTEM_OPTIONS.CLIENT_ID"),
+            "Device-Id": self.config.get_config("SYSTEM_OPTIONS.DEVICE_ID"),
+            "Client-Id": self.config.get_config("SYSTEM_OPTIONS.CLIENT_ID"),
         }
 
         if self.explain_token:

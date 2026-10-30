@@ -2,7 +2,7 @@
 
 import asyncio
 import json
-from typing import Callable
+from collections.abc import Callable
 
 from src.logging import get_logger
 from src.mcp.tooling import McpTool, Property, PropertyList, PropertyType
@@ -52,6 +52,8 @@ def register_screenshot_tools(
 
         question = arguments.get("question", "")
         display_id = arguments.get("display", None)
+        if isinstance(display_id, str):
+            display_id = display_id.strip().lower() or None
 
         if display_id:
             if isinstance(display_id, str):

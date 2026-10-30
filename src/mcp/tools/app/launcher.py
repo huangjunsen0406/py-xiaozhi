@@ -53,9 +53,7 @@ async def _find_matching_application(app_name: str) -> dict[str, Any] | None:
         return None
 
 
-async def _launch_matched_app(
-    matched_app: dict[str, Any], original_name: str
-) -> bool:
+async def _launch_matched_app(matched_app: dict[str, Any], original_name: str) -> bool:
     try:
         app_type = matched_app.get("type", "unknown")
         app_path = matched_app.get("path", matched_app.get("name", original_name))
@@ -70,6 +68,11 @@ async def _launch_matched_app(
                 from .launcher_windows import launch_shortcut
 
                 return await asyncio.to_thread(launch_shortcut, app_path)
+
+        if system == "Linux" and app_type == "desktop":
+            from .launcher_linux import launch_desktop_file
+
+            return await asyncio.to_thread(launch_desktop_file, app_path)
 
         return await _launch_by_name(app_path)
 

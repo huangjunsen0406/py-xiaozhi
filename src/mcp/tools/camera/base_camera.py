@@ -6,7 +6,7 @@ from abc import ABC, abstractmethod
 from typing import Any
 
 from src.logging import get_logger
-from src.utils.config_manager import get_config
+from src.utils.config_manager import ConfigManager
 
 from .capture_backend import capture_jpeg, load_capture_config
 
@@ -18,25 +18,24 @@ class BaseCamera(ABC):
     基础摄像头类，定义接口.
     """
 
-    def __init__(self):
-        """
-        初始化基础摄像头.
-        """
-        self.jpeg_data = {"buf": b"", "len": 0}  # 图像的JPEG字节数据  # 字节数据长度
+    def __init__(self, config=None):
+        """初始化基础摄像头；配置由宿主注入。"""
+        self.config = config if config is not None else ConfigManager.from_dict()
+        self.jpeg_data = {"buf": b"", "len": 0}
 
-        # 从配置中读取相机参数（采集细节由 capture_backend 统一读取）
-        config = get_config()
-        self.camera_index = config.get_config("CAMERA.camera_index", 0)
-        self.frame_width = config.get_config("CAMERA.frame_width", 640)
-        self.frame_height = config.get_config("CAMERA.frame_height", 480)
+        cfg = load_capture_config(self.config)
+        self.camera_index = cfg.camera_index
+        self.frame_width = cfg.frame_width
+        self.frame_height = cfg.frame_height
 
     def capture_frame(self) -> bool:
         """使用可插拔后端采集一帧 JPEG（OpenCV/V4L2 或 picamera2）.
 
         桌面 USB / Pi USB 走 OpenCV；Pi CSI 在 auto 模式下 OpenCV 失败后回退 picamera2。
-        带超时保护，避免驱动挂死拖死线程。
+        调用在超时后返回失败；仍阻塞的 native 驱动占用唯一 daemon worker，
+        直至驱动返回或进程退出，期间重试返回 busy，不能从 Python 强制终止。
         """
-        cfg = load_capture_config()
+        cfg = load_capture_config(self.config)
         # 与实例字段对齐（外部若改过 index 仍以配置为准，配置是权威）
         self.camera_index = cfg.camera_index
         self.frame_width = cfg.frame_width

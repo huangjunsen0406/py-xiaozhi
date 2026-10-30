@@ -59,17 +59,10 @@ def register_volume_tools(
             return False
 
     async def get_volume(args: dict[str, Any]) -> int:
-        try:
-            logger.info("[VolumeTools] 获取当前音量")
-            if controller is None:
-                logger.warning("[VolumeTools] 音量控制依赖不完整，返回默认音量")
-                return VolumeController.DEFAULT_VOLUME
-            current = await asyncio.to_thread(controller.get_volume)
-            logger.info(f"[VolumeTools] 当前音量: {current}")
-            return current
-        except Exception as e:
-            logger.error(f"[VolumeTools] 获取音量失败: {e}", exc_info=True)
-            return VolumeController.DEFAULT_VOLUME
+        logger.info("[VolumeTools] 获取当前音量")
+        if controller is None:
+            raise RuntimeError("Volume controller dependencies not available")
+        return await asyncio.to_thread(controller.get_volume)
 
     async def get_volume_status(args: dict[str, Any]) -> str:
         try:
@@ -82,16 +75,16 @@ def register_volume_tools(
                 }
             else:
                 status = {
-                    "volume": 50,
-                    "muted": False,
+                    "volume": None,
+                    "muted": None,
                     "available": False,
                     "reason": "Dependencies not available",
                 }
         except Exception as e:
             logger.warning(f"[VolumeTools] 获取音量状态失败: {e}", exc_info=True)
             status = {
-                "volume": 50,
-                "muted": False,
+                "volume": None,
+                "muted": None,
                 "available": False,
                 "error": str(e),
             }
@@ -130,7 +123,8 @@ def register_volume_tools(
             (
                 "Get detailed speaker volume status including whether audio output is muted and "
                 "whether the volume controller dependencies are available. Returns a JSON payload "
-                "with fields: volume (0-100), muted (bool), available (bool), reason/error(optional)."
+                "with fields: volume (0-100 or null), muted (bool or null), available (bool), "
+                "reason/error(optional). Unavailable measurements are null."
             ),
             PropertyList(),
             get_volume_status,
