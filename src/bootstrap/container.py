@@ -39,7 +39,7 @@ class ServiceContainer:
             config=self.config,
             audio_config=self.audio_config,
         )
-        self.plugins = PluginManager(ordered=True)
+        self.plugins = PluginManager()
         self.resource_pool = ResourcePool()
         self.mcp_server = None
         self.music_player = None

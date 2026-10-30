@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 from src.core.event_bus import EventBus, Events
 from src.logging import get_logger
+from src.ui.shared.event_emitter import safe_emit
 
 if TYPE_CHECKING:
     from src.core.task_manager import TaskManager
@@ -124,45 +125,14 @@ class TuiViewManager:
         self._safe_emit(Events.CONFIG_CHANGED)
 
     def _safe_emit(self, event: str, data=None):
-        """安全发射 EventBus 事件."""
-
-        def _start_emit():
-            if data is None:
-                return self._event_bus.emit(event)
-            return self._event_bus.emit(event, data)
-
-        if self._task_manager is not None:
-            try:
-                self._task_manager.schedule_nowait(_start_emit)
-                return
-            except Exception as e:
-                logger.error(
-                    f"TuiViewManager 经 TaskManager 调度事件 {event} 失败: {e}",
-                    exc_info=True,
-                )
-
-        if not self._loop or not self._loop.is_running():
-            return
-        coro = _start_emit()
-        try:
-            fut = asyncio.run_coroutine_threadsafe(coro, self._loop)
-
-            def _done(f):
-                try:
-                    exc = f.exception()
-                except Exception:
-                    return
-                if exc:
-                    logger.error(
-                        f"TuiViewManager 发射事件 {event} 失败: {exc}",
-                        exc_info=exc,
-                    )
-
-            fut.add_done_callback(_done)
-        except Exception as e:
-            logger.error(f"TuiViewManager 调度事件 {event} 失败: {e}", exc_info=True)
-            if asyncio.iscoroutine(coro):
-                coro.close()
+        safe_emit(
+            self._event_bus,
+            event,
+            data,
+            task_manager=self._task_manager,
+            loop=self._loop,
+            source=type(self).__name__,
+        )
 
     def _set_app_attr(self, name: str, value) -> None:
         app = self._app
@@ -210,6 +180,3 @@ class TuiViewManager:
 
     def set_button_text(self, text: str):
         logger.debug(f"TUI set_button_text: {text}")
-
-    def is_auto_mode(self) -> bool:
-        return bool(self._auto_mode)

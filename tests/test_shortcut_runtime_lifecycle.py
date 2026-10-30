@@ -6,7 +6,7 @@ import sys
 import threading
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
@@ -114,6 +114,61 @@ async def drain(core):
         await asyncio.wait_for(asyncio.gather(*tasks), 1)
 
 
+def test_backend_without_scheduler_keeps_sync_fallback_and_rejects_async():
+    backend = MemoryBackend(None)
+    backend._running = True
+    sync = Mock()
+    async_callback = AsyncMock()
+    backend.register("sync", ShortcutConfig("ctrl", "a"), sync)
+    backend.register("async", ShortcutConfig("ctrl", "b"), async_callback)
+
+    backend._run_callback("sync")
+    backend._run_callback("async")
+
+    sync.assert_called_once_with()
+    async_callback.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_backend_without_scheduler_hops_sync_and_rejects_async():
+    loop = asyncio.get_running_loop()
+    backend = MemoryBackend(loop)
+    backend._running = True
+    sync, async_callback = Mock(), AsyncMock()
+    backend.register("sync", ShortcutConfig("ctrl", "a"), sync)
+    backend.register("async", ShortcutConfig("ctrl", "b"), async_callback)
+
+    backend._run_callback("sync")
+    backend._run_callback("async")
+    sync.assert_not_called()
+    await asyncio.sleep(0)
+    sync.assert_called_once_with()
+    async_callback.assert_not_called()
+
+
+@pytest.mark.parametrize("change", ["replace", "unregister", "stop"])
+def test_backend_rechecks_running_and_callback_identity_before_invoking(change):
+    backend = MemoryBackend(None)
+    backend._running = True
+    schedule = Mock()
+    backend.bind_commands(SimpleNamespace(schedule_command_nowait=schedule))
+    callback, replacement = Mock(), Mock()
+    config = ShortcutConfig("ctrl", "a")
+    backend.register("manual", config, callback)
+    backend._run_callback("manual")
+    invoke = schedule.call_args.args[0]
+    if change == "replace":
+        backend.register("manual", config, replacement)
+    elif change == "unregister":
+        backend.unregister("manual")
+    else:
+        backend._running = False
+
+    assert invoke() is None
+    callback.assert_not_called()
+    replacement.assert_not_called()
+
+
 @pytest.mark.asyncio
 async def test_initially_disabled_config_starts_and_restarts_actual_listener(monkeypatch):
     core, plugin, backend, _ = await make_runtime(monkeypatch, enabled=False)
@@ -138,6 +193,9 @@ async def test_initially_disabled_config_starts_and_restarts_actual_listener(mon
 @pytest.mark.asyncio
 async def test_sync_reload_reconciles_listener_and_stop_revokes_pending_reload(monkeypatch):
     core, plugin, backend, _ = await make_runtime(monkeypatch, enabled=False)
+    loop = asyncio.get_running_loop()
+    thread_hop = Mock(wraps=loop.call_soon_threadsafe)
+    monkeypatch.setattr(loop, "call_soon_threadsafe", thread_hop)
     try:
         core.config.update_config("SHORTCUTS.ENABLED", True, save=False)
         plugin.reload_from_config()
@@ -152,6 +210,7 @@ async def test_sync_reload_reconciles_listener_and_stop_revokes_pending_reload(m
         await plugin.stop()
         await drain(core)
         assert not backend.is_running and backend.starts == 1
+        assert thread_hop.call_count == 3
     finally:
         await core.shutdown()
 
@@ -188,7 +247,31 @@ async def test_stop_wins_over_inflight_config_listener_start(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_stop_revokes_queued_callbacks_and_late_config_events(monkeypatch):
+async def test_stop_revokes_callback_permission_before_waiting_for_lifecycle_lock(
+    monkeypatch,
+):
+    core, plugin, backend, transport = await make_runtime(monkeypatch)
+    pending = None
+    await plugin._lifecycle_lock.acquire()
+    try:
+        pending = core.tasks.spawn(plugin.stop(), "test:shortcuts.stop")
+        await asyncio.sleep(0)
+        assert not pending.done()
+        assert backend.is_running
+        backend._run_callback(plugin.AUTO_TOGGLE)
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        assert not transport.entered.is_set()
+    finally:
+        plugin._lifecycle_lock.release()
+        if pending:
+            await asyncio.wait_for(pending, 1)
+        await core.shutdown()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("managed", [False, True], ids=["queued", "managed"])
+async def test_stop_revokes_queued_callbacks_and_late_config_events(monkeypatch, managed):
     core, plugin, backend, transport = await make_runtime(monkeypatch)
     try:
         # Simulate a keyboard thread which queues callbacks without running the loop.
@@ -198,9 +281,10 @@ async def test_stop_revokes_queued_callbacks_and_late_config_events(monkeypatch)
         thread.start()
         thread.join(timeout=1)
         assert not thread.is_alive()
-        # Also queue a handler directly: stop must revoke both scheduling layers.
-        plugin._handle_auto_toggle()
-        plugin.reload_from_config()
+        if managed:
+            # Hand coroutines to TaskManager, then stop before their bodies run.
+            await asyncio.sleep(0)
+            assert core.tasks.task_count() == len(backend._callbacks)
         await plugin.stop()
         assert core.event_bus.handler_count(Events.CONFIG_CHANGED) == 0
         await core.event_bus.emit(Events.CONFIG_CHANGED)
@@ -220,15 +304,61 @@ async def test_stop_revokes_queued_callbacks_and_late_config_events(monkeypatch)
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("managed", [False, True], ids=["queued", "managed"])
+@pytest.mark.parametrize("change", ["remap", "disable", "sync_reload"])
+async def test_config_change_revokes_old_callbacks(monkeypatch, managed, change):
+    core, plugin, backend, transport = await make_runtime(monkeypatch)
+    emitted = []
+    for event in (Events.UI_MANUAL_TOGGLE, Events.UI_AUTO_TOGGLE, Events.UI_TOGGLE_WINDOW):
+        async def record(event=event):
+            emitted.append(event)
+
+        core.event_bus.on(event, record)
+    try:
+        for name in backend._callbacks:
+            backend._run_callback(name)
+        if managed:
+            # The hop has run and handed callbacks to TaskManager, but their bodies
+            # have not run. Backend callback identity alone cannot revoke them now.
+            await asyncio.sleep(0)
+            assert core.tasks.task_count() == 5
+        if change == "disable":
+            core.config.update_config("SHORTCUTS.ENABLED", False, save=False)
+            await plugin._on_config_changed()
+        else:
+            core.config.update_config("SHORTCUTS.MANUAL_PRESS.key", "z", save=False)
+            if change == "sync_reload":
+                plugin.reload_from_config()
+            else:
+                await plugin._on_config_changed()
+        await drain(core)
+        assert emitted == []
+        assert not transport.entered.is_set()
+        assert transport.aborts == []
+        assert backend.is_running is (change != "disable")
+        if change != "disable":
+            assert backend._shortcuts[plugin.MANUAL_PRESS].key == "z"
+            backend._run_callback(plugin.AUTO_TOGGLE)
+            await drain(core)
+            assert transport.entered.is_set()
+    finally:
+        await core.shutdown()
+
+
+@pytest.mark.asyncio
 async def test_auto_connect_is_managed_and_cancelled_before_container_exit(monkeypatch):
     core, plugin, backend, transport = await make_runtime(monkeypatch)
     transport.block_connect = True
+    loop = asyncio.get_running_loop()
+    thread_hop = Mock(wraps=loop.call_soon_threadsafe)
+    monkeypatch.setattr(loop, "call_soon_threadsafe", thread_hop)
     try:
         thread = threading.Thread(target=lambda: backend._run_callback(plugin.AUTO_TOGGLE))
         thread.start()
         thread.join(timeout=1)
         assert not thread.is_alive()
         await asyncio.wait_for(transport.entered.wait(), 1)
+        assert thread_hop.call_count == 1
         assert core.tasks.task_count() == 1
         await core.shutdown()
         assert transport.cancelled
@@ -243,16 +373,43 @@ async def test_auto_connect_is_managed_and_cancelled_before_container_exit(monke
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "method,event",
+    "name,command",
     [
-        ("_handle_manual_press", Events.UI_MANUAL_TOGGLE),
-        ("_handle_mode_toggle", Events.UI_AUTO_TOGGLE),
-        ("_handle_window_toggle", Events.UI_TOGGLE_WINDOW),
-        ("_handle_abort", None),
+        (ShortcutsPlugin.AUTO_TOGGLE, "start_auto_conversation"),
+        (ShortcutsPlugin.ABORT, "abort_speaking"),
     ],
 )
-async def test_each_callback_path_has_managed_cancellation(monkeypatch, method, event):
-    core, plugin, _, transport = await make_runtime(monkeypatch)
+async def test_command_errors_remain_owned_by_managed_task(monkeypatch, name, command):
+    core, _, backend, _ = await make_runtime(monkeypatch)
+    error = RuntimeError("shortcut command failed")
+    callback = AsyncMock(side_effect=error)
+    monkeypatch.setattr(core.create_plugin_commands(), command, callback)
+    try:
+        backend._run_callback(name)
+        await asyncio.sleep(0)
+        task, = core.tasks._tasks
+        with pytest.raises(RuntimeError) as raised:
+            await task
+        assert raised.value is error
+        callback.assert_awaited_once()
+        await asyncio.sleep(0)
+        assert core.tasks.task_count() == 0
+    finally:
+        await core.shutdown()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "name,event",
+    [
+        (ShortcutsPlugin.MANUAL_PRESS, Events.UI_MANUAL_TOGGLE),
+        (ShortcutsPlugin.MODE_TOGGLE, Events.UI_AUTO_TOGGLE),
+        (ShortcutsPlugin.WINDOW_TOGGLE, Events.UI_TOGGLE_WINDOW),
+        (ShortcutsPlugin.ABORT, None),
+    ],
+)
+async def test_each_callback_path_has_managed_cancellation(monkeypatch, name, event):
+    core, plugin, backend, transport = await make_runtime(monkeypatch)
     entered, release, cancelled = asyncio.Event(), asyncio.Event(), asyncio.Event()
 
     async def block(*args):
@@ -269,7 +426,7 @@ async def test_each_callback_path_has_managed_cancellation(monkeypatch, method, 
         transport.send_abort_speaking = block
         transport.opened = True
     try:
-        getattr(plugin, method)()
+        backend._run_callback(name)
         await asyncio.wait_for(entered.wait(), 1)
         assert core.tasks.task_count() == 1
         await core.shutdown()
@@ -282,25 +439,25 @@ async def test_each_callback_path_has_managed_cancellation(monkeypatch, method, 
 
 @pytest.mark.asyncio
 async def test_shortcut_ui_modes_and_auto_intent_remain_unchanged(monkeypatch):
-    core, plugin, _, transport = await make_runtime(monkeypatch)
+    core, plugin, backend, transport = await make_runtime(monkeypatch)
     presenter = Mock()
     actions = SessionActions(
         core.create_plugin_context(), core.create_plugin_commands(), presenter
     )
     actions.subscribe(core.event_bus)
     try:
-        plugin._handle_manual_press()
+        backend._run_callback(plugin.MANUAL_PRESS)
         await drain(core)
         assert actions.manual_recording
         assert transport.starts == [ListeningMode.MANUAL]
-        plugin._handle_manual_press()
+        backend._run_callback(plugin.MANUAL_PRESS)
         await drain(core)
         assert not actions.manual_recording
-        plugin._handle_mode_toggle()
+        backend._run_callback(plugin.MODE_TOGGLE)
         await drain(core)
         assert actions.auto_mode
         presenter.set_auto_mode.assert_called_once_with(True)
-        plugin._handle_auto_toggle()
+        backend._run_callback(plugin.AUTO_TOGGLE)
         await drain(core)
         # Actual AEC availability, rather than the shortcut, selects the mode.
         assert transport.starts[-1] == ListeningMode.AUTO_STOP

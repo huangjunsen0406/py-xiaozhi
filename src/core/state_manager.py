@@ -188,16 +188,3 @@ class StateManager:
             and self._keep_listening
             and self._listening_mode == ListeningMode.REALTIME
         )
-
-    def get_snapshot(self) -> dict:
-        """获取状态快照.
-
-        返回当前所有状态的字典，用于调试和日志。
-        """
-        return {
-            "device_state": self._device_state,
-            "listening_mode": self._listening_mode,
-            "keep_listening": self._keep_listening,
-            "aec_enabled": self._aec_enabled,
-            "aborted": self._aborted,
-        }

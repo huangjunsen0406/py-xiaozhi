@@ -38,7 +38,3 @@ class ViewPort(Protocol):
     def set_auto_mode(self, auto_mode: bool) -> None:
         """刷新自动/手动显示（真状态在 Session 里）."""
         ...
-
-    def is_auto_mode(self) -> bool:
-        """界面上记录的当前模式（比如 GPIO 按键分支会用到）."""
-        ...

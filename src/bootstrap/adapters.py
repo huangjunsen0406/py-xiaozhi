@@ -7,7 +7,7 @@ PluginCommands，插件只依赖协议，不依赖容器类型。
 from collections.abc import Callable, Coroutine
 from typing import TYPE_CHECKING, Any
 
-from src.constants.constants import DeviceState, ListeningMode
+from src.constants.constants import ListeningMode
 from src.utils.config_manager import ConfigManager
 
 if TYPE_CHECKING:
@@ -19,12 +19,6 @@ class PluginContextAdapter:
 
     def __init__(self, container: "ServiceContainer"):
         self._container = container
-
-    def get_device_state(self) -> DeviceState:
-        return self._container.state.device_state
-
-    def get_listening_mode(self) -> ListeningMode:
-        return self._container.state.listening_mode
 
     def is_listening(self) -> bool:
         return self._container.state.is_listening()
@@ -40,9 +34,6 @@ class PluginContextAdapter:
 
     def should_capture_audio(self) -> bool:
         return self._container.state.should_capture_audio()
-
-    def is_keep_listening(self) -> bool:
-        return self._container.state.keep_listening
 
     def get_config(self) -> ConfigManager:
         return self._container.config

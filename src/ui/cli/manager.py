@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Optional
 
 from src.core.event_bus import EventBus, Events
 from src.logging import get_logger
+from src.ui.shared.event_emitter import safe_emit
 
 from .display import CLIDisplay
 
@@ -27,13 +28,6 @@ class CliViewManager:
         self._display = CLIDisplay()
         self._running = False
         self._loop: asyncio.AbstractEventLoop | None = None
-
-        # 状态
-        self._auto_mode = False
-        self._status = "待命"
-        self._connected = False
-        self._chat_text = ""
-        self._music_line = ""
 
         # 设置命令回调
         self._display.set_command_callback(self._handle_command)
@@ -88,49 +82,14 @@ class CliViewManager:
             self._safe_emit(Events.UI_SEND_TEXT, {"text": cmd})
 
     def _safe_emit(self, event: str, data=None):
-        """安全地发送事件.
-
-        优先经 TaskManager.schedule_nowait（线程安全 + 可追踪）；
-        否则回退 run_coroutine_threadsafe。
-        """
-
-        def _start_emit():
-            if data is None:
-                return self._event_bus.emit(event)
-            return self._event_bus.emit(event, data)
-
-        if self._task_manager is not None:
-            try:
-                self._task_manager.schedule_nowait(_start_emit)
-                return
-            except Exception as e:
-                logger.error(
-                    f"CliViewManager 经 TaskManager 调度事件 {event} 失败: {e}",
-                    exc_info=True,
-                )
-
-        if not self._loop or not self._loop.is_running():
-            return
-        coro = _start_emit()
-        try:
-            fut = asyncio.run_coroutine_threadsafe(coro, self._loop)
-
-            def _done(f):
-                try:
-                    exc = f.exception()
-                except Exception:
-                    return
-                if exc:
-                    logger.error(
-                        f"CliViewManager 发射事件 {event} 失败: {exc}",
-                        exc_info=exc,
-                    )
-
-            fut.add_done_callback(_done)
-        except Exception as e:
-            logger.error(f"CliViewManager 调度事件 {event} 失败: {e}", exc_info=True)
-            if asyncio.iscoroutine(coro):
-                coro.close()
+        safe_emit(
+            self._event_bus,
+            event,
+            data,
+            task_manager=self._task_manager,
+            loop=self._loop,
+            source=type(self).__name__,
+        )
 
     # ========== 公共 API ==========
 
@@ -141,28 +100,20 @@ class CliViewManager:
 
     def set_status(self, status: str, connected: bool = True):
         """设置状态."""
-        self._status = status
-        self._connected = connected
         self._display.update_status(status, connected)
 
     def set_chat_text(self, text: str):
-        self._chat_text = text
         self._display.update_text(text)
 
     def set_music_line(self, text: str):
-        self._music_line = text
         self._display.update_music_line(text)
 
     def set_emotion(self, emotion: str):
         self._display.update_emotion(emotion)
 
     def set_auto_mode(self, auto_mode: bool):
-        self._auto_mode = auto_mode
         self._display.update_auto_mode(auto_mode)
 
     def set_button_text(self, text: str):
         # 终端没有主按钮
         logger.debug(f"CLI set_button_text: {text}")
-
-    def is_auto_mode(self) -> bool:
-        return bool(self._auto_mode)

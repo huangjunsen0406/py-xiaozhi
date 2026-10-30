@@ -21,7 +21,6 @@ class UIPlugin(Plugin):
     """界面插件."""
 
     name = "ui"
-    priority = 60
 
     def __init__(
         self,

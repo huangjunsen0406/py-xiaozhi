@@ -76,7 +76,13 @@ async def test_plugin_manager_marks_failed_and_skips_dependents():
 
     await mgr.setup_all(ctx=None, cmd=None)
     await mgr.start_all()
-    await mgr.notify_incoming_json({"type": "test"})
+    from types import SimpleNamespace
+
+    from src.bootstrap.plugin_wiring import subscribe_builtin_events
+
+    bus = EventBus()
+    subscribe_builtin_events(SimpleNamespace(plugins=mgr, event_bus=bus))
+    await bus.emit_sequential(Events.SESSION_MESSAGE, {"type": "test"})
 
     assert boom.failed is True
     assert dep.failed is True
@@ -202,9 +208,18 @@ async def test_plugin_mark_failed_skips_notify_only_for_failed():
     mgr = PluginManager()
     ok = _OkPlugin()
     ok.mark_failed()
-    mgr.register(ok)
-    await mgr.notify_incoming_json({"x": 1})
+    from types import SimpleNamespace
+
+    from src.bootstrap.plugin_wiring import subscribe_builtin_events
+
+    healthy = _OkPlugin()
+    healthy.name = "healthy"
+    mgr.register(ok, healthy)
+    bus = EventBus()
+    subscribe_builtin_events(SimpleNamespace(plugins=mgr, event_bus=bus))
+    await bus.emit_sequential(Events.SESSION_MESSAGE, {"x": 1})
     assert ok.notify_calls == 0
+    assert healthy.notify_calls == 1
 
 
 def test_constants_import_has_no_config_manager_side_effect(monkeypatch):
@@ -789,30 +804,27 @@ def test_viewport_protocol_and_cli_slots():
 
     vm.set_chat_text("你好")
     vm.set_music_line("♪ 歌词行")
-    assert vm._chat_text == "你好"
-    assert vm._music_line == "♪ 歌词行"
     assert vm._display._dash_text == "你好"
     assert vm._display._dash_music == "♪ 歌词行"
 
     vm.set_chat_text("第二句")
-    assert vm._chat_text == "第二句"
-    assert vm._music_line == "♪ 歌词行"
+    assert vm._display._dash_text == "第二句"
+    assert vm._display._dash_music == "♪ 歌词行"
 
 
-def test_gpio_viewport_slots():
+def test_gpio_viewport_slots(caplog):
     from src.core.event_bus import EventBus
     from src.ui.gpio.manager import GpioViewManager
     from src.ui.shared.viewport import ViewPort
 
     vm = GpioViewManager(event_bus=EventBus())
     assert isinstance(vm, ViewPort)
-    vm.set_chat_text("chat")
-    vm.set_music_line("music")
-    assert vm._chat_text == "chat"
-    assert vm._music_line == "music"
-    vm.set_chat_text("chat2")
-    assert vm._chat_text == "chat2"
-    assert vm._music_line == "music"
+    with caplog.at_level(logging.INFO):
+        vm.set_chat_text("chat")
+        vm.set_music_line("music")
+        vm.set_chat_text("chat2")
+    messages = [record.getMessage() for record in caplog.records]
+    assert messages[-3:] == ["[对话] chat", "[音乐] music", "[对话] chat2"]
 
 
 def test_create_viewport_cli_factory():

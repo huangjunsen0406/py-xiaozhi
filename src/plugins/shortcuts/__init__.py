@@ -64,31 +64,10 @@ def create_backend(
             return None
 
 
-class _CmdAdapter:
-    """快捷键命令适配器."""
-
-    def __init__(self, cmd: "PluginCommands", ctx: "PluginContext"):
-        self._cmd = cmd
-        self._ctx = ctx
-
-    async def toggle_chat_state(self):
-        try:
-            await self._cmd.start_auto_conversation()
-        except Exception as e:
-            logger.error(f"切换对话状态失败: {e}", exc_info=True)
-
-    async def abort_speaking(self, reason):
-        try:
-            await self._cmd.abort_speaking(reason)
-        except Exception as e:
-            logger.error(f"中断对话失败: {e}", exc_info=True)
-
-
 class ShortcutsPlugin(Plugin):
     """快捷键插件."""
 
     name = "shortcuts"
-    priority = 70  # 最低优先级，依赖 UIPlugin
 
     # 快捷键名称常量
     MANUAL_PRESS = "MANUAL_PRESS"
@@ -100,7 +79,6 @@ class ShortcutsPlugin(Plugin):
     def __init__(self) -> None:
         super().__init__()
         self._backend: ShortcutBackend | None = None
-        self._adapter: _CmdAdapter | None = None
         self._loop: asyncio.AbstractEventLoop | None = None
         self._event_bus = None
         self._config = None
@@ -113,7 +91,6 @@ class ShortcutsPlugin(Plugin):
     async def setup(self, ctx: "PluginContext", cmd: "PluginCommands") -> None:
         await super().setup(ctx, cmd)
         self._config = ctx.get_config()
-        self._adapter = _CmdAdapter(cmd, ctx)
         self._loop = asyncio.get_running_loop()
         self._event_bus = ctx.event_bus
 
@@ -169,7 +146,7 @@ class ShortcutsPlugin(Plugin):
                     logger.error("快捷键后端启动失败")
 
     def _register_shortcuts(self) -> None:
-        """注册所有快捷键."""
+        """注册所有快捷键。"""
         if not self._backend:
             return
 
@@ -181,6 +158,7 @@ class ShortcutsPlugin(Plugin):
             self.WINDOW_TOGGLE: self._handle_window_toggle,
         }
 
+        generation = self._generation
         for name, handler in shortcut_handlers.items():
             cfg = self._shortcuts_config.get(name, {}) or {}
             modifier = str(cfg.get("modifier", "ctrl")).lower()
@@ -195,45 +173,44 @@ class ShortcutsPlugin(Plugin):
                 description=cfg.get("description", ""),
             )
 
-            self._backend.register(name, config, handler)
+            async def guarded_handler(
+                handler=handler,
+                generation=generation,
+            ):
+                if (
+                    self._active
+                    and generation == self._generation
+                    and self._enabled
+                ):
+                    await handler()
 
-    def _schedule(self, fn, *args, require_enabled=True) -> None:
-        """先排队 callable；执行前再次检查许可，避免停止后的迟到回调。"""
-        generation = self._generation
+            self._backend.register(name, config, guarded_handler)
 
-        async def invoke():
-            if self._active and generation == self._generation:
-                if not require_enabled or self._enabled:
-                    await fn(*args)
-
-        if self._active and (not require_enabled or self._enabled):
-            self.cmd.schedule_command_nowait(invoke)
-
-    def _handle_manual_press(self) -> None:
+    async def _handle_manual_press(self) -> None:
         """处理手动按键快捷键 - 使用 UI_MANUAL_TOGGLE 事件。"""
         from src.core.event_bus import Events
 
-        self._schedule(self._event_bus.emit, Events.UI_MANUAL_TOGGLE)
+        await self._event_bus.emit(Events.UI_MANUAL_TOGGLE)
 
-    def _handle_auto_toggle(self) -> None:
+    async def _handle_auto_toggle(self) -> None:
         """处理自动对话切换快捷键。"""
-        self._schedule(self._adapter.toggle_chat_state)
+        await self.cmd.start_auto_conversation()
 
-    def _handle_abort(self) -> None:
+    async def _handle_abort(self) -> None:
         """处理中断快捷键。"""
-        self._schedule(self._adapter.abort_speaking, AbortReason.NONE)
+        await self.cmd.abort_speaking(AbortReason.NONE)
 
-    def _handle_mode_toggle(self) -> None:
+    async def _handle_mode_toggle(self) -> None:
         """处理模式切换快捷键。"""
         from src.core.event_bus import Events
 
-        self._schedule(self._event_bus.emit, Events.UI_AUTO_TOGGLE)
+        await self._event_bus.emit(Events.UI_AUTO_TOGGLE)
 
-    def _handle_window_toggle(self) -> None:
+    async def _handle_window_toggle(self) -> None:
         """处理窗口切换快捷键。"""
         from src.core.event_bus import Events
 
-        self._schedule(self._event_bus.emit, Events.UI_TOGGLE_WINDOW)
+        await self._event_bus.emit(Events.UI_TOGGLE_WINDOW)
 
     async def stop(self) -> None:
         """先撤销回调许可和配置订阅，再停止监听。"""
@@ -258,4 +235,10 @@ class ShortcutsPlugin(Plugin):
             return
         self._load_config()
         self._generation += 1
-        self._schedule(self._reconcile_backend, require_enabled=False)
+        generation = self._generation
+
+        async def reconcile():
+            if self._active and generation == self._generation:
+                await self._reconcile_backend()
+
+        self.cmd.schedule_command_nowait(reconcile)
