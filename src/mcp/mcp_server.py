@@ -9,6 +9,7 @@ from typing import Any
 
 from src.constants.system import SystemConstants
 from src.logging import get_logger
+from src.mcp.plugins.registry import PluginRuntime
 from src.mcp.tooling import McpTool, PropertyList
 from src.utils.config_manager import ConfigManager
 
@@ -30,10 +31,9 @@ class McpServer:
         self.tools: list[McpTool] = []
         self._send_callback: Callable | None = None
         self._camera = None
-        # 外挂插件 tool_name -> plugin_id
-        self._plugin_tool_owner: dict[str, str] = {}
-        # 会话按容器隔离，包含尚未注册任何工具的插件。
-        self._plugin_session_scope = object()
+        self._plugin_runtime = PluginRuntime(
+            self.add_tools_atomic, self.remove_tools_by_names
+        )
         self._common_tool_names: set[str] = set()
 
     def set_send_callback(self, callback: Callable | None):
@@ -51,9 +51,11 @@ class McpServer:
 
     def detach(self) -> None:
         """容器关闭时回收外挂和运行时依赖；内置工具保留。"""
-        self._unload_external_plugins()
-        self._send_callback = None
-        self._camera = None
+        try:
+            self._unload_external_plugins()
+        finally:
+            self._send_callback = None
+            self._camera = None
 
     def add_tool(
         self, tool: McpTool | tuple[str, str, PropertyList, Callable]
@@ -88,19 +90,17 @@ class McpServer:
         self.tools = [t for t in self.tools if t.name not in name_set]
         return before - len(self.tools)
 
-    def unload_plugin(self, plugin_id: str) -> int:
-        """卸载外挂插件已注册的工具."""
-        from src.mcp.plugins.registry import PluginRegistry
+    @property
+    def _plugin_tool_owner(self) -> dict[str, str]:
+        """兼容诊断读取；归属仅由运行时安装记录生成。"""
+        return self._plugin_runtime.tool_owner
 
-        reg = PluginRegistry(tool_owner=self._plugin_tool_owner)
-        return reg.unload_plugin(self, plugin_id)
+    def unload_plugin(self, plugin_id: str) -> int:
+        """卸载插件工具和 worker，零工具插件也使用同一路径。"""
+        return self._plugin_runtime.unload(plugin_id)
 
     def _unload_external_plugins(self) -> None:
-        from src.mcp.plugins.subprocess_runtime import drop_all_sessions
-
-        drop_all_sessions(scope=self._plugin_session_scope)
-        self.remove_tools_by_names(set(self._plugin_tool_owner))
-        self._plugin_tool_owner.clear()
+        self._plugin_runtime.unload_all()
 
     def reload_external_plugins(
         self, music_player=None, volume_controller=None
@@ -121,7 +121,7 @@ class McpServer:
             self.add_tool,
             config=self.config,
             capabilities=capabilities,
-            tool_owner=self._plugin_tool_owner,
+            runtime=self._plugin_runtime,
         )
 
     def register_builtin_tools(self, music_player=None, volume_controller=None):

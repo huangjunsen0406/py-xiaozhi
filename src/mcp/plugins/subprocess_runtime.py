@@ -277,7 +277,14 @@ class PluginSubprocessSession:
         finally:
             for stream in (proc.stdin, proc.stdout, proc.stderr):
                 if stream is not None:
-                    stream.close()
+                    try:
+                        stream.close()
+                    except Exception:
+                        logger.debug(
+                            "[MCP插件:%s] 关闭子进程管道失败",
+                            self.plugin_id,
+                            exc_info=True,
+                        )
 
     def __del__(self) -> None:
         try:
@@ -317,7 +324,6 @@ def register_subprocess_plugin_tools(
     add_tool,
     *,
     session: PluginSubprocessSession,
-    tool_owner: dict[str, str] | None = None,
     enforce_prefix: bool = False,
     prefix: str | None = None,
 ) -> list[str]:
@@ -348,36 +354,7 @@ def register_subprocess_plugin_tools(
 
         add_tool(McpTool(name, desc, props, _make_cb(name)))
         names.append(name)
-        if tool_owner is not None:
-            tool_owner[name] = session.plugin_id
         logger.info(
             "[MCP插件:%s] 注册代理工具(subprocess): %s", session.plugin_id, name
         )
     return names
-
-
-# 同一 plugin_id 可存在于不同容器；默认 scope 保留独立 Loader 的兼容性。
-_SESSIONS: dict[tuple[object | None, str], PluginSubprocessSession] = {}
-_ALL_SCOPES = object()
-
-
-def track_session(
-    plugin_id: str, session: PluginSubprocessSession, *, scope=None
-) -> None:
-    key = (scope, plugin_id)
-    old = _SESSIONS.pop(key, None)
-    if old is not None:
-        old.terminate()
-    _SESSIONS[key] = session
-
-
-def drop_session(plugin_id: str, *, scope=None) -> None:
-    session = _SESSIONS.pop((scope, plugin_id), None)
-    if session is not None:
-        session.terminate()
-
-
-def drop_all_sessions(*, scope=_ALL_SCOPES) -> None:
-    for session_scope, plugin_id in list(_SESSIONS):
-        if scope is _ALL_SCOPES or session_scope is scope:
-            drop_session(plugin_id, scope=session_scope)

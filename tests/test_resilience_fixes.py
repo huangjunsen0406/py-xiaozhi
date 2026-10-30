@@ -1521,7 +1521,7 @@ def test_mcp_plugin_loader_loads_package_and_respects_disabled(tmp_path):
 
     server = McpServer()
     host = McpHost(server.add_tool, allow_get=["logger"])
-    loader = PluginLoader(host, plugins_dir=tmp_path)
+    loader = PluginLoader(host, runtime=server._plugin_runtime, plugins_dir=tmp_path)
     results = loader.load_all()
     assert any(r.plugin_id == "com.example.hello" and not r.error for r in results)
     assert any(tool.name == "example.hello" for tool in server.tools)
@@ -1529,7 +1529,8 @@ def test_mcp_plugin_loader_loads_package_and_respects_disabled(tmp_path):
     server2 = McpServer()
     host2 = McpHost(server2.add_tool)
     loader2 = PluginLoader(
-        host2, plugins_dir=tmp_path, disabled_ids=["com.example.hello"]
+        host2, runtime=server2._plugin_runtime, plugins_dir=tmp_path,
+        disabled_ids=["com.example.hello"]
     )
     results2 = loader2.load_all()
     assert any(r.error == "disabled" for r in results2)
@@ -1569,7 +1570,7 @@ def test_mcp_plugin_loader_vendored_lib(tmp_path):
     )
 
     server = McpServer()
-    loader = PluginLoader(McpHost(server.add_tool), plugins_dir=tmp_path)
+    loader = PluginLoader(McpHost(server.add_tool), runtime=server._plugin_runtime, plugins_dir=tmp_path)
     results = loader.load_all()
     assert any(
         not r.error and r.plugin_id == "com.example.vendored" for r in results
@@ -1594,7 +1595,7 @@ def test_mcp_plugin_simple_py_file(tmp_path):
     )
 
     server = McpServer()
-    PluginLoader(McpHost(server.add_tool), plugins_dir=tmp_path).load_all()
+    PluginLoader(McpHost(server.add_tool), runtime=server._plugin_runtime, plugins_dir=tmp_path).load_all()
     assert any(tool.name == "solo.ping" for tool in server.tools)
 
 
@@ -1620,11 +1621,9 @@ def test_mcp_server_unload_plugin(tmp_path):
 
     server = McpServer()
     host = McpHost(server.add_tool)
-    results = PluginLoader(host, plugins_dir=tmp_path).load_all()
-    for r in results:
-        if not r.error:
-            for n in r.tool_names:
-                server._plugin_tool_owner[n] = r.plugin_id
+    results = PluginLoader(host, runtime=server._plugin_runtime, plugins_dir=tmp_path).load_all()
+    assert results and results[0].error is None
+    assert server._plugin_tool_owner == {"example.tmp": "com.example.tmp"}
     assert any(tool.name == "example.tmp" for tool in server.tools)
     n = server.unload_plugin("com.example.tmp")
     assert n == 1
@@ -1645,7 +1644,7 @@ def test_mcp_plugin_rejects_future_api_version(tmp_path):
     )
     (root / "plugin.py").write_text("def register(host):\n    pass\n", encoding="utf-8")
     server = McpServer()
-    results = PluginLoader(McpHost(server.add_tool), plugins_dir=tmp_path).load_all()
+    results = PluginLoader(McpHost(server.add_tool), runtime=server._plugin_runtime, plugins_dir=tmp_path).load_all()
     assert any(r.error and "api_version" in (r.error or "") for r in results)
 
 
@@ -1865,7 +1864,6 @@ def test_mcp_plugin_subprocess_runtime(tmp_path):
     from src.mcp.mcp_server import McpServer
     from src.mcp.plugins.host import McpHost
     from src.mcp.plugins.loader import PluginLoader
-    from src.mcp.plugins.subprocess_runtime import drop_all_sessions
 
     plug = tmp_path / "com.example.iso"
     plug.mkdir()
@@ -1894,7 +1892,7 @@ def test_mcp_plugin_subprocess_runtime(tmp_path):
     loader = PluginLoader(
         host,
         plugins_dir=tmp_path,
-        raw_add_tool=server.add_tool,
+        runtime=server._plugin_runtime,
     )
     try:
         loaded = loader.load_all()
@@ -1912,4 +1910,4 @@ def test_mcp_plugin_subprocess_runtime(tmp_path):
 
         asyncio.run(_call())
     finally:
-        drop_all_sessions()
+        server.detach()
