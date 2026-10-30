@@ -12,6 +12,26 @@ from src.logging import get_logger
 logger = get_logger()
 
 
+def launch_desktop_file(desktop_path: str) -> bool:
+    """Let GIO interpret the entry's Exec argv/field codes, without a shell.
+
+    The full file path also preserves identity outside standard desktop dirs.
+    Wait only for the short-lived launcher; never wait for the GUI process.
+    Missing GIO or rejected entries are failures, not raw-Exec fallbacks.
+    """
+    try:
+        result = subprocess.run(
+            ["gio", "launch", desktop_path],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        return result.returncode == 0
+    except (OSError, subprocess.SubprocessError) as error:
+        logger.warning("[LinuxLauncher] Desktop launch failed: %s", error)
+        return False
+
+
 def launch_application(app_name: str) -> bool:
     """在Linux上启动应用程序.
 

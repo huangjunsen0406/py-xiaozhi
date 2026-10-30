@@ -18,7 +18,7 @@ logger = get_logger()
 
 
 class MusicEventBridge:
-    def __init__(self, engine: "PlaybackEngine", player: "MusicPlayer") -> None:
+    def __init__(self, engine: PlaybackEngine, player: MusicPlayer) -> None:
         self._engine = engine
         self._player = player
         self.event_bus = None
@@ -42,6 +42,7 @@ class MusicEventBridge:
                 except Exception as e:
                     logger.debug(f"codec 清除前停止 decoder 失败: {e}", exc_info=True)
                 self._engine.decoder = None
+            await self._engine.cancel_prefetch()
             self._engine.audio_codec = None
             logger.debug("MusicPlayer AudioCodec 已清除")
             return
@@ -73,12 +74,14 @@ class MusicEventBridge:
         except Exception as e:
             logger.debug(f"MusicPlayer 取消 EventBus 订阅失败: {e}")
 
-    def detach(self) -> None:
-        self.unsubscribe()
-        self.event_bus = None
-        self.plugin_ctx = None
-        self._engine.audio_codec = None
-        self._engine.cancel_prefetch()
+    async def detach(self) -> None:
+        try:
+            await self._engine.cancel_prefetch()
+        finally:
+            self.unsubscribe()
+            self.event_bus = None
+            self.plugin_ctx = None
+            self._engine.audio_codec = None
         logger.debug("MusicPlayer 已 detach 运行时绑定")
 
     async def emit_state_change(

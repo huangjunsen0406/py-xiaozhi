@@ -8,19 +8,24 @@ from __future__ import annotations
 
 import os
 import sys
+import threading
 import time
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import Future
 from concurrent.futures import TimeoutError as FuturesTimeout
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from src.logging import get_logger
-from src.utils.config_manager import get_config
+from src.utils.config_manager import ConfigManager
 
 logger = get_logger()
 
 _CAPTURE_TIMEOUT_S = 12.0
+# One native capture may outlive its caller's deadline. Never queue retries or
+# create another worker until it exits. A daemon does not hold up Python shutdown.
+_capture_lock = threading.Lock()
+_capture_worker: threading.Thread | None = None
 
 
 @dataclass
@@ -47,9 +52,9 @@ class CameraDeviceInfo:
     path: str | None = None
 
 
-def load_capture_config() -> CaptureConfig:
-    """从 ConfigManager 读取 CAMERA 采集配置."""
-    cfg = get_config()
+def load_capture_config(config=None) -> CaptureConfig:
+    """从注入配置读取 CAMERA 参数；默认配置不访问磁盘或进程状态。"""
+    cfg = config if config is not None else ConfigManager.from_dict()
     raw_backend = (
         str(cfg.get_config("CAMERA.backend", "auto") or "auto").strip().lower()
     )
@@ -285,7 +290,14 @@ def _capture_picamera2(cfg: CaptureConfig) -> bytes | None:
 
 
 def capture_jpeg(cfg: CaptureConfig | None = None) -> bytes | None:
-    """按配置采集一帧 JPEG 字节；失败返回 None."""
+    """Capture within the caller's deadline; failures return None.
+
+    Only one daemon worker may own a native capture at a time, across cameras.
+    A timed-out native call cannot be forcibly stopped from Python: further
+    captures fail busy until the driver returns (and its finally releases the
+    device), or the process exits. Late results are discarded, never reused.
+    """
+    global _capture_worker
     cfg = cfg or load_capture_config()
     backend = cfg.backend
 
@@ -304,16 +316,30 @@ def capture_jpeg(cfg: CaptureConfig | None = None) -> bytes | None:
             return _capture_picamera2(cfg)
         return None
 
-    with ThreadPoolExecutor(max_workers=1) as pool:
-        fut = pool.submit(_run)
+    future: Future[bytes | None] = Future()
+
+    def _worker() -> None:
         try:
-            return fut.result(timeout=_CAPTURE_TIMEOUT_S)
-        except FuturesTimeout:
-            logger.error(
-                f"摄像头采集超时 ({_CAPTURE_TIMEOUT_S}s) "
-                f"backend={backend} device={cfg.device!r} index={cfg.camera_index}"
-            )
+            future.set_result(_run())
+        except BaseException as error:
+            future.set_exception(error)
+
+    with _capture_lock:
+        if _capture_worker is not None and _capture_worker.is_alive():
+            logger.warning("Camera capture busy: previous native call still running")
             return None
+        _capture_worker = threading.Thread(
+            target=_worker, name="mcp-camera-capture", daemon=True
+        )
+        _capture_worker.start()
+    try:
+        return future.result(timeout=_CAPTURE_TIMEOUT_S)
+    except FuturesTimeout:
+        logger.error(
+            f"摄像头采集超时 ({_CAPTURE_TIMEOUT_S}s) "
+            f"backend={backend} device={cfg.device!r} index={cfg.camera_index}"
+        )
+        return None
 
 
 def _list_v4l2_paths() -> list[str]:
@@ -342,7 +368,6 @@ def list_camera_devices(
     # 1) Linux：/dev/video* 优先列出（便于 Pi 选对节点）
     for path in _list_v4l2_paths():
         try:
-
             cap = _open_capture(path)
             opened = bool(cap.isOpened())
             if opened:

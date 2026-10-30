@@ -8,8 +8,6 @@ from src.logging import get_logger
 
 logger = get_logger()
 
-DEFAULT_VOLUME = 70
-
 
 class MacosVolumeBackend:
     def __init__(self) -> None:
@@ -33,19 +31,14 @@ class MacosVolumeBackend:
             raise
 
     def get_volume(self) -> int:
-        try:
-            applescript = self._lazy_import("applescript")
-            result = applescript.run("output volume of (get volume settings)")
-            if result and result.out:
-                return int(result.out.strip())
-            return DEFAULT_VOLUME
-        except Exception as e:
-            logger.warning(f"获取macOS音量失败: {e}", exc_info=True)
-            return DEFAULT_VOLUME
+        applescript = self._lazy_import("applescript")
+        result = applescript.run("output volume of (get volume settings)")
+        if not result or result.code != 0 or not result.out:
+            raise RuntimeError("Unable to read macOS output volume")
+        return int(result.out.strip())
 
     def set_volume(self, volume: int) -> None:
-        try:
-            applescript = self._lazy_import("applescript")
-            applescript.run(f"set volume output volume {volume}")
-        except Exception as e:
-            logger.warning(f"设置macOS音量失败: {e}", exc_info=True)
+        applescript = self._lazy_import("applescript")
+        result = applescript.run(f"set volume output volume {volume}")
+        if not result or result.code != 0:
+            raise RuntimeError("Unable to set macOS output volume")

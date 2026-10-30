@@ -8,6 +8,7 @@ from src.logging import get_logger
 if TYPE_CHECKING:
     from src.core.event_bus import EventBus
     from src.core.task_manager import TaskManager
+    from src.utils.config_manager import ConfigManager
     from src.ui.shared.viewport import ViewPort
 
 logger = get_logger()
@@ -17,6 +18,7 @@ def create_viewport(
     mode: str,
     event_bus: "EventBus",
     task_manager: Optional["TaskManager"] = None,
+    config_manager: Optional["ConfigManager"] = None,
 ) -> "ViewPort":
     """gui / cli / tui / gpio；gpio 仅 Linux，其它平台回退 cli."""
     normalized = (mode or "cli").lower()
@@ -25,13 +27,21 @@ def create_viewport(
         from src.ui.gui import GuiViewManager
 
         logger.debug("create_viewport: gui")
-        return GuiViewManager(event_bus=event_bus, task_manager=task_manager)
+        return GuiViewManager(
+            event_bus=event_bus,
+            task_manager=task_manager,
+            config_manager=config_manager,
+        )
 
     if normalized == "tui":
         from src.ui.tui import TuiViewManager
 
         logger.info("create_viewport: tui")
-        return TuiViewManager(event_bus=event_bus, task_manager=task_manager)
+        return TuiViewManager(
+            event_bus=event_bus,
+            task_manager=task_manager,
+            config_manager=config_manager,
+        )
 
     if normalized == "gpio":
         if sys.platform != "linux":

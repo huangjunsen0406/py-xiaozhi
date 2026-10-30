@@ -38,9 +38,7 @@ class WindowsVolumeBackend:
             )
 
             devices = AudioUtilities.GetSpeakers()
-            interface = devices.Activate(
-                IAudioEndpointVolume._iid_, CLSCTX_ALL, None
-            )
+            interface = devices.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
             self.volume_control = cast(interface, POINTER(IAudioEndpointVolume))
             logger.debug("Windows音量控制初始化成功")
         except Exception as e:
@@ -48,15 +46,8 @@ class WindowsVolumeBackend:
             raise
 
     def get_volume(self) -> int:
-        try:
-            volume_scalar = self.volume_control.GetMasterVolumeLevelScalar()
-            return int(volume_scalar * 100)
-        except Exception as e:
-            logger.warning(f"获取Windows音量失败: {e}", exc_info=True)
-            return 70
+        volume_scalar = self.volume_control.GetMasterVolumeLevelScalar()
+        return int(volume_scalar * 100)
 
     def set_volume(self, volume: int) -> None:
-        try:
-            self.volume_control.SetMasterVolumeLevelScalar(volume / 100.0, None)
-        except Exception as e:
-            logger.warning(f"设置Windows音量失败: {e}", exc_info=True)
+        self.volume_control.SetMasterVolumeLevelScalar(volume / 100.0, None)

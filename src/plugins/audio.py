@@ -6,18 +6,21 @@ AudioCodec 经 Events.AUDIO_CODEC_CHANGED 发布，不直连 MusicPlayer。
 
 import asyncio
 import os
+import threading
+import time
+from collections import deque
 from typing import TYPE_CHECKING
 
-from src.audio_codecs.audio_codec import AudioCodec
 from src.logging import get_logger
 from src.plugins.base import Plugin
 
 if TYPE_CHECKING:
+    from src.audio_codecs.audio_codec import AudioCodec
     from src.bootstrap.protocols import PluginCommands, PluginContext
 
 logger = get_logger()
 
-MAX_CONCURRENT_AUDIO_SENDS = 4
+_UPLINK_BACKLOG_MS = 500
 
 
 class AudioPlugin(Plugin):
@@ -27,8 +30,15 @@ class AudioPlugin(Plugin):
     def __init__(self) -> None:
         super().__init__()
         self.codec: AudioCodec | None = None
-        self._send_sem = asyncio.Semaphore(MAX_CONCURRENT_AUDIO_SENDS)
         self._in_silence_period = False
+        self._silence_until = 0.0
+        self._uplink = deque(maxlen=25)
+        self._uplink_lock = threading.Lock()
+        self._uplink_ready = asyncio.Event()
+        self._wake_pending = False
+        self._accepting = False
+        self._loop = None
+        self._sender_task = None
 
     async def setup(self, ctx: "PluginContext", cmd: "PluginCommands") -> None:
         await super().setup(ctx, cmd)
@@ -38,7 +48,11 @@ class AudioPlugin(Plugin):
             return
 
         try:
-            self.codec = AudioCodec()
+            from src.audio_codecs.audio_codec import AudioCodec
+
+            self.codec = AudioCodec(
+                config=ctx.get_config(), audio_config=ctx.audio_config
+            )
             await self.codec.initialize()
             self.codec.set_encoded_callback(self._on_encoded_audio)
 
@@ -59,7 +73,26 @@ class AudioPlugin(Plugin):
     async def start(self) -> None:
         await super().start()
         if self.codec and not self.failed:
+            self._loop = asyncio.get_running_loop()
+            self._uplink = deque(
+                maxlen=max(
+                    1, _UPLINK_BACKLOG_MS // self._ctx.audio_config.FRAME_DURATION
+                )
+            )
+            self._accepting = True
+            self._sender_task = self._cmd.spawn(self._consume_uplink(), "audio:uplink")
             await self._publish_audio_codec(self.codec)
+
+    async def stop(self) -> None:
+        self._accepting = False
+        with self._uplink_lock:
+            self._uplink.clear()
+            self._wake_pending = False
+        if self._sender_task is not None:
+            self._sender_task.cancel()
+            await asyncio.gather(self._sender_task, return_exceptions=True)
+            self._sender_task = None
+        await super().stop()
 
     async def _publish_audio_codec(self, codec) -> None:
         """向订阅者（如 MusicPlayer）发布 AudioCodec 实例或 None."""
@@ -129,11 +162,7 @@ class AudioPlugin(Plugin):
         from src.constants.constants import DeviceState
 
         if state == DeviceState.LISTENING:
-            self._in_silence_period = True
-            try:
-                await asyncio.sleep(0.2)
-            finally:
-                self._in_silence_period = False
+            self._silence_until = time.monotonic() + 0.2
 
     async def on_incoming_json(self, message) -> None:
         """
@@ -226,36 +255,62 @@ class AudioPlugin(Plugin):
             pool.register("audio.codec", _cleanup)
 
     def _on_encoded_audio(self, encoded_data: bytes) -> None:
-        """
-        音频编码回调（从音频线程调用）.
-        """
-        try:
-            if not self._cmd:
+        """Audio thread: bounded copies and at most one pending loop wakeup."""
+        if (
+            not self._accepting
+            or self._loop is None
+            or not self._should_send_microphone_audio()
+        ):
+            return
+        generation = self._ctx.audio_generation
+        with self._uplink_lock:
+            if not self._accepting:
                 return
-            self._cmd.schedule_command_nowait(self._send_audio_async, encoded_data)
-        except Exception as e:
-            logger.error(f"调度音频发送失败: {e}", exc_info=True)
+            self._uplink.append((generation, encoded_data))
+            if self._wake_pending:
+                return
+            self._wake_pending = True
+        try:
+            self._loop.call_soon_threadsafe(self._uplink_ready.set)
+        except RuntimeError:
+            with self._uplink_lock:
+                self._uplink.clear()
+                self._wake_pending = False
 
-    async def _send_audio_async(self, encoded_data: bytes) -> None:
-        """
-        异步发送音频数据.
-        """
-        async with self._send_sem:
-            try:
-                if not self._ctx.is_audio_channel_opened():
-                    return
-                capture_allowed = await self._cmd.sync_audio_state()
-                if capture_allowed and self._should_send_microphone_audio():
-                    await self._cmd.send_audio(encoded_data)
-            except Exception as e:
-                logger.error(f"发送音频数据失败: {e}", exc_info=True)
+    async def _consume_uplink(self) -> None:
+        while True:
+            await self._uplink_ready.wait()
+            while True:
+                with self._uplink_lock:
+                    if not self._uplink:
+                        self._wake_pending = False
+                        self._uplink_ready.clear()
+                        break
+                    generation, data = self._uplink.popleft()
+                await self._send_audio_async(data, generation)
+
+    async def _send_audio_async(
+        self, encoded_data: bytes, generation: int | None = None
+    ) -> None:
+        try:
+            if not self._ctx.is_audio_channel_opened():
+                return
+            if generation is not None and generation != self._ctx.audio_generation:
+                return
+            capture_allowed = await self._cmd.sync_audio_state()
+            if generation is not None and generation != self._ctx.audio_generation:
+                return
+            if capture_allowed and self._should_send_microphone_audio():
+                await self._cmd.send_audio(encoded_data)
+        except Exception as e:
+            logger.error(f"发送音频数据失败: {e}", exc_info=True)
 
     def _should_send_microphone_audio(self) -> bool:
         """
         判断是否应该发送麦克风音频.
         """
         try:
-            if self._in_silence_period:
+            if self._in_silence_period or time.monotonic() < self._silence_until:
                 return False
             return self._ctx.should_capture_audio()
         except Exception as e:

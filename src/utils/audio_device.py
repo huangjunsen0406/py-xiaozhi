@@ -33,8 +33,15 @@ class DeviceConfig:
 class AudioDeviceManager:
     """音频设备管理器（无状态，纯逻辑）"""
 
-    def __init__(self, config_manager: ConfigManager):
+    def __init__(
+        self, config_manager: ConfigManager, audio_config: AudioConfig | None = None
+    ):
         self.config = config_manager
+        self.audio_config = (
+            audio_config
+            if audio_config is not None
+            else AudioConfig.from_config(config_manager)
+        )
 
     def load_or_detect_devices(self) -> DeviceConfig:
         """加载配置或自动检测设备（按名称匹配）
@@ -58,7 +65,9 @@ class AudioDeviceManager:
             logger.info(f"尝试查找输入设备: {input_device_name}")
             input_info = find_device_by_name("input", input_device_name)
             if input_info:
-                logger.info(f"✓ 找到输入设备: {input_info['name']} (ID: {input_info['index']})")
+                logger.info(
+                    f"✓ 找到输入设备: {input_info['name']} (ID: {input_info['index']})"
+                )
             else:
                 logger.warning(f"✗ 未找到设备 '{input_device_name}'，将重新选择")
 
@@ -66,7 +75,9 @@ class AudioDeviceManager:
             logger.info(f"尝试查找输出设备: {output_device_name}")
             output_info = find_device_by_name("output", output_device_name)
             if output_info:
-                logger.info(f"✓ 找到输出设备: {output_info['name']} (ID: {output_info['index']})")
+                logger.info(
+                    f"✓ 找到输出设备: {output_info['name']} (ID: {output_info['index']})"
+                )
             else:
                 logger.warning(f"✗ 未找到设备 '{output_device_name}'，将重新选择")
 
@@ -104,11 +115,19 @@ class AudioDeviceManager:
             input_device_name != input_info["name"]
             or output_device_name != output_info["name"]
         ):
-            self.config.update_config("AUDIO_DEVICES.input_device_name", input_info["name"])
-            self.config.update_config("AUDIO_DEVICES.input_sample_rate", device_input_sample_rate)
+            self.config.update_config(
+                "AUDIO_DEVICES.input_device_name", input_info["name"]
+            )
+            self.config.update_config(
+                "AUDIO_DEVICES.input_sample_rate", device_input_sample_rate
+            )
             self.config.update_config("AUDIO_DEVICES.input_channels", input_channels)
-            self.config.update_config("AUDIO_DEVICES.output_device_name", output_info["name"])
-            self.config.update_config("AUDIO_DEVICES.output_sample_rate", device_output_sample_rate)
+            self.config.update_config(
+                "AUDIO_DEVICES.output_device_name", output_info["name"]
+            )
+            self.config.update_config(
+                "AUDIO_DEVICES.output_sample_rate", device_output_sample_rate
+            )
             self.config.update_config("AUDIO_DEVICES.output_channels", output_channels)
             logger.info("设备配置已保存")
 
@@ -120,9 +139,9 @@ class AudioDeviceManager:
             input_channels=input_channels,
             output_channels=output_channels,
             input_frame_size=int(
-                device_input_sample_rate * (AudioConfig.FRAME_DURATION / 1000)
+                device_input_sample_rate * (self.audio_config.FRAME_DURATION / 1000)
             ),
             output_frame_size=int(
-                device_output_sample_rate * (AudioConfig.FRAME_DURATION / 1000)
+                device_output_sample_rate * (self.audio_config.FRAME_DURATION / 1000)
             ),
         )

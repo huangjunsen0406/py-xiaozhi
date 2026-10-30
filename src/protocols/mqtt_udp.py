@@ -9,6 +9,7 @@ import asyncio
 import socket
 import threading
 import time
+from collections import deque
 
 from src.logging import get_logger
 from src.protocols.mqtt_crypto import (
@@ -18,6 +19,9 @@ from src.protocols.mqtt_crypto import (
 )
 
 logger = get_logger()
+
+# Bound ingress before scheduling onto the event loop, dropping oldest frames.
+_RX_QUEUE_SIZE = 64
 
 
 class MqttUdpChannel:
@@ -37,6 +41,10 @@ class MqttUdpChannel:
         self.remote_sequence = 0
 
         self._on_incoming_audio = None
+        self._audio_queue: deque[bytes] = deque(maxlen=_RX_QUEUE_SIZE)
+        self._audio_lock = threading.Lock()
+        self._audio_wake_pending = False
+        self._audio_generation = 0
 
     def configure(
         self,
@@ -78,13 +86,15 @@ class MqttUdpChannel:
             target=self._receive_loop, name="mqtt-udp-rx", daemon=True
         )
         self.thread.start()
-        logger.info(
-            f"UDP接收线程已启动，监听来自 {self.server}:{self.port} 的数据"
-        )
+        logger.info(f"UDP接收线程已启动，监听来自 {self.server}:{self.port} 的数据")
 
     def stop(self) -> None:
         """停止接收线程并关闭套接字."""
-        self.running = False
+        with self._audio_lock:
+            self.running = False
+            self._audio_generation += 1
+            self._audio_queue.clear()
+            self._audio_wake_pending = False
         if self.thread and self.thread.is_alive():
             try:
                 self.thread.join(1.0)
@@ -180,11 +190,47 @@ class MqttUdpChannel:
         logger.info("UDP接收线程已停止")
 
     def _dispatch_audio(self, audio_data: bytes) -> None:
-        """从收包线程把帧回调调度到 event loop（handler 须为同步，在 loop 线程执行）."""
-        handler = self._on_incoming_audio
-        if not handler:
-            return
+        """Audio thread: retain bounded frames and coalesce event-loop wakeups."""
+        with self._audio_lock:
+            if not self.running or self._on_incoming_audio is None:
+                return
+            self._audio_queue.append(audio_data)
+            if self._audio_wake_pending:
+                return
+            self._audio_wake_pending = True
+            generation = self._audio_generation
+        self._schedule_audio_drain(generation)
+
+    def _schedule_audio_drain(self, generation: int) -> None:
         try:
-            self._loop.call_soon_threadsafe(handler, audio_data)
+            self._loop.call_soon_threadsafe(self._drain_audio, generation)
         except Exception as e:
+            with self._audio_lock:
+                if generation == self._audio_generation:
+                    self._audio_queue.clear()
+                    self._audio_wake_pending = False
             logger.error(f"调度音频回调失败: {e}", exc_info=True)
+
+    def _drain_audio(self, generation: int) -> None:
+        """Loop thread: deliver a bounded batch, yielding before further frames."""
+        for _ in range(_RX_QUEUE_SIZE):
+            with self._audio_lock:
+                if generation != self._audio_generation:
+                    return
+                if not self._audio_queue:
+                    self._audio_wake_pending = False
+                    return
+                data = self._audio_queue.popleft()
+            handler = self._on_incoming_audio
+            if handler is not None:
+                try:
+                    handler(data)
+                except Exception as e:
+                    logger.error(f"分发UDP音频失败: {e}", exc_info=True)
+        with self._audio_lock:
+            if generation != self._audio_generation:
+                return
+            if not self._audio_queue:
+                self._audio_wake_pending = False
+                return
+        self._schedule_audio_drain(generation)

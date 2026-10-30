@@ -1,6 +1,7 @@
 import inspect
 import logging
 import sys
+from dataclasses import replace
 from pathlib import Path
 
 from .filters import (
@@ -19,6 +20,8 @@ __version__ = "1.0.0"
 
 # 日志系统是否已初始化
 _initialized = False
+_bootstrap_handlers: dict[logging.Logger, tuple[logging.Handler, int]] = {}
+_owned_handlers: list[logging.Handler] = []
 
 # 导出的公共接口
 __all__ = [
@@ -45,14 +48,16 @@ __all__ = [
 def setup_logging(
     level: str | None = None,
     log_dir: str | Path | None = None,
-    enable_console: bool = True,
-    enable_file: bool = True,
-    enable_json: bool = False,
-    enable_async: bool = False,
-    enable_sensitive_filter: bool = True,
+    enable_console: bool | None = None,
+    enable_file: bool | None = None,
+    enable_json: bool | None = None,
+    enable_async: bool | None = None,
+    enable_sensitive_filter: bool | None = None,
     config: LoggingConfig | None = None,
 ) -> Path | None:
     """初始化日志系统.
+
+    未指定的覆盖参数沿用配置值；不会修改调用方的 config。
 
     Args:
         level: 日志级别，默认根据环境自动设置
@@ -69,20 +74,21 @@ def setup_logging(
     """
     global _initialized
 
-    # 获取或创建配置（无 LoggingConfigManager 单例）
-    if config is None:
-        config = load_logging_config()
-
-    # 应用参数覆盖
+    # 复制调用方配置；只覆盖明确指定的参数。
+    config = replace(config if config is not None else load_logging_config())
     if level:
         config.level = level.upper()
-    if log_dir:
+    if log_dir is not None:
         config.log_dir = Path(log_dir)
-    config.enable_console = enable_console
-    config.enable_file = enable_file
-    config.enable_json_file = enable_json
-    config.enable_async = enable_async
-    config.enable_sensitive_filter = enable_sensitive_filter
+    for field, value in (
+        ("enable_console", enable_console),
+        ("enable_file", enable_file),
+        ("enable_json_file", enable_json),
+        ("enable_async", enable_async),
+        ("enable_sensitive_filter", enable_sensitive_filter),
+    ):
+        if value is not None:
+            setattr(config, field, value)
 
     # 确保日志目录存在
     if config.log_dir:
@@ -92,17 +98,15 @@ def setup_logging(
     root_logger = logging.getLogger()
     root_logger.setLevel(getattr(logging, config.level, logging.INFO))
 
-    # 清除已有的处理器
-    if root_logger.handlers:
-        for handler in root_logger.handlers[:]:
-            handler.close()
-            root_logger.removeHandler(handler)
+    _close_owned_handlers()
+    _close_bootstrap_handlers()
 
     def _make_filters() -> list[logging.Filter]:
         """每个 handler 需要独立的 filter 实例，避免共享状态导致日志丢失."""
-        result: list[logging.Filter] = [DuplicateFilter(suppress_seconds=3.0)]
+        result: list[logging.Filter] = []
         if config.enable_sensitive_filter:
             result.append(SensitiveDataFilter(patterns=config.sensitive_patterns))
+        result.append(DuplicateFilter(suppress_seconds=3.0))
         return result
 
     # 创建处理器列表
@@ -192,9 +196,11 @@ def setup_logging(
     if config.enable_async and handlers:
         async_handler = AsyncHandler(handlers)
         root_logger.addHandler(async_handler)
+        _owned_handlers.append(async_handler)
     else:
         for handler in handlers:
             root_logger.addHandler(handler)
+            _owned_handlers.append(handler)
 
     # 设置第三方库日志级别
     for module_name, level_str in config.third_party_levels.items():
@@ -242,10 +248,28 @@ def get_logger(name: str | None = None) -> logging.Logger:
         handler.setFormatter(
             logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
         )
+        _bootstrap_handlers[logger] = (handler, logger.level)
         logger.addHandler(handler)
         logger.setLevel(logging.DEBUG)
 
     return logger
+
+
+def _close_bootstrap_handlers() -> None:
+    for logger, (handler, previous_level) in list(_bootstrap_handlers.items()):
+        logger.removeHandler(handler)
+        handler.close()
+        if logger.level == logging.DEBUG:
+            logger.setLevel(previous_level)
+    _bootstrap_handlers.clear()
+
+
+def _close_owned_handlers() -> None:
+    root = logging.getLogger()
+    for handler in _owned_handlers:
+        root.removeHandler(handler)
+        handler.close()
+    _owned_handlers.clear()
 
 
 def shutdown_logging() -> None:
@@ -255,5 +279,6 @@ def shutdown_logging() -> None:
     """
     global _initialized
 
-    logging.shutdown()
+    _close_owned_handlers()
+    _close_bootstrap_handlers()
     _initialized = False

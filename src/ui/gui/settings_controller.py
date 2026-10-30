@@ -4,6 +4,7 @@ from src.core.event_bus import EventBus, Events
 from src.core.task_manager import TaskManager
 from src.logging import get_logger
 from src.ui.shared.bridge import EventBridge
+from src.utils.config_manager import ConfigManager
 
 logger = get_logger()
 
@@ -16,11 +17,14 @@ class SettingsController:
         event_bus: EventBus,
         tasks: TaskManager,
         bridge: EventBridge,
+        config_manager: ConfigManager | None = None,
     ) -> None:
         self._event_bus = event_bus
         self._tasks = tasks
         self._bridge = bridge
+        self._config_manager = config_manager
         self._settings_model = None
+        self._bridge.openSettingsRequested.connect(self.open_settings)
 
     @property
     def settings_model(self):
@@ -34,6 +38,7 @@ class SettingsController:
             self._settings_model = SettingsModel(
                 event_bus=self._event_bus,
                 task_manager=self._tasks,
+                config_manager=self._config_manager,
             )
             self._settings_model.configSaved.connect(self._on_config_saved)
             self._settings_model.mcpToolsNeedReconnect.connect(

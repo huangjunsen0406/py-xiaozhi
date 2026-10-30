@@ -1,7 +1,6 @@
-"""服务容器.
+"""Own per-client services and their application lifecycle."""
 
-整合核心服务，作为应用的中央协调者；会话/门闩/装配/适配器已拆到子模块。
-"""
+import asyncio
 
 from src.bootstrap.adapters import PluginCommandsAdapter, PluginContextAdapter
 from src.bootstrap.health import (
@@ -12,6 +11,7 @@ from src.bootstrap.health import (
 from src.bootstrap.plugin_wiring import setup_plugins
 from src.bootstrap.protocols import PluginCommands, PluginContext
 from src.bootstrap.session import ConversationSession
+from src.constants.constants import AudioConfig
 from src.core.event_bus import EventBus, Events
 from src.core.protocol_manager import ProtocolManager
 from src.core.resource_pool import ResourcePool
@@ -19,141 +19,113 @@ from src.core.state_manager import StateManager
 from src.core.task_manager import TaskManager
 from src.logging import get_logger
 from src.plugins.manager import PluginManager
-from src.utils.config_manager import get_config
+from src.utils.config_manager import ConfigManager
 
 logger = get_logger()
 
 
 class ServiceContainer:
-    """服务容器.
+    """An independent runtime; the application owns Qt and process configuration."""
 
-    持有核心服务与 ConversationSession，编排 run / shutdown 生命周期。
-    会话操作走 ``self.session``；门闩走 ``health`` 模块。
-    """
-
-    def __init__(self):
-        logger.debug("初始化 ServiceContainer")
-
-        self.config = get_config()
-
+    def __init__(self, config: ConfigManager | None = None):
+        self.config = config if config is not None else ConfigManager.from_dict()
+        self.audio_config = AudioConfig.from_config(self.config)
         self.event_bus = EventBus()
-        # AEC 是否可用由会话根据 AudioCodec 的实际状态同步。
         self.state = StateManager(self.event_bus)
         self.tasks = TaskManager()
-        # Protocol 入站任务走 TaskManager，避免 fire-and-forget
-        self.protocol = ProtocolManager(self.event_bus, task_manager=self.tasks)
-        self.plugins = PluginManager()
+        self.protocol = ProtocolManager(
+            self.event_bus,
+            task_manager=self.tasks,
+            config=self.config,
+            audio_config=self.audio_config,
+        )
+        self.plugins = PluginManager(ordered=True)
         self.resource_pool = ResourcePool()
-
-        # 容器持有的跨插件共享服务（启动时 bind，关闭时 unbind）
         self.mcp_server = None
         self.music_player = None
         self.notification_player = None
-
-        # 会话控制（听/说/打断/TTS 回环）
         self.session = ConversationSession(
             state=self.state,
             protocol=self.protocol,
-            plugins=self.plugins,
             event_bus=self.event_bus,
+            config=self.config,
         )
-
-        self._plugin_context: PluginContextAdapter | None = None
-        self._plugin_commands: PluginCommandsAdapter | None = None
-
-        self._mode: str = "cli"
+        self._plugin_context = PluginContextAdapter(self)
+        self._plugin_commands = PluginCommandsAdapter(self)
         self._shutting_down = False
-        # audio 降级运行（XIAOZHI_DEGRADED_AUDIO=1 且 audio failed）
         self._degraded_audio = False
 
-    # -------------------------
-    # 适配器创建
-    # -------------------------
     def create_plugin_context(self) -> PluginContext:
-        if not self._plugin_context:
-            self._plugin_context = PluginContextAdapter(self)
         return self._plugin_context
 
     def create_plugin_commands(self) -> PluginCommands:
-        if not self._plugin_commands:
-            self._plugin_commands = PluginCommandsAdapter(self)
         return self._plugin_commands
 
-    # -------------------------
-    # 生命周期
-    # -------------------------
     async def run(self, *, protocol: str = "websocket", mode: str = "gui") -> int:
-        logger.info(f"启动 ServiceContainer, protocol={protocol}, mode={mode}")
-        self._mode = mode
-
+        logger.info("启动 ServiceContainer, protocol=%s, mode=%s", protocol, mode)
         try:
             self.tasks.initialize()
-            self.protocol.set_task_manager(self.tasks)
             self.protocol.set_protocol(protocol)
             self.protocol.set_idle_checker(self.state.is_idle)
-
             self.session.bind_events(self.event_bus)
-
-            ctx = self.create_plugin_context()
-            cmd = self.create_plugin_commands()
-
-            await setup_plugins(self, mode, ctx, cmd)
+            await setup_plugins(self, mode, self._plugin_context, self._plugin_commands)
             await self.plugins.start_all()
-
-            # 关键插件健康门闩：失败则退出，禁止 silent zombie
             health_error = check_critical_plugins(self.plugins)
             if health_error:
                 logger.error(health_error)
                 return 1
-
-            # audio 失败但允许降级：打横幅/日志，继续跑 UI
             if self.plugins.is_failed("audio") and not audio_is_fatal():
-                logger.warning(DEGRADED_AUDIO_NOTICE)
                 self._degraded_audio = True
-                try:
-                    await self.event_bus.emit(
-                        Events.SYSTEM_NOTICE, DEGRADED_AUDIO_NOTICE
-                    )
-                except Exception as e:
-                    logger.debug(f"降级提示事件失败: {e}", exc_info=True)
-
-            await self.plugins.notify_device_state_changed(self.state.device_state)
-
-            # MQTT 的控制连接常驻，用于 MCP/notify；WSS 的默认实现是 no-op。
-            await self.protocol.start()
-
-            await self.tasks.wait_shutdown()
+                await self.event_bus.emit(Events.SYSTEM_NOTICE, DEGRADED_AUDIO_NOTICE)
+            await self.event_bus.emit(
+                Events.DEVICE_STATE_CHANGED,
+                {
+                    "old_state": self.state.device_state,
+                    "new_state": self.state.device_state,
+                },
+            )
+            await self._wait_for_runtime()
+            health_error = check_critical_plugins(self.plugins)
+            if health_error:
+                logger.error(health_error)
+                return 1
             return 0
-
-        except Exception as e:
-            logger.error(f"应用运行失败: {e}", exc_info=True)
+        except Exception:
+            logger.exception("应用运行失败")
             return 1
         finally:
             await self.shutdown()
 
+    async def _wait_for_runtime(self) -> None:
+        if self.tasks.shutdown_event.is_set():
+            return
+        startup = asyncio.create_task(
+            self.protocol.start(), name="runtime:protocol_start"
+        )
+        shutdown = asyncio.create_task(
+            self.tasks.wait_shutdown(), name="runtime:wait_shutdown"
+        )
+        try:
+            await asyncio.wait((startup, shutdown), return_when=asyncio.FIRST_COMPLETED)
+            if startup.done():
+                await startup
+            await shutdown
+        finally:
+            for task in (startup, shutdown):
+                if not task.done():
+                    task.cancel()
+            await asyncio.gather(startup, shutdown, return_exceptions=True)
+
     async def shutdown(self) -> None:
-        """关闭应用，统一通过资源池逆序释放所有资源."""
         if self._shutting_down:
-            logger.debug("ServiceContainer 已在关闭中，跳过")
             return
         self._shutting_down = True
-        logger.info("正在关闭 ServiceContainer...")
-
         try:
             try:
                 await self.plugins.stop_all()
+            except Exception:
+                logger.exception("停止内置组件失败")
             finally:
                 await self.resource_pool.shutdown()
-            logger.info("ServiceContainer 关闭完成")
-        except Exception as e:
-            logger.error(f"关闭时出错: {e}", exc_info=True)
         finally:
-            if self._mode == "gui":
-                try:
-                    from PySide6.QtWidgets import QApplication
-
-                    if QApplication.instance():
-                        logger.debug("退出 Qt 应用")
-                        QApplication.quit()
-                except Exception as e:
-                    logger.debug(f"退出 Qt 应用时出错: {e}")
+            self.session.unbind_events()

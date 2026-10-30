@@ -6,14 +6,15 @@
 import platform
 import subprocess
 from pathlib import Path
-from typing import Dict, List
 
 from src.logging import get_logger
+
+from .utils import clean_app_name
 
 logger = get_logger()
 
 
-def scan_installed_applications() -> List[Dict[str, str]]:
+def scan_installed_applications() -> list[dict[str, str]]:
     """扫描Linux系统中已安装的应用程序.
 
     Returns:
@@ -89,7 +90,7 @@ def scan_installed_applications() -> List[Dict[str, str]]:
     return apps
 
 
-def scan_running_applications() -> List[Dict[str, str]]:
+def scan_running_applications() -> list[dict[str, str]]:
     """扫描Linux系统中正在运行的应用程序.
 
     Returns:
@@ -141,7 +142,7 @@ def scan_running_applications() -> List[Dict[str, str]]:
         return []
 
 
-def _parse_desktop_file(desktop_file: Path) -> Dict[str, str]:
+def _parse_desktop_file(desktop_file: Path) -> dict[str, str]:
     """解析.desktop文件.
 
     Args:
@@ -151,7 +152,7 @@ def _parse_desktop_file(desktop_file: Path) -> Dict[str, str]:
         Dict[str, str]: 应用程序信息
     """
     try:
-        with open(desktop_file, "r", encoding="utf-8") as f:
+        with open(desktop_file, encoding="utf-8") as f:
             content = f.read()
 
         # 解析 .desktop 文件
@@ -159,20 +160,29 @@ def _parse_desktop_file(desktop_file: Path) -> Dict[str, str]:
         display_name = ""
         exec_cmd = ""
 
-        for line in content.split("\n"):
+        in_entry = False
+        localized_name = ""
+        for line in content.splitlines():
+            line = line.strip()
+            if line.startswith("["):
+                in_entry = line == "[Desktop Entry]"
+                continue
+            if not in_entry:
+                continue
             if line.startswith("Name="):
                 display_name = line.split("=", 1)[1]
             elif line.startswith("Name[zh_CN]="):
-                display_name = line.split("=", 1)[1]  # 优先使用中文名
+                localized_name = line.split("=", 1)[1]
             elif line.startswith("Exec="):
-                exec_cmd = line.split("=", 1)[1].split()[0]  # 取第一个命令
+                exec_cmd = line.split("=", 1)[1]
 
+        display_name = localized_name or display_name
         if display_name and exec_cmd:
             name = clean_app_name(display_name)
             return {
                 "name": name,
                 "display_name": display_name,
-                "path": exec_cmd,
+                "path": str(desktop_file),
                 "type": "desktop",
             }
 
@@ -351,6 +361,3 @@ def _extract_app_name(comm: str, command: str) -> str:
 
     # 使用进程名称
     return comm if comm else "Unknown"
-
-
-from .utils import clean_app_name

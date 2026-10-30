@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """CLI 终端界面."""
 
 import asyncio
@@ -27,7 +26,7 @@ class CliViewManager:
         self._task_manager = task_manager
         self._display = CLIDisplay()
         self._running = False
-        self._loop: Optional[asyncio.AbstractEventLoop] = None
+        self._loop: asyncio.AbstractEventLoop | None = None
 
         # 状态
         self._auto_mode = False
@@ -57,6 +56,9 @@ class CliViewManager:
             await self._display.start()
         except asyncio.CancelledError:
             logger.info("CliViewManager: 显示任务被取消")
+            raise
+        finally:
+            self._running = False
 
     async def close(self):
         """关闭 CLI 视图."""
@@ -91,6 +93,7 @@ class CliViewManager:
         优先经 TaskManager.schedule_nowait（线程安全 + 可追踪）；
         否则回退 run_coroutine_threadsafe。
         """
+
         def _start_emit():
             if data is None:
                 return self._event_bus.emit(event)

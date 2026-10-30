@@ -3,7 +3,7 @@
 管理插件生命周期，支持依赖声明和拓扑排序。
 """
 
-from typing import TYPE_CHECKING, Any, List, Optional
+from typing import TYPE_CHECKING, Any
 
 from src.logging import get_logger
 
@@ -26,8 +26,9 @@ class PluginManager:
     - 失败标记 + 依赖失败时跳过下游
     """
 
-    def __init__(self) -> None:
-        self._plugins: List[Plugin] = []
+    def __init__(self, *, ordered: bool = False) -> None:
+        self._ordered = ordered
+        self._plugins: list[Plugin] = []
         self._by_name: dict[str, Plugin] = {}
         self._sorted: bool = False
 
@@ -46,14 +47,22 @@ class PluginManager:
                     raise ValueError(f"插件名称重复: {name}")
                 by_name[name] = p
 
-        sorted_plugins = sorted(plugins, key=lambda p: getattr(p, "priority", 50))
+        sorted_plugins = (
+            plugins
+            if self._ordered
+            else sorted(plugins, key=lambda p: getattr(p, "priority", 50))
+        )
         for p in sorted_plugins:
             if p not in self._plugins:
                 self._plugins.append(p)
         self._by_name = by_name
         self._sorted = False
 
-    def get_plugin(self, name: str) -> Optional[Plugin]:
+    @property
+    def plugins(self) -> tuple[Plugin, ...]:
+        return tuple(self._plugins)
+
+    def get_plugin(self, name: str) -> Plugin | None:
         """根据插件名获取插件实例."""
         return self._by_name.get(name)
 
@@ -62,13 +71,9 @@ class PluginManager:
         plugin = self._by_name.get(name)
         return plugin is None or plugin.failed
 
-    def failed_plugins(self) -> List[str]:
+    def failed_plugins(self) -> list[str]:
         """返回所有已失败插件名."""
-        return [
-            p.name
-            for p in self._plugins
-            if getattr(p, "name", None) and p.failed
-        ]
+        return [p.name for p in self._plugins if getattr(p, "name", None) and p.failed]
 
     def _dependencies_ok(self, plugin: Plugin) -> bool:
         """检查插件声明的依赖是否都可用（已注册且未失败）."""
@@ -87,11 +92,11 @@ class PluginManager:
                 return False
         return True
 
-    def _active_plugins(self) -> List[Plugin]:
+    def _active_plugins(self) -> list[Plugin]:
         """未失败的插件列表."""
         return [p for p in self._plugins if not p.failed]
 
-    def _topological_sort(self) -> List[Plugin]:
+    def _topological_sort(self) -> list[Plugin]:
         """拓扑排序插件列表，确保依赖先于被依赖者初始化.
 
         Returns:
@@ -102,7 +107,7 @@ class PluginManager:
         """
         # 构建依赖图
         in_degree: dict[str, int] = {}
-        dependents: dict[str, List[str]] = {}  # 被谁依赖
+        dependents: dict[str, list[str]] = {}  # 被谁依赖
 
         for p in self._plugins:
             name = getattr(p, "name", "")
@@ -122,13 +127,11 @@ class PluginManager:
 
         # Kahn 算法
         queue = [name for name, degree in in_degree.items() if degree == 0]
-        result: List[Plugin] = []
+        result: list[Plugin] = []
 
         while queue:
             # 从入度为0的节点中选择 priority 最小的
-            queue.sort(
-                key=lambda n: getattr(self._by_name.get(n), "priority", 50)
-            )
+            queue.sort(key=lambda n: getattr(self._by_name.get(n), "priority", 50))
             current = queue.pop(0)
             plugin = self._by_name.get(current)
             if plugin:
@@ -168,8 +171,14 @@ class PluginManager:
             ctx: 插件上下文
             cmd: 插件命令接口
         """
-        # 拓扑排序
-        if not self._sorted:
+        if self._ordered:
+            seen = set()
+            for plugin in self._plugins:
+                if any(dep not in seen for dep in plugin.requires):
+                    raise ValueError(f"内置组件依赖顺序无效: {plugin.name}")
+                seen.add(plugin.name)
+        # 通用插件仍保留拓扑排序；内置组件已在装配处明确依赖。
+        if not self._ordered and not self._sorted:
             try:
                 self._plugins = self._topological_sort()
                 self._sorted = True
@@ -183,7 +192,8 @@ class PluginManager:
                 raise
 
         # 注入依赖
-        self._inject_dependencies()
+        if not self._ordered:
+            self._inject_dependencies()
 
         # 初始化
         for p in list(self._plugins):

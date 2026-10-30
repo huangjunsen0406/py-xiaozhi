@@ -63,6 +63,7 @@ class PlaybackEngine:
         self._library = deps.library
         self._hooks = deps.hooks
 
+        self._default_audio_config = AudioConfig.from_config()
         self.audio_codec: AudioCodec | None = None
         self.decoder: MusicDecoder | None = None
         self._music_queue: asyncio.Queue = asyncio.Queue(maxsize=100)
@@ -82,11 +83,23 @@ class PlaybackEngine:
         self.api_url: str | None = None
         self.current_lyric_index = -1
         self.last_lyric_tick = 0.0
+        self.last_error: str | None = None
 
     def _get_audio_codec(self) -> AudioCodec | None:
         if self.audio_codec is None:
             logger.warning("AudioCodec 未设置，音乐播放功能不可用")
         return self.audio_codec
+
+    def _make_decoder(self) -> MusicDecoder:
+        """Resolve the current codec format after device refresh or resume."""
+        audio_config = getattr(
+            self.audio_codec, "audio_config", self._default_audio_config
+        )
+        return MusicDecoder(
+            sample_rate=audio_config.OUTPUT_SAMPLE_RATE,
+            channels=audio_config.CHANNELS,
+            frame_duration=audio_config.FRAME_DURATION,
+        )
 
     async def _clear_music_queue(self) -> int:
         count = 0
@@ -113,7 +126,13 @@ class PlaybackEngine:
         self._playback_task = None
 
     async def stop(self) -> dict:
+        return await self._downloader._await_cleanup(
+            asyncio.create_task(self._stop_playback())
+        )
+
+    async def _stop_playback(self) -> dict:
         try:
+            await self.cancel_prefetch()
             if not self.is_playing:
                 return {"status": "info", "message": "没有正在播放的歌曲"}
 
@@ -222,9 +241,10 @@ class PlaybackEngine:
                     }
             elif not self._current_source:
                 return {"status": "error", "message": "没有可恢复的音源"}
-            elif not is_http_url(self._current_source) and not Path(
-                self._current_source
-            ).exists():
+            elif (
+                not is_http_url(self._current_source)
+                and not Path(self._current_source).exists()
+            ):
                 return {"status": "error", "message": "无法找到音频文件"}
 
             fmt = self._hooks.format_time
@@ -241,12 +261,9 @@ class PlaybackEngine:
                 await self.decoder.stop()
                 self.decoder = None
 
-            self.decoder = MusicDecoder(
-                sample_rate=AudioConfig.OUTPUT_SAMPLE_RATE,
-                channels=AudioConfig.CHANNELS,
-            )
+            self.decoder = self._make_decoder()
             if is_http_url(self._current_source) and self.song_id:
-                self._downloader.start_prefetch(
+                await self._downloader.start_prefetch(
                     str(self._current_source),
                     self.song_id,
                     self._stream_headers,
@@ -285,9 +302,10 @@ class PlaybackEngine:
                 return {"status": "error", "message": "没有正在播放的歌曲"}
             if not self._current_source:
                 return {"status": "error", "message": "没有可跳转的音源"}
-            if not is_http_url(self._current_source) and not Path(
-                self._current_source
-            ).exists():
+            if (
+                not is_http_url(self._current_source)
+                and not Path(self._current_source).exists()
+            ):
                 return {"status": "error", "message": "无法找到音频文件"}
 
             if self.total_duration <= 0 and not is_http_url(self._current_source):
@@ -359,10 +377,8 @@ class PlaybackEngine:
     async def get_position(self):
         if not self.is_playing or self.paused:
             return self.current_position
-        current_pos = min(self.total_duration, time.time() - self.start_play_time)
-        if current_pos >= self.total_duration and self.total_duration > 0:
-            await self._handle_playback_finished()
-        return current_pos
+        current_pos = max(0.0, time.time() - self.start_play_time)
+        return min(self.total_duration, current_pos) if self.total_duration > 0 else current_pos
 
     async def get_progress(self):
         if self.total_duration <= 0:
@@ -378,16 +394,14 @@ class PlaybackEngine:
             self.api_url, song_id=self.song_id or None
         )
         if not media_url:
-            logger.error(
-                f"刷新播放地址失败: {self._downloader.last_error or '未知'}"
-            )
+            logger.error(f"刷新播放地址失败: {self._downloader.last_error or '未知'}")
             return False
         self._current_source = media_url
         self._stream_headers = self._downloader.media_headers(media_url)
         host = urlparse(media_url).hostname or media_url[:48]
         logger.info(f"已刷新流地址: {host}")
         if self.song_id:
-            self._downloader.start_prefetch(
+            await self._downloader.start_prefetch(
                 media_url, self.song_id, self._stream_headers
             )
         return True
@@ -401,6 +415,7 @@ class PlaybackEngine:
             if self.is_playing:
                 await self.stop()
 
+            self.last_error = None
             self._hooks.prepare_for_io()
             self.api_url = api_url
 
@@ -452,7 +467,7 @@ class PlaybackEngine:
             host = urlparse(media_url).hostname or media_url[:48]
             logger.info(f"流式播放: {host}")
             if self.song_id:
-                self._downloader.start_prefetch(media_url, self.song_id, headers)
+                await self._downloader.start_prefetch(media_url, self.song_id, headers)
             return await self.start_playback(media_url, headers=headers)
         except Exception as e:
             logger.error(f"播放失败: {e}", exc_info=True)
@@ -465,6 +480,7 @@ class PlaybackEngine:
         headers: dict[str, str] | None = None,
     ) -> bool:
         try:
+            self.last_error = None
             self._current_source = source
             self._stream_headers = headers if is_http_url(source) else None
 
@@ -492,10 +508,7 @@ class PlaybackEngine:
             if cleared > 0:
                 logger.debug(f"开始播放前清空 {cleared} 帧音乐数据")
 
-            self.decoder = MusicDecoder(
-                sample_rate=AudioConfig.OUTPUT_SAMPLE_RATE,
-                channels=AudioConfig.CHANNELS,
-            )
+            self.decoder = self._make_decoder()
             success = await self.decoder.start_decode(
                 source,
                 self._music_queue,
@@ -546,8 +559,12 @@ class PlaybackEngine:
                     continue
 
                 if audio_data is None:
-                    logger.info("音乐播放完成")
-                    await self._handle_playback_finished()
+                    if self.decoder is not None and self.decoder.completed_successfully:
+                        logger.info("音乐播放完成")
+                        await self._handle_playback_finished()
+                    else:
+                        error = getattr(self.decoder, "error", None) or "音频解码失败"
+                        await self._handle_playback_failed(error)
                     break
 
                 await self._write_to_audio_codec(audio_data)
@@ -555,6 +572,26 @@ class PlaybackEngine:
             logger.debug("播放循环被取消")
         except Exception as e:
             logger.error(f"播放循环异常: {e}", exc_info=True)
+            await self._handle_playback_failed(str(e) or type(e).__name__)
+
+    async def _handle_playback_failed(self, error: str) -> None:
+        self.last_error = error
+        self.current_position = await self.get_position()
+        self.is_playing = False
+        self.paused = False
+        self.pause_source = None
+        self.current_lyric_index = -1
+        if self.decoder is not None:
+            await self.decoder.stop()
+            self.decoder = None
+        await self._clear_music_queue()
+        if self.audio_codec is not None:
+            await self.audio_codec.clear_music_queue()
+        if self._playback_task is asyncio.current_task():
+            self._playback_task = None
+        await self.cancel_prefetch()
+        await self._hooks.emit_state_change("error", self.current_song)
+        logger.warning("音乐播放失败: %s", error)
 
     async def _write_to_audio_codec(self, pcm_data: np.ndarray):
         try:
@@ -573,6 +610,7 @@ class PlaybackEngine:
         if not self.is_playing:
             return
         logger.info(f"歌曲播放完成: {self.current_song}")
+        await self.cancel_prefetch()
         if self.decoder:
             await self.decoder.stop()
             self.decoder = None
@@ -592,8 +630,5 @@ class PlaybackEngine:
         self.current_lyric_index = -1
         await self._hooks.emit_state_change("completed", self.current_song)
 
-    def cancel_prefetch(self) -> None:
-        try:
-            self._downloader.cancel_prefetch()
-        except Exception:
-            pass
+    async def cancel_prefetch(self) -> None:
+        await self._downloader.cancel_prefetch()

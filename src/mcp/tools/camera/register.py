@@ -6,7 +6,7 @@ from collections.abc import Callable
 
 from src.logging import get_logger
 from src.mcp.tooling import McpTool, Property, PropertyList, PropertyType
-from src.utils.config_manager import get_config
+from src.utils.config_manager import ConfigManager
 
 from .normal_camera import NormalCamera
 from .vl_camera import VLCamera
@@ -14,21 +14,19 @@ from .vl_camera import VLCamera
 logger = get_logger()
 
 
-def create_camera():
-    """
-    按配置创建一个摄像头实现并返回.
-    """
-    config = get_config()
+def create_camera(config=None):
+    """按注入配置创建摄像头；无参时使用独立的内存默认配置。"""
+    config = config if config is not None else ConfigManager.from_dict()
 
     vl_key = config.get_config("CAMERA.VLapi_key")
     vl_url = config.get_config("CAMERA.Local_VL_url")
 
     if vl_key and vl_url:
         logger.info(f"Initializing VL Camera with URL: {vl_url}")
-        return VLCamera()
+        return VLCamera(config=config)
 
     logger.info("VL configuration not found, using normal Camera implementation")
-    return NormalCamera()
+    return NormalCamera(config=config)
 
 
 def register_camera_tools(add_tool: Callable[[McpTool], None], camera) -> None:

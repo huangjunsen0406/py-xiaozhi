@@ -215,27 +215,63 @@ def kill_process(pid: int, force: bool = False) -> bool:
         return False
 
 
+def _identity_name(name: str) -> str:
+    """Case-insensitive exact basename; no fuzzy/substring/version matching."""
+    name = name.replace("\\", "/").rstrip("/").rsplit("/", 1)[-1].casefold()
+    for suffix in (".exe", ".app"):
+        if name.endswith(suffix):
+            return name[: -len(suffix)]
+    return name
+
+
+def _application_identity(app: dict) -> tuple[str, set[str]]:
+    exe = app.get("exe", "").replace("\\", "/")
+    # All main processes from a macOS bundle share its identity, not a helper
+    # binary's basename. Child processes are reached through psutil's tree.
+    if sys.platform == "darwin" and ".app/" in exe:
+        exe = exe[: exe.index(".app/") + 4]
+    names = {_identity_name(app.get(key, "")) for key in ("name", "display_name")}
+    if exe:
+        names.add(_identity_name(exe))
+    names.discard("")
+    identity = exe.casefold() if sys.platform == "win32" else exe
+    # No executable identity means we cannot prove two same-named processes
+    # belong to the same installation. Keep them distinct and refuse ambiguity.
+    return identity or f"pid:{app['pid']}", names
+
+
 def find_matching_processes(app_name: str) -> list[dict]:
-    """查找与应用名匹配的运行中进程.
+    """Resolve one exact application identity, or refuse ambiguous requests.
 
-    使用 AppMatcher 进行智能匹配（包含特殊映射、模糊匹配等）。
-
-    Args:
-        app_name: 目标应用名称
-
-    Returns:
-        匹配的进程信息列表，按匹配度降序排列
+    Launching keeps its permissive AppMatcher scores; destructive selection
+    accepts only exact normalized names or exact configured aliases. Once
+    selected, termination reaches descendants through the actual process tree.
     """
-    all_apps = list_running_applications()
-    matched: list[tuple[int, dict]] = []
-
-    for app in all_apps:
-        score = AppMatcher.match_application(app_name, app)
-        if score >= 50:
-            matched.append((score, app))
-
-    matched.sort(key=lambda x: x[0], reverse=True)
-    return [app for _, app in matched]
+    target = _identity_name(app_name.strip())
+    if not target:
+        return []
+    candidates = [
+        (app, *_application_identity(app)) for app in list_running_applications()
+    ]
+    exact = [(app, identity) for app, identity, names in candidates if target in names]
+    if exact:
+        matched = exact
+    else:
+        aliases = {
+            _identity_name(alias)
+            for alias in AppMatcher.SPECIAL_MAPPINGS.get(target, [])
+        }
+        matched = [
+            (app, identity) for app, identity, names in candidates if aliases & names
+        ]
+    identities = {identity for _, identity in matched}
+    if len(identities) != 1:
+        if identities:
+            logger.warning(
+                "[ProcessManager] Ambiguous application identity: %s", app_name
+            )
+        return []
+    return [app for app, _ in matched]
 
 
 def kill_application_by_name(app_name: str, force: bool = False) -> bool:
@@ -279,7 +315,9 @@ def kill_application_by_name(app_name: str, force: bool = False) -> bool:
         except psutil.NoSuchProcess:
             logger.debug(f"[ProcessManager] 进程已退出: PID={pid}")
         except psutil.AccessDenied as e:
-            logger.warning(f"[ProcessManager] 无权操作进程 PID={pid}: {e}", exc_info=True)
+            logger.warning(
+                f"[ProcessManager] 无权操作进程 PID={pid}: {e}", exc_info=True
+            )
 
     logger.info(
         f"[ProcessManager] 终止操作完成，成功 {success_count}/{len(matched)} 个进程"

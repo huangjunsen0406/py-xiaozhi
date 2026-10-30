@@ -16,11 +16,19 @@ class MusicCache:
     """管理 music 缓存目录和临时文件."""
 
     def __init__(self, root: Path | None = None) -> None:
-        base = root or get_music_cache_dir()
-        self.root = base
-        self.temp_dir = base / "temp"
+        self._root = root
         self._ready = False
         self._temp_cleaned = False
+
+    @property
+    def root(self) -> Path:
+        if self._root is None:
+            self._root = get_music_cache_dir()
+        return self._root
+
+    @property
+    def temp_dir(self) -> Path:
+        return self.root / "temp"
 
     def ensure(self) -> None:
         """创建缓存目录（幂等）."""
@@ -33,8 +41,7 @@ class MusicCache:
             logger.debug(f"音乐缓存目录就绪: {self.root}")
         except Exception as e:
             logger.error(f"创建缓存目录失败: {e}", exc_info=True)
-            self.root = Path(tempfile.gettempdir()) / "xiaozhi_music_cache"
-            self.temp_dir = self.root / "temp"
+            self._root = Path(tempfile.gettempdir()) / "xiaozhi_music_cache"
             self.root.mkdir(parents=True, exist_ok=True)
             self.temp_dir.mkdir(parents=True, exist_ok=True)
             self._ready = True

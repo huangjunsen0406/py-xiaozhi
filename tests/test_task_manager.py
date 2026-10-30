@@ -9,7 +9,7 @@ from unittest.mock import Mock
 import pytest
 
 from src.core.event_bus import EventBus
-from src.core.protocol_manager import ProtocolTransport
+from src.core.protocol_manager import ProtocolManager
 from src.core.task_manager import TaskManager
 
 
@@ -363,7 +363,7 @@ async def test_schedule_rejected_before_enqueue_does_not_invoke_callable():
 @pytest.mark.asyncio
 async def test_protocol_spawn_delegates_rejected_coroutine_cleanup(recwarn):
     manager = TaskManager()
-    transport = ProtocolTransport(EventBus(), task_manager=manager)
+    transport = ProtocolManager(EventBus(), task_manager=manager)
     coro = _noop()
 
     transport._spawn(coro, "protocol:rejected")

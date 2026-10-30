@@ -6,7 +6,7 @@
 
 import asyncio
 import sys
-from typing import Callable, Dict, Optional
+from collections.abc import Callable
 
 from src.logging import get_logger
 
@@ -67,12 +67,12 @@ class MacOSShortcutBackend(ShortcutBackend):
     使用 Quartz Event Tap 监听全局热键事件。
     """
 
-    def __init__(self, loop: Optional[asyncio.AbstractEventLoop] = None):
+    def __init__(self, loop: asyncio.AbstractEventLoop | None = None):
         super().__init__(loop)
         self._tap = None
         self._run_loop_source = None
-        self._hotkey_ids: Dict[str, int] = {}  # name -> hotkey_id
-        self._registered_hotkeys: Dict[int, str] = {}  # hotkey_id -> name
+        self._hotkey_ids: dict[str, int] = {}  # name -> hotkey_id
+        self._registered_hotkeys: dict[int, str] = {}  # hotkey_id -> name
         self._next_hotkey_id = 1
         self._monitor_thread = None
         self._pressed_modifiers = 0
@@ -183,12 +183,7 @@ class MacOSShortcutBackend(ShortcutBackend):
         # 停止健康检查
         if self._health_check_task:
             self._health_check_task.cancel()
-            # concurrent.futures.Future 不能直接 await，需要特殊处理
-            try:
-                # 等待 Future 完成（忽略取消异常）
-                self._health_check_task.result(timeout=1.0)
-            except Exception as e:
-                logger.debug(f"MacOS 健康检查超时: {e}")
+            await asyncio.gather(self._health_check_task, return_exceptions=True)
             self._health_check_task = None
 
         # 移除 event tap
@@ -247,10 +242,12 @@ class MacOSShortcutBackend(ShortcutBackend):
 
     def _start_health_check(self):
         """启动健康检查任务."""
-        if self._loop:
-            self._health_check_task = asyncio.run_coroutine_threadsafe(
-                self._health_check_loop(), self._loop
+        if self._commands:
+            self._health_check_task = self._commands.spawn(
+                self._health_check_loop(), "shortcuts.macos.health"
             )
+        elif self._loop:
+            self._health_check_task = self._loop.create_task(self._health_check_loop())
 
     async def _health_check_loop(self):
         """健康检查：禁用则尝试 re-enable；失败只 warning，避免重建风暴挡退出."""

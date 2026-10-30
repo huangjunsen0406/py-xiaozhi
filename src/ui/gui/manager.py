@@ -10,6 +10,7 @@ from src.ui.gui.qml_host import QmlAppHost
 from src.ui.gui.services import TrayService
 from src.ui.gui.settings_controller import SettingsController
 from src.ui.shared.bridge import EventBridge
+from src.utils.config_manager import ConfigManager
 
 logger = get_logger()
 
@@ -20,7 +21,12 @@ class GuiViewManager(QObject):
     设备激活在容器启动前由 GuiActivation 独立窗口完成，主界面不再挂激活 Model/API。
     """
 
-    def __init__(self, event_bus: EventBus, task_manager: TaskManager | None = None):
+    def __init__(
+        self,
+        event_bus: EventBus,
+        task_manager: TaskManager | None = None,
+        config_manager: ConfigManager | None = None,
+    ):
         super().__init__()
         self._event_bus = event_bus
         self._running = False
@@ -35,7 +41,9 @@ class GuiViewManager(QObject):
         self._bridge = EventBridge(event_bus, task_manager=self._tasks)
         self._host = QmlAppHost()
         self._main = MainWindowController()
-        self._settings = SettingsController(event_bus, self._tasks, self._bridge)
+        self._settings = SettingsController(
+            event_bus, self._tasks, self._bridge, config_manager=config_manager
+        )
         self._tray_service: TrayService | None = None
 
         self._event_bus.on(Events.UI_TOGGLE_WINDOW, self._on_toggle_window)

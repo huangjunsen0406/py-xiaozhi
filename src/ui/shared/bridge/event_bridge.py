@@ -22,7 +22,8 @@ class EventBridge(QObject):
     # 窗口控制
     showWindow = Signal()
     hideWindow = Signal()
-    showSettingsWindow = Signal()  # 显示设置窗口
+    showSettingsWindow = Signal()  # 控制器完成草稿重载后通知 QML 显示
+    openSettingsRequested = Signal()  # QML 请求，和显示信号分开避免递归
 
     # ========== 构造 ==========
 
@@ -104,6 +105,6 @@ class EventBridge(QObject):
 
     @Slot()
     def onOpenSettings(self):
-        """打开设置窗口 - 直接发射信号到 QML."""
-        logger.debug("EventBridge: 打开设置窗口")
-        self.showSettingsWindow.emit()
+        """请求控制器刷新草稿后打开设置窗口."""
+        logger.debug("EventBridge: 请求打开设置窗口")
+        self.openSettingsRequested.emit()

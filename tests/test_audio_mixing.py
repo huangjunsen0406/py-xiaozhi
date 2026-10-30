@@ -7,15 +7,8 @@
 import numpy as np
 import pytest
 
-from src.utils.config_manager import initialize_config
-
-try:
-    initialize_config()
-except Exception:
-    pass
-
-from src.audio_codecs.audio_buffer import PcmFifo  # noqa: E402
-from src.audio_codecs.audio_codec import (  # noqa: E402
+from src.audio_codecs.audio_buffer import PcmFifo
+from src.audio_codecs.audio_codec import (
     _MUSIC_DUCK_GAIN,
     AudioCodec,
 )

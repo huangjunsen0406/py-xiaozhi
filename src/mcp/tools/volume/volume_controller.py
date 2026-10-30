@@ -43,19 +43,12 @@ class VolumeController:
 
     def get_volume(self) -> int:
         """获取当前音量 (0-100)."""
-        try:
-            return self._backend.get_volume()
-        except Exception as e:
-            self.logger.warning(f"获取音量失败: {e}", exc_info=True)
-            return self.DEFAULT_VOLUME
+        return self._backend.get_volume()
 
     def set_volume(self, volume: int) -> None:
         """设置音量 (0-100)."""
         volume = max(0, min(100, volume))
-        try:
-            self._backend.set_volume(volume)
-        except Exception as e:
-            self.logger.warning(f"设置音量失败: {e}", exc_info=True)
+        self._backend.set_volume(volume)
 
     @staticmethod
     def check_dependencies() -> bool:

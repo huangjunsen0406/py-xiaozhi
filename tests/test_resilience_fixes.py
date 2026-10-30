@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from src.core.event_bus import EventBus, Events
-from src.core.protocol_manager import ProtocolTransport, _INCOMING_AUDIO_QUEUE_SIZE
+from src.core.protocol_manager import ProtocolManager, _INCOMING_AUDIO_QUEUE_SIZE
 from src.core.task_manager import TaskManager
 from src.plugins.base import Plugin
 from src.plugins.manager import PluginManager
@@ -141,7 +141,7 @@ async def test_task_manager_logs_exception_with_traceback(caplog):
 @pytest.mark.asyncio
 async def test_protocol_audio_queue_uses_single_consumer_not_per_frame_tasks():
     bus = EventBus()
-    transport = ProtocolTransport(bus)
+    transport = ProtocolManager(bus)
     received = []
 
     async def handler(data: bytes):
@@ -177,7 +177,7 @@ async def test_protocol_json_spawns_via_task_manager():
     bus = EventBus()
     tm = TaskManager()
     tm.initialize()
-    transport = ProtocolTransport(bus, task_manager=tm)
+    transport = ProtocolManager(bus, task_manager=tm)
 
     got = []
 
@@ -234,13 +234,14 @@ def test_constants_import_has_no_config_manager_side_effect(monkeypatch):
     assert constants.DeviceState.IDLE == "idle"
 
 
-def test_music_player_detach_clears_runtime_bindings():
+@pytest.mark.asyncio
+async def test_music_player_detach_clears_runtime_bindings():
     from src.mcp.tools.music.music_player import MusicPlayer
 
     player = MusicPlayer()
     player._engine.audio_codec = object()  # type: ignore
     player._bus.event_bus = object()  # type: ignore
-    player.detach()
+    await player.detach()
     assert player._engine.audio_codec is None
     assert player._bus.event_bus is None
 
@@ -969,12 +970,10 @@ async def test_auto_session_button_start_stop():
     starts = []
 
     class _Cmd:
-        async def connect_protocol(self):
-            return True
-
-        async def start_listening(self, mode):
-            starts.append(mode)
+        async def start_auto_conversation(self):
+            starts.append("auto")
             listening["v"] = True
+            return True
 
         async def stop_listening(self):
             stops.append("stop")
@@ -1018,53 +1017,52 @@ async def test_auto_session_button_start_stop():
 
 @pytest.mark.asyncio
 async def test_send_text_from_idle_starts_listen_then_detect():
-    """空闲发文本要先 listen 再 detect."""
+    """真实会话保证空闲先 connect/listen，UI 只提交用户意图。"""
+    from src.bootstrap.session import ConversationSession
     from src.constants.constants import ListeningMode
+    from src.core.state_manager import StateManager
     from src.plugins.ui_presenter import UiPresenter
     from src.plugins.ui_session import SessionActions
+    from src.utils.config_manager import ConfigManager
 
     order = []
-    listening = {"v": False}
+    opened = False
 
-    class _Cmd:
-        async def connect_protocol(self):
+    class Protocol:
+        def is_audio_channel_opened(self):
+            return opened
+
+        async def connect(self):
+            nonlocal opened
             order.append("connect")
+            opened = True
             return True
 
-        async def start_listening(self, mode):
+        async def send_start_listening(self, mode):
             order.append(("listen", mode))
-            listening["v"] = True
+            return True
 
         async def send_wake_word_detected(self, text):
             order.append(("detect", text))
+            return True
 
-        async def abort_speaking(self, reason):
-            order.append(("abort", reason))
+    state = StateManager(EventBus())
+    conversation = ConversationSession(
+        state,
+        Protocol(),
+        config=ConfigManager.from_dict({"AEC_OPTIONS": {"ENABLED": False}}),
+    )
+    actions = SessionActions(state, conversation, UiPresenter(_FakeViewport()))
+    await actions.send_text("播放歌曲")
+    assert order == [
+        "connect",
+        ("listen", ListeningMode.MANUAL),
+        ("detect", "播放歌曲"),
+    ]
 
-    class _Ctx:
-        def is_speaking(self):
-            return False
-
-        def is_listening(self):
-            return listening["v"]
-
-        def get_config(self):
-            class C:
-                def get_config(self, k, d=None):
-                    return False  # AEC off → AUTO_STOP when auto
-
-            return C()
-
-    session = SessionActions(_Ctx(), _Cmd(), UiPresenter(_FakeViewport()))
-    # 手动模式空闲发文本
-    await session.send_text("播放歌曲")
-    assert order[0] == "connect"
-    assert order[1] == ("listen", ListeningMode.MANUAL)
-    assert order[2] == ("detect", "播放歌曲")
-
-    # 已在 listening 时不再重复 start
+    # 已在 listening 时不再重复 connect/start。
     order.clear()
-    await session.send_text("你好")
+    await actions.send_text("你好")
     assert order == [("detect", "你好")]
 
 
@@ -1082,9 +1080,11 @@ async def test_abort_speaking_resumes_keep_listening():
 
         async def send_abort_speaking(self, reason):
             order.append(("abort", reason))
+            return True
 
         async def send_start_listening(self, mode):
             order.append(("listen", mode))
+            return True
 
     class FakeState:
         def __init__(self):
@@ -1092,6 +1092,10 @@ async def test_abort_speaking_resumes_keep_listening():
             self.listening_mode = ListeningMode.AUTO_STOP
             self._state = DeviceState.SPEAKING
             self._aborted = False
+
+        @property
+        def aborted(self):
+            return self._aborted
 
         def set_aborted(self, v):
             self._aborted = v
@@ -1103,7 +1107,7 @@ async def test_abort_speaking_resumes_keep_listening():
     session = ConversationSession(
         state=FakeState(),
         protocol=FakeProtocol(),
-        plugins=None,  # type: ignore[arg-type]
+        audio=None,
     )
 
     await session.abort_speaking("user_interruption")
@@ -1111,7 +1115,7 @@ async def test_abort_speaking_resumes_keep_listening():
     assert ("listen", ListeningMode.AUTO_STOP) in order
     assert ("state", DeviceState.LISTENING) in order
     assert ("state", DeviceState.IDLE) not in order
-    assert session._aborted is False
+    assert session.state.aborted is False
 
 
 def test_device_state_handler_does_not_block_with_sleep():
@@ -1120,9 +1124,11 @@ def test_device_state_handler_does_not_block_with_sleep():
 
     from src.bootstrap.session import ConversationSession
 
-    src = inspect.getsource(ConversationSession._on_device_state_changed)
+    from src.core.state_manager import StateManager
+
+    src = inspect.getsource(StateManager.set_device_state)
     assert "asyncio.sleep" not in src
-    assert "await " not in src or "notify_device_state_changed" in src
+    assert "await self._event_bus.emit" in src
     # 不得再 await 人为延迟
     assert "await asyncio" not in src
     src_stop = inspect.getsource(ConversationSession._handle_tts_stop)
@@ -1146,6 +1152,7 @@ async def test_handle_tts_stop_relisten_before_state():
 
         async def send_start_listening(self, mode):
             order.append(("listen", mode))
+            return True
 
     class FakeState:
         def __init__(self):
@@ -1173,19 +1180,12 @@ async def test_handle_tts_stop_relisten_before_state():
         async def clear_audio_queue(self):
             order.append("clear_queue")
 
-    class FakePlugins:
-        def get_plugin(self, name):
-            if name == "audio":
-                p = type("P", (), {})()
-                p.codec = FakeCodec()
-                return p
-            return None
-
     session = ConversationSession(
         state=FakeState(),
         protocol=FakeProtocol(),
-        plugins=FakePlugins(),  # type: ignore[arg-type]
+        audio=FakeCodec(),
     )
+    session._tts_active = True
 
     await session._handle_tts_stop()
 
@@ -1230,17 +1230,12 @@ async def test_handle_tts_stop_realtime_skips_relisten():
         async def clear_audio_queue(self):
             pass
 
-    class FakePlugins:
-        def get_plugin(self, name):
-            from types import SimpleNamespace
-
-            return SimpleNamespace(codec=FakeCodec())
-
     session = ConversationSession(
         state=FakeState(),
         protocol=FakeProtocol(),
-        plugins=FakePlugins(),  # type: ignore[arg-type]
+        audio=FakeCodec(),
     )
+    session._tts_active = True
 
     await session._handle_tts_stop()
     assert "listen" not in order
@@ -1294,14 +1289,19 @@ async def test_music_player_receives_codec_via_event_bus():
     assert eng.audio_codec is None
     assert eng.is_playing is False
 
-    player.detach()
+    await player.detach()
 
 
 def test_music_player_has_no_set_audio_codec_api():
     from src.mcp.tools.music.music_player import MusicPlayer
 
     assert not hasattr(MusicPlayer, "set_audio_codec")
-    assert MusicPlayer.__init__.__code__.co_argcount == 1  # 仅 self
+    # 配置注入不引入 codec 所有权，codec 仍由音频组件发布。
+    from src.utils.config_manager import ConfigManager
+
+    config = ConfigManager.from_dict()
+    player = MusicPlayer(config=config)
+    assert player._config_source is config
     # 状态挂在 engine；门面只暴露少量只读属性
     assert isinstance(MusicPlayer.is_playing, property)
     assert MusicPlayer.is_playing.fset is None
@@ -1359,7 +1359,7 @@ async def test_cli_mock_protocol_smoke_session():
     bus = EventBus()
     tm = TaskManager()
     tm.initialize()
-    transport = ProtocolTransport(bus, task_manager=tm)
+    transport = ProtocolManager(bus, task_manager=tm)
 
     received_json: list = []
     received_audio: list = []
@@ -1758,24 +1758,16 @@ def test_config_version_migration_v1(tmp_path, monkeypatch):
     reset_config()
 
 
-def test_settings_model_save_is_atomic(tmp_path, monkeypatch):
+def test_settings_model_save_is_atomic(tmp_path):
     """SettingsModel.save 使用 tmp+replace."""
     import src.ui.gui.models.settings_model as sm_mod
 
-    # 避免真实 get_config 依赖
-    class FakeCM:
-        def reload_config(self, **kwargs):
-            return True
-
-    monkeypatch.setattr(sm_mod, "get_config", lambda: FakeCM())
-    monkeypatch.setattr(
-        sm_mod, "get_user_data_dir", lambda: tmp_path
-    )
+    # 使用独立文件配置，保存不得回落到用户配置路径。
     (tmp_path / "config").mkdir(exist_ok=True)
     cfg = tmp_path / "config" / "config.json"
     cfg.write_text("{}", encoding="utf-8")
 
-    model = sm_mod.SettingsModel()
+    model = sm_mod.SettingsModel(config_manager=sm_mod.ConfigManager(config_file=cfg))
     model._config = {"CONFIG_VERSION": 1, "MCP_TOOLS": {"DISABLED": ["a.b"]}}
     model._config_path = cfg
     model._mcp_disabled_snapshot = []
@@ -1856,8 +1848,10 @@ def test_discover_plugin_catalog_from_sources(tmp_path, monkeypatch):
         'host.add_tool(McpTool(name="example.hello", description="d"))\n',
         encoding="utf-8",
     )
-    monkeypatch.setattr(tc, "_plugins_dir_from_config", lambda: tmp_path)
-    rows = tc.discover_plugin_catalog_rows()
+    from src.utils.config_manager import ConfigManager
+
+    config = ConfigManager.from_dict({"MCP_PLUGINS": {"DIR": str(tmp_path)}})
+    rows = tc.discover_plugin_catalog_rows(config=config)
     names = [r["name"] for r in rows]
     assert "example.hello" in names
     hello = next(r for r in rows if r["name"] == "example.hello")

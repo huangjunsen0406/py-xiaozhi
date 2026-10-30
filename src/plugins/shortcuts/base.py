@@ -2,8 +2,8 @@
 
 import asyncio
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Dict, Optional
 
 from src.logging import get_logger
 
@@ -25,11 +25,16 @@ class ShortcutBackend(ABC):
     定义了所有快捷键后端必须实现的接口。
     """
 
-    def __init__(self, loop: Optional[asyncio.AbstractEventLoop] = None):
+    def __init__(self, loop: asyncio.AbstractEventLoop | None = None):
         self._loop = loop
         self._running = False
-        self._shortcuts: Dict[str, ShortcutConfig] = {}
-        self._callbacks: Dict[str, Callable] = {}
+        self._shortcuts: dict[str, ShortcutConfig] = {}
+        self._callbacks: dict[str, Callable] = {}
+        self._commands = None
+
+    def bind_commands(self, commands) -> None:
+        """使用应用已有的任务调度入口。"""
+        self._commands = commands
 
     @abstractmethod
     async def start(self) -> bool:
@@ -87,21 +92,23 @@ class ShortcutBackend(ABC):
         Args:
             name: 快捷键名称
         """
-        if name not in self._callbacks:
+        callback = self._callbacks.get(name)
+        if not self._running or callback is None:
             return
 
-        callback = self._callbacks[name]
-        if self._loop and self._loop.is_running():
+        def invoke():
+            if self._running and self._callbacks.get(name) is callback:
+                return callback()
+
+        if self._commands:
+            self._commands.schedule_command_nowait(invoke)
+        elif self._loop and self._loop.is_running():
             if asyncio.iscoroutinefunction(callback):
-                asyncio.run_coroutine_threadsafe(callback(), self._loop)
+                logger.warning(f"无法调用异步回调 {name}，没有任务调度器")
             else:
-                self._loop.call_soon_threadsafe(callback)
-        else:
-            # 没有事件循环，直接调用
-            if asyncio.iscoroutinefunction(callback):
-                logger.warning(f"无法调用异步回调 {name}，没有事件循环")
-            else:
-                try:
-                    callback()
-                except Exception as e:
-                    logger.error(f"快捷键回调 {name} 执行失败: {e}", exc_info=True)
+                self._loop.call_soon_threadsafe(invoke)
+        elif not asyncio.iscoroutinefunction(callback):
+            try:
+                invoke()
+            except Exception as e:
+                logger.error(f"快捷键回调 {name} 执行失败: {e}", exc_info=True)

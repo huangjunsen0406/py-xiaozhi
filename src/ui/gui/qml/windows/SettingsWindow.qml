@@ -15,6 +15,7 @@ AppWindow {
     minimumHeight: 450
     title: "参数设置"
     visible: false
+    onClosing: settingsModel.discard()
 
     // Tab 配置
     readonly property var tabConfig: [
@@ -163,7 +164,7 @@ AppWindow {
             // 底部按钮栏
             Rectangle {
                 Layout.fillWidth: true
-                Layout.preferredHeight: 60
+                Layout.preferredHeight: Math.max(60, statusText.implicitHeight + 24)
                 color: Theme.backgroundSecondary
 
                 // 顶部分隔线
@@ -185,15 +186,28 @@ AppWindow {
                     Text {
                         id: statusText
                         Layout.fillWidth: true
+                        property bool isError: false
                         font.pixelSize: Theme.fontSizeSm
-                        color: Theme.textPlaceholder
-                        elide: Text.ElideRight
+                        color: isError ? Theme.error : Theme.textPlaceholder
+                        wrapMode: Text.Wrap
 
                         Connections {
                             target: settingsModel
+                            function onStatusReset() {
+                                statusText.isError = false
+                                statusText.text = ""
+                                statusTimer.stop()
+                            }
                             function onStatusMessage(msg) {
+                                if (!statusText.isError) {
+                                    statusText.text = msg
+                                    statusTimer.restart()
+                                }
+                            }
+                            function onErrorOccurred(msg) {
+                                statusText.isError = true
                                 statusText.text = msg
-                                statusTimer.restart()
+                                statusTimer.stop()
                             }
                         }
 
@@ -279,8 +293,9 @@ AppWindow {
                         onClicked: {
                             // 先抢焦点，让当前 TextField 触发 editingFinished 写回模型
                             saveBtn.forceActiveFocus()
-                            settingsModel.save()
-                            root.close()
+                            if (settingsModel.save()) {
+                                root.close()
+                            }
                         }
                     }
             }

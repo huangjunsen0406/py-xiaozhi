@@ -45,6 +45,7 @@ class SettingsMcpToolsMixin:
         return full_catalog_rows(
             runtime_names=self._try_list_runtime_tools(),
             extra_disabled=self._mcp_disabled_list(),
+            config=getattr(self, "_config_manager", None),
         )
 
     def _get_mcpToolsCatalogJson(self) -> str:

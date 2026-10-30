@@ -71,7 +71,11 @@ def parse_notification(
 class NotificationPlayer:
     """仅承担一条 notify 的流式解码、播放与字幕进度。"""
 
-    def __init__(self) -> None:
+    def __init__(self, audio_config: AudioConfig | None = None) -> None:
+        self.audio_config = (
+            audio_config if audio_config is not None else AudioConfig.from_config()
+        )
+        self._playback_sample_rate = self.audio_config.OUTPUT_SAMPLE_RATE
         self._event_bus: EventBus | None = None
         self._codec: AudioCodec | None = None
         self._playback_codec: AudioCodec | None = None
@@ -158,9 +162,12 @@ class NotificationPlayer:
             self._finished_callback = finished_callback
             self._queue = asyncio.Queue(maxsize=_QUEUE_SIZE)
             self._drained_event = asyncio.Event()
+            audio_config = getattr(self._codec, "audio_config", self.audio_config)
+            self._playback_sample_rate = audio_config.OUTPUT_SAMPLE_RATE
             self._decoder = MusicDecoder(
-                sample_rate=AudioConfig.OUTPUT_SAMPLE_RATE,
-                channels=AudioConfig.CHANNELS,
+                sample_rate=audio_config.OUTPUT_SAMPLE_RATE,
+                channels=audio_config.CHANNELS,
+                frame_duration=audio_config.FRAME_DURATION,
             )
             self._loop = asyncio.get_running_loop()
             codec = self._codec
@@ -276,7 +283,10 @@ class NotificationPlayer:
                     return
                 if pcm is None:
                     if not self._saw_audio or not decoder.completed_successfully:
-                        logger.warning("通知音频为空或解码失败")
+                        logger.warning(
+                            "通知音频为空或解码失败: %s",
+                            getattr(decoder, "error", None) or "无有效音频",
+                        )
                         break
                     drained_event = self._drained_event
                     if drained_event is not None:
@@ -311,7 +321,7 @@ class NotificationPlayer:
         if not self._is_current(generation):
             return
         self._played_samples += samples
-        position_ms = int(self._played_samples * 1000 / AudioConfig.OUTPUT_SAMPLE_RATE)
+        position_ms = int(self._played_samples * 1000 / self._playback_sample_rate)
         text = None
         while (
             self._next_subtitle_index < len(self._subtitles)

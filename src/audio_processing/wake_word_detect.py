@@ -1,14 +1,14 @@
 import asyncio
 import threading
 import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable, Optional
 
 import numpy as np
 
 from src.constants.constants import AudioConfig
 from src.logging import get_logger
-from src.utils.config_manager import ConfigManager, get_config
+from src.utils.config_manager import ConfigManager
 from src.utils.resource_finder import get_resource_root, get_user_keywords_path
 
 logger = get_logger()
@@ -17,23 +17,28 @@ _STOP_SENTINEL = object()
 
 
 class WakeWordDetector:
-
-    def __init__(self):
+    def __init__(self, config=None, audio_config: AudioConfig | None = None):
+        self.config = config if config is not None else ConfigManager.from_dict()
+        self.audio_config = (
+            audio_config
+            if audio_config is not None
+            else AudioConfig.from_config(self.config)
+        )
         self.audio_codec = None
         self._running = False
         self._paused = False
         self._detection_task = None
-        self._audio_queue: Optional[asyncio.Queue] = None
+        self._audio_queue: asyncio.Queue | None = None
 
         self._last_detection_time = 0
         self._detection_cooldown = 1.5
 
-        self.on_detected_callback: Optional[Callable] = None
-        self.on_error: Optional[Callable] = None
+        self.on_detected_callback: Callable | None = None
+        self.on_error: Callable | None = None
 
         self.enabled = False
         self._model_loaded = False
-        self._model_dir: Optional[Path] = None
+        self._model_dir: Path | None = None
         self._keyword_spotter = None
         self._stream = None
 
@@ -41,7 +46,7 @@ class WakeWordDetector:
         self._onnx_lock = threading.Lock()
         self._stopping = False  # 标记是否正在停止
 
-        self._sample_rate = AudioConfig.INPUT_SAMPLE_RATE
+        self._sample_rate = self.audio_config.INPUT_SAMPLE_RATE
         self._num_threads = 4
         self._provider = "cpu"
         self._max_active_paths = 2
@@ -49,10 +54,10 @@ class WakeWordDetector:
         self._keywords_threshold = 0.2
         self._num_trailing_blanks = 1
 
-    async def initialize(self, model_path: Optional[str] = None) -> bool:
+    async def initialize(self, model_path: str | None = None) -> bool:
         try:
             # 1. 检查配置是否启用
-            config = get_config()
+            config = self.config
             if not config.get_config("WAKE_WORD_OPTIONS.USE_WAKE_WORD", False):
                 logger.info("唤醒词功能已禁用")
                 self.enabled = False
@@ -95,21 +100,33 @@ class WakeWordDetector:
     def _load_config(self, config: ConfigManager):
         self._num_threads = config.get_config("WAKE_WORD_OPTIONS.NUM_THREADS", 4)
         self._provider = config.get_config("WAKE_WORD_OPTIONS.PROVIDER", "cpu")
-        self._max_active_paths = config.get_config("WAKE_WORD_OPTIONS.MAX_ACTIVE_PATHS", 2)
-        self._keywords_score = config.get_config("WAKE_WORD_OPTIONS.KEYWORDS_SCORE", 1.8)
-        self._keywords_threshold = config.get_config("WAKE_WORD_OPTIONS.KEYWORDS_THRESHOLD", 0.2)
-        self._num_trailing_blanks = config.get_config("WAKE_WORD_OPTIONS.NUM_TRAILING_BLANKS", 1)
+        self._max_active_paths = config.get_config(
+            "WAKE_WORD_OPTIONS.MAX_ACTIVE_PATHS", 2
+        )
+        self._keywords_score = config.get_config(
+            "WAKE_WORD_OPTIONS.KEYWORDS_SCORE", 1.8
+        )
+        self._keywords_threshold = config.get_config(
+            "WAKE_WORD_OPTIONS.KEYWORDS_THRESHOLD", 0.2
+        )
+        self._num_trailing_blanks = config.get_config(
+            "WAKE_WORD_OPTIONS.NUM_TRAILING_BLANKS", 1
+        )
 
         # Validate
         if not 0.1 <= self._keywords_threshold <= 1.0:
-            logger.warning(f"关键词阈值 {self._keywords_threshold} 超出范围，重置为0.25")
+            logger.warning(
+                f"关键词阈值 {self._keywords_threshold} 超出范围，重置为0.25"
+            )
             self._keywords_threshold = 0.25
 
         if not 0.1 <= self._keywords_score <= 10.0:
             logger.warning(f"关键词分数 {self._keywords_score} 超出范围，重置为2.0")
             self._keywords_score = 2.0
 
-        logger.debug(f"KWS配置: 阈值={self._keywords_threshold}, 分数={self._keywords_score}")
+        logger.debug(
+            f"KWS配置: 阈值={self._keywords_threshold}, 分数={self._keywords_score}"
+        )
 
     def _load_model(self) -> bool:
         """Load sherpa-onnx KeywordSpotter model."""
@@ -121,10 +138,16 @@ class WakeWordDetector:
             joiner_path = self._model_dir / "joiner.onnx"
             tokens_path = self._model_dir / "tokens.txt"
 
-            lang = get_config().get_config("WAKE_WORD_OPTIONS.WAKE_WORD_LANG", "zh")
+            lang = self.config.get_config("WAKE_WORD_OPTIONS.WAKE_WORD_LANG", "zh")
             keywords_path = get_user_keywords_path(lang)
 
-            required_files = [encoder_path, decoder_path, joiner_path, tokens_path, keywords_path]
+            required_files = [
+                encoder_path,
+                decoder_path,
+                joiner_path,
+                tokens_path,
+                keywords_path,
+            ]
             for file_path in required_files:
                 if not file_path.exists():
                     logger.error(f"模型文件不存在: {file_path}")
@@ -235,6 +258,8 @@ class WakeWordDetector:
             logger.debug(f"音频数据入队失败: {type(e).__name__}: {e}")
 
     async def start(self, audio_codec) -> bool:
+        if self._running:
+            return self.audio_codec is audio_codec
         if not self.enabled:
             logger.warning("唤醒词功能未启用")
             return False
@@ -265,53 +290,47 @@ class WakeWordDetector:
 
         except Exception as e:
             logger.error(f"启动检测器失败: {e}", exc_info=True)
+            await self.stop()
             return False
+
+    def _detach_audio(self):
+        if self.audio_codec is not None:
+            try:
+                self.audio_codec.remove_audio_listener(self)
+            except Exception as exc:
+                logger.error("移除唤醒词音频监听失败: %s", exc, exc_info=True)
+            else:
+                self.audio_codec = None
 
     async def stop(self):
         self._stopping = True
         self._running = False
-
-        # Remove audio listener
-        if self.audio_codec:
-            self.audio_codec.remove_audio_listener(self)
-            self.audio_codec = None
-
-        # 用哨兵唤醒阻塞在 queue.get() 上的检测循环
-        if self._audio_queue:
-            try:
-                self._audio_queue.put_nowait(_STOP_SENTINEL)
-            except asyncio.QueueFull:
+        self._detach_audio()
+        task = self._detection_task
+        try:
+            if self._audio_queue is not None:
                 try:
+                    self._audio_queue.put_nowait(_STOP_SENTINEL)
+                except asyncio.QueueFull:
                     self._audio_queue.get_nowait()
                     self._audio_queue.put_nowait(_STOP_SENTINEL)
-                except (asyncio.QueueEmpty, asyncio.QueueFull):
-                    pass
-
-        # 等待检测循环自然退出（由哨兵触发）
-        if self._detection_task:
-            try:
-                await asyncio.wait_for(self._detection_task, timeout=1.0)
-            except asyncio.TimeoutError:
-                self._detection_task.cancel()
+            # The loop also cleans itself after fatal inference errors. Keep a
+            # local task reference because its finally clears the public slot.
+            if task is not None and task is not asyncio.current_task():
                 try:
-                    await self._detection_task
-                except asyncio.CancelledError:
-                    pass
-            self._detection_task = None
-
-        # Clear queue
-        if self._audio_queue:
-            while not self._audio_queue.empty():
-                try:
-                    self._audio_queue.get_nowait()
-                except asyncio.QueueEmpty:
-                    break
+                    await asyncio.wait_for(task, timeout=1.0)
+                except asyncio.TimeoutError:
+                    task.cancel()
+                    await asyncio.gather(task, return_exceptions=True)
+        finally:
+            if self._detection_task is task:
+                self._detection_task = None
             self._audio_queue = None
-
-        self._stopping = False
+            self._paused = False
+            self._stopping = False
         logger.info("唤醒词检测器已停止")
 
-    async def reload(self, model_path: Optional[str] = None) -> bool:
+    async def reload(self, model_path: str | None = None) -> bool:
         was_running = self._running
         codec = self.audio_codec
 
@@ -344,88 +363,79 @@ class WakeWordDetector:
 
     async def _detection_loop(self):
         error_count = 0
-        MAX_ERRORS = 5
-
-        while self._running and not self._stopping:
-            try:
-                if self._paused or self._stopping:
-                    await asyncio.sleep(0.1)
-                    continue
-
-                await self._process_audio()
-                await asyncio.sleep(0.005)
-                error_count = 0
-
-            except asyncio.CancelledError:
-                break
-            except RuntimeError as e:
-                if "no running event loop" in str(e) or "Event loop is closed" in str(e):
+        max_errors = 5
+        try:
+            while self._running and not self._stopping:
+                try:
+                    if self._paused:
+                        await asyncio.sleep(0.1)
+                        continue
+                    if await self._process_audio():
+                        error_count = 0
+                    await asyncio.sleep(0.005)
+                except asyncio.CancelledError:
                     break
-                error_count += 1
-                logger.error(f"检测循环错误 ({error_count}/{MAX_ERRORS}): {e}", exc_info=True)
+                except Exception as exc:
+                    error_count += 1
+                    logger.error(
+                        "检测循环错误 (%s/%s): %s",
+                        error_count,
+                        max_errors,
+                        exc,
+                        exc_info=True,
+                    )
+                    if error_count >= max_errors:
+                        self.enabled = False
+                        self._running = False
+                    if self.on_error is not None:
+                        try:
+                            if asyncio.iscoroutinefunction(self.on_error):
+                                await self.on_error(exc)
+                            else:
+                                self.on_error(exc)
+                        except Exception as callback_error:
+                            logger.error(
+                                "错误回调失败: %s", callback_error, exc_info=True
+                            )
+                    if error_count >= max_errors:
+                        logger.critical("达到最大错误次数，停止检测")
+                        break
+                    await asyncio.sleep(1)
+        finally:
+            self._running = False
+            self._detach_audio()
+            self._audio_queue = None
+            self._paused = False
+            if self._detection_task is asyncio.current_task():
+                self._detection_task = None
 
-                if error_count >= MAX_ERRORS:
-                    logger.critical("达到最大错误次数，停止检测")
-                    break
-
-                await asyncio.sleep(1)
-            except Exception as e:
-                error_count += 1
-                logger.error(f"检测循环错误 ({error_count}/{MAX_ERRORS}): {e}", exc_info=True)
-
-                if self.on_error:
-                    try:
-                        if asyncio.iscoroutinefunction(self.on_error):
-                            await self.on_error(e)
-                        else:
-                            self.on_error(e)
-                    except Exception as cb_error:
-                        logger.error(f"错误回调失败: {cb_error}")
-
-                if error_count >= MAX_ERRORS:
-                    logger.critical("达到最大错误次数，停止检测")
-                    break
-
-                await asyncio.sleep(1)
-
-    async def _process_audio(self):
-        if self._stopping or not self._audio_queue:
-            return
-
+    async def _process_audio(self) -> bool:
+        if self._stopping or self._audio_queue is None:
+            return False
         try:
             audio_data = self._audio_queue.get_nowait()
         except asyncio.QueueEmpty:
-            return
-
-        if audio_data is _STOP_SENTINEL:
-            return
-
-        if audio_data is None or len(audio_data) == 0:
-            return
+            return False
+        if audio_data is _STOP_SENTINEL or audio_data is None or len(audio_data) == 0:
+            return False
 
         detected_result = None
-
         with self._onnx_lock:
             if self._stopping or self._stream is None or self._keyword_spotter is None:
-                return
-
-            try:
-                self._stream.accept_waveform(
-                    sample_rate=self._sample_rate, waveform=audio_data
-                )
-
-                if self._keyword_spotter.is_ready(self._stream):
-                    self._keyword_spotter.decode_stream(self._stream)
-                    result = self._keyword_spotter.get_result(self._stream)
-
-                    if result:
-                        detected_result = result
-                        self._keyword_spotter.reset_stream(self._stream)
-            except Exception as e:
-                logger.debug(f"处理音频时出错: {e}")
-
+                return False
+            # Native inference exceptions belong to the loop's error policy.
+            self._stream.accept_waveform(
+                sample_rate=self._sample_rate, waveform=audio_data
+            )
+            if self._keyword_spotter.is_ready(self._stream):
+                self._keyword_spotter.decode_stream(self._stream)
+                result = self._keyword_spotter.get_result(self._stream)
+                if result:
+                    detected_result = result
+                    self._keyword_spotter.reset_stream(self._stream)
         if detected_result is not None:
             await self._handle_detection(detected_result)
+        return True
 
     async def _handle_detection(self, result):
         # Anti-repeat check
@@ -447,17 +457,13 @@ class WakeWordDetector:
                 except Exception as e:
                     logger.error(f"唤醒词回调执行失败: {e}", exc_info=True)
         finally:
-            # 快速退出：正在停止时跳过延迟和队列清理
-            if self._stopping:
-                self._paused = False
-                return
-            # 延迟后恢复检测（等待 abort + clear_audio_queue 完成）
-            await asyncio.sleep(0.3)
-            # 排空队列中残留的旧音频帧
-            if self._audio_queue:
-                while True:
-                    try:
-                        self._audio_queue.get_nowait()
-                    except asyncio.QueueEmpty:
-                        break
+            if not self._stopping:
+                # 延迟后恢复检测（等待 abort + clear_audio_queue 完成）
+                await asyncio.sleep(0.3)
+                if self._audio_queue is not None:
+                    while True:
+                        try:
+                            self._audio_queue.get_nowait()
+                        except asyncio.QueueEmpty:
+                            break
             self._paused = False

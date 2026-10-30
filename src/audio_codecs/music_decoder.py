@@ -7,7 +7,6 @@ from urllib.parse import urlparse
 
 import numpy as np
 
-from src.constants.constants import AudioConfig
 from src.logging import get_logger
 from src.utils.resource_finder import get_ffmpeg_path, get_ffprobe_path
 
@@ -65,17 +64,20 @@ class MusicDecoder:
         headers: Mapping[str, str] | None = None,
     ) -> float:
         """ffprobe 取时长；source 可以是本地文件或 http(s) URL."""
+        process = None
+        communication = None
         try:
             ffprobe = get_ffprobe_path()
             try:
-                check = await asyncio.create_subprocess_exec(
+                process = await MusicDecoder._spawn_process(
                     ffprobe,
                     "-version",
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
                     **_SUBPROCESS_KW,
                 )
-                await check.wait()
+                await process.wait()
+                process = None
             except FileNotFoundError:
                 logger.warning(
                     "ffprobe 不可用（未找到内置 libs/ffmpeg 且系统 PATH 无 ffprobe），"
@@ -99,11 +101,12 @@ class MusicDecoder:
                 ]
             )
 
-            process = await asyncio.create_subprocess_exec(
+            process = await MusicDecoder._spawn_process(
                 *cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, **_SUBPROCESS_KW
             )
 
-            stdout, stderr = await process.communicate()
+            communication = asyncio.create_task(process.communicate())
+            stdout, stderr = await asyncio.shield(communication)
 
             if process.returncode == 0:
                 duration_str = stdout.decode("utf-8").strip()
@@ -120,8 +123,17 @@ class MusicDecoder:
         except Exception as e:
             logger.warning(f"解析音频时长失败: {e}", exc_info=True)
             return 0
+        finally:
+            await MusicDecoder._terminate_process(process)
+            if communication is not None:
+                await asyncio.gather(communication, return_exceptions=True)
 
-    def __init__(self, sample_rate: int = 24000, channels: int = 1):
+    def __init__(
+        self, sample_rate: int = 24000, channels: int = 1, frame_duration: int = 20
+    ):
+        if frame_duration not in (20, 40, 60):
+            raise ValueError("frame_duration must be 20, 40 or 60 milliseconds")
+        self.frame_duration = frame_duration
         self.sample_rate = sample_rate
         self.channels = channels
         self._process: asyncio.subprocess.Process | None = None
@@ -129,6 +141,7 @@ class MusicDecoder:
         self._decode_task: asyncio.Task | None = None
         self._stopped = False
         self.completed_successfully = False
+        self.error: str | None = None
 
     @staticmethod
     async def _terminate_process(process: asyncio.subprocess.Process | None) -> None:
@@ -189,6 +202,7 @@ class MusicDecoder:
 
         self._stopped = False
         self.completed_successfully = False
+        self.error = None
 
         try:
             ffmpeg = get_ffmpeg_path()
@@ -292,7 +306,7 @@ class MusicDecoder:
             return False
 
     async def _read_pcm_stream(self, output_queue: asyncio.Queue):
-        frame_size_samples = int(self.sample_rate * AudioConfig.FRAME_DURATION / 1000)
+        frame_size_samples = int(self.sample_rate * self.frame_duration / 1000)
         sample_bytes = 2 * self.channels
         frame_size_bytes = frame_size_samples * sample_bytes
         process = self._process
@@ -306,9 +320,11 @@ class MusicDecoder:
                     returncode = await asyncio.wait_for(process.wait(), timeout=2.0)
                     self.completed_successfully = returncode == 0 and not pending
                     if not self.completed_successfully:
-                        logger.warning(
-                            "FFmpeg 解码失败或 PCM 截断，退出码: %s", returncode
+                        self.error = (
+                            f"FFmpeg exited with code {returncode}"
+                            if returncode != 0 else "Truncated PCM sample"
                         )
+                        logger.warning("FFmpeg 解码失败: %s", self.error)
                     break
 
                 pending += chunk
@@ -327,6 +343,7 @@ class MusicDecoder:
             raise
         except Exception as e:
             self.completed_successfully = False
+            self.error = str(e) or type(e).__name__
             logger.error(f"读取 PCM 流失败: {e}", exc_info=True)
         finally:
             if not self.completed_successfully:

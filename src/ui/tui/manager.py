@@ -11,6 +11,7 @@ from src.logging import get_logger
 if TYPE_CHECKING:
     from src.core.task_manager import TaskManager
     from src.ui.tui.app import XiaozhiTuiApp
+    from src.utils.config_manager import ConfigManager
 
 logger = get_logger()
 
@@ -22,9 +23,11 @@ class TuiViewManager:
         self,
         event_bus: EventBus,
         task_manager: TaskManager | None = None,
+        config_manager: ConfigManager | None = None,
     ):
         self._event_bus = event_bus
         self._task_manager = task_manager
+        self._config_manager = config_manager
         self._running = False
         self._loop: asyncio.AbstractEventLoop | None = None
         self._app: XiaozhiTuiApp | None = None
@@ -57,6 +60,7 @@ class TuiViewManager:
         self._app = XiaozhiTuiApp(
             on_command=self._handle_command,
             on_settings_saved=self._on_settings_saved,
+            config=self._config_manager,
         )
         self._app.status_text = self._status
         self._app.connected = self._connected

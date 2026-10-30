@@ -49,10 +49,14 @@ class PluginSubprocessSession:
         self.allow_get = list(allow_get)
         self.capabilities = dict(capabilities)
         self.python_executable = python_executable or sys.executable
+        self._frozen_worker = (
+            bool(getattr(sys, "frozen", False)) and python_executable is None
+        )
         self.call_timeout = call_timeout
         self._proc: subprocess.Popen[str] | None = None
         self._id = 0
         self._lock = threading.Lock()
+        self._call_lock = asyncio.Lock()
         self._tools_meta: list[dict[str, Any]] = []
 
     @property
@@ -61,9 +65,13 @@ class PluginSubprocessSession:
 
     def start_and_bootstrap(self) -> list[dict[str, Any]]:
         """启动进程并 bootstrap，返回 tools schema 列表."""
-        worker = Path(__file__).resolve().parent / "subprocess_worker.py"
-        if not worker.is_file():
-            raise RuntimeError(f"缺少 worker 脚本: {worker}")
+        if self._frozen_worker:
+            command = [self.python_executable, "--mcp-plugin-worker"]
+        else:
+            worker = Path(__file__).resolve().parent / "subprocess_worker.py"
+            if not worker.is_file():
+                raise RuntimeError(f"缺少 worker 脚本: {worker}")
+            command = [self.python_executable, str(worker)]
 
         env = os.environ.copy()
         # 避免子进程继承 GUI/Qt 相关干扰（可选）
@@ -71,7 +79,7 @@ class PluginSubprocessSession:
         env["PYTHONIOENCODING"] = "utf-8:replace"
 
         self._proc = subprocess.Popen(
-            [self.python_executable, str(worker)],
+            command,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -218,6 +226,29 @@ class PluginSubprocessSession:
             raise RuntimeError(f"子进程 result 无效: {result!r}")
         return result
 
+    async def call_tool(self, name: str, arguments: dict[str, Any]) -> Any:
+        async with self._call_lock:
+            request = asyncio.create_task(
+                asyncio.to_thread(self.call_tool_sync, name, arguments),
+                name=f"mcp-plugin-call:{self.plugin_id}",
+            )
+            try:
+                return await asyncio.shield(request)
+            except asyncio.CancelledError:
+                # Cancelling a to_thread await cannot stop the request. Retain
+                # the entry lock until it completes or its timeout kills the
+                # worker; a queued cancellation never gets this far.
+                while not request.done():
+                    try:
+                        await asyncio.shield(request)
+                    except asyncio.CancelledError:
+                        continue
+                    except Exception:
+                        break
+                if not request.cancelled():
+                    request.exception()  # Retrieve a late error before discarding it.
+                raise
+
     def call_tool_sync(self, name: str, arguments: dict[str, Any]) -> Any:
         result = self._request(
             "call",
@@ -240,7 +271,9 @@ class PluginSubprocessSession:
                     proc.kill()
                     proc.wait(timeout=2)
         except Exception as e:
-            logger.debug("[MCP插件:%s] 结束子进程: %s", self.plugin_id, e, exc_info=True)
+            logger.debug(
+                "[MCP插件:%s] 结束子进程: %s", self.plugin_id, e, exc_info=True
+            )
         finally:
             for stream in (proc.stdin, proc.stdout, proc.stderr):
                 if stream is not None:
@@ -309,9 +342,7 @@ def register_subprocess_plugin_tools(
 
         def _make_cb(tool_name: str):
             async def _proxy(arguments: dict[str, Any]):
-                return await asyncio.to_thread(
-                    session.call_tool_sync, tool_name, arguments or {}
-                )
+                return await session.call_tool(tool_name, arguments or {})
 
             return _proxy
 
@@ -330,7 +361,9 @@ _SESSIONS: dict[tuple[object | None, str], PluginSubprocessSession] = {}
 _ALL_SCOPES = object()
 
 
-def track_session(plugin_id: str, session: PluginSubprocessSession, *, scope=None) -> None:
+def track_session(
+    plugin_id: str, session: PluginSubprocessSession, *, scope=None
+) -> None:
     key = (scope, plugin_id)
     old = _SESSIONS.pop(key, None)
     if old is not None:

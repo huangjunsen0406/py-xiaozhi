@@ -9,11 +9,12 @@ import atexit
 import gzip
 import logging
 import queue
+import re
 import shutil
+import threading
 import time
 from logging.handlers import BaseRotatingHandler, QueueHandler, QueueListener
 from pathlib import Path
-from typing import Union
 
 
 class TimeSizeRotatingFileHandler(BaseRotatingHandler):
@@ -24,7 +25,7 @@ class TimeSizeRotatingFileHandler(BaseRotatingHandler):
 
     def __init__(
         self,
-        filename: Union[str, Path],
+        filename: str | Path,
         when: str = "midnight",
         interval: int = 1,
         max_bytes: int = 10 * 1024 * 1024,  # 10MB
@@ -166,13 +167,16 @@ class TimeSizeRotatingFileHandler(BaseRotatingHandler):
         if self.backup_count <= 0:
             return
 
-        # 查找所有轮转文件
-        pattern = f"{base_name}.*"
-        log_files = []
-
-        for f in directory.glob(pattern):
-            if f.name != Path(self.baseFilename).name:
-                log_files.append(f)
+        base_path = Path(self.baseFilename)
+        archive_name = re.compile(
+            rf"{re.escape(base_name)}\.\d{{4}}-\d{{2}}-\d{{2}}"
+            rf"(?:_\d{{2}})?(?:\.\d+)?{re.escape(base_path.suffix)}(?:\.gz)?"
+        )
+        log_files = [
+            f
+            for f in directory.iterdir()
+            if f.is_file() and archive_name.fullmatch(f.name)
+        ]
 
         # 按修改时间排序
         log_files.sort(key=lambda x: x.stat().st_mtime, reverse=True)
@@ -185,11 +189,14 @@ class TimeSizeRotatingFileHandler(BaseRotatingHandler):
                 pass
 
 
-class AsyncHandler(QueueHandler):
-    """异步日志处理器.
+class _DrainingQueueListener(QueueListener):
+    def enqueue_sentinel(self) -> None:
+        # 生产者已停止；等待消费者腾出空间，不能丢失停止信号。
+        self.queue.put(self._sentinel)
 
-    使用队列将日志写入操作移到后台线程，避免阻塞主线程。
-    """
+
+class AsyncHandler(QueueHandler):
+    """异步处理器；拥有传入的 sinks，关闭时排空队列并释放它们。"""
 
     def __init__(
         self,
@@ -197,38 +204,60 @@ class AsyncHandler(QueueHandler):
         queue_size: int = 10000,
         respect_handler_level: bool = True,
     ) -> None:
-        # 创建队列
         self._log_queue: queue.Queue = queue.Queue(maxsize=queue_size)
         super().__init__(self._log_queue)
-
-        # 创建监听器
-        self._listener = QueueListener(
+        self._accepting = True
+        self._close_lock = threading.Lock()
+        self.dropped_records = 0
+        self._listener = _DrainingQueueListener(
             self._log_queue,
             *handlers,
             respect_handler_level=respect_handler_level,
         )
         self._listener.start()
-
-        # 注册退出时的清理
         atexit.register(self.close)
 
     def close(self) -> None:
-        """
-        关闭处理器.
-        """
-        try:
+        """停止生产、排空并等待 worker，最后关闭拥有的 sinks；可重复调用。"""
+        with self._close_lock:
+            if self._closed:
+                return
+            # 与 emit 串行化，但 join 时不持有日志锁，允许 sink 间接打日志。
+            self.acquire()
+            try:
+                self._accepting = False
+            finally:
+                self.release()
             self._listener.stop()
-        except Exception as e:
-            logging.getLogger(__name__).debug(f"停止日志监听器失败: {e}")
-        super().close()
+            failure = None
+            try:
+                for handler in self._listener.handlers:
+                    try:
+                        try:
+                            handler.flush()
+                        finally:
+                            handler.close()
+                    except Exception as exc:
+                        if failure is None:
+                            failure = exc
+            finally:
+                atexit.unregister(self.close)
+                super().close()
+            if failure is not None:
+                raise failure
 
     def emit(self, record: logging.LogRecord) -> None:
-        """
-        发送日志记录到队列.
-        """
+        """队列满时只计数，禁止重新进入同一个日志队列。"""
+        self.acquire()
         try:
-            self.enqueue(record)
-        except queue.Full:
-            logging.getLogger(__name__).debug("日志队列已满，丢弃一条日志")
-
-
+            if not self._accepting:
+                return
+            try:
+                prepared = self.prepare(record)
+                self.enqueue(prepared)
+            except queue.Full:
+                self.dropped_records += 1
+            except Exception:
+                self.handleError(record)
+        finally:
+            self.release()

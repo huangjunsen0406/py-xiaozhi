@@ -80,6 +80,7 @@ def test_help_and_invalid_arguments_do_not_initialize(tmp_path, launcher, args, 
 
 def test_main_orders_initialization_and_returns_runtime_status(monkeypatch):
     events = []
+    config = object()
     monkeypatch.setattr(
         cli, "_configure_environment", lambda mode: events.append(("env", mode))
     )
@@ -87,19 +88,22 @@ def test_main_orders_initialization_and_returns_runtime_status(monkeypatch):
         sys.modules,
         "src.utils.config_manager",
         SimpleNamespace(
-            initialize_config=lambda: events.append(("config", None)),
+            initialize_config=lambda: (events.append(("config", None)) or config),
         ),
     )
     monkeypatch.setitem(
         sys.modules,
         "src.logging",
         SimpleNamespace(
-            load_logging_config=lambda: "logging-config",
+            load_logging_config=lambda source: "logging-config"
+            if source is config
+            else pytest.fail("wrong config"),
             setup_logging=lambda **kwargs: events.append(("logging", kwargs)),
         ),
     )
 
-    def run(args):
+    def run(args, config=None):
+        assert config is not None
         events.append(("run", args))
         return 7
 
@@ -116,21 +120,50 @@ def test_main_orders_initialization_and_returns_runtime_status(monkeypatch):
 async def test_failed_activation_does_not_create_container(monkeypatch):
     from src.bootstrap import container
 
-    async def activation(mode):
+    async def activation(mode, config=None):
         return False
 
     monkeypatch.setattr(cli, "handle_activation", activation)
     monkeypatch.setattr(
-        container, "ServiceContainer", lambda: pytest.fail("container created")
+        container, "ServiceContainer", lambda **kwargs: pytest.fail("container created")
     )
     assert await cli.start_app("cli", "websocket", False) == 1
+
+
+@pytest.mark.asyncio
+async def test_start_app_passes_explicit_config_to_activation_and_container(
+    monkeypatch,
+):
+    from src.bootstrap import container
+    from src.utils.config_manager import ConfigManager
+
+    config = ConfigManager.from_dict(
+        {"SYSTEM_OPTIONS": {"NETWORK": {"ACTIVATION_VERSION": "v1"}}}
+    )
+    seen = {}
+
+    async def activation(mode, config=None):
+        seen["activation"] = config
+        return True
+
+    class FakeContainer:
+        def __init__(self, config=None):
+            seen["container"] = config
+
+        async def run(self, *, mode, protocol):
+            return 4
+
+    monkeypatch.setattr(cli, "handle_activation", activation)
+    monkeypatch.setattr(container, "ServiceContainer", FakeContainer)
+    assert await cli.start_app("cli", "mqtt", False, config=config) == 4
+    assert seen == {"activation": config, "container": config}
 
 
 def test_cli_loop_propagates_status_and_restores_signals(monkeypatch):
     seen = []
     original = signal.getsignal(signal.SIGINT)
 
-    async def start(mode, protocol, skip_activation):
+    async def start(mode, protocol, skip_activation, config=None):
         seen.append((mode, protocol, skip_activation))
         assert signal.getsignal(signal.SIGINT) is not original
         return 3
@@ -169,7 +202,8 @@ def test_main_with_real_event_loop_and_fake_runtime(tmp_path, mode):
     ):
         pytest.skip("GUI extra is not installed")
     env = dict(
-        os.environ, QT_QPA_PLATFORM="offscreen",
+        os.environ,
+        QT_QPA_PLATFORM="offscreen",
         XIAOZHI_DATA_DIR=str(tmp_path / "data"),
         XIAOZHI_LOG_DIR=str(tmp_path / "logs"),
         PYTHONIOENCODING="utf-8",
@@ -184,6 +218,8 @@ def test_main_with_real_event_loop_and_fake_runtime(tmp_path, mode):
         mode = sys.argv[1]
         runtime = types.ModuleType('src.bootstrap.container')
         class FakeContainer:
+            def __init__(self, config):
+                assert config.config_file is not None
             async def run(self, *, mode, protocol):
                 assert protocol == 'mqtt'
                 is_qasync = 'qasync' in type(asyncio.get_running_loop()).__module__
@@ -197,8 +233,63 @@ def test_main_with_real_event_loop_and_fake_runtime(tmp_path, mode):
         assert signal.getsignal(signal.SIGINT) is previous
     """)
     result = subprocess.run(
-        [sys.executable, "-B", "-c", script, mode], cwd=REPOSITORY, env=env,
-        capture_output=True, text=True, encoding="utf-8", timeout=30,
+        [sys.executable, "-B", "-c", script, mode],
+        cwd=REPOSITORY,
+        env=env,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        timeout=30,
     )
     assert result.returncode == 0, result.stdout + result.stderr
     assert (tmp_path / "data" / "config" / "config.json").is_file()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mode", ["gui", "cli"])
+@pytest.mark.parametrize("fails", [False, True])
+async def test_start_app_quits_existing_qt_only_in_gui_finally(
+    monkeypatch, mode, fails
+):
+    from unittest.mock import Mock
+
+    from src.bootstrap import container
+
+    app = SimpleNamespace(quit=Mock())
+    qapplication = SimpleNamespace(instance=Mock(return_value=app))
+    monkeypatch.setitem(
+        sys.modules, "PySide6.QtWidgets", SimpleNamespace(QApplication=qapplication)
+    )
+
+    class FakeContainer:
+        def __init__(self, config=None):
+            pass
+
+        async def run(self, **kwargs):
+            if fails:
+                raise ValueError("runtime failure")
+            return 8
+
+    monkeypatch.setattr(container, "ServiceContainer", FakeContainer)
+    if fails:
+        with pytest.raises(ValueError, match="runtime failure"):
+            await cli.start_app(mode, "mqtt", True)
+    else:
+        assert await cli.start_app(mode, "mqtt", True) == 8
+    assert app.quit.call_count == (1 if mode == "gui" else 0)
+    assert qapplication.instance.call_count == (1 if mode == "gui" else 0)
+
+
+@pytest.mark.asyncio
+async def test_activation_service_create_keeps_supplied_config(monkeypatch):
+    from unittest.mock import AsyncMock
+
+    from src.activation.service import ActivationService
+    from src.utils.config_manager import ConfigManager
+
+    config = ConfigManager.from_dict({"SYSTEM_OPTIONS": {"DEVICE_ID": "injected"}})
+    monkeypatch.setattr(ActivationService, "_async_init", AsyncMock())
+    service = await ActivationService.create(config=config)
+    assert service.get_config_manager() is config
+    assert service._http._config is config
+    assert service._ota._config is config

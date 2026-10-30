@@ -47,6 +47,7 @@ def make_container(plugins, pool):
     container = ServiceContainer.__new__(ServiceContainer)
     container.plugins = plugins
     container.resource_pool = pool
+    container.session = SimpleNamespace(unbind_events=lambda: None)
     container._shutting_down = False
     container._mode = "cli"
     return container
@@ -159,16 +160,25 @@ class FakeDetector:
 
 async def make_wake_plugin(monkeypatch, events, *, enabled=True, fail=None):
     detector = FakeDetector(events, fail=fail)
+    config = SimpleNamespace(get_config=lambda key, default=None: enabled)
+    audio_config = object()
+
+    def create_detector(*, config: object, audio_config: object):
+        assert config is ctx.get_config()
+        assert audio_config is ctx.audio_config
+        return detector
+
     monkeypatch.setitem(
         sys.modules,
         "src.audio_processing.wake_word_detect",
-        SimpleNamespace(WakeWordDetector=lambda: detector),
+        SimpleNamespace(WakeWordDetector=create_detector),
     )
-    config = SimpleNamespace(get_config=lambda key, default=None: enabled)
-    ctx = SimpleNamespace(event_bus=EventBus(), get_config=lambda: config)
+    ctx = SimpleNamespace(
+        event_bus=EventBus(), get_config=lambda: config, audio_config=audio_config
+    )
     audio = RecordingPlugin("audio", [])
     audio.codec = object()
-    wake = WakeWordPlugin()
+    wake = WakeWordPlugin(audio=audio)
     manager = PluginManager()
     manager.register(wake, audio)
     await manager.setup_all(ctx, None)
@@ -233,18 +243,26 @@ async def test_mcp_setup_failure_is_visible_and_detaches_server(monkeypatch, pha
         if phase == "event_bus":
             raise RuntimeError("event bus injection failed")
 
+    config = object()
+
+    def create_camera(*, config: object):
+        assert config is ctx.get_config()
+        return object()
+
     monkeypatch.setitem(sys.modules, "src.mcp.tools.camera", SimpleNamespace(
-        create_camera=lambda: object(), register_camera_tools=register,
+        create_camera=create_camera, register_camera_tools=register,
     ))
     monkeypatch.setitem(sys.modules, "src.mcp.tools.screenshot", SimpleNamespace(
         register_screenshot_tools=lambda *args: None,
     ))
     server = McpServer()
-    monkeypatch.setattr(server, "add_common_tools", lambda **kwargs: None)
+    monkeypatch.setattr(server, "register_builtin_tools", lambda **kwargs: None)
+    monkeypatch.setattr(server, "reload_external_plugins", lambda **kwargs: [])
     plugin = McpPlugin(server, SimpleNamespace(set_event_bus=bind_bus))
     manager = PluginManager()
     manager.register(plugin)
-    await manager.setup_all(SimpleNamespace(event_bus=EventBus()), SimpleNamespace())
+    ctx = SimpleNamespace(event_bus=EventBus(), get_config=lambda: config)
+    await manager.setup_all(ctx, SimpleNamespace())
     await manager.start_all()
     assert manager.is_failed("mcp")
     assert not plugin._started

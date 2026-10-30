@@ -150,26 +150,20 @@ def is_tool_enabled(name: str, disabled: list[str] | set[str] | None) -> bool:
     return name not in set(disabled)
 
 
-# 兼容旧调用：动态 group 标签表（外挂会往里写）
+# 兼容旧调用的静态标签覆盖；外挂发现结果不写入进程全局表。
 GROUP_LABELS: dict[str, str] = {}
 
 
-def _plugins_dir_from_config() -> Path | None:
+def _plugins_dir_from_config(config=None) -> Path | None:
+    raw = config.get_config("MCP_PLUGINS.DIR", None) if config is not None else None
+    if raw and str(raw).strip():
+        return Path(str(raw).strip()).expanduser()
     try:
-        from src.utils.config_manager import get_config
         from src.utils.resource_finder import get_user_data_dir
 
-        raw = get_config().get_config("MCP_PLUGINS.DIR", None)
-        if raw and str(raw).strip():
-            return Path(str(raw).strip()).expanduser()
         return get_user_data_dir() / "mcp_plugins"
     except Exception:
-        try:
-            from src.utils.resource_finder import get_user_data_dir
-
-            return get_user_data_dir() / "mcp_plugins"
-        except Exception:
-            return None
+        return None
 
 
 def _tools_from_manifest(
@@ -250,8 +244,8 @@ def _tools_from_plugin_sources(
     ]
 
 
-def discover_plugin_catalog_rows() -> list[dict[str, str]]:
-    root = _plugins_dir_from_config()
+def discover_plugin_catalog_rows(config=None) -> list[dict[str, str]]:
+    root = _plugins_dir_from_config(config)
     if root is None or not root.is_dir():
         return []
 
@@ -278,7 +272,6 @@ def discover_plugin_catalog_rows() -> list[dict[str, str]]:
                     display = str(manifest.get("name") or plugin_id)
                 except Exception:
                     manifest = {}
-            GROUP_LABELS[plugin_id] = display
             found = _tools_from_manifest(manifest, plugin_id)
             if not found:
                 found = _tools_from_plugin_sources(child, plugin_id, display)
@@ -288,7 +281,6 @@ def discover_plugin_catalog_rows() -> list[dict[str, str]]:
                 seen.add(r["name"])
                 rows.append(r)
         elif child.suffix == ".py" and child.is_file():
-            GROUP_LABELS[plugin_id] = plugin_id
             for r in _tools_from_plugin_sources(child, plugin_id, plugin_id):
                 if r["name"] in seen:
                     continue
@@ -301,13 +293,15 @@ def full_catalog_rows(
     *,
     runtime_names: list[str] | None = None,
     extra_disabled: list[str] | None = None,
+    config=None,
 ) -> list[dict[str, str]]:
     """内置（扫描 tools/）+ 磁盘外挂 + 运行时 + disabled 残留."""
     rows = builtin_catalog_rows()
     seen = {r["name"] for r in rows}
     pkg_labels = {r["group"]: r["groupLabel"] for r in rows}
 
-    for r in discover_plugin_catalog_rows():
+    for r in discover_plugin_catalog_rows(config):
+        pkg_labels[r["group"]] = r["groupLabel"]
         if r["name"] in seen:
             continue
         seen.add(r["name"])
