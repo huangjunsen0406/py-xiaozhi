@@ -5,7 +5,7 @@
 
 import asyncio
 import time
-from typing import Callable, Optional, Set
+from collections.abc import Callable
 
 from src.logging import get_logger
 
@@ -28,10 +28,10 @@ class PynputShortcutBackend(ShortcutBackend):
     适用于 Linux 和 Windows 系统。
     """
 
-    def __init__(self, loop: Optional[asyncio.AbstractEventLoop] = None):
+    def __init__(self, loop: asyncio.AbstractEventLoop | None = None):
         super().__init__(loop)
         self._listener = None
-        self._pressed_keys: Set[str] = set()
+        self._pressed_keys: set[str] = set()
         self._last_activity_time = 0.0
         self._health_check_task = None
         self._check_interval = 10.0  # 健康检查间隔（秒）
@@ -76,12 +76,7 @@ class PynputShortcutBackend(ShortcutBackend):
         # 停止健康检查
         if self._health_check_task:
             self._health_check_task.cancel()
-            # concurrent.futures.Future 不能直接 await，需要特殊处理
-            try:
-                # 等待 Future 完成（忽略取消异常）
-                self._health_check_task.result(timeout=1.0)
-            except Exception as e:
-                logger.debug(f"Pynput 健康检查超时: {e}")
+            await asyncio.gather(self._health_check_task, return_exceptions=True)
             self._health_check_task = None
 
         # 停止监听器
@@ -139,7 +134,7 @@ class PynputShortcutBackend(ShortcutBackend):
 
         self._pressed_keys.discard(key_name)
 
-    def _get_key_name(self, key) -> Optional[str]:
+    def _get_key_name(self, key) -> str | None:
         """获取按键名称."""
         try:
             if hasattr(key, "name"):
@@ -206,10 +201,12 @@ class PynputShortcutBackend(ShortcutBackend):
 
     def _start_health_check(self) -> None:
         """启动健康检查任务."""
-        if self._loop:
-            self._health_check_task = asyncio.run_coroutine_threadsafe(
-                self._health_check_loop(), self._loop
+        if self._commands:
+            self._health_check_task = self._commands.spawn(
+                self._health_check_loop(), "shortcuts.pynput.health"
             )
+        elif self._loop:
+            self._health_check_task = self._loop.create_task(self._health_check_loop())
 
     async def _health_check_loop(self) -> None:
         """健康检查循环."""
@@ -237,6 +234,10 @@ class PynputShortcutBackend(ShortcutBackend):
 
             # 短暂等待
             await asyncio.sleep(0.5)
+
+            # 停止期间不能重新创建监听器。
+            if not self._running:
+                return
 
             # 创建新的监听器
             self._listener = keyboard.Listener(
