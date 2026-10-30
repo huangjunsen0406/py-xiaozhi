@@ -19,7 +19,7 @@ logger = get_logger()
 class _ActivationFlow(BaseActivation):
     """纯流程对象：把展示回调接到 GuiActivation 控制器."""
 
-    def __init__(self, controller: "GuiActivation", service, init_result: dict):
+    def __init__(self, controller: GuiActivation, service, init_result: dict):
         super().__init__(service, init_result)
         self._ui = controller
 
@@ -50,20 +50,38 @@ class GuiActivation(QObject):
         self._completion_future: asyncio.Future | None = None
         self._loop: asyncio.AbstractEventLoop | None = None
         self._activation_task: asyncio.Task | None = None
+        self._disposed = False
 
     async def run(self) -> bool:
-        loop = asyncio.get_running_loop()
-        self._completion_future = loop.create_future()
-        self._loop = loop
-
-        self._setup_ui()
-        self._update_device_info()
-        self._show_window()
-
-        QTimer.singleShot(100, self._start_activation)
-        result = await self._completion_future
-        self._cleanup()
-        return result
+        if self._disposed or self._completion_future is not None:
+            raise RuntimeError("GuiActivation controllers can only run once")
+        self._loop = asyncio.get_running_loop()
+        self._completion_future = self._loop.create_future()
+        try:
+            self._setup_ui()
+            self._update_device_info()
+            self._show_window()
+            QTimer.singleShot(100, self._start_activation)
+            return await self._completion_future
+        finally:
+            self._disposed = True
+            if not self._completion_future.done():
+                self._completion_future.cancel()
+            try:
+                task = self._activation_task
+                if task is not None and not task.done():
+                    try:
+                        self._service.cancel_activation()
+                    except Exception as exc:
+                        logger.error(
+                            "GuiActivation: 取消服务失败: %s", exc, exc_info=True
+                        )
+                    task.cancel()
+                    await asyncio.gather(task, return_exceptions=True)
+            finally:
+                self._activation_task = None
+                self._loop = None
+                self._cleanup()
 
     def _setup_ui(self) -> None:
         self._engine = QQmlApplicationEngine()
@@ -109,6 +127,13 @@ class GuiActivation(QObject):
             self._model.set_status_not_activated()
 
     def _start_activation(self) -> None:
+        if (
+            self._disposed
+            or self._completion_future is None
+            or self._completion_future.done()
+            or self._activation_task is not None
+        ):
+            return
         try:
             loop = self._loop or asyncio.get_running_loop()
             self._activation_task = loop.create_task(
@@ -141,20 +166,22 @@ class GuiActivation(QObject):
         else:
             logger.warning("GuiActivation: 激活失败")
             self._model.set_status_not_activated()
+            self._complete(False)
 
     def _show_error(self, msg: str) -> None:
         logger.error(f"GuiActivation: {msg}")
         self._complete(False)
 
     def _complete(self, success: bool) -> None:
-        if self._completion_future and not self._completion_future.done():
+        if self._disposed:
+            return
+        if self._completion_future is not None and not self._completion_future.done():
             self._completion_future.set_result(success)
-        self.activationCompleted.emit(success)
+            self.activationCompleted.emit(success)
 
-    def _on_window_closing(self) -> None:
+    def _on_window_closing(self, *_args) -> None:
         logger.info("GuiActivation: 窗口关闭")
-        if self._completion_future and not self._completion_future.done():
-            self._completion_future.set_result(False)
+        self.cancelActivation()
 
     def _cleanup(self) -> None:
         if self._engine:
@@ -175,9 +202,7 @@ class GuiActivation(QObject):
             from PySide6.QtCore import QUrl
             from PySide6.QtGui import QDesktopServices
 
-            from src.utils.config_manager import get_config
-
-            config = get_config()
+            config = self._service.get_config_manager()
             url = config.get_config("SYSTEM_OPTIONS.NETWORK.AUTHORIZATION_URL", "")
             if url:
                 QDesktopServices.openUrl(QUrl(url))
@@ -189,6 +214,4 @@ class GuiActivation(QObject):
 
     @Slot()
     def cancelActivation(self):
-        if self._service:
-            self._service.cancel_activation()
         self._complete(False)
