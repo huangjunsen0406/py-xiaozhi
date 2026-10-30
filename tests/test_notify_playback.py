@@ -5,7 +5,7 @@ import asyncio
 import numpy as np
 import pytest
 
-from src.constants.constants import DeviceState
+from src.constants.constants import AudioConfig, DeviceState
 from src.core.event_bus import EventBus, Events
 
 
@@ -18,6 +18,12 @@ class _FakeState:
 
     def is_idle(self):
         return self.device_state == DeviceState.IDLE
+
+    def is_speaking(self):
+        return self.device_state == DeviceState.SPEAKING
+
+    def set_aborted(self, aborted):
+        self.aborted = aborted
 
     def should_capture_audio(self):
         return self.device_state == DeviceState.LISTENING
@@ -34,17 +40,6 @@ class _FakeState:
     async def set_device_state(self, state):
         self.device_state = state
         self.states.append(state)
-
-
-class _FakePlugins:
-    def get_plugin(self, _name):
-        return None
-
-    async def notify_incoming_json(self, _message):
-        return None
-
-    async def notify_device_state_changed(self, _state):
-        return None
 
 
 class _FakeNotificationPlayer:
@@ -74,7 +69,7 @@ async def test_notify_only_starts_while_idle_and_returns_after_matching_finish()
     session = ConversationSession(
         state=state,
         protocol=object(),
-        plugins=_FakePlugins(),
+        audio=None,
         notification_player=player,
     )
 
@@ -107,7 +102,7 @@ async def test_notify_is_ignored_when_busy_or_invalid():
     session = ConversationSession(
         state=_FakeState(DeviceState.SPEAKING),
         protocol=object(),
-        plugins=_FakePlugins(),
+        audio=None,
         notification_player=player,
     )
 
@@ -129,7 +124,7 @@ async def test_start_listening_cancels_notification_first():
             return True
 
         async def send_start_listening(self, _mode):
-            return None
+            return True
 
     state = _FakeState(DeviceState.NOTIFYING)
     player = _FakeNotificationPlayer()
@@ -137,7 +132,7 @@ async def test_start_listening_cancels_notification_first():
     session = ConversationSession(
         state=state,
         protocol=_Protocol(),
-        plugins=_FakePlugins(),
+        audio=None,
         notification_player=player,
     )
 
@@ -149,6 +144,7 @@ async def test_start_listening_cancels_notification_first():
 
 class _FakeCodec:
     def __init__(self):
+        self.audio_config = AudioConfig()
         self.progress_callback = None
         self.drained_callback = None
         self.pcm = []
@@ -170,7 +166,10 @@ class _FakeCodec:
 class _FakeDecoder:
     completed_successfully = True
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *, sample_rate, channels, frame_duration):
+        self.sample_rate = sample_rate
+        self.channels = channels
+        self.frame_duration = frame_duration
         self.running = True
         self.stopped = False
 
@@ -222,6 +221,9 @@ async def test_notification_player_waits_for_audio_drain_and_emits_subtitle(
         on_finished,
     )
     assert generation is not None
+    assert player._decoder.sample_rate == codec.audio_config.OUTPUT_SAMPLE_RATE
+    assert player._decoder.channels == codec.audio_config.CHANNELS
+    assert player._decoder.frame_duration == codec.audio_config.FRAME_DURATION
 
     for _ in range(20):
         if codec.pcm:
@@ -349,7 +351,7 @@ async def test_decoder_start_failure_restores_idle_and_cleans_resources(
     await player._on_audio_codec_changed(codec)
     state = _FakeState()
     session = ConversationSession(
-        state, object(), _FakePlugins(), notification_player=player
+        state=state, protocol=object(), audio=None, notification_player=player
     )
     try:
         with pytest.raises(type(failure)):
@@ -378,7 +380,7 @@ async def test_removing_audio_codec_finishes_notification_and_restores_idle(
     await bus.emit(Events.AUDIO_CODEC_CHANGED, codec)
     state = _FakeState()
     session = ConversationSession(
-        state, object(), _FakePlugins(), notification_player=player
+        state=state, protocol=object(), audio=None, notification_player=player
     )
     await session._handle_notify({"audio_url": "https://example.test/a.ogg"})
     await _wait_for_pcm(codec, 1)
@@ -407,7 +409,7 @@ async def test_device_reload_cancels_notification_before_reset(
     player.set_event_bus(bus)
     state = _FakeState()
     session = ConversationSession(
-        state, object(), _FakePlugins(), notification_player=player
+        state=state, protocol=object(), audio=None, notification_player=player
     )
 
     class Codec(_FakeCodec):
@@ -422,7 +424,7 @@ async def test_device_reload_cancels_notification_before_reset(
     codec = Codec()
     plugin = AudioPlugin()
     plugin.codec = codec
-    plugin._ctx = SimpleNamespace(event_bus=bus)
+    plugin._ctx = SimpleNamespace(event_bus=bus, audio_config=codec.audio_config)
     await bus.emit(Events.AUDIO_CODEC_CHANGED, codec)
     await session._handle_notify({"audio_url": "https://example.test/a.ogg"})
     await _wait_for_pcm(codec, 1)

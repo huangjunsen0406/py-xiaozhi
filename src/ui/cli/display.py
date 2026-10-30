@@ -7,12 +7,15 @@
 """
 
 import asyncio
+import codecs
+import io
 import logging
 import os
 import shutil
+import stat
 import sys
 from collections import deque
-from typing import Callable, Optional
+from collections.abc import Callable
 
 from src.constants.system import SystemConstants
 from src.logging import get_logger
@@ -26,11 +29,18 @@ class CLIDisplay:
     def __init__(self):
         self.running = True
         self._use_ansi = sys.stdout.isatty()
-        self._loop: Optional[asyncio.AbstractEventLoop] = None
+        self._loop: asyncio.AbstractEventLoop | None = None
         self._last_drawn_rows = 0
         self._render_lock = None
         self._initialized = False  # 是否已初始化
         self._log_handler_installed = False  # 日志处理器是否已安装
+        self._display_log_handler = None
+        self._intercepted_handlers = []
+        self._start_task = None
+        self._input_waiter = None
+        self._input_text = ""
+        self._input_decoder = None
+        self._closed = False
 
         # 仪表盘数据
         self._dash_status = "待命"
@@ -58,7 +68,7 @@ class CLIDisplay:
         }
 
         # 回调函数
-        self._on_command: Optional[Callable[[str], None]] = None
+        self._on_command: Callable[[str], None] | None = None
 
         # 日志缓冲
         self._log_lines: deque[str] = deque(maxlen=6)
@@ -75,51 +85,52 @@ class CLIDisplay:
 
         模仿旧实现：在 __init__ 阶段就移除 StreamHandler 并安装自定义处理器。
         """
-        # 先移除所有 StreamHandler
+        if self._log_handler_installed:
+            return
+        # 只暂时接管控制台输出，保留文件处理器。
         self._remove_stream_handlers()
         # 再安装我们的日志处理器
         self._install_log_handler()
 
     async def start(self):
-        """启动 CLI 显示."""
-        # 先获取事件循环
+        """Own the interruptible input lifetime and restore it before returning."""
         self._loop = asyncio.get_running_loop()
+        self._start_task = asyncio.current_task()
         self._render_lock = asyncio.Lock()
-
-        # 确保日志已被拦截（如果还没有调用 intercept_logging）
-        if not self._log_handler_installed:
-            self.intercept_logging()
-
-        # 清屏并初始化界面
-        if self._use_ansi:
-            # 彻底清屏：清除屏幕 + 清除滚动缓冲区 + 光标移到左上角
-            sys.stdout.write("\x1b[3J\x1b[2J\x1b[H")
-            sys.stdout.flush()
-
-        # 标记已初始化
-        self._initialized = True
-
-        # 初始化屏幕显示
-        await self._init_screen()
-
-        # 启动输入循环
+        self.running = True
+        self._closed = False
+        self._input_text = ""
+        encoding = getattr(sys.stdin, "encoding", None) or "utf-8"
+        self._input_decoder = codecs.getincrementaldecoder(encoding)(errors="replace")
         try:
+            if not self._log_handler_installed:
+                self.intercept_logging()
+            if self._use_ansi:
+                sys.stdout.write("\x1b[3J\x1b[2J\x1b[H")
+                sys.stdout.flush()
+            self._initialized = True
+            await self._init_screen()
             await self._keyboard_input_loop()
-        except asyncio.CancelledError:
-            pass
+        finally:
+            self.running = False
+            self._initialized = False
+            self._start_task = None
+            await self.close()
 
     async def close(self):
-        """关闭 CLI 显示."""
+        """Stop and join the input owner; no executor thread waits for a key."""
+        if self._closed:
+            return
+        self._closed = True
         self.running = False
-
-        # 恢复标准日志
+        task = self._start_task
+        if task is not None and task is not asyncio.current_task() and not task.done():
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
         self._restore_logging()
-
-        # 清屏
         if self._use_ansi:
             sys.stdout.write("\x1b[2J\x1b[H")
             sys.stdout.flush()
-
         print("正在关闭应用...\n")
 
     # ========== 状态更新 ==========
@@ -339,69 +350,151 @@ class CLIDisplay:
     # ========== 输入处理 ==========
 
     async def _keyboard_input_loop(self):
-        """键盘输入循环."""
         try:
             while self.running:
                 if self._use_ansi:
                     await self._render_input_area()
-                    cmd = await asyncio.to_thread(self._read_line_raw)
+                    cmd = await self._read_line_raw()
                     self._clear_input_area()
                     await self._render_dashboard()
                 else:
-                    cmd = await asyncio.to_thread(input, "输入: ")
-
-                await self._handle_command(cmd.strip())
-        except asyncio.CancelledError:
-            pass
+                    print("输入: ", end="", flush=True)
+                    cmd = await self._read_line()
+                if cmd is None:
+                    await self._handle_command("q")
+                    break
+                cmd = cmd.strip()
+                await self._handle_command(cmd)
+                if cmd.lower() == "q":
+                    break
         except KeyboardInterrupt:
-            await self.close()
+            await self._handle_command("q")
+        finally:
+            self.running = False
 
-    def _read_line_raw(self) -> str:
-        """原始模式读取输入（支持中文）."""
+    async def _read_input_chunk(self):
+        """Wait for descriptor readiness; cancellation unregisters the reader."""
+        if sys.platform == "win32" and sys.stdin.isatty():
+            import msvcrt
+
+            while self.running:
+                if msvcrt.kbhit():
+                    ch = msvcrt.getwch()
+                    if ch in ("\x00", "\xe0"):
+                        msvcrt.getwch()
+                        continue
+                    return ch
+                await asyncio.sleep(0.03)
+            return ""
+        if isinstance(sys.stdin, io.StringIO):
+            return sys.stdin.read(1)
+        fd = sys.stdin.fileno()
+        if stat.S_ISREG(os.fstat(fd).st_mode):
+            return os.read(fd, 4096)
+        if sys.platform == "win32":
+            return await self._read_windows_pipe(fd)
+        loop = asyncio.get_running_loop()
+        future = loop.create_future()
+        self._input_waiter = future
+
+        def ready():
+            if future.done():
+                return
+            try:
+                data = os.read(fd, 4096)
+            except (BlockingIOError, InterruptedError):
+                return
+            except Exception as error:
+                future.set_exception(error)
+            else:
+                future.set_result(data)
+
         try:
+            loop.add_reader(fd, ready)
+            return await future
+        finally:
+            loop.remove_reader(fd)
+            if self._input_waiter is future:
+                self._input_waiter = None
+
+    async def _read_windows_pipe(self, fd):
+        import ctypes
+        import msvcrt
+        from ctypes import wintypes
+
+        peek = ctypes.WinDLL("kernel32", use_last_error=True).PeekNamedPipe
+        peek.argtypes = [
+            wintypes.HANDLE,
+            wintypes.LPVOID,
+            wintypes.DWORD,
+            wintypes.LPDWORD,
+            wintypes.LPDWORD,
+            wintypes.LPDWORD,
+        ]
+        peek.restype = wintypes.BOOL
+        handle = wintypes.HANDLE(msvcrt.get_osfhandle(fd))
+        while self.running:
+            available = wintypes.DWORD()
+            if not peek(handle, None, 0, None, ctypes.byref(available), None):
+                error = ctypes.get_last_error()
+                if error in (109, 233):  # ERROR_BROKEN_PIPE / PIPE_NOT_CONNECTED
+                    return b""
+                raise ctypes.WinError(error)
+            if available.value:
+                return os.read(fd, min(4096, available.value))
+            await asyncio.sleep(0.03)
+        return b""
+
+    async def _read_character(self):
+        while not self._input_text:
+            chunk = await self._read_input_chunk()
+            if not chunk:
+                return None
+            if isinstance(chunk, bytes):
+                chunk = self._input_decoder.decode(chunk)
+            self._input_text += chunk
+        character = self._input_text[0]
+        self._input_text = self._input_text[1:]
+        return character
+
+    async def _read_line(self, *, raw=False):
+        buffer = []
+        while self.running:
+            character = await self._read_character()
+            if character is None or character in ("\x04", "\x1a"):
+                return "".join(buffer) if buffer else None
+            if character == "\x03":
+                raise KeyboardInterrupt
+            if character in ("\r", "\n"):
+                if raw:
+                    print("\r")
+                return "".join(buffer)
+            if raw and character in ("\x7f", "\b"):
+                if buffer:
+                    buffer.pop()
+            else:
+                buffer.append(character)
+            if raw:
+                self._redraw_input_line("".join(buffer))
+        return None
+
+    async def _read_line_raw(self):
+        """Restore raw terminal state even if close cancels a pending read."""
+        settings = None
+        fd = None
+        if sys.platform != "win32":
             import termios
             import tty
-        except ImportError:
-            # Windows 不支持 termios
-            return input()
 
-        fd = sys.stdin.fileno()
-        old_settings = termios.tcgetattr(fd)
+            fd = sys.stdin.fileno()
+            if os.isatty(fd):
+                settings = termios.tcgetattr(fd)
+                tty.setraw(fd)
         try:
-            tty.setraw(fd)
-            buffer: list[str] = []
-            while True:
-                ch = os.read(fd, 4)
-                if not ch:
-                    break
-                try:
-                    s = ch.decode("utf-8")
-                except UnicodeDecodeError:
-                    while True:
-                        ch += os.read(fd, 1)
-                        try:
-                            s = ch.decode("utf-8")
-                            break
-                        except UnicodeDecodeError:
-                            continue
-
-                if s in ("\r", "\n"):
-                    sys.stdout.write("\r\n")
-                    sys.stdout.flush()
-                    break
-                elif s in ("\x7f", "\b"):
-                    if buffer:
-                        buffer.pop()
-                    self._redraw_input_line("".join(buffer))
-                elif s == "\x03":  # Ctrl+C
-                    raise KeyboardInterrupt
-                else:
-                    buffer.append(s)
-                    self._redraw_input_line("".join(buffer))
-
-            return "".join(buffer)
+            return await self._read_line(raw=True)
         finally:
-            termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+            if settings is not None:
+                termios.tcsetattr(fd, termios.TCSADRAIN, settings)
 
     def _redraw_input_line(self, content: str):
         """重绘输入行."""
@@ -463,40 +556,38 @@ class CLIDisplay:
             )
         )
         logging.getLogger().addHandler(handler)
+        self._display_log_handler = handler
 
     def _remove_stream_handlers(self):
-        """移除所有标准输出的日志处理器."""
-        root = logging.getLogger()
-
-        # 移除根 logger 的所有 StreamHandler
-        for h in list(root.handlers):
-            if isinstance(h, logging.StreamHandler):
-                root.removeHandler(h)
-
-        # 移除所有已注册 logger 的 StreamHandler
-        for name in list(logging.Logger.manager.loggerDict.keys()):
-            log = logging.getLogger(name)
-            for h in list(log.handlers):
-                if isinstance(h, logging.StreamHandler):
-                    log.removeHandler(h)
-
-        # 设置根 logger 级别
-        root.setLevel(logging.DEBUG)
+        """Temporarily detach console handlers, keeping disk logging active."""
+        loggers = [logging.getLogger()] + [
+            item
+            for item in logging.Logger.manager.loggerDict.values()
+            if isinstance(item, logging.Logger)
+        ]
+        streams = (sys.stdout, sys.stderr, sys.__stdout__, sys.__stderr__)
+        for log in loggers:
+            for index, handler in enumerate(list(log.handlers)):
+                if (
+                    isinstance(handler, logging.StreamHandler)
+                    and not isinstance(handler, logging.FileHandler)
+                    and any(handler.stream is stream for stream in streams)
+                ):
+                    self._intercepted_handlers.append((log, handler, index))
+                    log.removeHandler(handler)
 
     def _restore_logging(self):
-        """恢复标准日志."""
-        root = logging.getLogger()
-
-        # 移除 DisplayLogHandler
-        for h in list(root.handlers):
-            if h.__class__.__name__ == "DisplayLogHandler":
-                root.removeHandler(h)
-
-        # 添加简单的 StreamHandler
-        handler = logging.StreamHandler(sys.stderr)
-        handler.setLevel(logging.WARNING)
-        handler.setFormatter(logging.Formatter("%(levelname)s - %(message)s"))
-        root.addHandler(handler)
+        """Restore the exact handlers borrowed by this display, once."""
+        handler = self._display_log_handler
+        self._display_log_handler = None
+        if handler is not None:
+            logging.getLogger().removeHandler(handler)
+            handler.close()
+        for log, original, index in self._intercepted_handlers:
+            if original not in log.handlers and not original._closed:
+                log.handlers.insert(min(index, len(log.handlers)), original)
+        self._intercepted_handlers.clear()
+        self._log_handler_installed = False
 
     # ========== 工具函数 ==========
 

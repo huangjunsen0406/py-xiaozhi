@@ -13,7 +13,7 @@ from src.audio_codecs.stream_manager import AudioStreamManager
 from src.constants.constants import AudioConfig
 from src.logging import get_logger
 from src.utils.audio_device import AudioDeviceManager, DeviceConfig
-from src.utils.config_manager import get_config
+from src.utils.config_manager import ConfigManager
 
 logger = get_logger()
 
@@ -51,32 +51,36 @@ class AudioCodec:
     - 输出：网络 → Opus解码(bytes→float32) → 重采样+上混(float32) → 设备(float32)
     """
 
-    def __init__(self):
-        """初始化音频编解码器"""
-        # 刷新协议配置（支持 Settings UI 修改后生效）
-        AudioConfig.reload()
+    def __init__(self, config=None, audio_config: AudioConfig | None = None):
+        """Initialize without loading or mutating process configuration."""
+        self.config = config if config is not None else ConfigManager.from_dict()
+        self.audio_config = (
+            audio_config
+            if audio_config is not None
+            else AudioConfig.from_config(self.config)
+        )
 
         # 组件（依赖注入）
-        self.device_manager = AudioDeviceManager(get_config())
+        self.device_manager = AudioDeviceManager(self.config, self.audio_config)
         self.opus_codec = OpusCodec(
-            input_sample_rate=AudioConfig.INPUT_SAMPLE_RATE,
-            output_sample_rate=AudioConfig.OUTPUT_SAMPLE_RATE,
-            channels=AudioConfig.CHANNELS,
+            input_sample_rate=self.audio_config.INPUT_SAMPLE_RATE,
+            output_sample_rate=self.audio_config.OUTPUT_SAMPLE_RATE,
+            channels=self.audio_config.CHANNELS,
         )
         self.converter = AudioConverter()
         self.stream_manager = None
 
         # TTS / 通知 / 音乐分流：通知和 TTS 同级为语音，音乐在其出现时闪避。
         self._tts_fifo = PcmFifo(
-            int(AudioConfig.OUTPUT_SAMPLE_RATE * _TTS_FIFO_MAX_S)
+            int(self.audio_config.OUTPUT_SAMPLE_RATE * _TTS_FIFO_MAX_S)
         )
         self._music_fifo = PcmFifo(
-            int(AudioConfig.OUTPUT_SAMPLE_RATE * _MUSIC_FIFO_MAX_S)
+            int(self.audio_config.OUTPUT_SAMPLE_RATE * _MUSIC_FIFO_MAX_S)
         )
         self._notification_fifo = PcmFifo(
-            int(AudioConfig.OUTPUT_SAMPLE_RATE * _NOTIFICATION_FIFO_MAX_S)
+            int(self.audio_config.OUTPUT_SAMPLE_RATE * _NOTIFICATION_FIFO_MAX_S)
         )
-        self._mix_chunk = int(AudioConfig.OUTPUT_SAMPLE_RATE * 0.02)  # 20ms
+        self._mix_chunk = int(self.audio_config.OUTPUT_SAMPLE_RATE * 0.02)  # 20ms
         self._duck_hold = 0
         self._notification_had_audio = False
         self._notification_drain_callbacks_remaining = 0
@@ -112,15 +116,15 @@ class AudioCodec:
         """
         try:
             # 1. 加载/检测设备
+            self.audio_config.reload(self.config)
             self.device_config = self.device_manager.load_or_detect_devices()
 
-            # 2. 刷新协议配置并初始化 Opus
-            AudioConfig.reload()
+            # 2. 初始化 Opus
             self.opus_codec.close()
             self.opus_codec = OpusCodec(
-                input_sample_rate=AudioConfig.INPUT_SAMPLE_RATE,
-                output_sample_rate=AudioConfig.OUTPUT_SAMPLE_RATE,
-                channels=AudioConfig.CHANNELS,
+                input_sample_rate=self.audio_config.INPUT_SAMPLE_RATE,
+                output_sample_rate=self.audio_config.OUTPUT_SAMPLE_RATE,
+                channels=self.audio_config.CHANNELS,
             )
             self.opus_codec.initialize()
 
@@ -168,7 +172,7 @@ class AudioCodec:
             # 1. 格式转换（下混 + 重采样）
             # 保留 indata 的 (frames, channels) 形状，让 downmix_to_mono 正确下混
             audio_converted = self.converter.convert_input(
-                indata, AudioConfig.INPUT_FRAME_SIZE
+                indata, self.audio_config.INPUT_FRAME_SIZE
             )
             if audio_converted is None:
                 return  # 数据不足，等待下一帧
@@ -181,7 +185,7 @@ class AudioCodec:
             if self._encoded_callback:
                 try:
                     opus_data = self.opus_codec.encode(
-                        audio_converted, AudioConfig.INPUT_FRAME_SIZE
+                        audio_converted, self.audio_config.INPUT_FRAME_SIZE
                     )
                     self._encoded_callback(opus_data)
                 except Exception as e:
@@ -258,12 +262,12 @@ class AudioCodec:
         """
         self.converter.setup_input_converter(
             from_rate=self.device_config.input_sample_rate,
-            to_rate=AudioConfig.INPUT_SAMPLE_RATE,
+            to_rate=self.audio_config.INPUT_SAMPLE_RATE,
             from_channels=self.device_config.input_channels,
             to_channels=1,
         )
         self.converter.setup_output_converter(
-            from_rate=AudioConfig.OUTPUT_SAMPLE_RATE,
+            from_rate=self.audio_config.OUTPUT_SAMPLE_RATE,
             to_rate=self.device_config.output_sample_rate,
             from_channels=1,
             to_channels=self.device_config.output_channels,
@@ -272,15 +276,15 @@ class AudioCodec:
         # 协议输出采样率可能随配置热重载变化，FIFO/混音块随之重建
         # （此时音频流已停止，无并发读取）
         self._tts_fifo = PcmFifo(
-            int(AudioConfig.OUTPUT_SAMPLE_RATE * _TTS_FIFO_MAX_S)
+            int(self.audio_config.OUTPUT_SAMPLE_RATE * _TTS_FIFO_MAX_S)
         )
         self._music_fifo = PcmFifo(
-            int(AudioConfig.OUTPUT_SAMPLE_RATE * _MUSIC_FIFO_MAX_S)
+            int(self.audio_config.OUTPUT_SAMPLE_RATE * _MUSIC_FIFO_MAX_S)
         )
         self._notification_fifo = PcmFifo(
-            int(AudioConfig.OUTPUT_SAMPLE_RATE * _NOTIFICATION_FIFO_MAX_S)
+            int(self.audio_config.OUTPUT_SAMPLE_RATE * _NOTIFICATION_FIFO_MAX_S)
         )
-        self._mix_chunk = int(AudioConfig.OUTPUT_SAMPLE_RATE * 0.02)
+        self._mix_chunk = int(self.audio_config.OUTPUT_SAMPLE_RATE * 0.02)
         self._duck_hold = 0
         self._notification_had_audio = False
         self._notification_drain_callbacks_remaining = 0
@@ -360,7 +364,7 @@ class AudioCodec:
             self._aec = None
 
         try:
-            config = get_config()
+            config = self.config
             if not bool(config.get_config("AEC_OPTIONS.ENABLED", False)):
                 logger.info("AEC 未启用（AEC_OPTIONS.ENABLED=false）")
                 return
@@ -369,10 +373,10 @@ class AudioCodec:
 
             frame_delay = config.get_config("AEC_OPTIONS.FRAME_DELAY", 3)
             self._aec = AecEngine(
-                near_rate=AudioConfig.INPUT_SAMPLE_RATE,
+                near_rate=self.audio_config.INPUT_SAMPLE_RATE,
                 far_rate=self.device_config.output_sample_rate,
                 # FRAME_DELAY 以协议帧为单位，换算毫秒后叠加基础输出延迟
-                delay_ms=40 + int(frame_delay) * AudioConfig.FRAME_DURATION,
+                delay_ms=40 + int(frame_delay) * self.audio_config.FRAME_DURATION,
                 enable_preprocess=bool(
                     config.get_config("AEC_OPTIONS.ENABLE_PREPROCESS", True)
                 ),
@@ -446,7 +450,7 @@ class AudioCodec:
                 )
 
             frame_size = int(
-                AudioConfig.OUTPUT_SAMPLE_RATE * toc_info["duration_ms"] / 1000
+                self.audio_config.OUTPUT_SAMPLE_RATE * toc_info["duration_ms"] / 1000
             )
             audio_float32 = self.opus_codec.decode(opus_data, frame_size)
 
@@ -464,7 +468,7 @@ class AudioCodec:
         """
         self._music_fifo.push(pcm_float32)
 
-        target = int(AudioConfig.OUTPUT_SAMPLE_RATE * _MUSIC_BACKLOG_TARGET_S)
+        target = int(self.audio_config.OUTPUT_SAMPLE_RATE * _MUSIC_BACKLOG_TARGET_S)
         for _ in range(100):
             if self._is_closing or self._music_fifo.size <= target:
                 break
@@ -486,7 +490,7 @@ class AudioCodec:
         self._notification_fifo.push(pcm_float32)
 
         target = int(
-            AudioConfig.OUTPUT_SAMPLE_RATE * _NOTIFICATION_BACKLOG_TARGET_S
+            self.audio_config.OUTPUT_SAMPLE_RATE * _NOTIFICATION_BACKLOG_TARGET_S
         )
         for _ in range(100):
             if self._is_closing or self._notification_fifo.size <= target:
@@ -542,7 +546,8 @@ class AudioCodec:
         调用后必须再 ``reload_devices()`` 或自行 ``create_streams``，否则无采集/播放。
         """
         if self.stream_manager:
-            self.stream_manager.stop()
+            if self.stream_manager.stop() is False:
+                raise RuntimeError("音频流尚未关闭，无法重新枚举设备")
             logger.info("AudioCodec: 已停止音频流（供设备枚举）")
 
     async def reload_devices(self, *, reenumerate: bool = True):
@@ -562,12 +567,15 @@ class AudioCodec:
             bool: 是否成功
         """
         logger.info("AudioCodec: 开始热重载音频设备...")
+        replacement = None
 
         try:
             # 1. 停止当前流（必须在 PortAudio reinit 之前）
             if self.stream_manager:
-                self.stream_manager.stop()
+                if self.stream_manager.stop() is False:
+                    raise RuntimeError("旧音频流尚未关闭，无法重载设备")
                 logger.debug("AudioCodec: 已停止当前音频流")
+            self.stream_manager = None
 
             # 2. 热插拔：重建 PortAudio 上下文后再按名称匹配
             if reenumerate:
@@ -576,7 +584,8 @@ class AudioCodec:
                 refresh_portaudio_devices(reinitialize=True)
 
             # 3. 重新加载设备配置
-            self.device_manager.config.reload_config()
+            self.device_manager.config.reload_config(apply_paths=False)
+            self.audio_config.reload(self.config)
             self.device_config = self.device_manager.load_or_detect_devices()
             logger.info(
                 "AudioCodec: 新设备配置 - 输入ID: "
@@ -584,13 +593,12 @@ class AudioCodec:
                 f"{self.device_config.output_device_id}"
             )
 
-            # 4. 刷新协议配置并重建 Opus 编解码器
-            AudioConfig.reload()
+            # 4. 重建 Opus 编解码器
             self.opus_codec.close()
             self.opus_codec = OpusCodec(
-                input_sample_rate=AudioConfig.INPUT_SAMPLE_RATE,
-                output_sample_rate=AudioConfig.OUTPUT_SAMPLE_RATE,
-                channels=AudioConfig.CHANNELS,
+                input_sample_rate=self.audio_config.INPUT_SAMPLE_RATE,
+                output_sample_rate=self.audio_config.OUTPUT_SAMPLE_RATE,
+                channels=self.audio_config.CHANNELS,
             )
             self.opus_codec.initialize()
 
@@ -601,21 +609,29 @@ class AudioCodec:
             # 5.5 重建 AEC（far 采样率跟随新输出设备，滤波器状态清零）
             self._setup_aec()
 
-            # 6. 重新创建音频流
-            self.stream_manager = AudioStreamManager(self.device_config)
-            self.stream_manager.create_streams(
+            # 6. 重新创建音频流，成功后才安装替换 manager。
+            replacement = AudioStreamManager(self.device_config)
+            replacement.create_streams(
                 input_callback=self._input_callback,
                 output_callback=self._output_callback,
             )
 
             # 7. 启动音频流
-            self.stream_manager.start()
+            replacement.start()
+            self.stream_manager = replacement
+            self._closed = False
 
             logger.info("AudioCodec: 音频设备热重载完成")
             return True
 
         except Exception as e:
             logger.error(f"AudioCodec: 热重载音频设备失败: {e}", exc_info=True)
+            if replacement is not None:
+                # Preserve ownership if native close itself fails, so later
+                # close/reload can retry without releasing live callback DSP.
+                self.stream_manager = replacement
+                if replacement.stop() is not False:
+                    self.stream_manager = None
             return False
 
     async def close(self):
@@ -623,9 +639,10 @@ class AudioCodec:
         self._is_closing = True
 
         try:
-            # 1. 停止音频流
+            # 1. 停止音频流；close 失败时保留 DSP 供仍存活的回调使用。
             if self.stream_manager:
-                self.stream_manager.stop()
+                if self.stream_manager.stop() is False:
+                    raise RuntimeError("音频流尚未关闭，保留编解码资源供重试")
 
             # 2. 清空队列
             await self.clear_audio_queue()
@@ -666,7 +683,9 @@ class AudioCodec:
         try:
             # 1. 停止音频流（同步）
             if self.stream_manager:
-                self.stream_manager.stop()
+                if self.stream_manager.stop() is False:
+                    logger.error("音频流关闭失败，不能释放回调仍使用的编解码资源")
+                    return
 
             # 2. 清空队列（同步版本）
             count = (

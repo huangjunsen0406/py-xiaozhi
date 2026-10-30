@@ -472,16 +472,11 @@ def load_mcp_plugins_from_config(
     tool_owner: dict[str, str] | None = None,
 ) -> list[LoadedPlugin]:
     if config is None:
-        try:
-            from src.utils.config_manager import get_config
-            config = get_config()
-        except Exception:
-            logger.debug("[MCP插件] 无配置，使用默认目录加载")
-            config = None
+        from src.utils.config_manager import ConfigManager
+
+        config = ConfigManager.from_dict({"MCP_PLUGINS": {"ENABLED": False}})
 
     def _get(path: str, default=None):
-        if config is None:
-            return default
         return config.get_config(path, default)
 
     if not _get("MCP_PLUGINS.ENABLED", True):
@@ -499,9 +494,11 @@ def load_mcp_plugins_from_config(
     require_abi = bool(_get("MCP_PLUGINS.REQUIRE_PYTHON_ABI", False))
     require_plat = bool(_get("MCP_PLUGINS.REQUIRE_PLATFORMS", False))
 
+    host_capabilities = dict(capabilities or {})
+    host_capabilities["config_readonly"] = config
     host = McpHost(
         add_tool,
-        capabilities=capabilities or {},
+        capabilities=host_capabilities,
         allow_get=allow,
     )
     loader = PluginLoader(

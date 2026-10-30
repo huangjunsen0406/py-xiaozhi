@@ -30,7 +30,7 @@ class PluginContextAdapter:
         return self._container.state.is_listening()
 
     def is_speaking(self) -> bool:
-        return self._container.state.is_speaking()
+        return self._container.session.is_speaking()
 
     def is_idle(self) -> bool:
         return self._container.state.is_idle()
@@ -48,6 +48,14 @@ class PluginContextAdapter:
         return self._container.config
 
     @property
+    def audio_config(self):
+        return self._container.audio_config
+
+    @property
+    def audio_generation(self) -> int:
+        return self._container.session.audio_generation
+
+    @property
     def event_bus(self):
         """获取事件总线."""
         return self._container.event_bus
@@ -59,8 +67,17 @@ class PluginCommandsAdapter:
     def __init__(self, container: "ServiceContainer"):
         self._container = container
 
-    async def start_listening(self, mode: ListeningMode) -> None:
-        await self._container.session.start_listening(mode)
+    async def start_listening(self, mode: ListeningMode) -> bool:
+        return await self._container.session.start_listening(mode)
+
+    async def start_auto_conversation(self) -> bool:
+        return await self._container.session.start_auto_conversation()
+
+    async def send_user_text(self, text: str, mode: ListeningMode) -> bool:
+        return await self._container.session.send_user_text(text, mode)
+
+    async def wake(self) -> None:
+        await self._container.session.wake()
 
     async def stop_listening(self) -> None:
         await self._container.session.stop_listening()
@@ -71,20 +88,11 @@ class PluginCommandsAdapter:
     async def sync_audio_state(self) -> bool:
         return await self._container.session.sync_audio_state()
 
-    async def send_audio(self, data: bytes) -> None:
-        await self._container.protocol.send_audio(data)
+    async def send_audio(self, data: bytes) -> bool:
+        return await self._container.protocol.send_audio(data)
 
-    async def send_text(self, text: str) -> None:
-        await self._container.protocol.send_text(text)
-
-    async def send_wake_word_detected(self, text: str) -> None:
-        await self._container.protocol.send_wake_word_detected(text)
-
-    async def send_mcp_message(self, payload: str) -> bool | None:
+    async def send_mcp_message(self, payload: str) -> bool:
         return await self._container.protocol.send_mcp_message(payload)
-
-    async def connect_protocol(self) -> bool:
-        return await self._container.session.connect_protocol()
 
     def spawn(self, coro: Coroutine[Any, Any, Any], name: str) -> Any:
         return self._container.tasks.spawn(coro, name)

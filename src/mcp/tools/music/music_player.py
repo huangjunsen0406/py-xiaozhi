@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import time
 from pathlib import Path
 
@@ -28,7 +29,12 @@ logger = get_logger()
 
 
 class MusicPlayer:
-    def __init__(self):
+    def __init__(self, config=None):
+        from src.utils.config_manager import ConfigManager
+
+        self._config_source = (
+            config if config is not None else ConfigManager.from_dict()
+        )
         self._config: dict | None = None
         self._cache = MusicCache()
         self._downloader = MusicDownloader(self._cache)
@@ -102,7 +108,7 @@ class MusicPlayer:
         return self._config
 
     def reload_config(self) -> dict:
-        self._config = load_music_config()
+        self._config = load_music_config(self._config_source)
         self._downloader.set_config(self._config)
         logger.debug(
             "MusicPlayer 配置已加载: "
@@ -117,8 +123,14 @@ class MusicPlayer:
     def set_event_bus(self, event_bus, plugin_ctx=None) -> None:
         self._bus.set_event_bus(event_bus, plugin_ctx)
 
-    def detach(self) -> None:
-        self._bus.detach()
+    async def detach(self) -> None:
+        async def close():
+            try:
+                await self.stop()
+            finally:
+                await self._bus.detach()
+
+        await self._downloader._await_cleanup(asyncio.create_task(close()))
 
     async def stop(self) -> dict:
         return await self._engine.stop()
@@ -232,6 +244,8 @@ class MusicPlayer:
         eng = self._engine
         position = await eng.get_position()
         progress = await eng.get_progress()
+        if eng.last_error:
+            return {"status": "error", "message": f"播放失败: {eng.last_error}"}
         if not eng.is_playing:
             playing_state = "未播放"
         elif eng.paused and eng.pause_source == "manual":

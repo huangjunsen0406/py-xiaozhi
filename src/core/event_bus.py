@@ -26,6 +26,7 @@ class Events:
     PROTOCOL_CONNECTED = "protocol_connected"
     PROTOCOL_DISCONNECTED = "protocol_disconnected"
     INCOMING_JSON = "incoming_json"
+    SESSION_MESSAGE = "session_message"  # 会话状态处理完成后的消息
     INCOMING_AUDIO = "incoming_audio"
 
     # 网络错误

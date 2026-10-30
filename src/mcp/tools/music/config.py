@@ -19,10 +19,10 @@ def _cfg_str(cm, path: str, default: str) -> str:
     return text if text else default
 
 
-def load_music_config() -> dict:
-    from src.utils.config_manager import get_config
+def load_music_config(config=None) -> dict:
+    from src.utils.config_manager import ConfigManager
 
-    cm = get_config()
+    cm = config if config is not None else ConfigManager.from_dict()
     pick = _cfg_str
 
     return {

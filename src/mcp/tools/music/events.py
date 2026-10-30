@@ -12,7 +12,7 @@ class MusicStateData:
     """音乐状态变化事件数据.
 
     Attributes:
-        state: 播放状态 ("playing", "paused", "stopped", "completed")
+        state: 播放状态 ("playing", "paused", "stopped", "completed", "error")
         song: 歌曲名称
         position: 当前播放位置（秒）
         duration: 总时长（秒）

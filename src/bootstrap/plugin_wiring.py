@@ -1,131 +1,128 @@
-"""插件与共享服务装配.
-
-集中：创建 McpServer/MusicPlayer、注册插件清单、资源池清理、音频直连。
-"""
+"""Explicit assembly, event routing and ownership of built-in components."""
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from src.logging import get_logger
+from src.core.event_bus import Events
+from src.plugins.base import Plugin
 
 if TYPE_CHECKING:
     from src.bootstrap.container import ServiceContainer
     from src.bootstrap.protocols import PluginCommands, PluginContext
 
-logger = get_logger()
 
-
-def bind_shared_services(container: "ServiceContainer") -> None:
-    """创建跨插件共享服务（McpServer / MusicPlayer / Notify），仅容器持有.
-
-    不再写入模块级单例；插件与 MCP 工具经构造注入 / 闭包拿到同一实例。
-    """
+def bind_shared_services(container: ServiceContainer) -> None:
     from src.mcp.mcp_server import McpServer
     from src.mcp.tools.music.music_player import MusicPlayer
     from src.notifications.notification_player import NotificationPlayer
 
-    if container.mcp_server is None:
-        container.mcp_server = McpServer()
-
-    if container.music_player is None:
-        container.music_player = MusicPlayer()
-
-    if container.notification_player is None:
-        container.notification_player = NotificationPlayer()
-        container.notification_player.set_event_bus(container.event_bus)
-        container.session.set_notification_player(container.notification_player)
-
-    logger.debug("共享服务已创建: McpServer, MusicPlayer, NotificationPlayer")
+    container.mcp_server = McpServer(config=container.config)
+    container.music_player = MusicPlayer(config=container.config)
+    container.notification_player = NotificationPlayer(
+        audio_config=container.audio_config
+    )
+    container.notification_player.set_event_bus(container.event_bus)
+    container.session.set_notification_player(container.notification_player)
 
 
-def unbind_shared_services(container: "ServiceContainer") -> None:
-    """释放共享服务引用（资源池最后阶段调用）."""
-    if container.notification_player is not None:
-        try:
-            container.notification_player.detach()
-        except Exception as e:
-            logger.debug(f"detach NotificationPlayer 失败: {e}", exc_info=True)
-    if container.music_player is not None:
-        try:
-            container.music_player.detach()
-        except Exception as e:
-            logger.debug(f"detach MusicPlayer 失败: {e}", exc_info=True)
-    if container.mcp_server is not None:
-        try:
-            container.mcp_server.detach()
-        except Exception as e:
-            logger.debug(f"detach McpServer 失败: {e}", exc_info=True)
+def unbind_shared_services(container: ServiceContainer) -> None:
+    """Drop references only; each owner registers its cleanup exactly once."""
+    container.session.audio = None
+    for event, handler in getattr(container, "_builtin_subscriptions", ()):
+        container.event_bus.off(event, handler)
+    container._builtin_subscriptions = []
+    container.session.set_notification_player(None)
     container.music_player = None
     container.mcp_server = None
     container.notification_player = None
 
 
+def subscribe_builtin_events(container: ServiceContainer) -> None:
+    """One delivery route; no runtime broadcast through PluginManager."""
+    bus = container.event_bus
+    for event, handler in getattr(container, "_builtin_subscriptions", ()):
+        bus.off(event, handler)
+    container._builtin_subscriptions = []
+    for plugin in container.plugins.plugins:
+        for event, method, state_payload in (
+            (Events.SESSION_MESSAGE, "on_incoming_json", False),
+            (Events.DEVICE_STATE_CHANGED, "on_device_state_changed", True),
+        ):
+            if getattr(type(plugin), method) is getattr(Plugin, method):
+                continue
+
+            async def deliver(
+                data, plugin=plugin, method=method, state_payload=state_payload
+            ):
+                if not plugin.failed:
+                    payload = data.get("new_state") if state_payload else data
+                    await getattr(plugin, method)(payload)
+
+            bus.on(event, deliver)
+            container._builtin_subscriptions.append((event, deliver))
+
+
 async def setup_plugins(
-    container: "ServiceContainer",
+    container: ServiceContainer,
     mode: str,
-    ctx: "PluginContext",
-    cmd: "PluginCommands",
+    ctx: PluginContext,
+    cmd: PluginCommands,
 ) -> None:
-    """绑定共享服务、注册并初始化插件、挂资源清理与音频直连."""
-    from src.plugins.audio import AudioPlugin
-    from src.plugins.mcp import McpPlugin
-    from src.plugins.shortcuts import ShortcutsPlugin
-    from src.plugins.ui import UIPlugin
-    from src.plugins.wake_word import WakeWordPlugin
-
-    bind_shared_services(container)
-
-    # 创建插件实例（Audio 经事件发布 codec，不注入 MusicPlayer）
-    audio_plugin = AudioPlugin()
-    wake_word_plugin = WakeWordPlugin()
-    ui_plugin = UIPlugin(mode=mode, task_manager=container.tasks)
-    shortcuts_plugin = ShortcutsPlugin()
-    mcp_plugin = McpPlugin(
-        server=container.mcp_server,
-        music_player=container.music_player,
-    )
-
-    container.plugins.register(
-        mcp_plugin,
-        audio_plugin,
-        wake_word_plugin,
-        ui_plugin,
-        shortcuts_plugin,
-    )
-
     try:
+        from src.plugins.audio import AudioPlugin
+        from src.plugins.mcp import McpPlugin
+        from src.plugins.shortcuts import ShortcutsPlugin
+        from src.plugins.ui import UIPlugin
+        from src.plugins.wake_word import WakeWordPlugin
+
+        bind_shared_services(container)
+        audio = AudioPlugin()
+        container.plugins.register(
+            audio,
+            McpPlugin(server=container.mcp_server, music_player=container.music_player),
+            WakeWordPlugin(audio=audio),
+            UIPlugin(mode=mode, task_manager=container.tasks),
+            ShortcutsPlugin(),
+        )
         await container.plugins.setup_all(ctx, cmd)
+        container.session.set_audio(audio.codec if not audio.failed else None)
+        subscribe_builtin_events(container)
+        if not audio.failed:
+            container.protocol.set_audio_handler(audio.on_incoming_audio)
     finally:
+        # Also runs after partial construction/setup failure.
         register_cleanup_resources(container)
 
-    # 设置音频直连通道（TTS 音频不经过 EventBus，减少延迟）
-    if not audio_plugin.failed:
-        container.protocol.set_audio_handler(audio_plugin.on_incoming_audio)
 
-
-def register_cleanup_resources(container: "ServiceContainer") -> None:
-    """将所有模块的清理函数注册到资源池（先注册的后释放）."""
+def register_cleanup_resources(container: ServiceContainer) -> None:
     pool = container.resource_pool
-
-    # 最先注册 = 最后释放：共享服务 unbind 在插件清理之后
-    pool.register(
-        "shared_services", lambda: unbind_shared_services(container)
-    )
-
-    # 事件总线最后释放（次先注册）
+    pool.register("shared_services", lambda: unbind_shared_services(container))
     pool.register("event_bus", container.event_bus.clear)
-
-    # 各插件注册自身资源
-    for plugin in container.plugins._plugins:
+    for plugin in container.plugins.plugins:
         plugin.register_resources(pool)
 
-    # 通知必须先于 AudioCodec 清理，停止其解码任务并释放播放 FIFO。
+    if container.mcp_server is not None:
+        pool.register("mcp.server", container.mcp_server.detach)
+    if container.music_player is not None:
+        player = container.music_player
+
+        async def close_music(player=player):
+            try:
+                await player.stop()
+            finally:
+                await player.detach()
+
+        pool.register("music_player", close_music)
     if container.notification_player is not None:
-        pool.register("notification_player", container.notification_player.stop)
+        player = container.notification_player
 
-    # 网络连接：退出时关闭控制通道和其后台线程；会话内重连仍走 disconnect。
+        async def close_notifications(player=player):
+            try:
+                await player.stop()
+            finally:
+                player.detach()
+
+        pool.register("notification_player", close_notifications)
     pool.register("protocol", container.protocol.shutdown)
-
-    # 异步任务
     pool.register("tasks", container.tasks.cancel_all)

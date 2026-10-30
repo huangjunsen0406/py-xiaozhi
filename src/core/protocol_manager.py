@@ -24,18 +24,32 @@ AudioCallback = Callable[[bytes], Awaitable[None]]
 _INCOMING_AUDIO_QUEUE_SIZE = 64
 
 
-class ProtocolTransport:
-    """负责协议创建与连接管理."""
+class ProtocolManager:
+    """拥有协议连接、发送门控与有界入站音频队列。"""
 
     def __init__(
         self,
         event_bus: EventBus,
         task_manager: Optional["TaskManager"] = None,
+        *,
+        config=None,
+        audio_config=None,
     ):
+        from src.constants.constants import AudioConfig
+        from src.utils.config_manager import ConfigManager
+
+        self.config = config if config is not None else ConfigManager.from_dict()
+        self.audio_config = (
+            audio_config
+            if audio_config is not None
+            else AudioConfig.from_config(self.config)
+        )
         self._event_bus = event_bus
         self._task_manager = task_manager
         self._protocol: Optional["Protocol"] = None
         self._connect_lock = asyncio.Lock()
+        self._shutdown = False
+        self._open_generation = 0
         self._incoming_audio_handler: Optional[AudioCallback] = None
 
         # 有界音频队列 + 单 consumer（替代 per-packet create_task）
@@ -59,11 +73,17 @@ class ProtocolTransport:
         if protocol_type == "mqtt":
             from src.protocols.mqtt_protocol import MqttProtocol
 
-            self._protocol = MqttProtocol(asyncio.get_running_loop())
+            self._protocol = MqttProtocol(
+                asyncio.get_running_loop(),
+                config=self.config,
+                audio_config=self.audio_config,
+            )
         else:
             from src.protocols.websocket_protocol import WebsocketProtocol
 
-            self._protocol = WebsocketProtocol()
+            self._protocol = WebsocketProtocol(
+                config=self.config, audio_config=self.audio_config
+            )
 
         self._setup_callbacks()
         self._ensure_audio_consumer()
@@ -247,6 +267,9 @@ class ProtocolTransport:
             return False
 
     async def connect(self, timeout: float = 12.0) -> bool:
+        if self._shutdown:
+            return False
+        generation = self._open_generation
         if self.is_audio_channel_opened():
             return True
 
@@ -255,14 +278,22 @@ class ProtocolTransport:
             return False
 
         async with self._connect_lock:
+            if self._shutdown or generation != self._open_generation:
+                return False
             if self.is_audio_channel_opened():
                 return True
 
+            # Only the lock owner owns this attempt. Cancellation while waiting
+            # for the lock must not close another caller's successful session.
+            protocol = self._protocol
+            opened = False
             try:
                 opened = await asyncio.wait_for(
-                    self._protocol.open_audio_channel(),
+                    protocol.open_audio_channel(),
                     timeout=timeout,
                 )
+                if self._shutdown or generation != self._open_generation:
+                    opened = False
                 if not opened:
                     logger.error("协议连接失败")
                     return False
@@ -276,11 +307,19 @@ class ProtocolTransport:
             except Exception as e:
                 logger.error(f"协议连接异常: {e}", exc_info=True)
                 return False
+            finally:
+                if not opened:
+                    try:
+                        # Roll back the audio session only; MQTT may retain its
+                        # established broker connection across failed opens.
+                        await protocol.close_audio_channel()
+                    except Exception:
+                        logger.exception("清理未完成的协议音频会话失败")
 
     async def start(self) -> bool:
         """启动协议的常驻控制链路（若该协议需要）。"""
-        if not self._protocol:
-            logger.error("协议未初始化")
+        if self._shutdown or not self._protocol:
+            logger.error("协议未初始化或已关闭")
             return False
         try:
             return bool(await self._protocol.start())
@@ -290,6 +329,7 @@ class ProtocolTransport:
 
     async def disconnect(self) -> None:
         """结束当前音频会话，但允许协议复用其控制连接."""
+        self._open_generation += 1
         if self._protocol:
             try:
                 await self._protocol.close_audio_channel()
@@ -299,6 +339,8 @@ class ProtocolTransport:
 
     async def shutdown(self) -> None:
         """彻底关闭协议及其后台资源（应用退出路径）."""
+        self._shutdown = True
+        self._open_generation += 1
         if self._protocol:
             try:
                 await self._protocol.shutdown()
@@ -306,133 +348,64 @@ class ProtocolTransport:
                 logger.error(f"彻底关闭协议失败: {e}", exc_info=True)
         await self._stop_audio_consumer()
 
-
-class ProtocolGateway:
-    """负责消息发送的网关."""
-
-    def __init__(self, transport: ProtocolTransport):
-        self._transport = transport
-
-    async def send_audio(self, data: bytes) -> None:
-        protocol = self._transport.protocol
-        if protocol and self._transport.is_audio_channel_opened():
-            await protocol.send_audio(data)
+    async def send_audio(self, data: bytes) -> bool:
+        protocol = self._protocol
+        if protocol and self.is_audio_channel_opened():
+            return bool(await protocol.send_audio(data))
         else:
             logger.debug("音频通道未打开，跳过发送音频数据")
+        return False
 
-    async def send_text(self, text: str) -> None:
-        protocol = self._transport.protocol
+    async def send_text(self, text: str) -> bool:
+        protocol = self._protocol
         if protocol:
-            await protocol.send_text(text)
+            return bool(await protocol.send_text(text))
+        return False
 
-    async def send_start_listening(self, mode: ListeningMode) -> None:
-        protocol = self._transport.protocol
-        if protocol and self._transport.is_audio_channel_opened():
-            await protocol.send_start_listening(mode)
+    async def send_start_listening(self, mode: ListeningMode) -> bool:
+        protocol = self._protocol
+        if protocol and self.is_audio_channel_opened():
+            return bool(await protocol.send_start_listening(mode))
         else:
             logger.warning("音频通道未打开，跳过 send_start_listening")
+        return False
 
-    async def send_stop_listening(self) -> None:
-        protocol = self._transport.protocol
-        if protocol and self._transport.is_audio_channel_opened():
-            await protocol.send_stop_listening()
+    async def send_stop_listening(self) -> bool:
+        protocol = self._protocol
+        if protocol and self.is_audio_channel_opened():
+            return bool(await protocol.send_stop_listening())
         else:
             logger.debug("音频通道未打开，跳过 send_stop_listening")
+        return False
 
-    async def send_abort_speaking(self, reason: str = None) -> None:
-        protocol = self._transport.protocol
+    async def send_abort_speaking(self, reason: str = None) -> bool:
+        protocol = self._protocol
         if protocol:
-            await protocol.send_abort_speaking(reason)
+            return bool(await protocol.send_abort_speaking(reason))
+        return False
 
-    async def send_wake_word_detected(self, wake_word: str) -> None:
-        protocol = self._transport.protocol
-        if protocol and self._transport.is_audio_channel_opened():
-            await protocol.send_wake_word_detected(wake_word)
+    async def send_wake_word_detected(self, wake_word: str) -> bool:
+        protocol = self._protocol
+        if protocol and self.is_audio_channel_opened():
+            return bool(await protocol.send_wake_word_detected(wake_word))
         else:
             logger.warning("音频通道未打开，跳过 send_wake_word_detected")
+        return False
 
-    async def send_iot_descriptors(self, descriptors) -> None:
-        protocol = self._transport.protocol
+    async def send_iot_descriptors(self, descriptors) -> bool:
+        protocol = self._protocol
         if protocol:
-            await protocol.send_iot_descriptors(descriptors)
+            return bool(await protocol.send_iot_descriptors(descriptors))
+        return False
 
-    async def send_iot_states(self, states) -> None:
-        protocol = self._transport.protocol
+    async def send_iot_states(self, states) -> bool:
+        protocol = self._protocol
         if protocol:
-            await protocol.send_iot_states(states)
+            return bool(await protocol.send_iot_states(states))
+        return False
 
-    async def send_mcp_message(self, payload) -> bool | None:
-        protocol = self._transport.protocol
+    async def send_mcp_message(self, payload) -> bool:
+        protocol = self._protocol
         if protocol:
             return await protocol.send_mcp_message(payload)
         return False
-
-
-class ProtocolManager:
-    """对外暴露统一接口，内部组合 Transport + Gateway."""
-
-    def __init__(
-        self,
-        event_bus: EventBus,
-        task_manager: Optional["TaskManager"] = None,
-    ):
-        self._transport = ProtocolTransport(event_bus, task_manager=task_manager)
-        self._gateway = ProtocolGateway(self._transport)
-
-    def set_task_manager(self, task_manager: "TaskManager") -> None:
-        self._transport.set_task_manager(task_manager)
-
-    @property
-    def protocol(self) -> Optional["Protocol"]:
-        return self._transport.protocol
-
-    def set_protocol(self, protocol_type: str) -> None:
-        self._transport.set_protocol(protocol_type)
-
-    def set_audio_handler(self, handler: Optional[AudioCallback]) -> None:
-        self._transport.set_audio_handler(handler)
-
-    def set_idle_checker(self, checker: Callable[[], bool]) -> None:
-        self._transport.set_idle_checker(checker)
-
-    def is_audio_channel_opened(self) -> bool:
-        return self._transport.is_audio_channel_opened()
-
-    async def connect(self, timeout: float = 12.0) -> bool:
-        return await self._transport.connect(timeout)
-
-    async def start(self) -> bool:
-        return await self._transport.start()
-
-    async def disconnect(self) -> None:
-        await self._transport.disconnect()
-
-    async def shutdown(self) -> None:
-        await self._transport.shutdown()
-
-    async def send_audio(self, data: bytes) -> None:
-        await self._gateway.send_audio(data)
-
-    async def send_text(self, text: str) -> None:
-        await self._gateway.send_text(text)
-
-    async def send_start_listening(self, mode: ListeningMode) -> None:
-        await self._gateway.send_start_listening(mode)
-
-    async def send_stop_listening(self) -> None:
-        await self._gateway.send_stop_listening()
-
-    async def send_abort_speaking(self, reason: str = None) -> None:
-        await self._gateway.send_abort_speaking(reason)
-
-    async def send_wake_word_detected(self, wake_word: str) -> None:
-        await self._gateway.send_wake_word_detected(wake_word)
-
-    async def send_iot_descriptors(self, descriptors) -> None:
-        await self._gateway.send_iot_descriptors(descriptors)
-
-    async def send_iot_states(self, states) -> None:
-        await self._gateway.send_iot_states(states)
-
-    async def send_mcp_message(self, payload) -> bool | None:
-        return await self._gateway.send_mcp_message(payload)

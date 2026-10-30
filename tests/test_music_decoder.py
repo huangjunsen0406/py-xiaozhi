@@ -42,6 +42,18 @@ class Process:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("duration", [20, 40, 60])
+async def test_pcm_read_size_uses_decoder_frame_duration(duration):
+    decoder = module.MusicDecoder(sample_rate=16000, frame_duration=duration)
+    process = Process()
+    process.stdout = AsyncMock()
+    process.stdout.read.return_value = b""
+    decoder._process = process
+    await decoder._read_pcm_stream(asyncio.Queue())
+    process.stdout.read.assert_awaited_once_with(16000 * duration // 1000 * 2)
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("exit_code", [0, 1])
 async def test_decoder_reports_exit_status_after_partial_pcm(exit_code):
     decoder = module.MusicDecoder()

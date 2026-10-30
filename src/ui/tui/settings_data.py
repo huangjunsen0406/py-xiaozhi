@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from src.logging import get_logger
-from src.utils.config_manager import get_config
+from src.utils.config_manager import ConfigManager
 
 logger = get_logger()
 
@@ -135,9 +135,9 @@ SETTING_SECTIONS: list[tuple[str, list[SettingField]]] = [
 ]
 
 
-def load_setting_values() -> dict[str, str]:
+def load_setting_values(config: ConfigManager | None = None) -> dict[str, str]:
     """读取当前配置为字符串表（path -> 显示值）."""
-    cfg = get_config()
+    cfg = config if config is not None else ConfigManager.from_dict()
     values: dict[str, str] = {}
     for _section, fields in SETTING_SECTIONS:
         for f in fields:
@@ -175,13 +175,15 @@ def parse_field_value(field: SettingField, text: str) -> Any:
     return s
 
 
-def save_settings(values: dict[str, str]) -> tuple[bool, str]:
+def save_settings(
+    values: dict[str, str], config: ConfigManager | None = None
+) -> tuple[bool, str]:
     """批量写配置并落盘.
 
     Returns:
         (ok, message)
     """
-    cfg = get_config()
+    cfg = config if config is not None else ConfigManager.from_dict()
     updates: dict[str, Any] = {}
     try:
         for _section, fields in SETTING_SECTIONS:

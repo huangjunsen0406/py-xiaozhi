@@ -13,7 +13,7 @@ from src.constants.constants import DeviceState, ListeningMode
 from src.core.event_bus import EventBus
 from src.core.state_manager import StateManager
 from src.plugins.audio import AudioPlugin
-from src.plugins.manager import PluginManager
+from src.utils.config_manager import ConfigManager
 
 
 class FakeCodec:
@@ -39,10 +39,11 @@ def conversation():
     )
     audio = AudioPlugin()
     audio.codec = FakeCodec(False)
-    plugins = PluginManager()
-    plugins.register(audio)
-    session = ConversationSession(state, protocol, plugins)
-    container = SimpleNamespace(state=state, protocol=protocol, session=session)
+    config = ConfigManager.from_dict({"AEC_OPTIONS": {"ENABLED": True}})
+    session = ConversationSession(state, protocol, audio=audio.codec, config=config)
+    container = SimpleNamespace(
+        state=state, protocol=protocol, session=session, config=config
+    )
     audio._ctx = PluginContextAdapter(container)
     audio._cmd = PluginCommandsAdapter(container)
     return SimpleNamespace(
@@ -196,7 +197,7 @@ async def test_manual_mode_is_preserved(conversation, active):
 @pytest.mark.asyncio
 async def test_missing_audio_plugin_never_enables_realtime(conversation):
     c = conversation
-    c.session.plugins = PluginManager()
+    c.session.audio = None
     await c.session.start_auto_conversation()
     assert not c.state.aec_enabled
     assert c.state.listening_mode == ListeningMode.AUTO_STOP

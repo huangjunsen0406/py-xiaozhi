@@ -66,13 +66,13 @@ def _configure_environment(mode: str) -> None:
         os.environ.setdefault("QT_WAYLAND_DISABLE_WINDOWDECORATION", "1")
 
 
-async def handle_activation(mode: str) -> bool:
+async def handle_activation(mode: str, config=None) -> bool:
     """Run the existing activation flow for the selected UI."""
     try:
         from src.activation import ActivationService, create_activation_ui
 
         logger.info("开始设备激活流程检查...")
-        service = await ActivationService.create()
+        service = await ActivationService.create(config=config)
         result = await service.initialize()
         if not result.get("success", False):
             logger.error("初始化失败: %s", result.get("error", "未知错误"))
@@ -86,26 +86,64 @@ async def handle_activation(mode: str) -> bool:
         return False
 
 
-async def start_app(mode: str, protocol: str, skip_activation: bool) -> int:
+async def start_app(
+    mode: str, protocol: str, skip_activation: bool, config=None
+) -> int:
     """Create the runtime only after configuration and logging are ready."""
     from src.bootstrap.container import ServiceContainer
     from src.constants.system import SystemConstants
 
     global _container
     logger.info("启动%s", SystemConstants.APP_DISPLAY_NAME)
-    if not skip_activation:
-        if not await handle_activation(mode):
-            logger.error("设备激活失败，程序退出")
-            return 1
-    else:
-        logger.warning("跳过激活流程（调试模式）")
-    _container = ServiceContainer()
-    return await _container.run(mode=mode, protocol=protocol)
+    try:
+        if not skip_activation:
+            activated = await handle_activation(mode, config=config)
+            if not activated:
+                logger.error("设备激活失败，程序退出")
+                return 1
+        else:
+            logger.warning("跳过激活流程（调试模式）")
+        _container = ServiceContainer(config=config)
+        return await _container.run(mode=mode, protocol=protocol)
+    finally:
+        if mode == "gui":
+            try:
+                from PySide6.QtWidgets import QApplication
+
+                app = QApplication.instance()
+                if app is not None:
+                    app.quit()
+            except ImportError:
+                pass
 
 
-def _run(args: argparse.Namespace) -> int:
+def _run(args: argparse.Namespace, config=None) -> int:
     """Choose an event loop and restore signal handlers after it exits."""
     previous_signals = {}
+    requested = False
+    startup_task = None
+
+    async def run_startup():
+        nonlocal startup_task
+        startup_task = asyncio.current_task()
+        if requested:
+            return 0
+        try:
+            result = await start_app(
+                args.mode, args.protocol, args.skip_activation, config=config
+            )
+        except asyncio.CancelledError:
+            if requested:
+                return 0
+            raise
+        # Some activation services translate cancellation to False internally.
+        return 0 if requested else result
+
+    def request_shutdown():
+        if _container and _container.tasks:
+            _container.tasks.request_shutdown()
+        elif startup_task is not None:
+            startup_task.cancel()
 
     def install_signal(sig, handler):
         previous_signals[sig] = signal.getsignal(sig)
@@ -141,17 +179,12 @@ def _run(args: argparse.Namespace) -> int:
                     return
                 requested = True
                 logger.info("收到 SIGINT 信号，正在退出...")
-                if _container and _container.tasks:
-                    _container.tasks.request_shutdown()
-                elif loop.is_running():
-                    loop.call_soon_threadsafe(qt_app.quit)
+                request_shutdown()
 
             install_signal(signal.SIGINT, handle_sigint)
             try:
                 with loop:
-                    return loop.run_until_complete(
-                        start_app(args.mode, args.protocol, args.skip_activation)
-                    )
+                    return loop.run_until_complete(run_startup())
             except RuntimeError as exc:
                 if "Event loop stopped before Future completed" in str(exc):
                     logger.debug("事件循环已正常终止")
@@ -176,11 +209,10 @@ def _run(args: argparse.Namespace) -> int:
                 os._exit(130)
             requested = True
             logger.info("收到 SIGINT 信号，正在退出...")
-            if _container and _container.tasks:
-                _container.tasks.request_shutdown()
+            request_shutdown()
 
         install_signal(signal.SIGINT, handle_sigint_cli)
-        return asyncio.run(start_app(args.mode, args.protocol, args.skip_activation))
+        return asyncio.run(run_startup())
     finally:
         for sig, handler in previous_signals.items():
             signal.signal(sig, handler)
@@ -198,14 +230,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         _configure_environment(args.mode)
         from src.utils.config_manager import initialize_config
 
-        initialize_config()
+        config = initialize_config()
         from src.logging import load_logging_config, setup_logging
 
+        logging_config = load_logging_config(config)
         setup_logging(
             enable_console=args.mode not in ("cli", "tui"),
-            config=load_logging_config(),
+            config=logging_config,
         )
-        return _run(args)
+        return _run(args, config=config)
     except KeyboardInterrupt:
         logger.info("程序被用户中断")
         return 0

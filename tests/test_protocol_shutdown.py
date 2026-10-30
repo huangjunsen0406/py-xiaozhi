@@ -39,16 +39,15 @@ async def test_websocket_shutdown_uses_base_lifecycle(monkeypatch):
     from src.protocols import websocket_protocol as websocket_module
 
     class _Config:
-        def get_config(self, key):
+        def get_config(self, key, default=None):
             return {
                 "SYSTEM_OPTIONS.NETWORK.WEBSOCKET_URL": "wss://example.test",
                 "SYSTEM_OPTIONS.NETWORK.WEBSOCKET_ACCESS_TOKEN": "test-token",
                 "SYSTEM_OPTIONS.DEVICE_ID": "test-device",
                 "SYSTEM_OPTIONS.CLIENT_ID": "test-client",
-            }.get(key)
+            }.get(key, default)
 
-    monkeypatch.setattr(websocket_module, "get_config", lambda: _Config())
-    protocol = websocket_module.WebsocketProtocol()
+    protocol = websocket_module.WebsocketProtocol(config=_Config())
     websocket = _FakeWebSocket()
     protocol.websocket = websocket
     protocol.connected = True

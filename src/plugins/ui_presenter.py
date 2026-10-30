@@ -26,6 +26,7 @@ class UiPresenter:
         "paused": "已暂停: {song}",
         "stopped": "已停止: {song}",
         "completed": "播放完成: {song}",
+        "error": "播放失败: {song}",
     }
 
     def __init__(self, viewport: Optional["ViewPort"] = None) -> None:

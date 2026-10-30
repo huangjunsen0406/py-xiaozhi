@@ -4,6 +4,7 @@
 对外 仍为 SettingsModel，QML context 名 settingsModel 不变。
 """
 
+import copy
 import json
 import os
 import threading
@@ -20,8 +21,7 @@ from src.ui.gui.models.settings.mcp_tools import SettingsMcpToolsMixin
 from src.ui.gui.models.settings.shortcuts import SettingsShortcutsMixin
 from src.ui.gui.models.settings.system_options import SettingsSystemOptionsMixin
 from src.ui.gui.models.settings.wake_word import SettingsWakeWordMixin
-from src.utils.config_manager import get_config
-from src.utils.resource_finder import get_user_data_dir
+from src.utils.config_manager import ConfigManager
 
 logger = get_logger()
 
@@ -41,16 +41,26 @@ class SettingsModel(
     settingsChanged = Signal()
     devicesChanged = Signal()
     statusMessage = Signal(str)
+    statusReset = Signal()
     testComplete = Signal(str, bool)
     wakeWordChanged = Signal()
     configSaved = Signal()
     # MCP 工具禁用列表相对打开/上次保存是否变化 → 保存后可能触发重连
     mcpToolsNeedReconnect = Signal()
 
-    def __init__(self, parent=None, event_bus=None, task_manager=None):
+    def __init__(
+        self,
+        parent=None,
+        event_bus=None,
+        task_manager=None,
+        config_manager: ConfigManager | None = None,
+    ):
         super().__init__(parent)
-        self._config_manager = get_config()
-        self._config_path = get_user_data_dir() / "config" / "config.json"
+        self._config_manager = (
+            config_manager if config_manager is not None else ConfigManager.from_dict()
+        )
+        configured_path = getattr(self._config_manager, "config_file", None)
+        self._config_path = configured_path
         self._config: dict = {}
         # 可选：用于「刷新音频设备」时协调 AudioPlugin 停流重枚举
         self._event_bus = event_bus
@@ -120,18 +130,8 @@ class SettingsModel(
     # ========== 配置读写 ==========
 
     def _load_config(self):
-        """从文件加载配置."""
-        try:
-            if self._config_path.exists():
-                with open(self._config_path, encoding="utf-8") as f:
-                    self._config = json.load(f)
-                logger.debug("设置配置已加载")
-            else:
-                logger.warning(f"配置文件不存在: {self._config_path}")
-                self._config = {}
-        except Exception as e:
-            logger.error(f"加载配置失败: {e}", exc_info=True)
-            self._config = {}
+        """从注入的运行时配置复制独立草稿，避免覆盖其他配置写入者的更新."""
+        self._config = self._config_manager.get_config("", {})
 
     def _get_value(self, path: str, default: Any = None) -> Any:
         """获取配置值，支持点号分隔的路径."""
@@ -149,7 +149,7 @@ class SettingsModel(
         keys = path.split(".")
         config = self._config
         for key in keys[:-1]:
-            if key not in config:
+            if not isinstance(config.get(key), dict):
                 config[key] = {}
             config = config[key]
         config[keys[-1]] = value
@@ -161,9 +161,11 @@ class SettingsModel(
         raw = self._get_value("MCP_TOOLS.DISABLED", []) or []
         self._mcp_disabled_snapshot = list(normalize_disabled(raw))
 
-    @Slot()
-    def save(self):
-        """保存配置到文件，并让运行中的 ConfigManager 重新读盘."""
+    @Slot(result=bool)
+    def save(self) -> bool:
+        """提交草稿并更新运行时；失败时保留草稿供用户重试."""
+        self.set_error("")
+        self.statusReset.emit()
         try:
             from src.mcp.tool_catalog import normalize_disabled
 
@@ -172,19 +174,32 @@ class SettingsModel(
             )
             mcp_changed = sorted(new_disabled) != sorted(self._mcp_disabled_snapshot)
 
-            # 原子写：临时文件 + replace，与 ConfigManager 一致
-            self._config_path.parent.mkdir(parents=True, exist_ok=True)
-            tmp_path = self._config_path.with_suffix(".tmp")
-            tmp_path.write_text(
-                json.dumps(self._config, ensure_ascii=False, indent=2),
-                encoding="utf-8",
-            )
-            os.replace(tmp_path, self._config_path)
-            try:
-                self._config_manager.reload_config()
-            except Exception as e:
-                logger.warning(f"ConfigManager 重载失败: {e}", exc_info=True)
-            logger.info("设置已保存")
+            if self._config_path is None:
+                updates = {
+                    key: copy.deepcopy(value) for key, value in self._config.items()
+                }
+                if not self._config_manager.update_configs(updates):
+                    self.set_error("保存失败（内存配置更新错误）")
+                    return False
+            else:
+                # 原子写：临时文件 + replace，与 ConfigManager 一致
+                self._config_path.parent.mkdir(parents=True, exist_ok=True)
+                tmp_path = self._config_path.with_suffix(".tmp")
+                tmp_path.write_text(
+                    json.dumps(self._config, ensure_ascii=False, indent=2),
+                    encoding="utf-8",
+                )
+                os.replace(tmp_path, self._config_path)
+                try:
+                    applied = self._config_manager.reload_config(apply_paths=False)
+                except Exception as e:
+                    logger.warning(f"ConfigManager 重载失败: {e}", exc_info=True)
+                    self.set_error(f"配置已写入磁盘，但运行时加载失败，请重试保存: {e}")
+                    return False
+                if not applied:
+                    self.set_error("配置已写入磁盘，但运行时加载失败，请重试保存")
+                    return False
+            logger.info("设置已保存并加载到运行时配置")
             self._snapshot_mcp_disabled()
             if mcp_changed:
                 self.statusMessage.emit("配置已保存（MCP 工具变更，将重连以更新）")
@@ -192,19 +207,32 @@ class SettingsModel(
             else:
                 self.statusMessage.emit("配置已保存")
             self.configSaved.emit()
+            return True
         except Exception as e:
             logger.error(f"保存配置失败: {e}", exc_info=True)
             self.set_error(f"保存配置失败: {e}")
+            return False
+
+    @Slot()
+    def discard(self):
+        """丢弃草稿并恢复当前运行时快照，不枚举设备或加载模型."""
+        self._load_config()
+        self._load_wake_word(update_preview=False)
+        self._snapshot_mcp_disabled()
+        self.set_error("")
+        self.statusReset.emit()
+        self.settingsChanged.emit()
+        self.wakeWordChanged.emit()
 
     @Slot()
     def reload(self):
-        """重新加载配置（打开设置窗口时调用；此时才枚举设备）."""
-        self._load_config()
+        """打开设置时恢复草稿，再按原策略刷新设备与唤醒词预览."""
+        self.discard()
         self._load_audio_devices(force=True)
         self._load_cameras(force=True)
         self._load_wake_word()
-        self._snapshot_mcp_disabled()
         self.settingsChanged.emit()
+        self.wakeWordChanged.emit()
         logger.info("设置已重新加载")
 
     # ========== QML Properties（实现见各 mixin）==========

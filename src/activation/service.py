@@ -11,7 +11,7 @@ from src.activation.identity import DeviceIdentity
 from src.activation.ota import OtaConfigClient
 from src.activation.side_effects import announce_code, apply_code_side_effects
 from src.logging import get_logger
-from src.utils.config_manager import ConfigManager, get_config
+from src.utils.config_manager import ConfigManager
 
 logger = get_logger()
 
@@ -32,10 +32,12 @@ class ActivationResult(TypedDict, total=False):
 class ActivationService:
     """设备激活门面（由 create() 构造，非单例）."""
 
-    def __init__(self) -> None:
+    def __init__(self, config: ConfigManager | None = None) -> None:
         self.logger = get_logger()
         self._initialized = False
-        self.config_manager = get_config()
+        self.config_manager = (
+            config if config is not None else ConfigManager.from_dict()
+        )
 
         self._identity = DeviceIdentity()
         self._ota = OtaConfigClient(self.config_manager, self._identity)
@@ -51,8 +53,8 @@ class ActivationService:
         self._is_activating = False
 
     @classmethod
-    async def create(cls) -> "ActivationService":
-        instance = cls()
+    async def create(cls, config: ConfigManager | None = None) -> "ActivationService":
+        instance = cls(config=config)
         await instance._async_init()
         return instance
 
@@ -75,9 +77,7 @@ class ActivationService:
             )
             self._activation_status["local_activated"] = is_activated
             self.logger.info(f"设备序列号: {serial_number}")
-            self.logger.info(
-                f"本地激活状态: {'已激活' if is_activated else '未激活'}"
-            )
+            self.logger.info(f"本地激活状态: {'已激活' if is_activated else '未激活'}")
 
             self._ota.initialize_config()
             await self._ota.fetch_ota_config()
@@ -105,9 +105,7 @@ class ActivationService:
             result["activation_version"] = activation_version
             return result
         except Exception as e:
-            self.logger.error(
-                f"系统初始化失败: {type(e).__name__}: {e}", exc_info=True
-            )
+            self.logger.error(f"系统初始化失败: {type(e).__name__}: {e}", exc_info=True)
             return ActivationResult(
                 success=False,
                 need_activation_ui=False,

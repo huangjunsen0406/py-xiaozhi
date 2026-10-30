@@ -7,8 +7,11 @@ import re
 import shutil
 import subprocess
 import sys
+import threading
+import uuid
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 from urllib.parse import urlparse
 
 import requests
@@ -29,6 +32,10 @@ _SUBPROCESS_KW = (
 )
 
 
+class _DownloadCancelled(Exception):
+    """The owning coroutine cancelled a blocking download."""
+
+
 class MusicDownloader:
     """解析播放地址；可选后台 copy 整首到缓存（按网速，不跟播放进度走）."""
 
@@ -39,6 +46,7 @@ class MusicDownloader:
         self.last_error: str | None = None
         self._prefetch_task: asyncio.Task | None = None
         self._prefetch_song_id: str | None = None
+        self._prefetch_lock = asyncio.Lock()
 
     def set_config(self, config: dict[str, Any]) -> None:
         self._config = config
@@ -285,11 +293,20 @@ class MusicDownloader:
             return None
 
     def _sync_download(
-        self, download_url: str, headers: dict, temp_path: Path, cache_path: Path
+        self, download_url: str, headers: dict, temp_path: Path, cache_path: Path,
+        cancelled: threading.Event | None = None, publish_lock=None,
     ) -> Path:
-        # CDN 偶发 RemoteDisconnected，多试两次
+        cancelled = cancelled if cancelled is not None else threading.Event()
+        publish_lock = publish_lock if publish_lock is not None else threading.Lock()
+
+        def check_cancelled():
+            if cancelled.is_set():
+                raise _DownloadCancelled()
+
+        # CDN 偶发 RemoteDisconnected，多试两次；取消不重试。
         last_err: Exception | None = None
         for attempt in range(3):
+            check_cancelled()
             try:
                 if temp_path.exists():
                     temp_path.unlink()
@@ -300,16 +317,24 @@ class MusicDownloader:
                     timeout=45,
                     allow_redirects=True,
                 ) as response:
+                    check_cancelled()
                     response.raise_for_status()
                     with open(temp_path, "wb") as f:
                         for chunk in response.iter_content(chunk_size=64 * 1024):
+                            check_cancelled()
                             if chunk:
                                 f.write(chunk)
+                check_cancelled()
                 if temp_path.stat().st_size <= 0:
-                    raise IOError("下载文件为空")
-                shutil.move(str(temp_path), str(cache_path))
+                    raise OSError("下载文件为空")
+                # Cancellation and publish have one ordering point. The event
+                # loop only shares this lock for the final local rename/move.
+                with publish_lock:
+                    check_cancelled()
+                    shutil.move(str(temp_path), str(cache_path))
                 return cache_path
             except (requests.RequestException, OSError) as e:
+                check_cancelled()
                 last_err = e
                 logger.warning(
                     f"下载重试 {attempt + 1}/3 失败: {e}"
@@ -323,123 +348,141 @@ class MusicDownloader:
         """下载并写入缓存目录."""
         self._cache.prepare()
         temp_path = None
+        worker = None
+        cancelled = threading.Event()
+        publish_lock = threading.Lock()
         try:
             download_url = await self.resolve_play_url(api_url, song_id=song_id)
             if not download_url:
                 return None
 
-            temp_path = self._cache.temp_path(filename)
+            temp_path = self._cache.temp_path(f"{uuid.uuid4().hex}_{filename}")
             cache_path = self._cache.root / filename
             headers = self.media_headers(download_url)
             logger.debug(
                 f"开始下载音频: host={urlparse(download_url).hostname}"
             )
 
-            result = await asyncio.to_thread(
+            worker = asyncio.create_task(asyncio.to_thread(
                 self._sync_download,
                 download_url,
                 headers,
                 temp_path,
                 cache_path,
-            )
+                cancelled,
+                publish_lock,
+            ))
+            result = await asyncio.shield(worker)
             logger.info(f"音乐下载完成并缓存: {result}")
             return result
+        except asyncio.CancelledError:
+            # requests cannot be killed. Let its current blocking operation
+            # finish (45s connect/read timeout), then the worker checks this
+            # flag, closes the response and exits without publishing/retrying.
+            with publish_lock:
+                cancelled.set()
+            if worker is not None:
+                await self._await_cleanup(asyncio.gather(worker, return_exceptions=True))
+            raise
         except Exception as e:
             self.last_error = f"下载失败: {e}"
             logger.error(self.last_error, exc_info=True)
-            if temp_path and temp_path.exists():
-                try:
-                    temp_path.unlink()
-                except Exception as cleanup_e:
-                    logger.debug(f"清理临时文件失败: {cleanup_e}")
             return None
+        finally:
+            if temp_path is not None:
+                try:
+                    temp_path.unlink(missing_ok=True)
+                except OSError as e:
+                    logger.debug(f"清理临时文件失败: {e}")
 
-    def start_prefetch(
+    async def start_prefetch(
         self,
         media_url: str,
         song_id: str,
         headers: Mapping[str, str] | None = None,
     ) -> None:
-        """后台按网速 FFmpeg -c copy 整首落盘，不跟播放进度同步.
-
-        类似 HTML audio 的缓冲：播的同时尽快把整文件拉完，听完前也可能已缓存好。
-        换歌会取消上一次预取；暂停/停止当前歌不取消（继续缓冲）。
-        """
+        """后台流式缓存；切歌时先等待旧任务及其子进程退出。"""
         if not song_id or song_id == "unknown":
             return
-        self._cache.prepare()
-        if self._cache.find_song_file(song_id) is not None:
-            logger.debug(f"已有缓存，跳过预取: {song_id}")
-            return
+        async with self._prefetch_lock:
+            if (
+                self._prefetch_task
+                and not self._prefetch_task.done()
+                and self._prefetch_song_id == song_id
+            ):
+                return
+            await self._cancel_prefetch_task()
+            self._cache.prepare()
+            if self._cache.find_song_file(song_id) is not None:
+                logger.debug(f"已有缓存，跳过预取: {song_id}")
+                return
+            hdrs = dict(headers or self.media_headers(media_url))
+            self._prefetch_song_id = song_id
+            self._prefetch_task = asyncio.create_task(
+                self._prefetch_copy_loop(media_url, song_id, hdrs),
+                name=f"music:prefetch:{song_id}",
+            )
+            logger.info(f"后台预取缓存: song_id={song_id}")
 
-        # 同一首歌已在预取
-        if (
-            self._prefetch_task
-            and not self._prefetch_task.done()
-            and self._prefetch_song_id == song_id
-        ):
-            return
+    @staticmethod
+    async def _await_cleanup(future):
+        """清理不能因重复取消中断；完成后仍将取消传回调用方。"""
+        cancelled = False
+        while not future.done():
+            try:
+                await asyncio.shield(future)
+            except asyncio.CancelledError:
+                cancelled = True
+        result = future.result()
+        if cancelled:
+            raise asyncio.CancelledError
+        return result
 
-        self.cancel_prefetch()
-        hdrs = dict(headers or self.media_headers(media_url))
-        self._prefetch_song_id = song_id
-        self._prefetch_task = asyncio.create_task(
-            self._prefetch_copy_loop(media_url, song_id, hdrs),
-            name=f"music:prefetch:{song_id}",
-        )
-        logger.info(f"后台预取缓存: song_id={song_id}")
-
-    def cancel_prefetch(self) -> None:
-        """取消后台预取（换歌时）."""
+    async def _cancel_prefetch_task(self) -> None:
         task = self._prefetch_task
-        self._prefetch_task = None
-        self._prefetch_song_id = None
-        if task and not task.done():
+        if task is None:
+            return
+        if not task.done():
             task.cancel()
+        try:
+            await self._await_cleanup(asyncio.gather(task, return_exceptions=True))
+        finally:
+            if self._prefetch_task is task:
+                self._prefetch_task = None
+                self._prefetch_song_id = None
+
+    async def cancel_prefetch(self) -> None:
+        """取消并等待预取完全退出，之后才允许复用缓存目录。"""
+        async with self._prefetch_lock:
+            await self._cancel_prefetch_task()
 
     async def _prefetch_copy_loop(
         self, media_url: str, song_id: str, headers: dict[str, str]
     ) -> None:
         final = self._cache.path_for_song(song_id)
-        part = final.with_name(f"{final.stem}.part{final.suffix}")
-        try:
-            if part.exists():
-                part.unlink()
-        except Exception:
-            pass
-
+        part = final.with_name(f"{final.stem}.{uuid.uuid4().hex}.part{final.suffix}")
         try:
             ok = await self._ffmpeg_copy_url(media_url, part, headers)
             if not ok:
                 return
             if not part.exists() or part.stat().st_size <= 1024:
                 logger.warning(f"预取文件过小，丢弃: {part.name}")
-                if part.exists():
-                    part.unlink()
                 return
-            if final.exists():
-                final.unlink()
             part.replace(final)
             logger.info(
                 f"后台预取完成（可本地播）: {final.name} ({final.stat().st_size} bytes)"
             )
         except asyncio.CancelledError:
             logger.debug(f"后台预取取消: {song_id}")
-            try:
-                if part.exists():
-                    part.unlink()
-            except Exception:
-                pass
             raise
         except Exception as e:
             logger.warning(f"后台预取失败 {song_id}: {e}", exc_info=True)
-            try:
-                if part.exists():
-                    part.unlink()
-            except Exception:
-                pass
         finally:
-            if self._prefetch_song_id == song_id:
+            try:
+                part.unlink(missing_ok=True)
+            except OSError as e:
+                logger.debug(f"清理预取临时文件失败: {e}")
+            if self._prefetch_task is asyncio.current_task():
                 self._prefetch_task = None
                 self._prefetch_song_id = None
 
@@ -473,14 +516,18 @@ class MusicDownloader:
                 str(out_path),
             ]
         )
+        spawn = asyncio.create_task(asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            **_SUBPROCESS_KW,
+        ))
+        proc = None
+        communication = None
         try:
-            proc = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.PIPE,
-                **_SUBPROCESS_KW,
-            )
-            _, stderr = await proc.communicate()
+            proc = await asyncio.shield(spawn)
+            communication = asyncio.create_task(proc.communicate())
+            _, stderr = await asyncio.shield(communication)
             if proc.returncode != 0:
                 err = (stderr or b"").decode("utf-8", errors="ignore").strip()
                 logger.warning(
@@ -494,3 +541,29 @@ class MusicDownloader:
         except Exception as e:
             logger.warning(f"FFmpeg copy 预取异常: {e}", exc_info=True)
             return False
+        finally:
+            async def cleanup():
+                # spawn is shielded: cancellation can precede the Process handle.
+                try:
+                    child = proc if proc is not None else await spawn
+                except Exception:
+                    return
+                reader = communication or asyncio.create_task(child.communicate())
+                try:
+                    if child.returncode is None:
+                        try:
+                            child.terminate()
+                        except ProcessLookupError:
+                            pass
+                        try:
+                            await asyncio.wait_for(child.wait(), timeout=2.0)
+                        except asyncio.TimeoutError:
+                            try:
+                                child.kill()
+                            except ProcessLookupError:
+                                pass
+                            await child.wait()
+                finally:
+                    await asyncio.gather(reader, return_exceptions=True)
+
+            await self._await_cleanup(asyncio.create_task(cleanup()))

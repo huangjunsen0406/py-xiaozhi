@@ -44,7 +44,9 @@ class AudioStreamManager:
         Raises:
             Exception: 创建流失败
         """
-        # 允许 stop() 后再 create（热重载路径）
+        # Never overwrite a handle whose earlier close failed.
+        if self.is_active() and not self.stop():
+            raise RuntimeError("旧音频流尚未关闭，无法创建新流")
         self._stopped = False
         try:
             # 使用 ALSAErrorSuppressor 抑制 Linux 上的 ALSA 警告
@@ -80,6 +82,7 @@ class AudioStreamManager:
             )
         except Exception as e:
             logger.error(f"创建音频流失败: {e}", exc_info=True)
+            self.stop()
             raise
 
     def start(self) -> None:
@@ -96,28 +99,35 @@ class AudioStreamManager:
             logger.info("音频流已启动")
         except Exception as e:
             logger.error(f"启动音频流失败: {e}", exc_info=True)
+            self.stop()
             raise
 
-    def stop(self) -> None:
-        """停止音频流，幂等可重复调用"""
-        if getattr(self, "_stopped", False):
-            return
-        self._stopped = True
-
+    def _close_stream(self, name: str) -> bool:
+        stream = getattr(self, name)
+        if stream is None:
+            return True
         try:
-            if self.input_stream:
-                self.input_stream.stop()
-                self.input_stream.close()
-                self.input_stream = None
+            stream.stop()
+        except Exception as exc:
+            logger.error("停止 %s 失败: %s", name, exc, exc_info=True)
+        # Closing is still required when stopping raises. Retain failed handles
+        # so a later stop/close can retry rather than silently losing ownership.
+        try:
+            stream.close()
+        except Exception as exc:
+            logger.error("关闭 %s 失败: %s", name, exc, exc_info=True)
+            return False
+        setattr(self, name, None)
+        return True
 
-            if self.output_stream:
-                self.output_stream.stop()
-                self.output_stream.close()
-                self.output_stream = None
-
+    def stop(self) -> bool:
+        """Close both streams independently; unsuccessful closes remain retryable."""
+        self._close_stream("input_stream")
+        self._close_stream("output_stream")
+        self._stopped = not self.is_active()
+        if self._stopped:
             logger.info("音频流已停止")
-        except Exception as e:
-            logger.error(f"停止音频流失败: {e}", exc_info=True)
+        return self._stopped
 
     def is_active(self) -> bool:
         """是否仍持有未关闭的输入/输出流."""
@@ -144,9 +154,8 @@ class AudioStreamManager:
             with ALSAErrorSuppressor():
                 if is_input and input_callback:
                     # 重建输入流
-                    if self.input_stream:
-                        self.input_stream.stop()
-                        self.input_stream.close()
+                    if not self._close_stream("input_stream"):
+                        return False
 
                     self.input_stream = sd.InputStream(
                         device=self.device_config.input_device_id,
@@ -158,14 +167,14 @@ class AudioStreamManager:
                         latency="low",
                     )
                     self.input_stream.start()
+                    self._stopped = False
                     logger.info("输入流重新初始化成功")
                     return True
 
                 elif not is_input and output_callback:
                     # 重建输出流
-                    if self.output_stream:
-                        self.output_stream.stop()
-                        self.output_stream.close()
+                    if not self._close_stream("output_stream"):
+                        return False
 
                     self.output_stream = sd.OutputStream(
                         device=self.device_config.output_device_id,
@@ -177,6 +186,7 @@ class AudioStreamManager:
                         latency="low",
                     )
                     self.output_stream.start()
+                    self._stopped = False
                     logger.info("输出流重新初始化成功")
                     return True
 
@@ -185,4 +195,6 @@ class AudioStreamManager:
         except Exception as e:
             stream_type = "输入" if is_input else "输出"
             logger.error(f"{stream_type}流重建失败: {e}", exc_info=True)
+            self._close_stream("input_stream" if is_input else "output_stream")
+            self._stopped = not self.is_active()
             return False

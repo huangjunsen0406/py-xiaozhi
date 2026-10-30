@@ -22,7 +22,7 @@ class McpPlugin(Plugin):
 
     def __init__(
         self,
-        server: Optional[McpServer] = None,
+        server: McpServer | None = None,
         music_player: Optional["MusicPlayer"] = None,
     ) -> None:
         super().__init__()
@@ -51,12 +51,13 @@ class McpPlugin(Plugin):
             from src.mcp.tools.camera import create_camera, register_camera_tools
             from src.mcp.tools.screenshot import register_screenshot_tools
 
-            camera = create_camera()
+            camera = create_camera(config=ctx.get_config())
             server.set_camera(camera)
             register_camera_tools(server.add_tool, camera)
             register_screenshot_tools(server.add_tool, camera)
 
-            server.add_common_tools(music_player=self._music_player)
+            server.register_builtin_tools(music_player=self._music_player)
+            server.reload_external_plugins(music_player=self._music_player)
         except Exception as e:
             logger.error(f"MCP 工具注册失败: {e}", exc_info=True)
             self.mark_failed()
@@ -83,20 +84,3 @@ class McpPlugin(Plugin):
                 await self._server.parse_message(payload)
         except Exception as e:
             logger.error(f"MCP 消息处理失败: {e}", exc_info=True)
-
-    def register_resources(self, pool) -> None:
-        async def _mcp_cleanup():
-            try:
-                music_player = self._music_player
-                if music_player.is_playing:
-                    await music_player.stop()
-                music_player.detach()
-            except Exception as e:
-                logger.debug(f"停止/detach 音乐播放器失败: {e}", exc_info=True)
-
-            try:
-                self._server.detach()
-            except Exception as e:
-                logger.debug(f"MCP shutdown 清理失败: {e}", exc_info=True)
-
-        pool.register("mcp.server", _mcp_cleanup)

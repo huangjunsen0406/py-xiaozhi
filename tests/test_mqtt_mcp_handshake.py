@@ -6,7 +6,7 @@ import json
 import pytest
 
 from src.core.event_bus import EventBus, Events
-from src.core.protocol_manager import ProtocolTransport
+from src.core.protocol_manager import ProtocolManager
 from src.core.task_manager import TaskManager
 from src.mcp.mcp_server import McpServer
 from src.mcp.tooling import McpTool, PropertyList
@@ -136,11 +136,10 @@ async def test_mqtt_mcp_tools_list_before_hello_reaches_server(
     """网关可在 MQTT CONNACK 后、客户端 hello 前拉取工具清单."""
     from src.protocols import mqtt_protocol as mqtt_module
 
-    monkeypatch.setattr(mqtt_module, "get_config", lambda: object())
 
     task_manager = TaskManager()
     task_manager.initialize()
-    transport = ProtocolTransport(EventBus(), task_manager=task_manager)
+    transport = ProtocolManager(EventBus(), task_manager=task_manager)
     protocol = mqtt_module.MqttProtocol(asyncio.get_running_loop())
     result = _PublishedMessage(mqtt_module.mqtt.MQTT_ERR_SUCCESS)
     protocol.mqtt_client = _FakeMqttClient(result)
@@ -201,7 +200,6 @@ async def test_mqtt_mcp_tools_list_before_hello_reaches_server(
 async def test_mqtt_send_text_rejects_publish_enqueue_failure(monkeypatch):
     from src.protocols import mqtt_protocol as mqtt_module
 
-    monkeypatch.setattr(mqtt_module, "get_config", lambda: object())
 
     protocol = mqtt_module.MqttProtocol(asyncio.get_running_loop())
     result = _PublishedMessage(mqtt_module.mqtt.MQTT_ERR_NO_CONN)
@@ -229,13 +227,12 @@ async def test_mqtt_connection_uses_controlled_reconnect_and_disconnects_cleanly
     }
 
     class _Config:
-        def get_config(self, key):
-            assert key == "SYSTEM_OPTIONS.NETWORK.MQTT_INFO"
-            return mqtt_info
+        def get_config(self, key, default=None):
+            if key == "SYSTEM_OPTIONS.NETWORK.MQTT_INFO":
+                return mqtt_info
+            return default
 
-    monkeypatch.setattr(mqtt_module, "get_config", lambda: _Config())
-
-    protocol = mqtt_module.MqttProtocol(asyncio.get_running_loop())
+    protocol = mqtt_module.MqttProtocol(asyncio.get_running_loop(), config=_Config())
     protocol._udp = _FakeUdp()
     clients = []
 
@@ -285,13 +282,12 @@ async def test_mqtt_closes_only_udp_session_and_reuses_broker(monkeypatch):
     }
 
     class _Config:
-        def get_config(self, key):
-            assert key == "SYSTEM_OPTIONS.NETWORK.MQTT_INFO"
-            return mqtt_info
+        def get_config(self, key, default=None):
+            if key == "SYSTEM_OPTIONS.NETWORK.MQTT_INFO":
+                return mqtt_info
+            return default
 
-    monkeypatch.setattr(mqtt_module, "get_config", lambda: _Config())
-
-    protocol = mqtt_module.MqttProtocol(asyncio.get_running_loop())
+    protocol = mqtt_module.MqttProtocol(asyncio.get_running_loop(), config=_Config())
     udp = _FakeUdp()
     protocol._udp = udp
     clients = []
@@ -355,12 +351,12 @@ async def test_mqtt_start_opens_only_control_connection_until_audio_is_requested
     }
 
     class _Config:
-        def get_config(self, key):
-            assert key == "SYSTEM_OPTIONS.NETWORK.MQTT_INFO"
-            return mqtt_info
+        def get_config(self, key, default=None):
+            if key == "SYSTEM_OPTIONS.NETWORK.MQTT_INFO":
+                return mqtt_info
+            return default
 
-    monkeypatch.setattr(mqtt_module, "get_config", lambda: _Config())
-    protocol = mqtt_module.MqttProtocol(asyncio.get_running_loop())
+    protocol = mqtt_module.MqttProtocol(asyncio.get_running_loop(), config=_Config())
     udp = _FakeUdp()
     protocol._udp = udp
     clients = []
@@ -389,7 +385,6 @@ async def test_mqtt_control_reconnect_waits_for_idle_and_never_opens_udp(
 ):
     from src.protocols import mqtt_protocol as mqtt_module
 
-    monkeypatch.setattr(mqtt_module, "get_config", lambda: object())
     monkeypatch.setattr(mqtt_module, "_CONTROL_RECONNECT_DELAY", 0)
 
     protocol = mqtt_module.MqttProtocol(asyncio.get_running_loop())

@@ -29,6 +29,7 @@ from src.ui.tui.settings_data import (
     load_setting_values,
     save_settings,
 )
+from src.utils.config_manager import ConfigManager
 
 logger = get_logger()
 
@@ -84,9 +85,10 @@ class SettingsScreen(ModalScreen[bool]):
     }
     """
 
-    def __init__(self) -> None:
+    def __init__(self, config: ConfigManager | None = None) -> None:
         super().__init__()
-        self._values = load_setting_values()
+        self._config = config if config is not None else ConfigManager.from_dict()
+        self._values = load_setting_values(self._config)
 
     def compose(self) -> ComposeResult:
         with Vertical(id="settings-dialog"):
@@ -142,7 +144,7 @@ class SettingsScreen(ModalScreen[bool]):
     @on(Button.Pressed, "#btn-save")
     def on_save_btn(self) -> None:
         values = self._collect_values()
-        ok, msg = save_settings(values)
+        ok, msg = save_settings(values, self._config)
         try:
             self.query_one("#settings-status", Static).update(msg)
         except Exception:
@@ -204,9 +206,11 @@ class XiaozhiTuiApp(App[None]):
         self,
         on_command: Callable[[str], None] | None = None,
         on_settings_saved: Callable[[], None] | None = None,
+        config: ConfigManager | None = None,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
+        self._config = config if config is not None else ConfigManager.from_dict()
         self._on_command = on_command
         self._on_settings_saved = on_settings_saved
         self._log_handler_installed = False
@@ -330,7 +334,7 @@ class XiaozhiTuiApp(App[None]):
                         logger.error(f"设置保存回调失败: {e}", exc_info=True)
                         self.write_log(f"[red]热应用失败: {e}[/]")
 
-        self.push_screen(SettingsScreen(), _done)
+        self.push_screen(SettingsScreen(self._config), _done)
 
     def action_quit_app(self) -> None:
         if self._on_command:

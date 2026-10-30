@@ -74,13 +74,13 @@ class Protocol:
         """
         self._on_reconnecting = callback
 
-    async def send_text(self, message):
+    async def send_text(self, message) -> bool:
         """
         发送文本消息的抽象方法，需要在子类中实现.
         """
         raise NotImplementedError("send_text方法必须由子类实现")
 
-    async def send_audio(self, data: bytes):
+    async def send_audio(self, data: bytes) -> bool:
         """
         发送音频数据的抽象方法，需要在子类中实现.
         """
@@ -128,16 +128,16 @@ class Protocol:
         finally:
             await self._shutdown_control_channel()
 
-    async def send_abort_speaking(self, reason):
+    async def send_abort_speaking(self, reason) -> bool:
         """
         发送中止语音的消息.
         """
         message = {"session_id": self.session_id, "type": "abort"}
         if reason == AbortReason.WAKE_WORD_DETECTED:
             message["reason"] = "wake_word_detected"
-        await self.send_text(json.dumps(message))
+        return await self.send_text(json.dumps(message))
 
-    async def send_wake_word_detected(self, wake_word):
+    async def send_wake_word_detected(self, wake_word) -> bool:
         """
         发送检测到唤醒词的消息.
         """
@@ -147,9 +147,9 @@ class Protocol:
             "state": "detect",
             "text": wake_word,
         }
-        await self.send_text(json.dumps(message))
+        return await self.send_text(json.dumps(message))
 
-    async def send_start_listening(self, mode):
+    async def send_start_listening(self, mode) -> bool:
         """
         发送开始监听的消息.
         """
@@ -164,16 +164,16 @@ class Protocol:
             "state": "start",
             "mode": mode_map[mode],
         }
-        await self.send_text(json.dumps(message))
+        return await self.send_text(json.dumps(message))
 
-    async def send_stop_listening(self):
+    async def send_stop_listening(self) -> bool:
         """
         发送停止监听的消息.
         """
         message = {"session_id": self.session_id, "type": "listen", "state": "stop"}
-        await self.send_text(json.dumps(message))
+        return await self.send_text(json.dumps(message))
 
-    async def send_iot_descriptors(self, descriptors):
+    async def send_iot_descriptors(self, descriptors) -> bool:
         """
         发送物联网设备描述信息.
         """
@@ -187,12 +187,14 @@ class Protocol:
             # 检查是否为数组
             if not isinstance(descriptors_data, list):
                 logger.error("IoT descriptors should be an array")
-                return
+                return False
 
             # 为每个描述符发送单独的消息
+            accepted = True
             for i, descriptor in enumerate(descriptors_data):
                 if descriptor is None:
                     logger.error(f"Failed to get IoT descriptor at index {i}")
+                    accepted = False
                     continue
 
                 message = {
@@ -203,19 +205,22 @@ class Protocol:
                 }
 
                 try:
-                    await self.send_text(json.dumps(message))
+                    sent = await self.send_text(json.dumps(message))
+                    accepted = bool(sent) and accepted
                 except Exception as e:
                     logger.error(
                         f"Failed to send JSON message for IoT descriptor "
                         f"at index {i}: {e}"
                     )
+                    accepted = False
                     continue
+            return accepted
 
         except json.JSONDecodeError as e:
             logger.error(f"Failed to parse IoT descriptors: {e}", exc_info=True)
-            return
+            return False
 
-    async def send_iot_states(self, states):
+    async def send_iot_states(self, states) -> bool:
         """
         发送物联网设备状态信息.
         """
@@ -230,9 +235,9 @@ class Protocol:
             "update": True,
             "states": states_data,
         }
-        await self.send_text(json.dumps(message))
+        return await self.send_text(json.dumps(message))
 
-    async def send_mcp_message(self, payload) -> bool | None:
+    async def send_mcp_message(self, payload) -> bool:
         """
         发送MCP消息.
         """
@@ -448,13 +453,16 @@ class Protocol:
                     await self._on_network_error(f"重连异常: {str(e)}")
 
     async def _cancel_monitor_task(self):
-        """取消并等待连接监控任务完成."""
-        if self._connection_monitor_task and not self._connection_monitor_task.done():
-            self._connection_monitor_task.cancel()
-            try:
-                await self._connection_monitor_task
-            except asyncio.CancelledError:
-                pass
+        """取消外部监控任务；监控自身结束时只清除引用。"""
+        task = self._connection_monitor_task
+        self._connection_monitor_task = None
+        if task is None or task.done() or task is asyncio.current_task():
+            return
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
 
     def get_connection_info(self) -> dict:
         """获取连接信息（基类实现，子类可扩展）.

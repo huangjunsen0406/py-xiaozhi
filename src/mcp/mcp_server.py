@@ -10,6 +10,7 @@ from typing import Any
 from src.constants.system import SystemConstants
 from src.logging import get_logger
 from src.mcp.tooling import McpTool, PropertyList
+from src.utils.config_manager import ConfigManager
 
 logger = get_logger()
 
@@ -21,7 +22,11 @@ class McpServer:
     由 ServiceContainer 创建，经 McpPlugin 注入。
     """
 
-    def __init__(self):
+    def __init__(self, config=None):
+        self.config = (
+            config if config is not None
+            else ConfigManager.from_dict({"MCP_PLUGINS": {"ENABLED": False}})
+        )
         self.tools: list[McpTool] = []
         self._send_callback: Callable | None = None
         self._camera = None
@@ -108,23 +113,18 @@ class McpServer:
 
         from src.mcp.plugins.loader import load_mcp_plugins_from_config
 
-        capabilities = {}
+        capabilities = {"config_readonly": self.config}
         if music_player is not None:
             capabilities["music_player"] = music_player
-        try:
-            from src.utils.config_manager import get_config
-
-            capabilities["config_readonly"] = get_config()
-        except Exception:
-            pass
 
         return load_mcp_plugins_from_config(
             self.add_tool,
+            config=self.config,
             capabilities=capabilities,
             tool_owner=self._plugin_tool_owner,
         )
 
-    def add_common_tools(self, music_player=None, volume_controller=None):
+    def register_builtin_tools(self, music_player=None, volume_controller=None):
         """
         添加通用工具（全部经 register_* 显式挂载）.
 
@@ -150,38 +150,23 @@ class McpServer:
         preserved = [
             tool for tool in self.tools
             if tool.name not in self._common_tool_names
-            and tool.name not in self._plugin_tool_owner
         ]
         names = {tool.name for tool in preserved}
         for tool in common_tools:
             if tool.name in names:
                 raise ValueError(f"Tool name conflict: {tool.name}")
             names.add(tool.name)
-        self._unload_external_plugins()
         self.tools = common_tools + preserved
         self._common_tool_names = {tool.name for tool in common_tools}
 
-        # 外挂：用户目录插件包（自带 lib/），失败隔离
+    def add_common_tools(self, music_player=None, volume_controller=None):
+        """兼容旧调用；新装配分别注册内置工具和加载外挂。"""
+        self.register_builtin_tools(music_player, volume_controller)
         try:
-            from src.mcp.plugins.loader import load_mcp_plugins_from_config
-
-            capabilities = {}
-            if music_player is not None:
-                capabilities["music_player"] = music_player
-            try:
-                from src.utils.config_manager import get_config
-
-                capabilities["config_readonly"] = get_config()
-            except Exception:
-                pass
-
-            load_mcp_plugins_from_config(
-                self.add_tool,
-                capabilities=capabilities,
-                tool_owner=self._plugin_tool_owner,
-            )
+            return self.reload_external_plugins(music_player, volume_controller)
         except Exception as e:
             logger.error(f"加载外挂 MCP 插件失败: {e}", exc_info=True)
+            return []
 
     async def parse_message(self, message: str | dict[str, Any]):
         """
@@ -268,9 +253,8 @@ class McpServer:
         """从配置读取 MCP_TOOLS.DISABLED（黑名单）."""
         try:
             from src.mcp.tool_catalog import normalize_disabled
-            from src.utils.config_manager import get_config
 
-            raw = get_config().get_config("MCP_TOOLS.DISABLED", []) or []
+            raw = self.config.get_config("MCP_TOOLS.DISABLED", []) or []
             return set(normalize_disabled(raw))
         except Exception:
             return set()
@@ -385,7 +369,7 @@ class McpServer:
                 if camera is None:
                     from src.mcp.tools.camera import create_camera
 
-                    camera = create_camera()
+                    camera = create_camera(config=self.config)
                     self._camera = camera
                 camera.set_explain_url(url)
                 if token:
