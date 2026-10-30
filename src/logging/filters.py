@@ -8,7 +8,6 @@
 
 import logging
 import re
-from typing import Optional
 
 
 class SensitiveDataFilter(logging.Filter):
@@ -72,7 +71,7 @@ class SensitiveDataFilter(logging.Filter):
     def __init__(
         self,
         name: str = "",
-        patterns: Optional[list[str]] = None,
+        patterns: list[str] | None = None,
         mask: str = "***",
         enable_regex: bool = True,
     ) -> None:
@@ -157,7 +156,7 @@ class DuplicateFilter(logging.Filter):
         import time
 
         now = time.time()
-        key = f"{record.name}:{record.levelno}:{record.msg}"
+        key = f"{record.name}:{record.levelno}:{record.getMessage()}"
 
         last_time = self._last_log.get(key, 0)
         if now - last_time < self.suppress_seconds:

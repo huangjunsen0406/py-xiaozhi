@@ -162,6 +162,10 @@ def clear_path_caches() -> None:
     get_app_root.cache_clear()
 
 
+def _migration_paths_overlap(src: Path, dst: Path) -> bool:
+    return src != dst and (src.is_relative_to(dst) or dst.is_relative_to(src))
+
+
 def migrate_directory(
     src: Path,
     dst: Path,
@@ -189,6 +193,9 @@ def migrate_directory(
     if src == dst:
         result["ok"] = True
         result["skipped"] = "same_path"
+        return result
+    if _migration_paths_overlap(src, dst):
+        result["error"] = "source and destination directories overlap"
         return result
     if not src.is_dir():
         result["ok"] = True
@@ -262,6 +269,43 @@ def apply_path_overrides_from_config(
     music_s = _cfg("PATHS.MUSIC_CACHE_DIR")
     kw_s = _cfg("PATHS.KEYWORDS_DIR")
 
+    # 先解析并校验所有候选路径，不能先激活/创建目标再发现迁移重叠。
+    def _candidate(env_name: str, configured: str | None, default: Path) -> Path:
+        env = _env_path(env_name)
+        if env is not None:
+            return env
+        return (
+            Path(configured).expanduser().resolve() if configured else default.resolve()
+        )
+
+    data = get_user_data_dir()
+    proposed_cache = _candidate(ENV_CACHE_DIR, cache_s, data / "cache")
+    proposed_log = _candidate(ENV_LOG_DIR, log_s, data / "logs")
+    proposed_music = _candidate(ENV_MUSIC_CACHE_DIR, music_s, proposed_cache / "music")
+    proposed_kw = _candidate(ENV_KEYWORDS_DIR, kw_s, data / "keywords")
+    if migrate:
+        for kind, old, new in (
+            ("cache", old_cache, proposed_cache),
+            ("logs", old_log, proposed_log),
+            ("music", old_music, proposed_music),
+            ("keywords", old_kw, proposed_kw),
+        ):
+            if _migration_paths_overlap(old.resolve(), new):
+                migrations.append(
+                    {
+                        "kind": kind,
+                        "ok": False,
+                        "src": str(old.resolve()),
+                        "dst": str(new),
+                        "files_copied": 0,
+                        "error": "source and destination directories overlap",
+                    }
+                )
+        if migrations:
+            for r in migrations:
+                _log_migration(r["kind"], Path(r["src"]), Path(r["dst"]), r)
+            return migrations
+
     # 仅当 env 未设时应用 config 覆盖
     if _env_path(ENV_CACHE_DIR) is None:
         _override_cache = Path(cache_s).expanduser().resolve() if cache_s else None
@@ -284,9 +328,9 @@ def apply_path_overrides_from_config(
     cache_skip: set[str] = set()
     try:
         music_under_old_cache = old_music.resolve() == (old_cache / "music").resolve()
-        music_stays_default_under_new = new_music.resolve() == (
-            new_cache / "music"
-        ).resolve()
+        music_stays_default_under_new = (
+            new_music.resolve() == (new_cache / "music").resolve()
+        )
         # 旧 music 在 cache 下，但新 music 不是「新 cache/music」→ 由 music 项单独迁，cache 勿再拷
         if music_under_old_cache and not music_stays_default_under_new:
             cache_skip.add("music")
@@ -512,7 +556,9 @@ def get_ffprobe_path() -> str:
 
     plat_dir, arch = get_platform_info()
     ext = ".exe" if sys.platform == "win32" else ""
-    bundled = get_resource_root() / "libs" / "ffmpeg" / plat_dir / arch / f"ffprobe{ext}"
+    bundled = (
+        get_resource_root() / "libs" / "ffmpeg" / plat_dir / arch / f"ffprobe{ext}"
+    )
     if bundled.exists():
         return str(bundled)
     return shutil.which("ffprobe") or "ffprobe"
