@@ -97,7 +97,7 @@ def test_no_runtime_provider_keeps_builtin_disk_and_disabled_rows(
     assert rows["removed.disabled"]["enabled"] is False
 
 
-@pytest.mark.parametrize("mode", ["cli", "gpio", "gpio-fallback"])
+@pytest.mark.parametrize("mode", ["cli", "tui", "gpio", "gpio-fallback"])
 def test_factory_forwards_provider_only_to_settings_capable_views(monkeypatch, mode):
     from src.ui.shared import factory
 

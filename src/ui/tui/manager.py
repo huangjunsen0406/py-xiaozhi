@@ -3,16 +3,18 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 from src.core.event_bus import EventBus, Events
 from src.logging import get_logger
 from src.ui.shared.event_emitter import safe_emit
+from src.ui.tui.settings_services import SettingsServices
+from src.utils.config_manager import ConfigManager
 
 if TYPE_CHECKING:
     from src.core.task_manager import TaskManager
     from src.ui.tui.app import XiaozhiTuiApp
-    from src.utils.config_manager import ConfigManager
 
 logger = get_logger()
 
@@ -25,10 +27,17 @@ class TuiViewManager:
         event_bus: EventBus,
         task_manager: TaskManager | None = None,
         config_manager: ConfigManager | None = None,
+        runtime_tool_names: Callable[[], tuple[str, ...]] | None = None,
     ):
         self._event_bus = event_bus
         self._task_manager = task_manager
-        self._config_manager = config_manager
+        self._config_manager = (
+            config_manager if config_manager is not None else ConfigManager.from_dict()
+        )
+        self._settings_services = SettingsServices(
+            self._config_manager, event_bus, runtime_tool_names
+        )
+        self._reconnect_snapshot = self._reconnect_values()
         self._running = False
         self._loop: asyncio.AbstractEventLoop | None = None
         self._app: XiaozhiTuiApp | None = None
@@ -62,6 +71,7 @@ class TuiViewManager:
             on_command=self._handle_command,
             on_settings_saved=self._on_settings_saved,
             config=self._config_manager,
+            settings_services=self._settings_services,
         )
         self._app.status_text = self._status
         self._app.connected = self._connected
@@ -85,6 +95,7 @@ class TuiViewManager:
             raise
         finally:
             self._running = False
+            self._settings_services.close()
             if self._app is not None:
                 try:
                     self._app.uninstall_log_handler()
@@ -96,6 +107,7 @@ class TuiViewManager:
         """关闭 TUI."""
         logger.info("TuiViewManager: 正在关闭...")
         self._running = False
+        self._settings_services.close()
         app = self._app
         if app is not None:
             try:
@@ -120,9 +132,40 @@ class TuiViewManager:
         else:
             self._safe_emit(Events.UI_SEND_TEXT, {"text": cmd})
 
+    def _reconnect_values(self) -> dict:
+        from src.mcp.tool_catalog import normalize_disabled
+        from src.ui.tui.settings_data import SETTING_SECTIONS
+
+        values = {
+            field.path: self._config_manager.get_config(field.path)
+            for _, fields in SETTING_SECTIONS
+            for field in fields
+            if getattr(field, "effect", "hot") == "reconnect"
+        }
+        values["MCP_TOOLS.DISABLED"] = sorted(
+            normalize_disabled(
+                self._config_manager.get_config("MCP_TOOLS.DISABLED", [])
+            )
+        )
+        return values
+
     def _on_settings_saved(self) -> None:
-        """设置保存后通知运行时热重载."""
-        self._safe_emit(Events.CONFIG_CHANGED)
+        """配置提交成功后统一应用；关闭拒绝不另起任务。"""
+        current = self._reconnect_values()
+        reconnect = current != self._reconnect_snapshot
+        self._reconnect_snapshot = current
+
+        async def apply_settings():
+            await self._event_bus.emit(Events.CONFIG_CHANGED)
+            if reconnect:
+                await self._event_bus.emit(Events.PROTOCOL_RECONNECT_REQUEST)
+
+        if self._task_manager is not None:
+            self._task_manager.schedule_nowait(apply_settings)
+        elif self._app is not None and self._app.is_running:
+            self._app.run_worker(
+                apply_settings(), group="settings-apply", exit_on_error=False
+            )
 
     def _safe_emit(self, event: str, data=None):
         safe_emit(

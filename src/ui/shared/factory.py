@@ -44,6 +44,7 @@ def create_viewport(
             event_bus=event_bus,
             task_manager=task_manager,
             config_manager=config_manager,
+            runtime_tool_names=runtime_tool_names,
         )
 
     if normalized == "gpio":
