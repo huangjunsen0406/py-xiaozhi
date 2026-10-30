@@ -415,35 +415,33 @@ async def test_cli_view_manager_uses_task_manager_for_emit():
 
 
 @pytest.mark.asyncio
-async def test_music_player_tick_lyrics_in_playback_path():
-    """歌词由主循环 _tick_lyrics 驱动，无独立 lyrics task."""
+async def test_music_player_lyrics_use_owned_request_and_events(monkeypatch):
+    """歌词来自完整播放请求，事件携带歌曲身份且保留节流。"""
+    from unittest.mock import AsyncMock
+
+    from src.audio_codecs.music_decoder import MusicDecoder
     from src.mcp.tools.music.music_player import MusicPlayer
+    from src.mcp.tools.music.state import PlaybackRequest
 
     player = MusicPlayer()
-    eng = player._engine
-    assert not hasattr(player, "_lyrics_task") or player.__dict__.get("_lyrics_task") is None
-
+    bus = EventBus()
+    player.set_event_bus(bus)
     emitted = []
-
-    async def fake_emit(text, time_sec=0):
-        emitted.append(text)
-
-    player.lyrics = [(0.0, "hello"), (5.0, "world")]
-    eng.start_play_time = __import__("time").time() - 0.1
-    eng.total_duration = 100
-    eng.current_lyric_index = -1
-    eng.last_lyric_tick = 0.0
-    player._bus.emit_lyrics_update = fake_emit  # type: ignore
-
-    await player._tick_lyrics()
-    assert eng.current_lyric_index == 0
-    assert emitted and "hello" in emitted[0]
-
-    # 节流：立即再 tick 不应重复
-    n = len(emitted)
-    await player._tick_lyrics()
-    assert len(emitted) == n
-
+    bus.on(Events.MUSIC_LYRICS_UPDATE, emitted.append)
+    monkeypatch.setattr(MusicDecoder, "get_duration", AsyncMock(return_value=100))
+    monkeypatch.setattr(player._engine, "start_playback", AsyncMock(return_value=True))
+    request = PlaybackRequest(
+        song="hello track", song_id="track", source="fake.wav",
+        lyrics=((0.0, "hello"), (5.0, "world")),
+    )
+    assert await player._engine.play(request)
+    assert not hasattr(player, "_lyrics_task")
+    await player.tick_lyrics()
+    assert len(emitted) == 1
+    assert "hello" in emitted[0].text and emitted[0].song_id == "track"
+    await player.tick_lyrics()
+    assert len(emitted) == 1
+    await player.detach()
 
 def test_lyric_at_pure_function():
     from src.mcp.tools.music.lyrics import format_lyric_display, lyric_at

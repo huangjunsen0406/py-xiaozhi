@@ -105,15 +105,7 @@ def register_cleanup_resources(container: ServiceContainer) -> None:
     if container.mcp_server is not None:
         pool.register("mcp.server", container.mcp_server.detach)
     if container.music_player is not None:
-        player = container.music_player
-
-        async def close_music(player=player):
-            try:
-                await player.stop()
-            finally:
-                await player.detach()
-
-        pool.register("music_player", close_music)
+        pool.register("music_player", container.music_player.detach)
     if container.notification_player is not None:
         player = container.notification_player
 
