@@ -18,7 +18,6 @@ logger = get_logger()
 
 class McpPlugin(Plugin):
     name = "mcp"
-    priority = 20  # 工具注册，需要较早初始化
 
     def __init__(
         self,

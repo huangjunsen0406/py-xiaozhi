@@ -25,7 +25,6 @@ _UPLINK_BACKLOG_MS = 500
 
 class AudioPlugin(Plugin):
     name = "audio"
-    priority = 10  # 最高优先级，其他插件依赖 audio_codec
 
     def __init__(self) -> None:
         super().__init__()
@@ -66,7 +65,7 @@ class AudioPlugin(Plugin):
 
         except Exception as e:
             logger.error(f"音频插件初始化失败: {e}", exc_info=True)
-            self.codec = None
+            # 保留已构造 codec 的所有权，供资源池重试 initialize 回滚中失败的关闭。
             self.mark_failed()
             raise
 
@@ -110,7 +109,7 @@ class AudioPlugin(Plugin):
 
     async def _on_config_changed(self, data=None):
         """配置变更时重新加载音频设备（含 PortAudio 重枚举）."""
-        if self.codec:
+        if self.codec and not self.failed:
             logger.info("AudioPlugin: 收到配置变更事件，重新加载音频设备")
             await self._publish_audio_codec(None)
             if await self.codec.reload_devices(reenumerate=True):
@@ -121,11 +120,17 @@ class AudioPlugin(Plugin):
 
         payload 可为 asyncio.Future，完成后 set_result(list_audio_devices 结果)。
         """
-        from src.utils.audio_utils import list_audio_devices, refresh_portaudio_devices
-
         future = data if isinstance(data, asyncio.Future) else None
         result = {"input": [], "output": []}
         try:
+            if self.failed:
+                return
+
+            from src.utils.audio_utils import (
+                list_audio_devices,
+                refresh_portaudio_devices,
+            )
+
             if self.codec:
                 await self._publish_audio_codec(None)
                 # 停流后才能安全 _terminate PortAudio
@@ -156,7 +161,7 @@ class AudioPlugin(Plugin):
         """
         设备状态变化时处理.
         """
-        if not self.codec:
+        if not self.codec or self.failed:
             return
 
         from src.constants.constants import DeviceState
@@ -195,7 +200,7 @@ class AudioPlugin(Plugin):
             config = self._ctx.get_config()
             if not bool(config.get_config("AEC_OPTIONS.MUSIC_PARALLEL", True)):
                 return False
-            return bool(self.codec and self.codec.aec_active)
+            return bool(self.codec and not self.failed and self.codec.aec_active)
         except Exception:
             return False
 
@@ -203,7 +208,7 @@ class AudioPlugin(Plugin):
         """
         接收并播放音频数据.
         """
-        if self.codec:
+        if self.codec and not self.failed:
             try:
                 await self.codec.write_audio(data)
             except Exception as e:
@@ -238,7 +243,8 @@ class AudioPlugin(Plugin):
 
     def register_resources(self, pool) -> None:
         codec = self.codec
-        if codec:
+        # failed 只阻止使用，已构造资源仍必须登记清理。
+        if codec is not None:
 
             async def _cleanup():
                 """音频编解码器完整清理：先通知订阅者清 codec，再 close."""
@@ -310,7 +316,11 @@ class AudioPlugin(Plugin):
         判断是否应该发送麦克风音频.
         """
         try:
-            if self._in_silence_period or time.monotonic() < self._silence_until:
+            if (
+                self.failed
+                or self._in_silence_period
+                or time.monotonic() < self._silence_until
+            ):
                 return False
             return self._ctx.should_capture_audio()
         except Exception as e:

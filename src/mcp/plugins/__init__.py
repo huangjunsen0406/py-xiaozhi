@@ -2,12 +2,11 @@
 
 from .host import McpHost
 from .loader import PluginLoader, default_plugins_dir
-from .registry import PluginRegistry, get_plugin_registry
+from .registry import PluginRuntime
 
 __all__ = [
     "McpHost",
     "PluginLoader",
-    "PluginRegistry",
+    "PluginRuntime",
     "default_plugins_dir",
-    "get_plugin_registry",
 ]

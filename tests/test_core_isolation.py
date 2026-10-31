@@ -237,13 +237,14 @@ async def test_ui_uses_only_conversation_intents_and_subscribes_once():
 
 
 @pytest.mark.asyncio
-async def test_shortcut_adapter_uses_auto_conversation_intent():
-    from src.plugins.shortcuts import _CmdAdapter
+async def test_shortcut_uses_auto_conversation_intent():
+    from src.plugins.shortcuts import ShortcutsPlugin
 
     commands = SimpleNamespace(start_auto_conversation=AsyncMock(return_value=True))
-    # No config or low-level protocol API is exposed to the adapter.
-    adapter = _CmdAdapter(commands, object())
-    await adapter.toggle_chat_state()
+    plugin = ShortcutsPlugin()
+    # No configuration or low-level protocol API is needed for this intent.
+    plugin._cmd = commands
+    await plugin._handle_auto_toggle()
     commands.start_auto_conversation.assert_awaited_once_with()
 
 
@@ -400,7 +401,7 @@ async def test_import_failure_closes_protocol_consumer_and_tasks(monkeypatch):
     try:
         with monkeypatch.context() as patch:
             patch.setattr(builtins, "__import__", fail_shortcut_import)
-            assert await core.run(mode="cli") == 1
+            assert await core.run(mode="tui") == 1
         assert core.tasks.task_count() == 0
         assert not core.protocol._audio_consumer_running
         assert core.protocol._audio_consumer_task is None

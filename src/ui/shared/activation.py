@@ -44,7 +44,7 @@ class BaseActivation:
         raise NotImplementedError
 
     def _show_code(self, data: dict) -> None:
-        """展示激活验证码（CLI 打印 / GUI 写 Model）."""
+        """展示激活验证码（终端打印或 GUI 写入 Model）。"""
         raise NotImplementedError
 
     def _show_result(self, success: bool) -> None:

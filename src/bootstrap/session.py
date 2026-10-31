@@ -401,9 +401,6 @@ class ConversationSession:
     async def start_listening_manual(self) -> bool:
         return await self.start_listening(ListeningMode.MANUAL)
 
-    async def stop_listening_manual(self) -> None:
-        await self.stop_listening()
-
     async def start_auto_conversation(self) -> bool:
         enabled = self.config is None or bool(
             self.config.get_config("AEC_OPTIONS.ENABLED", True)

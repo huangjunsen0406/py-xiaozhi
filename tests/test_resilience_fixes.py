@@ -76,7 +76,13 @@ async def test_plugin_manager_marks_failed_and_skips_dependents():
 
     await mgr.setup_all(ctx=None, cmd=None)
     await mgr.start_all()
-    await mgr.notify_incoming_json({"type": "test"})
+    from types import SimpleNamespace
+
+    from src.bootstrap.plugin_wiring import subscribe_builtin_events
+
+    bus = EventBus()
+    subscribe_builtin_events(SimpleNamespace(plugins=mgr, event_bus=bus))
+    await bus.emit_sequential(Events.SESSION_MESSAGE, {"type": "test"})
 
     assert boom.failed is True
     assert dep.failed is True
@@ -202,9 +208,18 @@ async def test_plugin_mark_failed_skips_notify_only_for_failed():
     mgr = PluginManager()
     ok = _OkPlugin()
     ok.mark_failed()
-    mgr.register(ok)
-    await mgr.notify_incoming_json({"x": 1})
+    from types import SimpleNamespace
+
+    from src.bootstrap.plugin_wiring import subscribe_builtin_events
+
+    healthy = _OkPlugin()
+    healthy.name = "healthy"
+    mgr.register(ok, healthy)
+    bus = EventBus()
+    subscribe_builtin_events(SimpleNamespace(plugins=mgr, event_bus=bus))
+    await bus.emit_sequential(Events.SESSION_MESSAGE, {"x": 1})
     assert ok.notify_calls == 0
+    assert healthy.notify_calls == 1
 
 
 def test_constants_import_has_no_config_manager_side_effect(monkeypatch):
@@ -387,10 +402,10 @@ def test_config_manager_initialize_and_reset():
 
 
 @pytest.mark.asyncio
-async def test_cli_view_manager_uses_task_manager_for_emit():
+async def test_tui_view_manager_uses_task_manager_for_emit():
     from src.core.event_bus import EventBus, Events
     from src.core.task_manager import TaskManager
-    from src.ui.cli.manager import CliViewManager
+    from src.ui.tui.manager import TuiViewManager
 
     bus = EventBus()
     tm = TaskManager()
@@ -401,7 +416,7 @@ async def test_cli_view_manager_uses_task_manager_for_emit():
         got.append("abort")
 
     bus.on(Events.UI_ABORT_REQUEST, on_abort)
-    vm = CliViewManager(event_bus=bus, task_manager=tm)
+    vm = TuiViewManager(event_bus=bus, task_manager=tm)
     vm._loop = asyncio.get_running_loop()
     vm._safe_emit(Events.UI_ABORT_REQUEST)
 
@@ -415,35 +430,33 @@ async def test_cli_view_manager_uses_task_manager_for_emit():
 
 
 @pytest.mark.asyncio
-async def test_music_player_tick_lyrics_in_playback_path():
-    """歌词由主循环 _tick_lyrics 驱动，无独立 lyrics task."""
+async def test_music_player_lyrics_use_owned_request_and_events(monkeypatch):
+    """歌词来自完整播放请求，事件携带歌曲身份且保留节流。"""
+    from unittest.mock import AsyncMock
+
+    from src.audio_codecs.music_decoder import MusicDecoder
     from src.mcp.tools.music.music_player import MusicPlayer
+    from src.mcp.tools.music.state import PlaybackRequest
 
     player = MusicPlayer()
-    eng = player._engine
-    assert not hasattr(player, "_lyrics_task") or player.__dict__.get("_lyrics_task") is None
-
+    bus = EventBus()
+    player.set_event_bus(bus)
     emitted = []
-
-    async def fake_emit(text, time_sec=0):
-        emitted.append(text)
-
-    player.lyrics = [(0.0, "hello"), (5.0, "world")]
-    eng.start_play_time = __import__("time").time() - 0.1
-    eng.total_duration = 100
-    eng.current_lyric_index = -1
-    eng.last_lyric_tick = 0.0
-    player._bus.emit_lyrics_update = fake_emit  # type: ignore
-
-    await player._tick_lyrics()
-    assert eng.current_lyric_index == 0
-    assert emitted and "hello" in emitted[0]
-
-    # 节流：立即再 tick 不应重复
-    n = len(emitted)
-    await player._tick_lyrics()
-    assert len(emitted) == n
-
+    bus.on(Events.MUSIC_LYRICS_UPDATE, emitted.append)
+    monkeypatch.setattr(MusicDecoder, "get_duration", AsyncMock(return_value=100))
+    monkeypatch.setattr(player._engine, "start_playback", AsyncMock(return_value=True))
+    request = PlaybackRequest(
+        song="hello track", song_id="track", source="fake.wav",
+        lyrics=((0.0, "hello"), (5.0, "world")),
+    )
+    assert await player._engine.play(request)
+    assert not hasattr(player, "_lyrics_task")
+    await player.tick_lyrics()
+    assert len(emitted) == 1
+    assert "hello" in emitted[0].text and emitted[0].song_id == "track"
+    await player.tick_lyrics()
+    assert len(emitted) == 1
+    await player.detach()
 
 def test_lyric_at_pure_function():
     from src.mcp.tools.music.lyrics import format_lyric_display, lyric_at
@@ -779,52 +792,49 @@ def test_music_player_init_is_lazy():
         reset_config()
 
 
-def test_viewport_protocol_and_cli_slots():
-    """CLI 对话和音乐两行互不影响."""
+def test_viewport_protocol_and_tui_slots():
+    """TUI 对话和音乐两行互不影响。"""
     from src.core.event_bus import EventBus
-    from src.ui.cli.manager import CliViewManager
     from src.ui.shared.viewport import ViewPort
+    from src.ui.tui.manager import TuiViewManager
 
     bus = EventBus()
-    vm = CliViewManager(event_bus=bus)
+    vm = TuiViewManager(event_bus=bus)
     assert isinstance(vm, ViewPort)
 
     vm.set_chat_text("你好")
     vm.set_music_line("♪ 歌词行")
     assert vm._chat_text == "你好"
     assert vm._music_line == "♪ 歌词行"
-    assert vm._display._dash_text == "你好"
-    assert vm._display._dash_music == "♪ 歌词行"
 
     vm.set_chat_text("第二句")
     assert vm._chat_text == "第二句"
     assert vm._music_line == "♪ 歌词行"
 
 
-def test_gpio_viewport_slots():
+def test_gpio_viewport_slots(caplog):
     from src.core.event_bus import EventBus
     from src.ui.gpio.manager import GpioViewManager
     from src.ui.shared.viewport import ViewPort
 
     vm = GpioViewManager(event_bus=EventBus())
     assert isinstance(vm, ViewPort)
-    vm.set_chat_text("chat")
-    vm.set_music_line("music")
-    assert vm._chat_text == "chat"
-    assert vm._music_line == "music"
-    vm.set_chat_text("chat2")
-    assert vm._chat_text == "chat2"
-    assert vm._music_line == "music"
+    with caplog.at_level(logging.INFO):
+        vm.set_chat_text("chat")
+        vm.set_music_line("music")
+        vm.set_chat_text("chat2")
+    messages = [record.getMessage() for record in caplog.records]
+    assert messages[-3:] == ["[对话] chat", "[音乐] music", "[对话] chat2"]
 
 
-def test_create_viewport_cli_factory():
+def test_create_viewport_tui_factory():
     from src.core.event_bus import EventBus
-    from src.ui.cli.manager import CliViewManager
     from src.ui.shared.factory import create_viewport
     from src.ui.shared.viewport import ViewPort
+    from src.ui.tui.manager import TuiViewManager
 
-    vp = create_viewport("cli", EventBus())
-    assert isinstance(vp, CliViewManager)
+    vp = create_viewport("tui", EventBus())
+    assert isinstance(vp, TuiViewManager)
     assert isinstance(vp, ViewPort)
 
 
@@ -873,7 +883,7 @@ class _FakeViewport:
     def is_auto_mode(self) -> bool:
         return self._auto
 
-    async def start(self, mode: str = "cli") -> None:
+    async def start(self, mode: str = "tui") -> None:
         pass
 
     async def close(self) -> None:
@@ -886,7 +896,7 @@ async def test_ui_plugin_routes_music_to_music_line():
     from src.mcp.tools.music.events import MusicLyricsData, MusicStateData
     from src.plugins.ui import UIPlugin
 
-    plugin = UIPlugin(mode="cli")
+    plugin = UIPlugin(mode="tui")
     vp = _FakeViewport()
     plugin.viewport = vp
     plugin._presenter.bind(vp)
@@ -1351,8 +1361,8 @@ def test_check_critical_plugins_audio_degraded(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_cli_mock_protocol_smoke_session():
-    """CLI 级冒烟：mock 协议 → 有界音频 + JSON → 状态机事件，无需真网/真麦."""
+async def test_runtime_mock_protocol_smoke_session():
+    """Runtime 冒烟：mock 协议 → 有界音频 + JSON → 状态机事件，无需真网/真麦."""
     from src.core.task_manager import TaskManager
     from src.protocols.protocol import Protocol
 
@@ -1523,7 +1533,7 @@ def test_mcp_plugin_loader_loads_package_and_respects_disabled(tmp_path):
 
     server = McpServer()
     host = McpHost(server.add_tool, allow_get=["logger"])
-    loader = PluginLoader(host, plugins_dir=tmp_path)
+    loader = PluginLoader(host, runtime=server._plugin_runtime, plugins_dir=tmp_path)
     results = loader.load_all()
     assert any(r.plugin_id == "com.example.hello" and not r.error for r in results)
     assert any(tool.name == "example.hello" for tool in server.tools)
@@ -1531,7 +1541,8 @@ def test_mcp_plugin_loader_loads_package_and_respects_disabled(tmp_path):
     server2 = McpServer()
     host2 = McpHost(server2.add_tool)
     loader2 = PluginLoader(
-        host2, plugins_dir=tmp_path, disabled_ids=["com.example.hello"]
+        host2, runtime=server2._plugin_runtime, plugins_dir=tmp_path,
+        disabled_ids=["com.example.hello"]
     )
     results2 = loader2.load_all()
     assert any(r.error == "disabled" for r in results2)
@@ -1571,7 +1582,7 @@ def test_mcp_plugin_loader_vendored_lib(tmp_path):
     )
 
     server = McpServer()
-    loader = PluginLoader(McpHost(server.add_tool), plugins_dir=tmp_path)
+    loader = PluginLoader(McpHost(server.add_tool), runtime=server._plugin_runtime, plugins_dir=tmp_path)
     results = loader.load_all()
     assert any(
         not r.error and r.plugin_id == "com.example.vendored" for r in results
@@ -1596,7 +1607,7 @@ def test_mcp_plugin_simple_py_file(tmp_path):
     )
 
     server = McpServer()
-    PluginLoader(McpHost(server.add_tool), plugins_dir=tmp_path).load_all()
+    PluginLoader(McpHost(server.add_tool), runtime=server._plugin_runtime, plugins_dir=tmp_path).load_all()
     assert any(tool.name == "solo.ping" for tool in server.tools)
 
 
@@ -1622,11 +1633,9 @@ def test_mcp_server_unload_plugin(tmp_path):
 
     server = McpServer()
     host = McpHost(server.add_tool)
-    results = PluginLoader(host, plugins_dir=tmp_path).load_all()
-    for r in results:
-        if not r.error:
-            for n in r.tool_names:
-                server._plugin_tool_owner[n] = r.plugin_id
+    results = PluginLoader(host, runtime=server._plugin_runtime, plugins_dir=tmp_path).load_all()
+    assert results and results[0].error is None
+    assert server._plugin_tool_owner == {"example.tmp": "com.example.tmp"}
     assert any(tool.name == "example.tmp" for tool in server.tools)
     n = server.unload_plugin("com.example.tmp")
     assert n == 1
@@ -1647,7 +1656,7 @@ def test_mcp_plugin_rejects_future_api_version(tmp_path):
     )
     (root / "plugin.py").write_text("def register(host):\n    pass\n", encoding="utf-8")
     server = McpServer()
-    results = PluginLoader(McpHost(server.add_tool), plugins_dir=tmp_path).load_all()
+    results = PluginLoader(McpHost(server.add_tool), runtime=server._plugin_runtime, plugins_dir=tmp_path).load_all()
     assert any(r.error and "api_version" in (r.error or "") for r in results)
 
 
@@ -1769,7 +1778,6 @@ def test_settings_model_save_is_atomic(tmp_path):
 
     model = sm_mod.SettingsModel(config_manager=sm_mod.ConfigManager(config_file=cfg))
     model._config = {"CONFIG_VERSION": 1, "MCP_TOOLS": {"DISABLED": ["a.b"]}}
-    model._config_path = cfg
     model._mcp_disabled_snapshot = []
     # save 会 emit Qt signals；无 QApp 时可能仍可用
     try:
@@ -1867,7 +1875,6 @@ def test_mcp_plugin_subprocess_runtime(tmp_path):
     from src.mcp.mcp_server import McpServer
     from src.mcp.plugins.host import McpHost
     from src.mcp.plugins.loader import PluginLoader
-    from src.mcp.plugins.subprocess_runtime import drop_all_sessions
 
     plug = tmp_path / "com.example.iso"
     plug.mkdir()
@@ -1896,7 +1903,7 @@ def test_mcp_plugin_subprocess_runtime(tmp_path):
     loader = PluginLoader(
         host,
         plugins_dir=tmp_path,
-        raw_add_tool=server.add_tool,
+        runtime=server._plugin_runtime,
     )
     try:
         loaded = loader.load_all()
@@ -1914,4 +1921,4 @@ def test_mcp_plugin_subprocess_runtime(tmp_path):
 
         asyncio.run(_call())
     finally:
-        drop_all_sessions()
+        server.detach()

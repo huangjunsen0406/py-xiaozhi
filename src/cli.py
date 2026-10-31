@@ -27,9 +27,9 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=SystemConstants.APP_DISPLAY_NAME)
     parser.add_argument(
         "--mode",
-        choices=["gui", "cli", "tui", "gpio"],
+        choices=["gui", "tui", "gpio"],
         default="gui",
-        help="运行模式（默认 gui）：gui / cli / tui(全屏终端) / gpio(仅Linux)",
+        help="运行模式（默认 gui）：gui / tui(全屏终端) / gpio(仅Linux)",
     )
     parser.add_argument(
         "--protocol",
@@ -163,7 +163,8 @@ def _run(args: argparse.Namespace, config=None) -> int:
                 logger.error(
                     "GUI 模式需要 PySide6 + qasync。请安装: pip install 'py-xiaozhi[gui]' "
                     "或在源码目录执行 uv sync --extra gui。"
-                    "无 GUI 时可用 --mode cli。原始错误: %s",
+                    "无 GUI 时可安装 'py-xiaozhi[tui]' 或执行 uv sync --extra tui，"
+                    "再用 --mode tui。原始错误: %s",
                     exc,
                 )
                 return 1
@@ -202,7 +203,7 @@ def _run(args: argparse.Namespace, config=None) -> int:
                 return 1
         requested = False
 
-        def handle_sigint_cli(*_):
+        def handle_sigint_terminal(*_):
             nonlocal requested
             if requested:
                 logger.warning("再次收到 SIGINT，强制退出")
@@ -211,7 +212,7 @@ def _run(args: argparse.Namespace, config=None) -> int:
             logger.info("收到 SIGINT 信号，正在退出...")
             request_shutdown()
 
-        install_signal(signal.SIGINT, handle_sigint_cli)
+        install_signal(signal.SIGINT, handle_sigint_terminal)
         return asyncio.run(run_startup())
     finally:
         for sig, handler in previous_signals.items():
@@ -235,7 +236,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
         logging_config = load_logging_config(config)
         setup_logging(
-            enable_console=args.mode not in ("cli", "tui"),
+            enable_console=args.mode != "tui",
             config=logging_config,
         )
         return _run(args, config=config)

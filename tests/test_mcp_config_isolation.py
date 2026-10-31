@@ -7,7 +7,6 @@ from unittest.mock import AsyncMock
 import pytest
 
 from src.mcp.mcp_server import McpServer
-from src.mcp.plugins import subprocess_runtime
 from src.mcp.plugins.loader import load_mcp_plugins_from_config
 from src.mcp.tool_catalog import discover_plugin_catalog_rows
 from src.mcp.tooling import McpTool, PropertyList
@@ -71,7 +70,6 @@ async def test_servers_use_their_own_plugin_directory_policy_and_readonly_config
     finally:
         first.detach()
         second.detach()
-        subprocess_runtime.drop_all_sessions()
 
 
 def test_default_servers_and_cameras_never_read_process_configuration(monkeypatch):
@@ -112,7 +110,7 @@ async def test_loader_uses_its_configuration_for_readonly_capability(tmp_path):
     try:
         results = load_mcp_plugins_from_config(
             server.add_tool, config=server.config,
-            capabilities={"config_readonly": foreign}, tool_owner=server._plugin_tool_owner,
+            capabilities={"config_readonly": foreign}, runtime=server._plugin_runtime,
         )
         assert results[0].error is None
         result = json.loads(await server.tools[0].call({}))

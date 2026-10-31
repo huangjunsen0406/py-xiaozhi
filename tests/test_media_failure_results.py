@@ -37,7 +37,9 @@ class Codec:
 
     clear_notification_queue = clear_music_queue
 
-    def set_notification_playback_callbacks(self, progress_callback=None, drained_callback=None):
+    def set_notification_playback_callbacks(
+        self, progress_callback=None, drained_callback=None
+    ):
         self.progress = progress_callback
         self.drained = drained_callback
 
@@ -85,7 +87,9 @@ def finish_decode(children):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("exit_code", [0, 1])
 @pytest.mark.parametrize("has_pcm", [False, True])
-async def test_music_decode_result_is_not_confused_with_success(local_decoder, exit_code, has_pcm):
+async def test_music_decode_result_is_not_confused_with_success(
+    local_decoder, exit_code, has_pcm
+):
     mode, children = local_decoder
     mode.update(exit=exit_code, pcm=has_pcm)
     bus = EventBus()
@@ -103,7 +107,9 @@ async def test_music_decode_result_is_not_confused_with_success(local_decoder, e
     codec = Codec()
     player._engine.audio_codec = codec
     try:
-        assert await player._engine.start_playback("https://local-substitute.test/a.ogg")
+        assert await player._engine.start_playback(
+            "https://local-substitute.test/a.ogg"
+        )
         if has_pcm:
             await asyncio.wait_for(codec.written.wait(), 3)
             np.testing.assert_allclose(codec.pcm[0], np.full(7, 0.5))
@@ -123,7 +129,9 @@ async def test_music_decode_result_is_not_confused_with_success(local_decoder, e
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("exit_code", [0, 1])
-async def test_notification_decode_result_propagates_after_partial_audio(local_decoder, exit_code):
+async def test_notification_decode_result_propagates_after_partial_audio(
+    local_decoder, exit_code
+):
     mode, children = local_decoder
     mode["exit"] = exit_code
     codec = Codec()
@@ -135,7 +143,9 @@ async def test_notification_decode_result_propagates_after_partial_audio(local_d
         await finished.put((generation, success))
 
     try:
-        generation = await player.start("https://local-substitute.test/a.ogg", [], on_finished)
+        generation = await player.start(
+            "https://local-substitute.test/a.ogg", [], on_finished
+        )
         await asyncio.wait_for(codec.written.wait(), 3)
         assert finished.empty()
         finish_decode(children)
@@ -158,7 +168,9 @@ async def test_truncated_sample_fails_music_instead_of_completed(local_decoder):
     codec = Codec()
     player._engine.audio_codec = codec
     try:
-        assert await player._engine.start_playback("https://local-substitute.test/a.ogg")
+        assert await player._engine.start_playback(
+            "https://local-substitute.test/a.ogg"
+        )
         task = player._engine._playback_task
         await asyncio.wait_for(codec.written.wait(), 3)
         finish_decode(children)
@@ -183,7 +195,9 @@ async def test_truncated_sample_fails_notification(local_decoder):
         await finished.put((generation, success))
 
     try:
-        generation = await player.start("https://local-substitute.test/a.ogg", [], on_finished)
+        generation = await player.start(
+            "https://local-substitute.test/a.ogg", [], on_finished
+        )
         await asyncio.wait_for(codec.written.wait(), 3)
         finish_decode(children)
         assert await asyncio.wait_for(finished.get(), 3) == (generation, False)
@@ -207,7 +221,9 @@ async def test_music_stop_is_not_decode_failure_or_completion(local_decoder):
     bus.on(Events.MUSIC_STATE_CHANGED, record)
     player.set_event_bus(bus)
     try:
-        assert await player._engine.start_playback("https://local-substitute.test/a.ogg")
+        assert await player._engine.start_playback(
+            "https://local-substitute.test/a.ogg"
+        )
         await asyncio.wait_for(codec.written.wait(), 3)
         assert (await player.stop())["status"] == "success"
         assert states == ["playing", "stopped"]
@@ -219,6 +235,70 @@ async def test_music_stop_is_not_decode_failure_or_completion(local_decoder):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("action", ["stop", "detach", "codec_removed"])
+async def test_music_cleanup_waits_for_decoder_child_created_during_start(
+    local_decoder,
+    monkeypatch,
+    action,
+):
+    _mode, children = local_decoder
+    spawn = module.asyncio.create_subprocess_exec
+    spawned, release = asyncio.Event(), asyncio.Event()
+
+    async def held_spawn(*args, **kwargs):
+        child = await spawn(*args, **kwargs)
+        if "-version" not in args:
+            spawned.set()
+            await release.wait()
+        return child
+
+    monkeypatch.setattr(module.asyncio, "create_subprocess_exec", held_spawn)
+    player = MusicPlayer(ConfigManager.from_dict())
+    bus = EventBus()
+    player.set_event_bus(bus)
+    await bus.emit(Events.AUDIO_CODEC_CHANGED, Codec())
+    request = asyncio.create_task(
+        player._engine.start_playback("https://local-substitute.test/a.ogg")
+    )
+    cleanup = None
+    try:
+        await asyncio.wait_for(spawned.wait(), 3)
+        child = children[-1]
+        assert child.returncode is None
+        operation = (
+            player.bind_audio_codec(None)
+            if action == "codec_removed"
+            else getattr(player, action)()
+        )
+        cleanup = asyncio.create_task(operation)
+        # Let cancellation reach MusicDecoder._spawn_process while the real
+        # child exists but its handle has not yet reached that method.
+        for _ in range(10):
+            await asyncio.sleep(0)
+        cleanup.cancel()
+        await asyncio.sleep(0)
+        cleanup.cancel()
+        await asyncio.sleep(0)
+        assert not cleanup.done()
+        assert child.returncode is None
+        release.set()
+        with pytest.raises(asyncio.CancelledError):
+            await asyncio.wait_for(cleanup, 3)
+        assert await asyncio.wait_for(request, 3) is False
+        assert all(child.returncode is not None for child in children)
+        assert player._engine.decoder is None
+        assert not player.is_playing
+        if action == "detach":
+            assert player._bus.event_bus is None
+    finally:
+        release.set()
+        await asyncio.gather(
+            request, *([cleanup] if cleanup is not None else []), return_exceptions=True
+        )
+        await player.detach()
+
+
+@pytest.mark.asyncio
 async def test_elapsed_duration_does_not_bypass_decoder_result(local_decoder):
     _mode, children = local_decoder
     player = MusicPlayer(ConfigManager.from_dict())
@@ -226,7 +306,9 @@ async def test_elapsed_duration_does_not_bypass_decoder_result(local_decoder):
     player._engine.audio_codec = codec
     try:
         player._engine.total_duration = 1
-        assert await player._engine.start_playback("https://local-substitute.test/a.ogg")
+        assert await player._engine.start_playback(
+            "https://local-substitute.test/a.ogg"
+        )
         await asyncio.wait_for(codec.written.wait(), 3)
         player._engine.start_play_time = time.time() - 5
         assert await player._engine.get_position() == 1

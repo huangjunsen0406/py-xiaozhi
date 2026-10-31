@@ -147,6 +147,35 @@ def test_apply_failure_retains_draft_and_suppresses_hot_reload(
     assert config.get_config("SYSTEM_OPTIONS.DEVICE_ID") == "on-disk-only"
 
 
+def test_real_reload_read_failure_keeps_draft_and_suppresses_success(
+    monkeypatch, tmp_path
+):
+    config = ConfigManager(config_file=tmp_path / "config.json")
+    model = SettingsModel(config_manager=config)
+    signals = observe(model)
+    before = config.get_config("")
+    model.deviceId = "disk-only"
+    model._set_value("MCP_TOOLS.DISABLED", ["music_player.stop"])
+    original_read = Path.read_text
+
+    def failed_read(path, *args, **kwargs):
+        if path == config.config_file:
+            raise OSError("injected read failure")
+        return original_read(path, *args, **kwargs)
+
+    with monkeypatch.context() as read_patch:
+        read_patch.setattr(Path, "read_text", failed_read)
+        assert model.save() is False
+
+    assert config.get_config("") == before
+    assert model.deviceId == "disk-only"
+    assert json.loads(config.config_file.read_text())["SYSTEM_OPTIONS"]["DEVICE_ID"] == "disk-only"
+    assert not signals.saved and not signals.reconnect
+    assert "已写入" in signals.errors[-1] and "运行时" in signals.errors[-1]
+    assert model.save() is True
+    assert signals.saved == [True] and signals.reconnect == [True]
+
+
 def test_atomic_replace_failure_keeps_previous_config_and_draft(monkeypatch, tmp_path):
     config = ConfigManager(config_file=tmp_path / "config.json")
     before = config.config_file.read_bytes()
@@ -154,7 +183,7 @@ def test_atomic_replace_failure_keeps_previous_config_and_draft(monkeypatch, tmp
     signals = observe(model)
     model.deviceId = "not-committed"
     monkeypatch.setattr(
-        "src.ui.gui.models.settings_model.os.replace",
+        "src.utils.config_manager.os.replace",
         Mock(side_effect=PermissionError("injected read-only directory")),
     )
     assert model.save() is False
@@ -170,7 +199,7 @@ def test_memory_commit_failure_is_false_and_keeps_draft(monkeypatch):
     model = SettingsModel(config_manager=config)
     signals = observe(model)
     model.deviceId = "draft"
-    monkeypatch.setattr(config, "update_configs", lambda updates: False)
+    monkeypatch.setattr(config, "commit_draft", lambda draft: "配置草稿提交失败")
     assert model.save() is False
     assert model.deviceId == "draft"
     assert config.get_config("SYSTEM_OPTIONS.DEVICE_ID") != "draft"
@@ -207,7 +236,7 @@ def test_wake_word_save_propagates_commit_failure(monkeypatch, tmp_path):
         lambda word: ("TEST @test", "en", "fake-model"),
     )
     monkeypatch.setattr("src.utils.resource_finder.get_keywords_dir", lambda: tmp_path)
-    monkeypatch.setattr(config, "update_configs", lambda updates: False)
+    monkeypatch.setattr(config, "commit_draft", lambda draft: "配置草稿提交失败")
     model._wake_word = "test"
     assert model.saveWakeWord() is False
     assert signals.errors and not signals.saved

@@ -10,15 +10,25 @@ from src.mcp.mcp_server import McpServer
 from src.mcp.plugins import subprocess_runtime as runtime
 from src.mcp.plugins.host import McpHost
 from src.mcp.plugins.loader import PluginLoader
+from src.mcp.plugins.registry import PluginRuntime
 from src.mcp.tooling import McpTool, PropertyList
 
 
 @pytest.fixture(autouse=True)
-def restore_plugin_imports():
+def restore_plugin_imports(monkeypatch):
+    runtimes = []
+    original_init = PluginRuntime.__init__
+
+    def track_runtime(self, *args, **kwargs):
+        original_init(self, *args, **kwargs)
+        runtimes.append(self)
+
+    monkeypatch.setattr(PluginRuntime, "__init__", track_runtime)
     original_path = sys.path[:]
     original_modules = sys.modules.copy()
     yield
-    runtime.drop_all_sessions()
+    for plugin_runtime in runtimes:
+        plugin_runtime.unload_all()
     sys.path[:] = original_path
     for name in list(sys.modules):
         if name.startswith(("mcp_plugin_", "mcp_sub_")) or name == "plugin":
@@ -42,7 +52,7 @@ def package(root, plugin_id, source, *, mode="python-inprocess", **manifest):
 def load(server, root, *, allow=None, capabilities=None, **options):
     host = McpHost(server.add_tool, allow_get=allow, capabilities=capabilities)
     return PluginLoader(
-        host, plugins_dir=root, tool_owner=server._plugin_tool_owner, **options
+        host, plugins_dir=root, runtime=server._plugin_runtime, **options
     ).load_all()
 
 
@@ -68,8 +78,7 @@ def test_conflicting_batch_leaves_original_tools_and_owners_unchanged(tmp_path, 
     builtin = tool("builtin.keep")
     other = tool("external.keep")
     server.add_tool(builtin)
-    server.add_tool(other)
-    server._plugin_tool_owner[other.name] = "original.plugin"
+    server._plugin_runtime.install("original.plugin", [other])
     package(
         tmp_path, "bad.plugin",
         "def register(host):\n"
@@ -83,7 +92,10 @@ def test_conflicting_batch_leaves_original_tools_and_owners_unchanged(tmp_path, 
     assert server._plugin_tool_owner == {"external.keep": "original.plugin"}
     assert server.unload_plugin("bad.plugin") == 0
     assert server.tools == [builtin, other]
-    assert not runtime._SESSIONS
+    assert not any(
+        installation.session is not None
+        for installation in server._plugin_runtime._installations.values()
+    )
 
 
 @pytest.mark.parametrize("mode", ["python-inprocess", "python-subprocess"])
@@ -105,7 +117,10 @@ def test_registration_failures_never_publish_partial_tools(tmp_path, mode, failu
     assert result[0].error
     assert server.tools == []
     assert server._plugin_tool_owner == {}
-    assert not runtime._SESSIONS
+    assert not any(
+        installation.session is not None
+        for installation in server._plugin_runtime._installations.values()
+    )
 
 
 def test_single_file_register_failure_is_not_published(tmp_path):
@@ -218,7 +233,10 @@ def register(host):
         assert response["isError"] is False
         assert response["content"][0]["text"] == ("v2" if allow else "denied")
     server.detach()
-    assert not runtime._SESSIONS
+    assert not any(
+        installation.session is not None
+        for installation in server._plugin_runtime._installations.values()
+    )
 
 
 def test_reload_detach_and_unload_reap_zero_tool_workers_per_server(tmp_path, monkeypatch):
@@ -226,7 +244,7 @@ def test_reload_detach_and_unload_reap_zero_tool_workers_per_server(tmp_path, mo
     servers = [McpServer(), McpServer()]
     for server in servers:
         assert load(server, tmp_path)[0].error is None
-    sessions = [runtime._SESSIONS[(server._plugin_session_scope, "same.plugin")] for server in servers]
+    sessions = [server._plugin_runtime._installations["same.plugin"].session for server in servers]
     processes = [session._proc for session in sessions]
     assert all(process.poll() is None for process in processes)
     monkeypatch.setattr("src.mcp.plugins.loader.load_mcp_plugins_from_config", lambda *a, **kw: [])
@@ -236,14 +254,14 @@ def test_reload_detach_and_unload_reap_zero_tool_workers_per_server(tmp_path, mo
     assert servers[0]._plugin_tool_owner == {}
     servers[1].unload_plugin("same.plugin")
     assert processes[1].poll() is not None
-    assert not runtime._SESSIONS
+    assert all(not server._plugin_runtime._installations for server in servers)
     # detach must also reap a worker with no tool ownership records and be idempotent.
     assert load(servers[0], tmp_path)[0].error is None
-    process = runtime._SESSIONS[(servers[0]._plugin_session_scope, "same.plugin")]._proc
+    process = servers[0]._plugin_runtime._installations["same.plugin"].session._proc
     servers[0].detach()
     servers[0].detach()
     assert process.poll() is not None
-    assert not runtime._SESSIONS
+    assert all(not server._plugin_runtime._installations for server in servers)
 
 
 def test_loader_can_be_reused_after_unload(tmp_path):
@@ -251,7 +269,7 @@ def test_loader_can_be_reused_after_unload(tmp_path):
     server = McpServer()
     loader = PluginLoader(
         McpHost(server.add_tool), plugins_dir=tmp_path,
-        tool_owner=server._plugin_tool_owner,
+        runtime=server._plugin_runtime,
     )
     assert loader.load_all()[0].error is None
     assert server.unload_plugin("reload.demo") == 1
@@ -272,9 +290,10 @@ def test_common_tools_reassembly_replaces_callbacks_and_reloads_plugins(tmp_path
     package(tmp_path, "external.demo", "def register(host):\n    host.tool('external.ping', 'ping')(lambda _: 'ok')\n")
 
     def load_config(add_tool, **kwargs):
-        return load(
-            add_tool.__self__, tmp_path, capabilities=kwargs.get("capabilities")
-        )
+        return PluginLoader(
+            McpHost(add_tool, capabilities=kwargs.get("capabilities")),
+            runtime=kwargs["runtime"], plugins_dir=tmp_path,
+        ).load_all()
 
     monkeypatch.setattr("src.mcp.plugins.loader.load_mcp_plugins_from_config", load_config)
     server = McpServer()

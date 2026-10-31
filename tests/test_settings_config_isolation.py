@@ -19,7 +19,7 @@ def test_memory_settings_load_save_without_user_paths(monkeypatch):
         {"SYSTEM_OPTIONS": {"DEVICE_ID": "isolated-device"}}
     )
     model = SettingsModel(config_manager=config)
-    assert model._config_path is None
+    assert config.config_file is None
     assert model._get_value("SYSTEM_OPTIONS.DEVICE_ID") == "isolated-device"
 
     model._set_value("SYSTEM_OPTIONS.DEVICE_ID", "updated-device")
@@ -56,7 +56,7 @@ def test_file_settings_save_uses_own_path_without_applying_global_overrides(
     model = SettingsModel(config_manager=config)
     model._set_value("SYSTEM_OPTIONS.DEVICE_ID", "file-device")
     model.save()
-    reload_config.assert_called_once_with(apply_paths=False)
+    reload_config.assert_called_once_with(apply_paths=False, strict=True)
     assert config.get_config("SYSTEM_OPTIONS.DEVICE_ID") == "file-device"
     assert not config.config_file.with_suffix(".tmp").exists()
 

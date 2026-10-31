@@ -392,18 +392,6 @@ class ProtocolManager:
             logger.warning("音频通道未打开，跳过 send_wake_word_detected")
         return False
 
-    async def send_iot_descriptors(self, descriptors) -> bool:
-        protocol = self._protocol
-        if protocol:
-            return bool(await protocol.send_iot_descriptors(descriptors))
-        return False
-
-    async def send_iot_states(self, states) -> bool:
-        protocol = self._protocol
-        if protocol:
-            return bool(await protocol.send_iot_states(states))
-        return False
-
     async def send_mcp_message(self, payload) -> bool:
         protocol = self._protocol
         if protocol:

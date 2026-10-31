@@ -77,12 +77,22 @@ async def setup_plugins(
         from src.plugins.wake_word import WakeWordPlugin
 
         bind_shared_services(container)
+        server = container.mcp_server
+
+        def runtime_tool_names() -> tuple[str, ...]:
+            # Copy current registrations, including tools disabled in config.
+            return tuple(tool.name for tool in server.tools)
+
         audio = AudioPlugin()
         container.plugins.register(
             audio,
             McpPlugin(server=container.mcp_server, music_player=container.music_player),
             WakeWordPlugin(audio=audio),
-            UIPlugin(mode=mode, task_manager=container.tasks),
+            UIPlugin(
+                mode=mode,
+                task_manager=container.tasks,
+                runtime_tool_names=runtime_tool_names,
+            ),
             ShortcutsPlugin(),
         )
         await container.plugins.setup_all(ctx, cmd)
@@ -105,15 +115,7 @@ def register_cleanup_resources(container: ServiceContainer) -> None:
     if container.mcp_server is not None:
         pool.register("mcp.server", container.mcp_server.detach)
     if container.music_player is not None:
-        player = container.music_player
-
-        async def close_music(player=player):
-            try:
-                await player.stop()
-            finally:
-                await player.detach()
-
-        pool.register("music_player", close_music)
+        pool.register("music_player", container.music_player.detach)
     if container.notification_player is not None:
         player = container.notification_player
 

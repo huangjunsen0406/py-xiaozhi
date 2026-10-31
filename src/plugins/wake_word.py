@@ -14,7 +14,6 @@ logger = get_logger()
 
 class WakeWordPlugin(Plugin):
     name = "wake_word"
-    priority = 30
     requires = ["audio"]
 
     def __init__(self, audio=None) -> None:

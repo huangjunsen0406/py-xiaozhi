@@ -11,7 +11,7 @@ import pytest
 from src import cli
 
 
-@pytest.mark.parametrize("mode", ["cli", "tui"])
+@pytest.mark.parametrize("mode", ["gpio", "tui"])
 def test_first_sigint_cancels_startup_and_restores_handler(monkeypatch, mode):
     original = signal.getsignal(signal.SIGINT)
     cleaned = []
@@ -63,6 +63,34 @@ class Service:
 
     def get_activation_status(self):
         return {}
+
+
+@pytest.mark.parametrize("mode", ["tui", "gpio", "unknown", "", None])
+def test_activation_factory_uses_independent_terminal_ui(mode):
+    from src.activation.factory import create_activation_ui
+    from src.activation.terminal import TerminalActivation
+
+    service = Service()
+    result = {"need_activation_ui": True}
+    ui = create_activation_ui(mode, service, result)
+    assert isinstance(ui, TerminalActivation)
+    assert ui._service is service
+    assert ui._init_result is result
+
+
+@pytest.mark.asyncio
+async def test_terminal_activation_cancellation_joins_service():
+    from src.activation.terminal import TerminalActivation
+
+    service = Service()
+    ui = TerminalActivation(service, {"need_activation_ui": True})
+    task = asyncio.create_task(ui.run())
+    await asyncio.wait_for(service.started.wait(), timeout=0.5)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert service.finished.is_set()
+    service.cancel_activation.assert_not_called()
 
 
 class Engine:
@@ -217,7 +245,7 @@ def test_real_startup_activation_unwinds_on_first_sigint(monkeypatch, phase):
         ),
     )
     monkeypatch.setattr(cli, "_container", None)
-    assert cli._run(cli.parse_args(["--mode", "cli"])) == 0
+    assert cli._run(cli.parse_args(["--mode", "gpio"])) == 0
     assert events == [phase + "-cleaned"]
 
 
@@ -273,7 +301,7 @@ def test_runtime_sigint_preserves_graceful_shutdown_request(monkeypatch):
         return 0
 
     monkeypatch.setattr(cli, "start_app", running)
-    assert cli._run(cli.parse_args(["--mode", "cli"])) == 0
+    assert cli._run(cli.parse_args(["--mode", "gpio"])) == 0
 
 
 @pytest.mark.asyncio

@@ -7,150 +7,17 @@ from collections.abc import Callable
 from textual import on
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.containers import Horizontal, Vertical, VerticalScroll
+from textual.containers import Horizontal, Vertical
 from textual.reactive import reactive
-from textual.screen import ModalScreen
-from textual.widgets import (
-    Button,
-    Footer,
-    Header,
-    Input,
-    Label,
-    RichLog,
-    Static,
-    TabbedContent,
-    TabPane,
-)
+from textual.widgets import Footer, Header, Input, RichLog, Static
 
 from src.constants.system import SystemConstants
 from src.logging import get_logger
-from src.ui.tui.settings_data import (
-    SETTING_SECTIONS,
-    load_setting_values,
-    save_settings,
-)
+from src.ui.tui.settings_screen import SettingsScreen
+from src.ui.tui.settings_services import SettingsServices
 from src.utils.config_manager import ConfigManager
 
 logger = get_logger()
-
-
-class SettingsScreen(ModalScreen[bool]):
-    """配置编辑弹层；返回 True 表示已保存."""
-
-    BINDINGS = [
-        Binding("escape", "cancel", "取消", show=True),
-    ]
-
-    CSS = """
-    SettingsScreen {
-        align: center middle;
-    }
-    #settings-dialog {
-        width: 90%;
-        max-width: 100;
-        height: 85%;
-        border: thick $primary;
-        background: $surface;
-        padding: 1 2;
-    }
-    #settings-title {
-        text-style: bold;
-        margin-bottom: 1;
-    }
-    #settings-hint {
-        color: $text-muted;
-        margin-bottom: 1;
-    }
-    .field-row {
-        height: auto;
-        margin-bottom: 1;
-    }
-    .field-label {
-        width: 20;
-        color: $text-muted;
-        padding-top: 1;
-    }
-    .field-input {
-        width: 1fr;
-    }
-    #settings-actions {
-        height: 3;
-        align: right middle;
-        margin-top: 1;
-    }
-    #settings-status {
-        color: $accent;
-        height: 1;
-        margin-top: 1;
-    }
-    """
-
-    def __init__(self, config: ConfigManager | None = None) -> None:
-        super().__init__()
-        self._config = config if config is not None else ConfigManager.from_dict()
-        self._values = load_setting_values(self._config)
-
-    def compose(self) -> ComposeResult:
-        with Vertical(id="settings-dialog"):
-            yield Static("设置", id="settings-title")
-            yield Static(
-                "编辑后点「保存」写盘并热应用 | Esc 取消 | "
-                "choice 字段请填合法值（见占位提示）",
-                id="settings-hint",
-            )
-            with TabbedContent():
-                for section_name, fields in SETTING_SECTIONS:
-                    with TabPane(section_name):
-                        with VerticalScroll():
-                            for f in fields:
-                                with Horizontal(classes="field-row"):
-                                    yield Label(f.label, classes="field-label")
-                                    current = self._values.get(f.path, "")
-                                    placeholder = f.help or f.path
-                                    if f.kind == "choice" and f.choices:
-                                        placeholder = f"可选: {', '.join(f.choices)}"
-                                    elif f.kind == "bool":
-                                        placeholder = "true / false"
-                                    yield Input(
-                                        value=current,
-                                        placeholder=placeholder,
-                                        id=f"fld-{f.path.replace('.', '-')}",
-                                        classes="field-input",
-                                    )
-            yield Static("", id="settings-status")
-            with Horizontal(id="settings-actions"):
-                yield Button("取消", id="btn-cancel", variant="default")
-                yield Button("保存", id="btn-save", variant="primary")
-
-    def _collect_values(self) -> dict[str, str]:
-        out: dict[str, str] = {}
-        for _section, fields in SETTING_SECTIONS:
-            for f in fields:
-                wid = f"fld-{f.path.replace('.', '-')}"
-                try:
-                    w = self.query_one(f"#{wid}", Input)
-                    out[f.path] = w.value
-                except Exception:
-                    out[f.path] = self._values.get(f.path, "")
-        return out
-
-    @on(Button.Pressed, "#btn-cancel")
-    def on_cancel_btn(self) -> None:
-        self.dismiss(False)
-
-    def action_cancel(self) -> None:
-        self.dismiss(False)
-
-    @on(Button.Pressed, "#btn-save")
-    def on_save_btn(self) -> None:
-        values = self._collect_values()
-        ok, msg = save_settings(values, self._config)
-        try:
-            self.query_one("#settings-status", Static).update(msg)
-        except Exception:
-            pass
-        if ok:
-            self.dismiss(True)
 
 
 class XiaozhiTuiApp(App[None]):
@@ -207,10 +74,16 @@ class XiaozhiTuiApp(App[None]):
         on_command: Callable[[str], None] | None = None,
         on_settings_saved: Callable[[], None] | None = None,
         config: ConfigManager | None = None,
+        settings_services: SettingsServices | None = None,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
         self._config = config if config is not None else ConfigManager.from_dict()
+        self._settings_services = (
+            settings_services
+            if settings_services is not None
+            else SettingsServices(self._config)
+        )
         self._on_command = on_command
         self._on_settings_saved = on_settings_saved
         self._log_handler_installed = False
@@ -324,17 +197,23 @@ class XiaozhiTuiApp(App[None]):
         )
 
     def action_open_settings(self) -> None:
+        if isinstance(self.screen, SettingsScreen):
+            return
+        screen = SettingsScreen(self._config, services=self._settings_services)
+
         def _done(saved: bool | None) -> None:
             if saved:
-                self.write_log("[green]配置已保存，正在热应用…[/]")
-                if self._on_settings_saved:
+                from rich.markup import escape
+
+                self.write_log(f"[green]{escape(screen.saved_message)}[/]")
+                if screen.changed_paths and self._on_settings_saved:
                     try:
                         self._on_settings_saved()
                     except Exception as e:
                         logger.error(f"设置保存回调失败: {e}", exc_info=True)
-                        self.write_log(f"[red]热应用失败: {e}[/]")
+                        self.write_log("[red]配置已保存，运行时应用失败，请重启应用[/]")
 
-        self.push_screen(SettingsScreen(self._config), _done)
+        self.push_screen(screen, _done)
 
     def action_quit_app(self) -> None:
         if self._on_command:

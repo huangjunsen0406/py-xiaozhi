@@ -16,8 +16,6 @@ COMMANDS = [
     ("send_stop_listening", ()),
     ("send_abort_speaking", ("user_interruption",)),
     ("send_wake_word_detected", ("hello",)),
-    ("send_iot_descriptors", ([{"name": "lamp"}],)),
-    ("send_iot_states", ({"on": True},)),
     ("send_mcp_message", ({"id": 1},)),
 ]
 
@@ -57,18 +55,6 @@ async def test_websocket_transport_returns_bool(method, accepted):
         await getattr(protocol, method)("hello" if method == "send_text" else b"audio")
         is accepted
     )
-
-
-@pytest.mark.asyncio
-async def test_iot_batch_reports_partial_failure():
-    protocol = Protocol()
-    protocol.send_text = AsyncMock(side_effect=[False, True])
-    assert (
-        await protocol.send_iot_descriptors([{"name": "one"}, {"name": "two"}]) is False
-    )
-    assert protocol.send_text.await_count == 2
-    assert await protocol.send_iot_descriptors("bad json") is False
-    assert await protocol.send_iot_descriptors({"not": "a list"}) is False
 
 
 @pytest.mark.asyncio

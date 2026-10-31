@@ -20,6 +20,7 @@ from src.logging import get_logger
 from src.utils.resource_finder import get_ffmpeg_path
 
 from .cache import MusicCache
+from .lifecycle import await_cleanup
 
 logger = get_logger()
 
@@ -158,10 +159,6 @@ class MusicDownloader:
             headers["Origin"] = "https://www.kuwo.cn"
         return headers
 
-    # 旧名
-    def _download_headers(self, download_url: str) -> dict[str, str]:
-        return self.media_headers(download_url)
-
     async def _fetch_json(
         self, url: str, headers: dict[str, str], *, timeout: int = 15
     ) -> Any | None:
@@ -172,9 +169,7 @@ class MusicDownloader:
             response.raise_for_status()
             return response.json()
         except Exception as e:
-            logger.warning(
-                f"请求失败 {urlparse(url).netloc}: {e}", exc_info=True
-            )
+            logger.warning(f"请求失败 {urlparse(url).netloc}: {e}", exc_info=True)
             return None
 
     def _candidate_lx_urls(self, api_url: str) -> list[str]:
@@ -293,8 +288,13 @@ class MusicDownloader:
             return None
 
     def _sync_download(
-        self, download_url: str, headers: dict, temp_path: Path, cache_path: Path,
-        cancelled: threading.Event | None = None, publish_lock=None,
+        self,
+        download_url: str,
+        headers: dict,
+        temp_path: Path,
+        cache_path: Path,
+        cancelled: threading.Event | None = None,
+        publish_lock=None,
     ) -> Path:
         cancelled = cancelled if cancelled is not None else threading.Event()
         publish_lock = publish_lock if publish_lock is not None else threading.Lock()
@@ -336,9 +336,7 @@ class MusicDownloader:
             except (requests.RequestException, OSError) as e:
                 check_cancelled()
                 last_err = e
-                logger.warning(
-                    f"下载重试 {attempt + 1}/3 失败: {e}"
-                )
+                logger.warning(f"下载重试 {attempt + 1}/3 失败: {e}")
         assert last_err is not None
         raise last_err
 
@@ -359,19 +357,19 @@ class MusicDownloader:
             temp_path = self._cache.temp_path(f"{uuid.uuid4().hex}_{filename}")
             cache_path = self._cache.root / filename
             headers = self.media_headers(download_url)
-            logger.debug(
-                f"开始下载音频: host={urlparse(download_url).hostname}"
-            )
+            logger.debug(f"开始下载音频: host={urlparse(download_url).hostname}")
 
-            worker = asyncio.create_task(asyncio.to_thread(
-                self._sync_download,
-                download_url,
-                headers,
-                temp_path,
-                cache_path,
-                cancelled,
-                publish_lock,
-            ))
+            worker = asyncio.create_task(
+                asyncio.to_thread(
+                    self._sync_download,
+                    download_url,
+                    headers,
+                    temp_path,
+                    cache_path,
+                    cancelled,
+                    publish_lock,
+                )
+            )
             result = await asyncio.shield(worker)
             logger.info(f"音乐下载完成并缓存: {result}")
             return result
@@ -382,7 +380,7 @@ class MusicDownloader:
             with publish_lock:
                 cancelled.set()
             if worker is not None:
-                await self._await_cleanup(asyncio.gather(worker, return_exceptions=True))
+                await await_cleanup(asyncio.gather(worker, return_exceptions=True))
             raise
         except Exception as e:
             self.last_error = f"下载失败: {e}"
@@ -424,20 +422,6 @@ class MusicDownloader:
             )
             logger.info(f"后台预取缓存: song_id={song_id}")
 
-    @staticmethod
-    async def _await_cleanup(future):
-        """清理不能因重复取消中断；完成后仍将取消传回调用方。"""
-        cancelled = False
-        while not future.done():
-            try:
-                await asyncio.shield(future)
-            except asyncio.CancelledError:
-                cancelled = True
-        result = future.result()
-        if cancelled:
-            raise asyncio.CancelledError
-        return result
-
     async def _cancel_prefetch_task(self) -> None:
         task = self._prefetch_task
         if task is None:
@@ -445,7 +429,7 @@ class MusicDownloader:
         if not task.done():
             task.cancel()
         try:
-            await self._await_cleanup(asyncio.gather(task, return_exceptions=True))
+            await await_cleanup(asyncio.gather(task, return_exceptions=True))
         finally:
             if self._prefetch_task is task:
                 self._prefetch_task = None
@@ -516,12 +500,14 @@ class MusicDownloader:
                 str(out_path),
             ]
         )
-        spawn = asyncio.create_task(asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.PIPE,
-            **_SUBPROCESS_KW,
-        ))
+        spawn = asyncio.create_task(
+            asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+                **_SUBPROCESS_KW,
+            )
+        )
         proc = None
         communication = None
         try:
@@ -542,6 +528,7 @@ class MusicDownloader:
             logger.warning(f"FFmpeg copy 预取异常: {e}", exc_info=True)
             return False
         finally:
+
             async def cleanup():
                 # spawn is shielded: cancellation can precede the Process handle.
                 try:
@@ -566,4 +553,4 @@ class MusicDownloader:
                 finally:
                     await asyncio.gather(reader, return_exceptions=True)
 
-            await self._await_cleanup(asyncio.create_task(cleanup()))
+            await await_cleanup(asyncio.create_task(cleanup()))

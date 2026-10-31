@@ -15,6 +15,7 @@ from typing import Any
 from src.constants.system import SystemConstants
 from src.logging import get_logger
 from src.mcp.plugins.host import DEFAULT_ALLOW_GET, McpHost
+from src.mcp.plugins.registry import PluginRuntime
 from src.mcp.tooling import McpTool
 from src.utils.resource_finder import get_user_data_dir
 
@@ -84,15 +85,13 @@ class PluginLoader:
         self,
         host: McpHost,
         *,
+        runtime: PluginRuntime,
         plugins_dir: Path | None = None,
         enabled_ids: list[str] | None = None,
         disabled_ids: list[str] | None = None,
         enforce_prefix: bool = False,
         require_python_abi: bool = False,
         require_platforms: bool = False,
-        tool_owner: dict[str, str] | None = None,
-        raw_add_tool=None,
-        remove_tools_by_names=None,
     ) -> None:
         self._base_host = host
         self.plugins_dir = Path(plugins_dir) if plugins_dir else default_plugins_dir()
@@ -101,13 +100,7 @@ class PluginLoader:
         self.enforce_prefix = enforce_prefix
         self.require_python_abi = require_python_abi
         self.require_platforms = require_platforms
-        self.tool_owner = tool_owner
-        self._raw_add_tool = raw_add_tool or host._add_tool
-        server = getattr(self._raw_add_tool, "__self__", None)
-        self._add_tools_atomic = getattr(server, "add_tools_atomic", None)
-        self._remove_tools = remove_tools_by_names or getattr(server, "remove_tools_by_names", None)
-        self._session_scope = getattr(server, "_plugin_session_scope", None)
-        self._loaded_ids: set[str] = set()
+        self._runtime = runtime
         self.loaded: list[LoadedPlugin] = []
         self._platform = current_platform_tag()
         self._abi = current_python_abi()
@@ -115,7 +108,6 @@ class PluginLoader:
 
     def load_all(self) -> list[LoadedPlugin]:
         self.loaded.clear()
-        self._loaded_ids.clear()
         root = self.plugins_dir
         if not root.is_dir():
             logger.info("[MCP插件] 目录不存在，跳过: %s", root)
@@ -301,7 +293,6 @@ class PluginLoader:
         from src.mcp.plugins.subprocess_runtime import (
             PluginSubprocessSession,
             register_subprocess_plugin_tools,
-            track_session,
         )
 
         allow = list(self._base_host._allow_get)
@@ -325,8 +316,9 @@ class PluginLoader:
                 enforce_prefix=self.enforce_prefix,
                 prefix=str(prefix) if prefix else None,
             )
-            names = self._commit_tools(plugin_id, staged, prefix=prefix)
-            track_session(plugin_id, session, scope=self._session_scope)
+            names = self._commit_tools(
+                plugin_id, staged, prefix=prefix, session=session
+            )
             self._record(
                 plugin_id, path, tool_names=names, runtime="python-subprocess"
             )
@@ -377,9 +369,7 @@ class PluginLoader:
             host.close_registration()
 
     def _check_plugin_id(self, plugin_id: str) -> None:
-        if plugin_id in self._loaded_ids or (
-            self.tool_owner is not None and plugin_id in self.tool_owner.values()
-        ):
+        if self._runtime.has_plugin(plugin_id):
             raise ValueError(f"插件 id 冲突: {plugin_id}")
 
     def _staging_host(self, plugin_id: str, staged: list[McpTool]) -> McpHost:
@@ -390,37 +380,18 @@ class PluginLoader:
             plugin_id=plugin_id,
         )
 
-    def _commit_tools(self, plugin_id: str, tools: list[McpTool], *, prefix=None) -> list[str]:
+    def _commit_tools(
+        self, plugin_id: str, tools: list[McpTool], *, prefix=None, session=None
+    ) -> list[str]:
         """注册函数和 schema 校验结束后整批提交；失败时不登记归属。"""
         names = [tool.name for tool in tools]
-        if len(names) != len(set(names)):
-            raise ValueError(f"插件工具名称冲突: {plugin_id}")
-        if self.tool_owner is not None and set(names) & self.tool_owner.keys():
-            raise ValueError(f"插件工具归属冲突: {plugin_id}")
         bad = [name for name in names if prefix and not name.startswith(str(prefix))]
         if bad:
             message = f"工具名未使用前缀 {prefix}: {bad}"
             if self.enforce_prefix:
                 raise ValueError(message)
             logger.warning("[MCP插件:%s] %s", plugin_id, message)
-        if self._add_tools_atomic is not None:
-            self._add_tools_atomic(tools)
-        else:
-            # 自定义宿主须提供回滚接口；McpServer 使用上面的原子批量接口。
-            if len(tools) > 1 and self._remove_tools is None:
-                raise RuntimeError("批量注册须提供 remove_tools_by_names 回滚接口")
-            added: list[str] = []
-            try:
-                for tool in tools:
-                    self._raw_add_tool(tool)
-                    added.append(tool.name)
-            except Exception:
-                if added and self._remove_tools is not None:
-                    self._remove_tools(added)
-                raise
-        if self.tool_owner is not None:
-            self.tool_owner.update(dict.fromkeys(names, plugin_id))
-        self._loaded_ids.add(plugin_id)
+        self._runtime.install(plugin_id, tools, session=session)
         return names
 
     def _record(
@@ -469,7 +440,7 @@ def load_mcp_plugins_from_config(
     *,
     config=None,
     capabilities: dict | None = None,
-    tool_owner: dict[str, str] | None = None,
+    runtime: PluginRuntime | None = None,
 ) -> list[LoadedPlugin]:
     if config is None:
         from src.utils.config_manager import ConfigManager
@@ -482,6 +453,9 @@ def load_mcp_plugins_from_config(
     if not _get("MCP_PLUGINS.ENABLED", True):
         logger.info("[MCP插件] MCP_PLUGINS.ENABLED=false，跳过外挂")
         return []
+
+    if runtime is None:
+        raise ValueError("加载外挂需要显式传入 server 持有的 PluginRuntime")
 
     dir_cfg = _get("MCP_PLUGINS.DIR", None)
     plugins_dir = Path(dir_cfg).expanduser() if dir_cfg else default_plugins_dir()
@@ -509,14 +483,6 @@ def load_mcp_plugins_from_config(
         enforce_prefix=enforce_prefix,
         require_python_abi=require_abi,
         require_platforms=require_plat,
-        tool_owner=tool_owner,
-        raw_add_tool=add_tool,
+        runtime=runtime,
     )
-    results = loader.load_all()
-    if tool_owner is not None:
-        for item in results:
-            if item.error:
-                continue
-            for name in item.tool_names:
-                tool_owner[name] = item.plugin_id
-    return results
+    return loader.load_all()
