@@ -79,12 +79,6 @@ class SettingsSystemOptionsMixin:
     def _set_musicUrlApiKey(self, value: str):
         self._set_value("MUSIC.URL_API_KEY", value)
 
-    def _get_musicDefaultPlatform(self) -> str:
-        return self._get_value("MUSIC.DEFAULT_PLATFORM", "kw")
-
-    def _set_musicDefaultPlatform(self, value: str):
-        self._set_value("MUSIC.DEFAULT_PLATFORM", value)
-
     def _get_musicDefaultQuality(self) -> str:
         return self._get_value("MUSIC.DEFAULT_QUALITY", "320k")
 

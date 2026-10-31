@@ -88,6 +88,7 @@ class XiaozhiTuiApp(App[None]):
         self._on_settings_saved = on_settings_saved
         self._log_handler_installed = False
         self._tui_log_handler = None
+        self._muted_console_handlers = []
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
@@ -114,6 +115,9 @@ class XiaozhiTuiApp(App[None]):
             f"[bold cyan]{SystemConstants.APP_DISPLAY_NAME} TUI[/]  "
             "F2 设置 · F1 帮助 · Ctrl+C 退出"
         )
+
+    def on_unmount(self) -> None:
+        self.uninstall_log_handler()
 
     def watch_status_text(self, _value: str) -> None:
         self._refresh_status_widgets()
@@ -225,6 +229,8 @@ class XiaozhiTuiApp(App[None]):
             return
         import logging
 
+        import src.logging as app_logging
+
         app = self
 
         class TuiLogHandler(logging.Handler):
@@ -244,15 +250,28 @@ class XiaozhiTuiApp(App[None]):
             )
         )
         handler.setLevel(logging.INFO)
+        # Leave host handlers attached. Temporarily silence only our console sinks,
+        # including those owned by an asynchronous queue listener.
+        class MuteConsole(logging.Filter):
+            def filter(self, record: logging.LogRecord) -> bool:
+                return False
+
+        owned = list(app_logging._owned_handlers)
+        owned.extend(h for h, _ in app_logging._bootstrap_handlers.values())
+        for h in owned:
+            sinks = (
+                h._listener.handlers
+                if isinstance(h, app_logging.AsyncHandler)
+                else (h,)
+            )
+            for sink in sinks:
+                if isinstance(sink, logging.StreamHandler) and not isinstance(
+                    sink, logging.FileHandler
+                ):
+                    mute = MuteConsole()
+                    sink.addFilter(mute)
+                    self._muted_console_handlers.append((sink, mute))
         root = logging.getLogger()
-        for h in list(root.handlers):
-            if isinstance(h, logging.StreamHandler) and not isinstance(
-                h, logging.FileHandler
-            ):
-                try:
-                    root.removeHandler(h)
-                except Exception:
-                    pass
         root.addHandler(handler)
         self._tui_log_handler = handler
         self._log_handler_installed = True
@@ -268,5 +287,9 @@ class XiaozhiTuiApp(App[None]):
                 logging.getLogger().removeHandler(h)
             except Exception:
                 pass
+            h.close()
+        for sink, mute in self._muted_console_handlers:
+            sink.removeFilter(mute)
+        self._muted_console_handlers.clear()
         self._log_handler_installed = False
         self._tui_log_handler = None

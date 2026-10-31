@@ -4,6 +4,7 @@ Shared MCP tooling primitives (Property schema + tool wrapper).
 
 import asyncio
 import json
+import math
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, Union
@@ -44,18 +45,31 @@ class Property:
 
     @property
     def has_range(self) -> bool:
-        return self.min_value is not None and self.max_value is not None
+        return self.min_value is not None or self.max_value is not None
 
     def value(self, value: Any) -> Any:
         """
         验证并返回值.
         """
-        if self.type == PropertyType.INTEGER and self.has_range:
-            if value < self.min_value:
+        if self.type == PropertyType.BOOLEAN:
+            if not isinstance(value, bool):
+                raise ValueError(f"Invalid type for property {self.name}")
+        elif self.type == PropertyType.STRING:
+            if not isinstance(value, str):
+                raise ValueError(f"Invalid type for property {self.name}")
+        elif self.type == PropertyType.INTEGER:
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                raise ValueError(f"Invalid type for property {self.name}")
+            if isinstance(value, float) and (
+                not math.isfinite(value) or not value.is_integer()
+            ):
+                raise ValueError(f"Invalid integer for property {self.name}")
+            value = int(value)
+            if self.min_value is not None and value < self.min_value:
                 raise ValueError(
                     f"Value {value} is below minimum allowed: {self.min_value}"
                 )
-            if value > self.max_value:
+            if self.max_value is not None and value > self.max_value:
                 raise ValueError(
                     f"Value {value} exceeds maximum allowed: {self.max_value}"
                 )
@@ -118,27 +132,16 @@ class PropertyList:
         """
         解析并验证参数.
         """
+        if arguments is not None and not isinstance(arguments, dict):
+            raise ValueError("Tool arguments must be an object")
         result = {}
-
         for prop in self.properties:
             if arguments and prop.name in arguments:
-                value = arguments[prop.name]
-                # 类型检查
-                if prop.type == PropertyType.BOOLEAN and isinstance(value, bool):
-                    result[prop.name] = value
-                elif prop.type == PropertyType.INTEGER and isinstance(
-                    value, (int, float)
-                ):
-                    result[prop.name] = prop.value(int(value))
-                elif prop.type == PropertyType.STRING and isinstance(value, str):
-                    result[prop.name] = value
-                else:
-                    raise ValueError(f"Invalid type for property {prop.name}")
+                result[prop.name] = prop.value(arguments[prop.name])
             elif prop.has_default_value:
-                result[prop.name] = prop.default_value
+                result[prop.name] = prop.value(prop.default_value)
             else:
                 raise ValueError(f"Missing required argument: {prop.name}")
-
         return result
 
 

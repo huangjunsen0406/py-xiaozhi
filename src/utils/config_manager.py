@@ -2,8 +2,11 @@ import copy
 import json
 import os
 import shutil
+import tempfile
+import threading
 import uuid
 from datetime import datetime, timezone
+from functools import wraps
 from pathlib import Path
 from typing import Any
 
@@ -49,6 +52,17 @@ def reset_config() -> None:
     """丢弃进程配置（仅测试）."""
     global _current
     _current = None
+
+
+def _synchronized(method):
+    """Serialize snapshots and writes for one configuration instance."""
+
+    @wraps(method)
+    def locked(self, *args, **kwargs):
+        with self._lock:
+            return method(self, *args, **kwargs)
+
+    return locked
 
 
 class ConfigManager:
@@ -200,6 +214,7 @@ class ConfigManager:
         The application may keep using its default user configuration. Embedded
         clients use ``from_dict`` or an explicit file without changing that default.
         """
+        self._lock = threading.RLock()
         self._memory_only = data is not None
         if self._memory_only:
             if config_file is not None:
@@ -394,20 +409,29 @@ class ConfigManager:
         """原子写入配置文件；内存配置只更新当前实例。"""
         if getattr(self, "_memory_only", False):
             return True
+        tmp_file = None
         try:
             self.config_dir.mkdir(parents=True, exist_ok=True)
-
-            tmp_file = self.config_file.with_suffix(".tmp")
-            tmp_file.write_text(
-                json.dumps(config, indent=2, ensure_ascii=False), encoding="utf-8"
+            fd, temporary = tempfile.mkstemp(
+                prefix=f".{self.config_file.name}.", suffix=".tmp", dir=self.config_dir
             )
+            tmp_file = Path(temporary)
+            with os.fdopen(fd, "w", encoding="utf-8") as stream:
+                json.dump(config, stream, indent=2, ensure_ascii=False)
+                stream.flush()
+                os.fsync(stream.fileno())
             os.replace(tmp_file, self.config_file)
             logger.debug(f"配置已保存到: {self.config_file}")
             return True
-
         except Exception as e:
             logger.error(f"配置保存错误: {e}", exc_info=True)
             return False
+        finally:
+            if tmp_file is not None:
+                try:
+                    tmp_file.unlink(missing_ok=True)
+                except OSError:
+                    logger.warning("清理配置临时文件失败: %s", tmp_file, exc_info=True)
 
     @staticmethod
     def _merge_configs(default: dict, custom: dict) -> dict:
@@ -427,6 +451,7 @@ class ConfigManager:
                 result[key] = value
         return result
 
+    @_synchronized
     def get_config(self, path: str, default: Any = None) -> Any:
         """
         通过路径获取配置值
@@ -443,56 +468,42 @@ class ConfigManager:
         except (KeyError, TypeError):
             return default
 
+    @_synchronized
     def update_config(self, path: str, value: Any, *, save: bool = True) -> bool:
-        """
-        更新特定配置项
-        path: 点分隔的配置路径，如 "SYSTEM_OPTIONS.NETWORK.MQTT_INFO"
-        save: 是否立即落盘；批量更新时传 False，最后再 save_config()/update_configs
+        """更新一个路径；保存失败时保留原内存，save=False 显式只更新内存。"""
+        return self._update_candidate({path: value}, save=save)
 
-        中间节点若为 None/非 dict，会提升为 dict 再写入（兼容 MQTT_INFO: null 等默认）。
-        """
-        try:
-            current: Any = self._config
-            *parts, last = path.split(".")
-            for part in parts:
-                if not isinstance(current, dict):
-                    raise TypeError(
-                        f"配置路径前缀不是对象，无法写入 {path}（当前节点类型 {type(current).__name__}）"
-                    )
-                existing = current.get(part, None)
-                if not isinstance(existing, dict):
-                    # 键缺失、或值为 None/标量：建空对象以便继续下钻
-                    existing = {}
-                    current[part] = existing
-                current = existing
-            if not isinstance(current, dict):
-                raise TypeError(f"配置路径无法写入: {path}")
-            current[last] = value
-            if not save:
-                return True
-            return self._save_config(self._config)
-        except Exception as e:
-            logger.error(f"配置更新错误 {path}: {e}", exc_info=True)
-            return False
-
+    @_synchronized
     def update_configs(self, updates: dict[str, Any]) -> bool:
-        """批量更新多个配置路径，只写盘一次.
+        """在独立副本上批量更新，全部验证及写盘成功后才发布。"""
+        return self._update_candidate(updates, save=True)
 
-        Args:
-            updates: path -> value，例如
-                {"SYSTEM_OPTIONS.NETWORK.WEBSOCKET_URL": "wss://..."}
-        """
+    def _update_candidate(self, updates: dict[str, Any], *, save: bool) -> bool:
         if not updates:
             return True
         try:
+            candidate = copy.deepcopy(self._config)
             for path, value in updates.items():
-                if not self.update_config(path, value, save=False):
-                    return False
-            return self._save_config(self._config)
+                if not isinstance(path, str) or not path or any(
+                    not part for part in path.split(".")
+                ):
+                    raise ValueError(f"配置路径无效: {path!r}")
+                current = candidate
+                *parents, final = path.split(".")
+                for part in parents:
+                    if not isinstance(current.get(part), dict):
+                        current[part] = {}
+                    current = current[part]
+                current[final] = value
+            if save and not self._save_config(candidate):
+                return False
+            self._config = candidate
+            return True
         except Exception as e:
-            logger.error(f"批量配置更新错误: {e}", exc_info=True)
+            logger.error("配置更新错误: %s", e, exc_info=True)
             return False
 
+    @_synchronized
     def commit_draft(self, draft: dict) -> str | None:
         """提交独立草稿；成功返回 None，失败返回可展示的错误信息.
 
@@ -528,10 +539,12 @@ class ConfigManager:
         self._config = previous
         return "配置已写入，但运行时加载失败，请重试或重启应用"
 
+    @_synchronized
     def save_config(self) -> bool:
         """将当前内存配置落盘."""
         return self._save_config(self._config)
 
+    @_synchronized
     def reload_config(
         self, *, apply_paths: bool = True, strict: bool = False
     ) -> bool:

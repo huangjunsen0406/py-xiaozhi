@@ -43,11 +43,14 @@ class OtaConfigClient:
 
     def initialize_config(self) -> None:
         self._config.initialize_client_id()
+        if not self._config.get_config("SYSTEM_OPTIONS.CLIENT_ID"):
+            raise OSError("保存 CLIENT_ID 失败")
         device_id = self._config.get_config("SYSTEM_OPTIONS.DEVICE_ID")
         if not device_id:
             mac = self._identity.get_mac_address()
             if mac:
-                self._config.update_config("SYSTEM_OPTIONS.DEVICE_ID", mac)
+                if not self._config.update_config("SYSTEM_OPTIONS.DEVICE_ID", mac):
+                    raise OSError("保存 DEVICE_ID 失败")
                 logger.info(f"已设置DEVICE_ID: {mac}")
         logger.info(
             f"CLIENT_ID: {self._config.get_config('SYSTEM_OPTIONS.CLIENT_ID')}"
@@ -113,7 +116,6 @@ class OtaConfigClient:
         updates: Dict[str, object] = {}
         if "mqtt" in data and data["mqtt"]:
             updates["SYSTEM_OPTIONS.NETWORK.MQTT_INFO"] = data["mqtt"]
-            logger.info("MQTT配置已更新")
         if "websocket" in data:
             ws = data["websocket"]
             if ws.get("url"):
@@ -121,8 +123,10 @@ class OtaConfigClient:
                 logger.info(f"WebSocket URL: {ws['url']}")
             token = ws.get("token", "test-token") or "test-token"
             updates["SYSTEM_OPTIONS.NETWORK.WEBSOCKET_ACCESS_TOKEN"] = token
+        if updates and not self._config.update_configs(updates):
+            raise OSError("OTA 配置保存失败，激活状态未更新")
         if updates:
-            self._config.update_configs(updates)
+            logger.info("OTA 网络配置已保存")
         if "activation" in data:
             logger.info("检测到激活数据，设备需要激活")
             self.activation_data = data["activation"]

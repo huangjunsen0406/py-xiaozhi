@@ -273,35 +273,30 @@ class McpServer:
         """
         cursor = params.get("cursor", "")
         max_payload_size = 8000
-
-        tools_json = []
-        total_size = 0
-        found_cursor = not cursor
-        next_cursor = ""
-
-        for tool in self._iter_enabled_tools():
-            # 如果还没找到起始位置，继续搜索
-            if not found_cursor:
-                if tool.name == cursor:
-                    found_cursor = True
-                else:
-                    continue
-
-            # 检查大小
-            tool_json = tool.to_json()
-            tool_size = len(json.dumps(tool_json))
-
-            if total_size + tool_size + 100 > max_payload_size:
-                next_cursor = tool.name
+        tools = list(self._iter_enabled_tools())
+        if not isinstance(cursor, str):
+            await self._reply_error(request_id, "Invalid tools/list cursor")
+            return
+        start = 0
+        if cursor:
+            start = next((i for i, t in enumerate(tools) if t.name == cursor), -1)
+            if start < 0:
+                await self._reply_error(request_id, "Unknown tools/list cursor")
+                return
+        result = {"tools": []}
+        for index in range(start, len(tools)):
+            candidate = {"tools": result["tools"] + [tools[index].to_json()]}
+            if index + 1 < len(tools):
+                candidate["nextCursor"] = tools[index + 1].name
+            payload = {"jsonrpc": "2.0", "id": request_id, "result": candidate}
+            if len(json.dumps(payload).encode("utf-8")) > max_payload_size:
+                if not result["tools"]:
+                    await self._reply_error(
+                        request_id, "Tool definition exceeds tools/list payload limit"
+                    )
+                    return
                 break
-
-            tools_json.append(tool_json)
-            total_size += tool_size
-
-        result = {"tools": tools_json}
-        if next_cursor:
-            result["nextCursor"] = next_cursor
-
+            result = candidate
         await self._reply_result(request_id, result)
 
     async def _handle_tool_call(

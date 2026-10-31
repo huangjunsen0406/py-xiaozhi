@@ -29,6 +29,8 @@ class SessionAudio(Protocol):
 
     async def clear_audio_queue(self) -> None: ...
 
+    async def wait_for_tts_playback(self) -> None: ...
+
 
 class ConversationSession:
     """应用级会话控制器."""
@@ -50,7 +52,9 @@ class ConversationSession:
         self.audio_generation = 0
         self._listen_start_generation: int | None = None
         self._tts_active = False
+        self._tts_stopping = False
         self._tts_generation = 0
+        self._tts_changed = asyncio.Event()
         self._notification_player = notification_player
         self._notification_generation = 0
         self._notification_lock = asyncio.Lock()
@@ -59,10 +63,19 @@ class ConversationSession:
     def is_speaking(self) -> bool:
         return self._tts_active or self.state.is_speaking()
 
+    def _advance_tts_generation(self) -> None:
+        self._tts_generation += 1
+        self._tts_changed.set()
+        self._tts_changed = asyncio.Event()
+
     def _reset_tts(self) -> None:
         self.audio_generation += 1
-        self._tts_generation += 1
+        self._advance_tts_generation()
         self._tts_active = False
+        self._tts_stopping = False
+        discard = getattr(self.protocol, "discard_incoming_audio", None)
+        if discard is not None:
+            discard()
 
     def set_audio(self, audio: SessionAudio | None) -> None:
         self.audio = audio
@@ -108,6 +121,8 @@ class ConversationSession:
         self._reset_tts()
         self.state.set_keep_listening(False)
         await self._cancel_notification()
+        if self.audio:
+            await self.audio.clear_audio_queue()
         await self.state.set_device_state(DeviceState.IDLE)
 
     async def _on_network_error(self, error_message: str = None) -> None:
@@ -115,6 +130,8 @@ class ConversationSession:
         self._reset_tts()
         self.state.set_keep_listening(False)
         await self._cancel_notification()
+        if self.audio:
+            await self.audio.clear_audio_queue()
         try:
             if not self.state.is_idle():
                 await self.state.set_device_state(DeviceState.IDLE)
@@ -124,9 +141,13 @@ class ConversationSession:
     async def _on_incoming_json(self, json_data: dict) -> None:
         if isinstance(json_data, dict) and json_data.get("type") == "tts":
             async with self._tts_message_lock:
-                await self._dispatch_message(json_data)
-        else:
-            await self._dispatch_message(json_data)
+                # Starts remain ordered, including a slow AEC downgrade. Stop
+                # waits for prior starts, but releases the lock before drain so
+                # it cannot block the next start or unrelated MCP messages.
+                if json_data.get("state") != "stop":
+                    await self._dispatch_message(json_data)
+                    return
+        await self._dispatch_message(json_data)
 
     async def _dispatch_message(self, json_data: dict) -> None:
         try:
@@ -138,7 +159,14 @@ class ConversationSession:
                 if state == "start":
                     await self._handle_tts_start()
                 elif state == "stop":
+                    if self._tts_stopping:
+                        return
+                    expected_generation = self._tts_generation + int(
+                        self._tts_active and not self._tts_stopping
+                    )
                     await self._handle_tts_stop()
+                    if self._tts_generation != expected_generation:
+                        return
             elif msg_type == "notify":
                 await self._handle_notify(json_data)
 
@@ -188,9 +216,10 @@ class ConversationSession:
 
     async def _handle_tts_start(self) -> None:
         self.audio_generation += 1
-        self._tts_generation += 1
+        self._advance_tts_generation()
         generation = self._tts_generation
         self._tts_active = True
+        self._tts_stopping = False
         await self._cancel_notification()
         if generation != self._tts_generation:
             return
@@ -206,17 +235,55 @@ class ConversationSession:
             await self.state.set_device_state(DeviceState.SPEAKING)
 
     async def _handle_tts_stop(self) -> None:
-        if not self._tts_active:
+        if not self._tts_active or self._tts_stopping:
             return
-        self._reset_tts()
+        # Network EOF is not playback EOF. Keep half-duplex capture muted until
+        # both the Opus consumer and local/device output have drained. This
+        # handler deliberately runs outside _tts_message_lock so a new start
+        # or user abort can invalidate it immediately.
+        self._tts_stopping = True
+        self._advance_tts_generation()
         generation = self._tts_generation
+
+        async def drain():
+            wait_incoming = getattr(self.protocol, "wait_for_incoming_audio", None)
+            if wait_incoming is not None:
+                await wait_incoming()
+            wait_playback = getattr(self.audio, "wait_for_tts_playback", None)
+            if wait_playback is not None:
+                await wait_playback()
+
+        playback = asyncio.create_task(drain(), name="session:tts_drain")
+        changed = asyncio.create_task(
+            self._tts_changed.wait(), name="session:tts_changed"
+        )
+        try:
+            done, _ = await asyncio.wait(
+                (playback, changed), return_when=asyncio.FIRST_COMPLETED
+            )
+            if playback in done:
+                await playback
+            if generation != self._tts_generation:
+                return
+        finally:
+            for task in (playback, changed):
+                if not task.done():
+                    task.cancel()
+            await asyncio.gather(playback, changed, return_exceptions=True)
+            if generation == self._tts_generation:
+                self._tts_stopping = False
+
+        if generation != self._tts_generation:
+            return
+        self._tts_active = False
+        self.audio_generation += 1
         await self.sync_audio_state(update_protocol=False)
-        # 还要继续听的话，尽量先发 listen，再清队列、改状态
+        if generation != self._tts_generation:
+            return
         if not self.state.keep_listening:
             await self.state.set_device_state(DeviceState.IDLE)
             return
 
-        # realtime 一般还在 listen 里，不用再发一遍。
         if self.state.listening_mode != ListeningMode.REALTIME:
             resumed = False
             if self.protocol.is_audio_channel_opened():
@@ -226,22 +293,11 @@ class ConversationSession:
                     )
                 except Exception as e:
                     logger.warning(f"TTS 结束后重新 listen 失败: {e}", exc_info=True)
-            else:
-                logger.warning("TTS 结束但协议通道已关闭，跳过重新 listen")
             if generation != self._tts_generation:
                 return
             if not resumed:
                 await self._fail_listening(self.audio_generation)
                 return
-
-        if generation != self._tts_generation:
-            return
-        try:
-            if self.audio:
-                await self.audio.clear_audio_queue()
-        except Exception as e:
-            logger.warning(f"清空音频队列失败: {e}", exc_info=True)
-
         if generation == self._tts_generation:
             await self.state.set_device_state(DeviceState.LISTENING)
 

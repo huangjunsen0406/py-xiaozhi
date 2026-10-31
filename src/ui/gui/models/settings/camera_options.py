@@ -22,12 +22,6 @@ class SettingsCameraOptionsMixin:
     def _set_frameHeight(self, value: int):
         self._set_value("CAMERA.frame_height", value)
 
-    def _get_fps(self) -> int:
-        return self._get_value("CAMERA.fps", 30)
-
-    def _set_fps(self, value: int):
-        self._set_value("CAMERA.fps", value)
-
     def _get_vlApiUrl(self) -> str:
         return self._get_value("CAMERA.Local_VL_url", "")
 

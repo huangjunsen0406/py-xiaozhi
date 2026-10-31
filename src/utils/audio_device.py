@@ -115,21 +115,20 @@ class AudioDeviceManager:
             input_device_name != input_info["name"]
             or output_device_name != output_info["name"]
         ):
-            self.config.update_config(
-                "AUDIO_DEVICES.input_device_name", input_info["name"]
+            saved = self.config.update_configs(
+                {
+                    "AUDIO_DEVICES.input_device_name": input_info["name"],
+                    "AUDIO_DEVICES.input_sample_rate": device_input_sample_rate,
+                    "AUDIO_DEVICES.input_channels": input_channels,
+                    "AUDIO_DEVICES.output_device_name": output_info["name"],
+                    "AUDIO_DEVICES.output_sample_rate": device_output_sample_rate,
+                    "AUDIO_DEVICES.output_channels": output_channels,
+                }
             )
-            self.config.update_config(
-                "AUDIO_DEVICES.input_sample_rate", device_input_sample_rate
-            )
-            self.config.update_config("AUDIO_DEVICES.input_channels", input_channels)
-            self.config.update_config(
-                "AUDIO_DEVICES.output_device_name", output_info["name"]
-            )
-            self.config.update_config(
-                "AUDIO_DEVICES.output_sample_rate", device_output_sample_rate
-            )
-            self.config.update_config("AUDIO_DEVICES.output_channels", output_channels)
-            logger.info("设备配置已保存")
+            if saved:
+                logger.info("设备配置已保存")
+            else:
+                logger.warning("设备配置保存失败，本次仍使用已检测到的设备")
 
         return DeviceConfig(
             input_device_id=input_info["index"],

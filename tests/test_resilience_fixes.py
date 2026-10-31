@@ -545,16 +545,9 @@ def test_config_manager_update_through_none_intermediate(tmp_path):
     from src.utils.config_manager import ConfigManager, reset_config
 
     reset_config()
-    cm = ConfigManager.__new__(ConfigManager)
-    cm.config_dir = tmp_path
-    cm.config_file = tmp_path / "config.json"
-    cm._config = {
-        "SYSTEM_OPTIONS": {
-            "NETWORK": {
-                "MQTT_INFO": None,
-            }
-        }
-    }
+    cm = ConfigManager.from_dict(
+        {"SYSTEM_OPTIONS": {"NETWORK": {"MQTT_INFO": None}}}
+    )
 
     assert cm.update_config(
         "SYSTEM_OPTIONS.NETWORK.MQTT_INFO.endpoint", "mqtt.example.com", save=False
@@ -573,10 +566,7 @@ def test_config_manager_no_default_config_pollution():
     reset_config()
     before = copy.deepcopy(ConfigManager.DEFAULT_CONFIG["WAKE_WORD_OPTIONS"]["WAKE_WORD"])
 
-    cm = ConfigManager.__new__(ConfigManager)
-    cm.config_dir = None  # type: ignore
-    cm.config_file = None  # type: ignore
-    cm._config = copy.deepcopy(ConfigManager.DEFAULT_CONFIG)
+    cm = ConfigManager.from_dict()
     cm.update_config("WAKE_WORD_OPTIONS.WAKE_WORD", "__pollute_test__", save=False)
 
     assert ConfigManager.DEFAULT_CONFIG["WAKE_WORD_OPTIONS"]["WAKE_WORD"] == before
@@ -1200,7 +1190,7 @@ async def test_handle_tts_stop_relisten_before_state():
     await session._handle_tts_stop()
 
     assert order[0] == ("listen", ListeningMode.AUTO_STOP)
-    assert "clear_queue" in order
+    assert "clear_queue" not in order
     assert ("state", DeviceState.LISTENING) in order
     assert order.index(("listen", ListeningMode.AUTO_STOP)) < order.index(
         ("state", DeviceState.LISTENING)
@@ -1452,6 +1442,9 @@ def test_settings_run_worker_emits_test_complete_on_exception():
         pass
 
     stub = _Stub()
+    stub._closed = False
+    # Isolate the worker boundary; real queued Qt delivery has its own regression.
+    stub._schedule_ui = lambda callback: callback()
     stub.testComplete = _Sig(completed)
     stub.statusMessage = _Sig(messages)
     stub._testing_input = True

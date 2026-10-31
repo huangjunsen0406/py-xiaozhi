@@ -54,6 +54,9 @@ class AudioPlugin(Plugin):
             )
             await self.codec.initialize()
             self.codec.set_encoded_callback(self._on_encoded_audio)
+            self.codec.set_encode_gate(
+                lambda: self._accepting and self._should_send_microphone_audio()
+            )
 
             from src.core.event_bus import Events
 

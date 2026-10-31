@@ -3,10 +3,7 @@
 from __future__ import annotations
 
 import math
-import os
-import tempfile
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any
 
 from src.logging import get_logger
@@ -222,9 +219,6 @@ SETTING_SECTIONS: list[tuple[str, list[SettingField]]] = [
                 minimum=240,
                 maximum=1080,
                 effect="hot",
-            ),
-            SettingField(
-                "CAMERA.fps", "帧率", kind="int", minimum=10, maximum=60, effect="hot"
             ),
             SettingField("CAMERA.Local_VL_url", "视觉模型 URL", effect="restart"),
             SettingField(
@@ -464,28 +458,6 @@ def _validate_extras(disabled_tools, device_updates) -> dict[str, Any]:
     return updates
 
 
-def _write_keywords(lang: str, keyword_line: str) -> Path:
-    """原子替换当前生效目录下的关键词；PATHS 新草稿下次启动应用。"""
-    from src.utils.resource_finder import get_keywords_dir
-
-    directory = Path(get_keywords_dir())
-    directory.mkdir(parents=True, exist_ok=True)
-    target = directory / f"{lang}_keywords.txt"
-    fd, temporary = tempfile.mkstemp(prefix=f".{target.name}.", dir=directory)
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as stream:
-            stream.write(keyword_line + "\n")
-            stream.flush()
-            os.fsync(stream.fileno())
-        os.replace(temporary, target)
-    finally:
-        # temporary is created by mkstemp in the checked keywords directory.
-        temporary_path = Path(temporary)
-        if temporary_path.exists():
-            temporary_path.unlink()
-    return target
-
-
 def save_settings(
     values: dict[str, str],
     config: ConfigManager | None = None,
@@ -495,8 +467,8 @@ def save_settings(
 ) -> tuple[bool, str]:
     """先校验全部输入，再提交独立完整草稿。失败保留调用方输入。
 
-    关键词先原子写入再 commit_draft，沿用 GUI 顺序。配置提交失败时关键词
-    可能已经生成；运行时加载失败时磁盘新配置保留，错误原样返回供重试。
+    关键词先原子写入再 commit_draft；配置未落盘时恢复旧关键词。
+    运行时加载失败但磁盘已保存新配置时保留匹配的新关键词，错误返回供重试。
     """
     cfg = config if config is not None else ConfigManager.from_dict()
     try:
@@ -538,8 +510,11 @@ def save_settings(
                 continue
             _set_path(draft, path, value)
         if converted is not None:
-            _write_keywords(lang, keyword_line)
-        error = cfg.commit_draft(draft)
+            from src.utils.keyword_writer import commit_with_keywords
+
+            error = commit_with_keywords(cfg, draft, lang, keyword_line)
+        else:
+            error = cfg.commit_draft(draft)
         if error is not None:
             return False, str(error)
         logger.info("TUI 已保存 %s 项配置", len(updates))
