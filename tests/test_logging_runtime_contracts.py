@@ -27,6 +27,45 @@ def isolated_logging(monkeypatch):
     logs.shutdown_logging()
 
 
+@pytest.mark.parametrize(
+    "environment, configured, explicit, expected",
+    [
+        ("development", "WARNING", None, "WARNING"),
+        ("production", "DEBUG", None, "DEBUG"),
+        ("testing", "ERROR", None, "ERROR"),
+        ("development", "ERROR", "info", "INFO"),
+        ("development", None, None, "DEBUG"),
+        ("production", None, None, "INFO"),
+        ("testing", None, None, "INFO"),
+    ],
+)
+def test_loaded_level_precedence(
+    monkeypatch, tmp_path, environment, configured, explicit, expected
+):
+    monkeypatch.setenv("APP_ENV", environment)
+    monkeypatch.delenv("LOG_LEVEL", raising=False)
+    if explicit is not None:
+        monkeypatch.setenv("LOG_LEVEL", explicit)
+    source = SimpleNamespace(
+        get_config=lambda *_: {"LEVEL": configured} if configured else {}
+    )
+    monkeypatch.setattr(log_config, "_get_default_log_dir", lambda: tmp_path)
+    assert logs.load_logging_config(source).level == expected
+
+
+def test_qasync_noise_default_can_be_overridden(monkeypatch, tmp_path):
+    monkeypatch.setattr(log_config, "_get_default_log_dir", lambda: tmp_path)
+    assert logs.LoggingConfig().third_party_levels["qasync"] == "WARNING"
+    source = SimpleNamespace(
+        get_config=lambda *_: {"THIRD_PARTY_LEVELS": {"qasync": "DEBUG"}}
+    )
+    config = logs.load_logging_config(source)
+    logs.setup_logging(
+        config=config, enable_console=False, enable_file=False, enable_json=False
+    )
+    assert logging.getLogger("qasync").level == logging.DEBUG
+
+
 def test_setup_replaces_bootstrap_console_and_restores_inherited_level(
     tmp_path, capsys
 ):

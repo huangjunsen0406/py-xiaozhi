@@ -166,9 +166,18 @@ class AudioConverter:
 
         return audio
 
+    @property
+    def pending_output_samples(self) -> float:
+        delayed = (
+            self.output_resampler.delay() if self.output_resampler is not None else 0
+        )
+        return len(self._output_buffer) + delayed
+
     def clear_output_buffer(self):
-        """只清空输出缓冲区（用于 TTS 停止时防回声，不影响输入管线）"""
+        """Discard converted PCM and delayed resampler output on cancellation."""
         self._output_buffer.clear()
+        if self.output_resampler is not None:
+            self.output_resampler.clear()
 
     def clear_buffers(self):
         """清空缓冲区"""

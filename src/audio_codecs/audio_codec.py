@@ -71,6 +71,11 @@ class AudioCodec:
         self.stream_manager = None
 
         # TTS / 通知 / 音乐分流：通知和 TTS 同级为语音，音乐在其出现时闪避。
+        self._output_lock = threading.RLock()
+        self._tts_output_frames = 0.0
+        self._tts_playback_until = 0.0
+        self._tts_clear_generation = 0
+        self._tts_pulled_samples = 0
         self._tts_fifo = PcmFifo(
             int(self.audio_config.OUTPUT_SAMPLE_RATE * _TTS_FIFO_MAX_S)
         )
@@ -89,6 +94,7 @@ class AudioCodec:
 
         # 监听器（线程安全）
         self._encoded_callback: Callable | None = None
+        self._encode_gate: Callable[[], bool] | None = None
         self._audio_listeners: list[AudioListener] = []
         self._listeners_lock = threading.Lock()
 
@@ -182,7 +188,9 @@ class AudioCodec:
                 audio_converted = self._aec.process_near(audio_converted)
 
             # 2. Opus 编码（float32 输入）
-            if self._encoded_callback:
+            if self._encoded_callback and (
+                self._encode_gate is None or self._encode_gate()
+            ):
                 try:
                     opus_data = self.opus_codec.encode(
                         audio_converted, self.audio_config.INPUT_FRAME_SIZE
@@ -203,6 +211,11 @@ class AudioCodec:
             logger.error(f"输入回调错误: {e}", exc_info=True)
 
     def _output_callback(self, outdata, frames, time_info, status):
+        # Clear/abort must not race a device callback rebuilding converter PCM.
+        with self._output_lock:
+            self._render_output(outdata, frames, time_info, status)
+
+    def _render_output(self, outdata, frames, time_info, status):
         """输出回调：解码 → 转换 → 播放
 
         数据流：队列 → 重采样 → 上混 → 设备
@@ -226,11 +239,24 @@ class AudioCodec:
 
         try:
             audio_converted = None
-
+            self._tts_pulled_samples = 0
+            output_rate = (
+                self.device_config.output_sample_rate
+                if self.device_config is not None
+                else self.audio_config.OUTPUT_SAMPLE_RATE
+            )
             while audio_converted is None:
+                before = self._tts_pulled_samples
                 audio_data = self._pull_mixed(self._mix_chunk)
                 if audio_data is None:
                     break
+                pulled = self._tts_pulled_samples - before
+                if pulled:
+                    if self._tts_output_frames <= 0:
+                        self._tts_output_frames = self.converter.pending_output_samples
+                    self._tts_output_frames += (
+                        pulled * output_rate / self.audio_config.OUTPUT_SAMPLE_RATE
+                    )
                 audio_converted = self.converter.convert_output(audio_data, frames)
 
             if audio_converted is None:
@@ -242,6 +268,23 @@ class AudioCodec:
                     outdata[: len(audio_converted)] = audio_converted
             else:
                 outdata[:] = audio_converted[:frames]
+
+            if self._tts_output_frames > 0:
+                # PortAudio times share its own clock, so only their delta is
+                # combined with monotonic time. Include Bluetooth/device lead.
+                device_lead = max(
+                    0.0,
+                    float(getattr(time_info, "outputBufferDacTime", 0.0))
+                    - float(getattr(time_info, "currentTime", 0.0)),
+                )
+                self._tts_playback_until = (
+                    time.monotonic() + device_lead + frames / output_rate
+                )
+                self._tts_output_frames = max(
+                    0.0,
+                    self._tts_output_frames
+                    - (len(audio_converted) if audio_converted is not None else 0),
+                )
 
             # AEC far：设备实际写出的最终 PCM（TTS+音乐混合，含静音保持连续）
             if self._aec is not None and self._aec.active:
@@ -286,6 +329,9 @@ class AudioCodec:
         )
         self._mix_chunk = int(self.audio_config.OUTPUT_SAMPLE_RATE * 0.02)
         self._duck_hold = 0
+        self._tts_clear_generation += 1
+        self._tts_output_frames = 0.0
+        self._tts_playback_until = 0.0
         self._notification_had_audio = False
         self._notification_drain_callbacks_remaining = 0
 
@@ -298,6 +344,8 @@ class AudioCodec:
           帧间隙保持若干块（避免闪避增益抖动）
         """
         tts = self._tts_fifo.pull(n)
+        if tts is not None:
+            self._tts_pulled_samples += n
         notification, notification_samples = self._notification_fifo.pull_with_count(n)
         music = self._music_fifo.pull(n)
 
@@ -317,6 +365,10 @@ class AudioCodec:
             self._notification_drain_callbacks_remaining = 2
 
         if tts is None and notification is None and music is None:
+            # Flush the last resampler samples with silence while the tracked
+            # TTS tail is still in the converter. Do not count silence as TTS.
+            if self._tts_output_frames > 0:
+                return np.zeros(n, dtype=np.float32)
             return None
 
         if tts is not None or notification is not None:
@@ -392,6 +444,10 @@ class AudioCodec:
         """AEC 引擎是否在位且工作中（音乐并行策略等依赖此判断）."""
         aec = self._aec
         return bool(aec is not None and aec.active)
+
+    def set_encode_gate(self, gate: Callable[[], bool] | None) -> None:
+        """Skip network encoding while retaining PCM listeners and AEC."""
+        self._encode_gate = gate
 
     def set_encoded_callback(self, callback: Callable[[bytes], None]):
         """设置编码回调
@@ -497,11 +553,35 @@ class AudioCodec:
                 break
             await asyncio.sleep(0.02)
 
+    async def wait_for_tts_playback(self) -> None:
+        """Wait for FIFO, converted output and the final device buffer to drain.
+
+        A generation change releases an obsolete waiter when the user aborts;
+        it must never wait for audio belonging to the next reply.
+        """
+        generation = self._tts_clear_generation
+        while not self._is_closing:
+            with self._output_lock:
+                if generation != self._tts_clear_generation:
+                    return
+                if (
+                    self._tts_fifo.size == 0
+                    and self._tts_output_frames <= 0
+                    and time.monotonic() >= self._tts_playback_until
+                ):
+                    return
+            await asyncio.sleep(0.01)
+
     async def clear_audio_queue(self):
         """清空 TTS 播放队列（打断/中止时用；音乐队列不受影响）."""
-        self._server_opus_logged = False
-        self.converter.clear_output_buffer()
-        count = self._tts_fifo.clear()
+        with self._output_lock:
+            self._tts_clear_generation += 1
+            self._tts_output_frames = 0.0
+            self._tts_playback_until = 0.0
+            self._tts_pulled_samples = 0
+            self._server_opus_logged = False
+            self.converter.clear_output_buffer()
+            count = self._tts_fifo.clear()
         if count > 0:
             logger.info(f"清空 TTS 队列，丢弃 {count} 样本")
 
@@ -576,6 +656,7 @@ class AudioCodec:
                     raise RuntimeError("旧音频流尚未关闭，无法重载设备")
                 logger.debug("AudioCodec: 已停止当前音频流")
             self.stream_manager = None
+            await self.clear_audio_queue()
 
             # 2. 热插拔：重建 PortAudio 上下文后再按名称匹配
             if reenumerate:

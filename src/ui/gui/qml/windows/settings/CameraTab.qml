@@ -199,32 +199,6 @@ ScrollView {
                         font.pixelSize: Theme.fontSizeSm
                     }
                 }
-
-                Text {
-                    text: "帧率"
-                    font.pixelSize: Theme.fontSizeSm
-                    color: Theme.textSecondary
-                    Layout.preferredWidth: 80
-                }
-
-                RowLayout {
-                    spacing: Theme.spacingSm
-
-                    XSpinBox {
-                        Layout.preferredWidth: 100
-                        from: 10
-                        to: 60
-                        stepSize: 5
-                        value: settingsModel ? settingsModel.fps : 30
-                        onValueModified: if (settingsModel) settingsModel.fps = value
-                    }
-
-                    Text {
-                        text: "FPS"
-                        font.pixelSize: Theme.fontSizeSm
-                        color: Theme.textSecondary
-                    }
-                }
             }
         }
 

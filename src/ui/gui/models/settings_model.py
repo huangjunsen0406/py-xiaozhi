@@ -8,7 +8,7 @@ import threading
 from collections.abc import Callable
 from typing import Any
 
-from PySide6.QtCore import Property, Signal, Slot
+from PySide6.QtCore import Property, Qt, Signal, Slot
 
 from src.logging import get_logger
 from src.ui.gui.models.base_model import BaseModel
@@ -45,6 +45,7 @@ class SettingsModel(
     configSaved = Signal()
     # MCP 工具禁用列表相对打开/上次保存是否变化 → 保存后可能触发重连
     mcpToolsNeedReconnect = Signal()
+    _uiCallbackRequested = Signal(object)
 
     def __init__(
         self,
@@ -55,6 +56,10 @@ class SettingsModel(
         runtime_tool_names: Callable[[], tuple[str, ...]] | None = None,
     ):
         super().__init__(parent)
+        self._closed = False
+        self._uiCallbackRequested.connect(
+            self._run_ui_callback, Qt.ConnectionType.QueuedConnection
+        )
         self._config_manager = (
             config_manager if config_manager is not None else ConfigManager.from_dict()
         )
@@ -73,7 +78,9 @@ class SettingsModel(
         self._cameras_loading = False
         self._cameras_loaded_once = False
         self._audio_devices_loaded = False
+        self._audio_devices_loading = False
         self._audio_devices_refreshing = False
+        self._audio_generation = 0
 
         self._testing_input = False
         self._testing_output = False
@@ -89,6 +96,32 @@ class SettingsModel(
         self._load_wake_word(update_preview=False)
         self._snapshot_mcp_disabled()
 
+    @Slot(object)
+    def _run_ui_callback(self, callback) -> None:
+        if not self._closed:
+            try:
+                callback()
+            except Exception as exc:
+                logger.error("设置页 UI 回调失败: %s", exc, exc_info=True)
+
+    def _schedule_ui(self, callback) -> None:
+        """A receiver-bound queued signal always runs on this QObject's thread."""
+        if self._closed:
+            return
+        try:
+            self._uiCallbackRequested.emit(callback)
+        except RuntimeError:
+            # Qt may already have deleted the receiver while a worker finishes.
+            pass
+
+    def close(self) -> None:
+        self._closed = True
+        self._audio_generation += 1
+        self._audio_devices_loading = False
+        self._audio_devices_refreshing = False
+        self._cameras_loading = False
+        self._runtime_tool_names = lambda: ()
+
     def _run_worker(
         self,
         target,
@@ -98,6 +131,9 @@ class SettingsModel(
         clear_flags=None,
     ) -> None:
         """后台线程统一入口：异常必达 statusMessage / testComplete."""
+
+        if self._closed:
+            return
 
         def _entry():
             try:
@@ -118,7 +154,7 @@ class SettingsModel(
             finally:
                 if clear_flags is not None:
                     try:
-                        clear_flags()
+                        self._schedule_ui(clear_flags)
                     except Exception:
                         pass
 
@@ -241,12 +277,6 @@ class SettingsModel(
     )
     musicUrlApiKey = Property(
         str, SettingsSystemOptionsMixin._get_musicUrlApiKey, SettingsSystemOptionsMixin._set_musicUrlApiKey, notify=settingsChanged
-    )
-    musicDefaultPlatform = Property(
-        str,
-        SettingsSystemOptionsMixin._get_musicDefaultPlatform,
-        SettingsSystemOptionsMixin._set_musicDefaultPlatform,
-        notify=settingsChanged,
     )
     musicDefaultQuality = Property(
         str, SettingsSystemOptionsMixin._get_musicDefaultQuality, SettingsSystemOptionsMixin._set_musicDefaultQuality, notify=settingsChanged
@@ -425,7 +455,6 @@ class SettingsModel(
     frameHeight = Property(
         int, SettingsCameraOptionsMixin._get_frameHeight, SettingsCameraOptionsMixin._set_frameHeight, notify=settingsChanged
     )
-    fps = Property(int, SettingsCameraOptionsMixin._get_fps, SettingsCameraOptionsMixin._set_fps, notify=settingsChanged)
     vlApiUrl = Property(str, SettingsCameraOptionsMixin._get_vlApiUrl, SettingsCameraOptionsMixin._set_vlApiUrl, notify=settingsChanged)
     vlApiKey = Property(str, SettingsCameraOptionsMixin._get_vlApiKey, SettingsCameraOptionsMixin._set_vlApiKey, notify=settingsChanged)
     vlModels = Property(str, SettingsCameraOptionsMixin._get_vlModels, SettingsCameraOptionsMixin._set_vlModels, notify=settingsChanged)

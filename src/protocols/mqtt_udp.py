@@ -39,6 +39,7 @@ class MqttUdpChannel:
         self.aes_nonce: str | None = None  # hex
         self.local_sequence = 0
         self.remote_sequence = 0
+        self._remote_sequence_received = False
 
         self._on_incoming_audio = None
         self._audio_queue: deque[bytes] = deque(maxlen=_RX_QUEUE_SIZE)
@@ -59,6 +60,7 @@ class MqttUdpChannel:
         self.aes_nonce = aes_nonce
         self.local_sequence = 0
         self.remote_sequence = 0
+        self._remote_sequence_received = False
 
     def set_audio_handler(self, handler) -> None:
         self._on_incoming_audio = handler
@@ -118,6 +120,7 @@ class MqttUdpChannel:
         self.aes_nonce = None
         self.local_sequence = 0
         self.remote_sequence = 0
+        self._remote_sequence_received = False
 
     def send_audio(self, audio_data: bytes) -> bool:
         if not self.socket or not self.server or not self.port:
@@ -156,6 +159,26 @@ class MqttUdpChannel:
                     if len(data) < 16:
                         logger.error(f"无效的音频数据包大小: {len(data)}")
                         continue
+                    # MQTT/UDP audio header: type, flags, uint16 payload length,
+                    # ssrc, timestamp, uint32 sequence (network byte order).
+                    # See xiaozhi-esp32/docs/mqtt-udp_zh.md, section 4.2.1.
+                    if data[0] != 0x01:
+                        logger.warning(f"无效的音频数据包类型: {data[0]:#04x}")
+                        continue
+                    payload_len = int.from_bytes(data[2:4], "big")
+                    if len(data) != 16 + payload_len:
+                        logger.warning(
+                            f"音频数据包长度不匹配: 声明 {payload_len}，"
+                            f"实际 {len(data) - 16}"
+                        )
+                        continue
+                    sequence = int.from_bytes(data[12:16], "big")
+                    if self._remote_sequence_received:
+                        # Serial-number arithmetic permits uint32 wraparound and
+                        # gaps, but rejects duplicates, late and ambiguous packets.
+                        distance = (sequence - self.remote_sequence) & 0xFFFFFFFF
+                        if not 0 < distance < 0x80000000:
+                            continue
                     if not self.aes_key:
                         continue
 
@@ -166,6 +189,8 @@ class MqttUdpChannel:
                         received_nonce,
                         encrypted_audio,
                     )
+                    self.remote_sequence = sequence
+                    self._remote_sequence_received = True
 
                     if debug_counter % 100 == 0:
                         logger.debug(

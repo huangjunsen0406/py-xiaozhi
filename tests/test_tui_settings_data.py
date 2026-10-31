@@ -11,6 +11,7 @@ import pytest
 
 import src.ui.tui.settings_data as settings
 import src.utils.config_manager as config_module
+import src.utils.keyword_writer as keyword_writer
 import src.utils.resource_finder as resources
 from src.utils.config_manager import ConfigManager
 
@@ -63,6 +64,8 @@ def test_schema_preserves_existing_paths_and_gui_contracts():
     assert schema["MUSIC.URL_API_KEY"].kind == "secret"
     assert schema["CAMERA.VLapi_key"].kind == "secret"
     assert schema["MUSIC.DEFAULT_QUALITY"].choices == ("128k", "320k")
+    assert "CAMERA.fps" not in schema
+    assert "MUSIC.DEFAULT_PLATFORM" not in schema
     assert schema["WAKE_WORD_OPTIONS.KEYWORDS_SCORE"].minimum == 0.5
     assert schema["AEC_OPTIONS.FRAME_DELAY"].maximum == 20
     assert not any("WINDOW_TOGGLE" in path for path in schema)
@@ -82,7 +85,7 @@ def test_schema_preserves_existing_paths_and_gui_contracts():
         for name in ("NUM_THREADS", "KEYWORDS_SCORE", "KEYWORDS_THRESHOLD")
     } <= schema.keys()
     assert {
-        "CAMERA." + name for name in ("fps", "Local_VL_url", "VLapi_key", "models")
+        "CAMERA." + name for name in ("Local_VL_url", "VLapi_key", "models")
     } <= schema.keys()
     assert {
         "SYSTEM_OPTIONS.NETWORK.MQTT_INFO." + name
@@ -209,7 +212,6 @@ def test_save_preserves_unknown_config_and_typed_values(config, monkeypatch):
         ("AEC_OPTIONS.FRAME_DELAY", "1.5"),
         ("CAMERA.frame_width", "0"),
         ("CAMERA.frame_height", "invalid"),
-        ("CAMERA.fps", "121"),
         ("WAKE_WORD_OPTIONS.NUM_THREADS", "0"),
         ("WAKE_WORD_OPTIONS.KEYWORDS_SCORE", "nan"),
         ("WAKE_WORD_OPTIONS.KEYWORDS_SCORE", "inf"),
@@ -365,14 +367,14 @@ def test_keyword_atomic_replace_failure_prevents_commit(config, keywords, monkey
     target.write_text("previous\n")
     before = config.get_config("")
     disk = disk_bytes(config)
-    replace = settings.os.replace
+    replace = keyword_writer.os.replace
 
     def fail_keyword_replace(source, destination):
         if Path(destination) == target:
             raise OSError("keyword write denied")
         return replace(source, destination)
 
-    monkeypatch.setattr(settings.os, "replace", fail_keyword_replace)
+    monkeypatch.setattr(keyword_writer.os, "replace", fail_keyword_replace)
     commit = Mock(wraps=config.commit_draft)
     monkeypatch.setattr(config, "commit_draft", commit)
     ok, message = settings.save_settings(
@@ -386,7 +388,7 @@ def test_keyword_atomic_replace_failure_prevents_commit(config, keywords, monkey
     commit.assert_not_called()
 
 
-def test_commit_failure_keeps_runtime_and_draft_but_keywords_may_exist(
+def test_commit_failure_keeps_runtime_draft_and_restores_keywords(
     config, keywords, monkeypatch
 ):
     before = config.get_config("")
@@ -398,7 +400,7 @@ def test_commit_failure_keeps_runtime_and_draft_but_keywords_may_exist(
     assert (ok, message) == (False, "configuration commit failed")
     assert config.get_config("") == before
     assert values == {"WAKE_WORD_OPTIONS.WAKE_WORD": "test"}
-    assert (keywords.directory / "en_keywords.txt").read_text() == "TEST @test\n"
+    assert not (keywords.directory / "en_keywords.txt").exists()
 
 
 def test_real_config_write_failure_preserves_runtime_and_disk(monkeypatch, tmp_path):
