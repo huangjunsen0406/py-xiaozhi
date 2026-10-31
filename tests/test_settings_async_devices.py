@@ -27,7 +27,9 @@ def until(qt, predicate):
     deadline = time.monotonic() + 3
     while not predicate() and time.monotonic() < deadline:
         qt.processEvents()
-        QTest.qWait(1)
+        # Explicitly release the GIL so the Python worker can enqueue its Qt
+        # callback; tight qWait/processEvents loops can starve it on CI.
+        time.sleep(0.001)
     assert predicate(), "queued result did not arrive"
 
 
