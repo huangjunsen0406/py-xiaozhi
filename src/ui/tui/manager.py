@@ -20,7 +20,7 @@ logger = get_logger()
 
 
 class TuiViewManager:
-    """TUI 界面（ViewPort：与 GUI/CLI/GPIO 同一套 set_*）."""
+    """TUI 界面（ViewPort：与 GUI/GPIO 同一套 set_*）."""
 
     def __init__(
         self,

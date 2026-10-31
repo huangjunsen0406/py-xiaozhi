@@ -58,10 +58,6 @@ class GuiViewManager(QObject):
         logger.debug("GuiViewManager: 已订阅窗口切换事件")
 
     async def start(self, mode: str = "gui"):
-        if mode == "cli":
-            logger.info("GuiViewManager: CLI 模式，跳过 GUI 初始化")
-            return
-
         logger.info("GuiViewManager: 启动 GUI...")
         self._running = True
 

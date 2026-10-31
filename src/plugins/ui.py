@@ -30,7 +30,7 @@ class UIPlugin(Plugin):
         runtime_tool_names: Callable[[], tuple[str, ...]] | None = None,
     ) -> None:
         super().__init__()
-        self.mode = (mode or "cli").lower()
+        self.mode = (mode or "tui").lower()
         self._task_manager = task_manager
         self._runtime_tool_names = runtime_tool_names
         self.viewport: ViewPort | None = None

@@ -17,6 +17,7 @@ from pathlib import Path
 
 REQUIRED_FILES = {
     "src/cli.py",
+    "src/activation/terminal.py",
     "src/__main__.py",
     "src/ui/gui/qml/main.qml",
     "src/_resources/assets/icon.png",
@@ -77,6 +78,9 @@ def check_wheel(wheel: Path) -> None:
         missing = REQUIRED_FILES - files
         if missing:
             raise RuntimeError(f"Wheel is missing files: {sorted(missing)}")
+        legacy_ui = [name for name in files if name.startswith("src/ui/cli/")]
+        if legacy_ui:
+            raise RuntimeError(f"Wheel includes removed CLI UI: {legacy_ui}")
         forbidden = [
             name for name in files if "__pycache__" in name or name.endswith(".pyc")
         ]
@@ -121,29 +125,30 @@ def check_wheel(wheel: Path) -> None:
             check=True,
             timeout=30,
         )
-        for args in (
-            [str(command), "--help"],
-            [str(python), "-I", "-X", "utf8", "-B", "-m", "src", "--help"],
+        for launcher in (
+            [str(command)],
+            [str(python), "-I", "-X", "utf8", "-B", "-m", "src"],
         ):
-            result = subprocess.run(
-                args,
-                cwd=root,
-                env=env,
-                check=False,
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                timeout=30,
-            )
-            if result.returncode:
-                raise RuntimeError(
-                    f"Help command failed ({result.returncode}): {args}\n"
-                    f"{result.stdout}\n{result.stderr}"
+            for arguments, expected in ((["--help"], 0), (["--mode", "cli"], 2)):
+                result = subprocess.run(
+                    [*launcher, *arguments],
+                    cwd=root,
+                    env=env,
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                    encoding="utf-8",
+                    timeout=30,
                 )
-            if "--mode" not in result.stdout:
-                raise RuntimeError(f"Help output is incomplete: {result.stdout}")
+                if result.returncode != expected:
+                    raise RuntimeError(
+                        f"Launcher returned {result.returncode}, expected {expected}: "
+                        f"{launcher} {arguments}\n{result.stdout}\n{result.stderr}"
+                    )
+                if expected == 0 and "{gui,tui,gpio}" not in result.stdout:
+                    raise RuntimeError(f"Help modes are incorrect: {result.stdout}")
         if (root / "data").exists() or (root / "logs").exists():
-            raise RuntimeError("Import/help created user configuration or logs")
+            raise RuntimeError("Import/help/invalid mode created configuration or logs")
     print(f"Wheel entry point and resources verified: {wheel.name}")
 
 

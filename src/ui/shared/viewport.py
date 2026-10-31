@@ -1,4 +1,4 @@
-"""界面统一接口：gui / cli / gpio 都实现这一套."""
+"""界面统一接口：gui / tui / gpio 都实现这一套."""
 
 from typing import Protocol, runtime_checkable
 
@@ -7,7 +7,7 @@ from typing import Protocol, runtime_checkable
 class ViewPort(Protocol):
     """写界面用的方法集合."""
 
-    async def start(self, mode: str = "cli") -> None:
+    async def start(self, mode: str = "tui") -> None:
         """启动."""
         ...
 

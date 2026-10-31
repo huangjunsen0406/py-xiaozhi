@@ -97,7 +97,7 @@ def test_no_runtime_provider_keeps_builtin_disk_and_disabled_rows(
     assert rows["removed.disabled"]["enabled"] is False
 
 
-@pytest.mark.parametrize("mode", ["cli", "tui", "gpio", "gpio-fallback"])
+@pytest.mark.parametrize("mode", ["tui", "gpio", "gpio-fallback", "unknown", ""])
 def test_factory_forwards_provider_only_to_settings_capable_views(monkeypatch, mode):
     from src.ui.shared import factory
 
@@ -113,7 +113,6 @@ def test_factory_forwards_provider_only_to_settings_capable_views(monkeypatch, m
         return "tui"
 
     for package, name, constructor in (
-        ("cli", "CliViewManager", terminal),
         ("gpio", "GpioViewManager", terminal),
         ("tui", "TuiViewManager", tui),
     ):
@@ -130,9 +129,9 @@ def test_factory_forwards_provider_only_to_settings_capable_views(monkeypatch, m
         config,
         lambda: ("runtime.tool",),
     )
-    assert viewport == ("tui" if mode == "tui" else "terminal")
+    assert viewport == ("terminal" if mode == "gpio" else "tui")
     expected = (
-        (bus, tasks, config, ("runtime.tool",)) if mode == "tui" else (bus, tasks)
+        (bus, tasks) if mode == "gpio" else (bus, tasks, config, ("runtime.tool",))
     )
     assert calls == [expected]
 

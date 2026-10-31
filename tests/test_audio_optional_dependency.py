@@ -80,7 +80,7 @@ async def main():
     container.tasks.wait_shutdown = noop
     notices = []
     container.event_bus.on(Events.SYSTEM_NOTICE, lambda notice: notices.append(notice))
-    code = await container.run(mode="cli")
+    code = await container.run(mode="tui")
     audio = container.plugins.get_plugin("audio")
     ui_plugin = container.plugins.get_plugin("ui")
     print(json.dumps({

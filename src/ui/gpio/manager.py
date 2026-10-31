@@ -16,7 +16,7 @@ logger = get_logger()
 
 
 class GpioViewManager:
-    """GPIO 界面（ViewPort：与 CLI/GUI 同一套 set_*）."""
+    """GPIO 界面（ViewPort：与 GUI/TUI 同一套 set_*）."""
 
     def __init__(
         self,

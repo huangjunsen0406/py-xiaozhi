@@ -401,7 +401,7 @@ async def test_import_failure_closes_protocol_consumer_and_tasks(monkeypatch):
     try:
         with monkeypatch.context() as patch:
             patch.setattr(builtins, "__import__", fail_shortcut_import)
-            assert await core.run(mode="cli") == 1
+            assert await core.run(mode="tui") == 1
         assert core.tasks.task_count() == 0
         assert not core.protocol._audio_consumer_running
         assert core.protocol._audio_consumer_task is None

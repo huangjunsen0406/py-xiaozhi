@@ -1,4 +1,4 @@
-"""CLI模式设备激活流程."""
+"""终端模式设备激活流程。"""
 
 from datetime import datetime
 
@@ -9,10 +9,10 @@ from src.ui.shared.activation import BaseActivation
 logger = get_logger()
 
 
-class CliActivation(BaseActivation):
-    """CLI模式设备激活处理器.
+class TerminalActivation(BaseActivation):
+    """终端模式设备激活处理器。
 
-    继承 BaseActivation，仅覆盖终端输出的展示方法。
+    继承 BaseActivation，仅覆盖终端输出的展示方法；不依赖 Textual 或 Qt。
     """
 
     def __init__(self, activation_service, init_result: dict):
@@ -33,8 +33,6 @@ class CliActivation(BaseActivation):
             self._log("\n用户中断激活流程")
             return False
 
-    # ---- BaseActivation 展示方法 ----
-
     def _show_code(self, data: dict) -> None:
         self._print_activation_info(data)
 
@@ -47,15 +45,13 @@ class CliActivation(BaseActivation):
     def _show_error(self, msg: str) -> None:
         self._log(msg)
 
-    # ---- 终端展示辅助方法 ----
-
     def _print_header(self):
         print("\n" + "=" * 60)
         print(f"{SystemConstants.APP_DISPLAY_NAME} - 设备激活")
         print("=" * 60)
 
     def _print_device_info(self):
-        """打印设备信息."""
+        """打印设备信息。"""
         serial = self._service.get_serial_number() or "--"
         mac = self._service.get_mac_address() or "--"
         status = self._service.get_activation_status()
@@ -76,7 +72,7 @@ class CliActivation(BaseActivation):
         print(f"  状态: {status_text}")
 
     def _print_activation_info(self, data: dict):
-        """打印激活信息."""
+        """打印激活信息。"""
         code = data.get("code", "------")
         message = data.get("message", "请访问 xiaozhi.me 输入验证码")
 
@@ -116,7 +112,7 @@ class CliActivation(BaseActivation):
         print("=" * 60 + "\n")
 
     def _log(self, message: str):
-        """打印带时间戳的日志."""
+        """打印带时间戳的日志。"""
         timestamp = datetime.now().strftime("%H:%M:%S")
         print(f"[{timestamp}] {message}")
         logger.info(message)

@@ -16,6 +16,26 @@ from src import cli
 REPOSITORY = Path(__file__).resolve().parents[1]
 
 
+def test_parse_args_rejects_removed_cli_mode():
+    assert cli.parse_args([]).mode == "gui"
+    with pytest.raises(SystemExit) as rejected:
+        cli.parse_args(["--mode", "cli"])
+    assert rejected.value.code == 2
+
+
+def test_tui_loop_checks_optional_dependency_before_runtime(monkeypatch):
+    seen = []
+    monkeypatch.setitem(sys.modules, "textual", SimpleNamespace())
+
+    async def start(*args, **kwargs):
+        seen.append(args)
+        return 4
+
+    monkeypatch.setattr(cli, "start_app", start)
+    assert cli._run(cli.parse_args(["--mode", "tui", "--skip-activation"])) == 4
+    assert seen == [("tui", "websocket", True)]
+
+
 def test_importing_launchers_has_no_startup_side_effects(tmp_path):
     data = tmp_path / "user-data"
     logs = tmp_path / "logs"
@@ -58,7 +78,9 @@ def test_importing_launchers_has_no_startup_side_effects(tmp_path):
 
 
 @pytest.mark.parametrize("launcher", [["main.py"], ["-m", "src"]])
-@pytest.mark.parametrize("args, code", [(["--help"], 0), (["--bad-option"], 2)])
+@pytest.mark.parametrize(
+    "args, code", [(["--help"], 0), (["--bad-option"], 2), (["--mode", "cli"], 2)]
+)
 def test_help_and_invalid_arguments_do_not_initialize(tmp_path, launcher, args, code):
     data = tmp_path / "data"
     env = dict(
@@ -108,11 +130,11 @@ def test_main_orders_initialization_and_returns_runtime_status(monkeypatch):
         return 7
 
     monkeypatch.setattr(cli, "_run", run)
-    assert cli.main(["--mode", "cli", "--protocol", "mqtt", "--skip-activation"]) == 7
+    assert cli.main(["--mode", "tui", "--protocol", "mqtt", "--skip-activation"]) == 7
     assert [event[0] for event in events] == ["env", "config", "logging", "run"]
     assert events[2][1] == {"enable_console": False, "config": "logging-config"}
     args = events[3][1]
-    assert (args.mode, args.protocol, args.skip_activation) == ("cli", "mqtt", True)
+    assert (args.mode, args.protocol, args.skip_activation) == ("tui", "mqtt", True)
     assert cli._container is None
 
 
@@ -127,7 +149,7 @@ async def test_failed_activation_does_not_create_container(monkeypatch):
     monkeypatch.setattr(
         container, "ServiceContainer", lambda **kwargs: pytest.fail("container created")
     )
-    assert await cli.start_app("cli", "websocket", False) == 1
+    assert await cli.start_app("tui", "websocket", False) == 1
 
 
 @pytest.mark.asyncio
@@ -155,11 +177,11 @@ async def test_start_app_passes_explicit_config_to_activation_and_container(
 
     monkeypatch.setattr(cli, "handle_activation", activation)
     monkeypatch.setattr(container, "ServiceContainer", FakeContainer)
-    assert await cli.start_app("cli", "mqtt", False, config=config) == 4
+    assert await cli.start_app("tui", "mqtt", False, config=config) == 4
     assert seen == {"activation": config, "container": config}
 
 
-def test_cli_loop_propagates_status_and_restores_signals(monkeypatch):
+def test_terminal_loop_propagates_status_and_restores_signals(monkeypatch):
     seen = []
     original = signal.getsignal(signal.SIGINT)
 
@@ -169,8 +191,8 @@ def test_cli_loop_propagates_status_and_restores_signals(monkeypatch):
         return 3
 
     monkeypatch.setattr(cli, "start_app", start)
-    assert cli._run(cli.parse_args(["--mode", "cli", "--skip-activation"])) == 3
-    assert seen == [("cli", "websocket", True)]
+    assert cli._run(cli.parse_args(["--mode", "gpio", "--skip-activation"])) == 3
+    assert seen == [("gpio", "websocket", True)]
     assert signal.getsignal(signal.SIGINT) is original
 
 
@@ -195,7 +217,7 @@ def test_gui_environment_is_configured_before_import(monkeypatch):
     assert os.environ["QT_QPA_PLATFORM"] == "offscreen"
 
 
-@pytest.mark.parametrize("mode", ["cli", "gui"])
+@pytest.mark.parametrize("mode", ["gpio", "gui"])
 def test_main_with_real_event_loop_and_fake_runtime(tmp_path, mode):
     if mode == "gui" and any(
         importlib.util.find_spec(name) is None for name in ("PySide6", "qasync")
@@ -246,7 +268,7 @@ def test_main_with_real_event_loop_and_fake_runtime(tmp_path, mode):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("mode", ["gui", "cli"])
+@pytest.mark.parametrize("mode", ["gui", "tui"])
 @pytest.mark.parametrize("fails", [False, True])
 async def test_start_app_quits_existing_qt_only_in_gui_finally(
     monkeypatch, mode, fails

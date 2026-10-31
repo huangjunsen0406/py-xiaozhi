@@ -151,18 +151,6 @@ async def test_real_gui_qml_start_failure_is_critical(runtime, monkeypatch):
     assert container.tasks.task_count() == 0
 
 
-@pytest.mark.asyncio
-async def test_real_cli_normal_lifetime_end_requests_quit(runtime, monkeypatch):
-    from src.ui.cli.display import CLIDisplay
-
-    monkeypatch.setattr(CLIDisplay, "_keyboard_input_loop", AsyncMock())
-    container, plugins = runtime
-    assert await asyncio.wait_for(container.run(mode="cli"), 0.5) == 0
-    assert not plugins[0].failed
-    assert not plugins[0].viewport.is_running
-    assert container.tasks.task_count() == 0
-
-
 def test_core_ui_import_does_not_require_qt():
     result = subprocess.run(
         [

@@ -402,10 +402,10 @@ def test_config_manager_initialize_and_reset():
 
 
 @pytest.mark.asyncio
-async def test_cli_view_manager_uses_task_manager_for_emit():
+async def test_tui_view_manager_uses_task_manager_for_emit():
     from src.core.event_bus import EventBus, Events
     from src.core.task_manager import TaskManager
-    from src.ui.cli.manager import CliViewManager
+    from src.ui.tui.manager import TuiViewManager
 
     bus = EventBus()
     tm = TaskManager()
@@ -416,7 +416,7 @@ async def test_cli_view_manager_uses_task_manager_for_emit():
         got.append("abort")
 
     bus.on(Events.UI_ABORT_REQUEST, on_abort)
-    vm = CliViewManager(event_bus=bus, task_manager=tm)
+    vm = TuiViewManager(event_bus=bus, task_manager=tm)
     vm._loop = asyncio.get_running_loop()
     vm._safe_emit(Events.UI_ABORT_REQUEST)
 
@@ -792,24 +792,24 @@ def test_music_player_init_is_lazy():
         reset_config()
 
 
-def test_viewport_protocol_and_cli_slots():
-    """CLI 对话和音乐两行互不影响."""
+def test_viewport_protocol_and_tui_slots():
+    """TUI 对话和音乐两行互不影响。"""
     from src.core.event_bus import EventBus
-    from src.ui.cli.manager import CliViewManager
     from src.ui.shared.viewport import ViewPort
+    from src.ui.tui.manager import TuiViewManager
 
     bus = EventBus()
-    vm = CliViewManager(event_bus=bus)
+    vm = TuiViewManager(event_bus=bus)
     assert isinstance(vm, ViewPort)
 
     vm.set_chat_text("你好")
     vm.set_music_line("♪ 歌词行")
-    assert vm._display._dash_text == "你好"
-    assert vm._display._dash_music == "♪ 歌词行"
+    assert vm._chat_text == "你好"
+    assert vm._music_line == "♪ 歌词行"
 
     vm.set_chat_text("第二句")
-    assert vm._display._dash_text == "第二句"
-    assert vm._display._dash_music == "♪ 歌词行"
+    assert vm._chat_text == "第二句"
+    assert vm._music_line == "♪ 歌词行"
 
 
 def test_gpio_viewport_slots(caplog):
@@ -827,14 +827,14 @@ def test_gpio_viewport_slots(caplog):
     assert messages[-3:] == ["[对话] chat", "[音乐] music", "[对话] chat2"]
 
 
-def test_create_viewport_cli_factory():
+def test_create_viewport_tui_factory():
     from src.core.event_bus import EventBus
-    from src.ui.cli.manager import CliViewManager
     from src.ui.shared.factory import create_viewport
     from src.ui.shared.viewport import ViewPort
+    from src.ui.tui.manager import TuiViewManager
 
-    vp = create_viewport("cli", EventBus())
-    assert isinstance(vp, CliViewManager)
+    vp = create_viewport("tui", EventBus())
+    assert isinstance(vp, TuiViewManager)
     assert isinstance(vp, ViewPort)
 
 
@@ -883,7 +883,7 @@ class _FakeViewport:
     def is_auto_mode(self) -> bool:
         return self._auto
 
-    async def start(self, mode: str = "cli") -> None:
+    async def start(self, mode: str = "tui") -> None:
         pass
 
     async def close(self) -> None:
@@ -896,7 +896,7 @@ async def test_ui_plugin_routes_music_to_music_line():
     from src.mcp.tools.music.events import MusicLyricsData, MusicStateData
     from src.plugins.ui import UIPlugin
 
-    plugin = UIPlugin(mode="cli")
+    plugin = UIPlugin(mode="tui")
     vp = _FakeViewport()
     plugin.viewport = vp
     plugin._presenter.bind(vp)
@@ -1361,8 +1361,8 @@ def test_check_critical_plugins_audio_degraded(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_cli_mock_protocol_smoke_session():
-    """CLI 级冒烟：mock 协议 → 有界音频 + JSON → 状态机事件，无需真网/真麦."""
+async def test_runtime_mock_protocol_smoke_session():
+    """Runtime 冒烟：mock 协议 → 有界音频 + JSON → 状态机事件，无需真网/真麦."""
     from src.core.task_manager import TaskManager
     from src.protocols.protocol import Protocol
 

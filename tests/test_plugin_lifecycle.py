@@ -49,7 +49,7 @@ def make_container(plugins, pool):
     container.resource_pool = pool
     container.session = SimpleNamespace(unbind_events=lambda: None)
     container._shutting_down = False
-    container._mode = "cli"
+    container._mode = "tui"
     return container
 
 

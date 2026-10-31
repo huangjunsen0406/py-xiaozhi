@@ -10,7 +10,7 @@ logger = get_logger()
 
 
 def apply_code_side_effects(code: str, message: Optional[str] = None) -> None:
-    """日志 + 剪贴板 + 播报；不负责 CLI/GUI 文案."""
+    """日志、剪贴板和播报；不负责界面文案。"""
     if not code:
         return
     msg = message or "请在控制面板输入验证码"

@@ -212,7 +212,7 @@ async def test_builtin_assembly_normal_lifecycle_has_no_error_logs(
     )
     core = ServiceContainer(config)
     before = asyncio.all_tasks()
-    runtime = asyncio.create_task(core.run(mode="cli"))
+    runtime = asyncio.create_task(core.run(mode="tui"))
     viewport, keyboard, transport = (
         boundaries.viewport, boundaries.keyboard, boundaries.transport
     )

@@ -12,18 +12,14 @@ import pytest
 
 from src.core.event_bus import EventBus, Events
 from src.core.task_manager import TaskManager
-from src.ui.cli.manager import CliViewManager
 from src.ui.gpio.manager import GpioViewManager
 from src.ui.shared import event_emitter
 from src.ui.tui.manager import TuiViewManager
 
 
-@pytest.fixture(params=[CliViewManager, TuiViewManager, GpioViewManager])
+@pytest.fixture(params=[TuiViewManager, GpioViewManager])
 def view_factory(request, monkeypatch):
     # Constructors must not intercept pytest logging or probe physical GPIO.
-    monkeypatch.setattr(
-        "src.ui.cli.manager.CLIDisplay.intercept_logging", lambda _: None
-    )
     monkeypatch.setattr("src.ui.gpio.manager.GPIOInput", Mock())
     return request.param
 
@@ -272,22 +268,19 @@ async def test_cancelled_fallback_future_is_normal_shutdown(monkeypatch, caplog)
     assert not caplog.records
 
 
-def test_cli_retains_display_state_and_gpio_key1_retains_mode(monkeypatch):
-    monkeypatch.setattr(
-        "src.ui.cli.manager.CLIDisplay.intercept_logging", lambda _: None
-    )
+def test_tui_retains_display_state_and_gpio_key1_retains_mode(monkeypatch):
     monkeypatch.setattr("src.ui.gpio.manager.GPIOInput", Mock())
-    cli = CliViewManager(EventBus())
-    cli.set_status("ready", False)
-    cli.set_chat_text("first")
-    cli.set_music_line("lyrics")
-    cli.set_chat_text("second")
-    cli.set_auto_mode(True)
-    assert cli._display._dash_status == "ready"
-    assert cli._display._dash_connected is False
-    assert cli._display._dash_text == "second"
-    assert cli._display._dash_music == "lyrics"
-    assert cli._display._dash_auto_mode is True
+    view = TuiViewManager(EventBus())
+    view.set_status("ready", False)
+    view.set_chat_text("first")
+    view.set_music_line("lyrics")
+    view.set_chat_text("second")
+    view.set_auto_mode(True)
+    assert view._status == "ready"
+    assert view._connected is False
+    assert view._chat_text == "second"
+    assert view._music_line == "lyrics"
+    assert view._auto_mode is True
 
     gpio = GpioViewManager(EventBus())
     gpio._safe_emit = Mock()

@@ -1,7 +1,4 @@
-"""GUI 专用 Qt ViewModel（QObject + Property）.
-
-CLI/GPIO 不依赖此包。
-"""
+"""GUI 专用 Qt ViewModel（QObject + Property）。"""
 
 from src.ui.gui.models.activation_model import ActivationModel
 from src.ui.gui.models.base_model import BaseModel
