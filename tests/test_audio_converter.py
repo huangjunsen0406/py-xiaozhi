@@ -1,7 +1,6 @@
 """音频转换缓冲与设备重配置的回归测试（不打开音频设备）。"""
 
 from collections import deque
-from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -62,13 +61,10 @@ def test_output_callback_fills_available_audio(duration_ms, channels, partial):
     available = frames // 2 if partial else frames
     source = np.linspace(0.1, 0.8, available, dtype=np.float32)
     chunks = deque(source[i : i + CHUNK] for i in range(0, available, CHUNK))
-    codec = SimpleNamespace(
-        converter=converter,
-        _mix_chunk=CHUNK,
-        _pull_mixed=lambda n: chunks.popleft() if chunks else None,
-        _aec=None,
-        _notify_notification_drained_after_output=lambda: None,
-    )
+    codec = AudioCodec()
+    codec._closed = True  # No streams/native codecs are opened by this test.
+    codec.converter = converter
+    codec._pull_mixed = lambda n: chunks.popleft() if chunks else None
     output = np.full((frames, channels), np.nan, dtype=np.float32)
 
     AudioCodec._output_callback(codec, output, frames, None, None)
@@ -84,13 +80,10 @@ def test_output_callback_consumes_remainder_when_queue_exhausted():
     converter.setup_output_converter(RATE, RATE, to_channels=1)
     source = np.linspace(0.1, 0.8, 2 * CHUNK, dtype=np.float32)
     chunks = deque([source[:CHUNK], source[CHUNK:]])
-    codec = SimpleNamespace(
-        converter=converter,
-        _mix_chunk=CHUNK,
-        _pull_mixed=lambda n: chunks.popleft() if chunks else None,
-        _aec=None,
-        _notify_notification_drained_after_output=lambda: None,
-    )
+    codec = AudioCodec()
+    codec._closed = True  # No streams/native codecs are opened by this test.
+    codec.converter = converter
+    codec._pull_mixed = lambda n: chunks.popleft() if chunks else None
     frames = 3 * CHUNK // 4
     outputs = []
     for _ in range(3):

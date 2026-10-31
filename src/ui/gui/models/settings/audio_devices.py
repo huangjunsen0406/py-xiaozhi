@@ -29,22 +29,44 @@ class SettingsAudioDevicesMixin:
         self.devicesChanged.emit()
 
     def _load_audio_devices(self, force: bool = False):
-        """加载可用的音频设备列表（普通枚举，不重初始化 PortAudio）.
-
-        Args:
-            force: True 时强制重新枚举（打开设置时）
-        """
+        """普通枚举在后台执行；同一时刻只允许一次扫描/热刷新。"""
+        if self._closed or self._audio_devices_loading or self._audio_devices_refreshing:
+            return
         if self._audio_devices_loaded and not force:
             return
-        try:
-            from src.utils.audio_utils import list_audio_devices
+        self._audio_devices_loading = True
+        self._audio_generation += 1
+        generation = self._audio_generation
 
-            devices = list_audio_devices(include_virtual=True)
-            self._apply_device_lists(devices)
-        except Exception as e:
-            logger.error(f"加载音频设备失败: {e}", exc_info=True)
-            self._input_devices = []
-            self._output_devices = []
+        def scan():
+            try:
+                from src.utils.audio_utils import list_audio_devices
+
+                devices = list_audio_devices(include_virtual=True)
+                error = None
+            except Exception as exc:
+                logger.error("加载音频设备失败: %s", exc, exc_info=True)
+                devices, error = None, str(exc)
+            self._schedule_ui(
+                lambda: self._finish_audio_devices(generation, devices, error)
+            )
+
+        self._run_worker(scan, name="settings:scan_audio")
+
+    def _finish_audio_devices(self, generation, devices, error, *, refreshed=False):
+        if self._closed or generation != self._audio_generation:
+            return
+        self._audio_devices_loading = False
+        self._audio_devices_refreshing = False
+        if error is not None:
+            self.statusMessage.emit(f"[错误] 音频设备枚举失败: {error}")
+            return
+        self._apply_device_lists(devices if isinstance(devices, dict) else {})
+        if refreshed:
+            self.statusMessage.emit(
+                f"设备列表已刷新（输入 {len(self._input_devices)} / "
+                f"输出 {len(self._output_devices)}）"
+            )
 
     @Slot(result=list)
     def getInputDevices(self) -> list:
@@ -60,101 +82,61 @@ class SettingsAudioDevicesMixin:
 
     @Slot()
     def refreshDevices(self):
-        """热刷新设备列表（停流 → PortAudio 重枚举 → 再开流）.
-
-        运行中后连蓝牙时，需经 AudioPlugin 先停流再 ``refresh_portaudio_devices``。
-        无 EventBus 时降级为本地普通枚举。
-        """
-        if getattr(self, "_audio_devices_refreshing", False):
+        """停流热刷新；结果通过 QObject 排队信号返回 Qt 主线程。"""
+        if self._closed:
+            return
+        if self._audio_devices_loading or self._audio_devices_refreshing:
             self.statusMessage.emit("设备刷新进行中…")
             return
-
-        event_bus = getattr(self, "_event_bus", None)
-        task_manager = getattr(self, "_task_manager", None)
-
+        event_bus = self._event_bus
+        task_manager = self._task_manager
         if event_bus is None or task_manager is None:
-            logger.warning("SettingsModel: 无 EventBus/TaskManager，降级为本地设备枚举")
+            self.statusMessage.emit("正在后台枚举设备（未协调音频流）…")
             self._load_audio_devices(force=True)
-            self.statusMessage.emit(
-                "设备列表已刷新（未协调音频流；后连蓝牙可能仍不可见）"
-            )
             return
 
         self._audio_devices_refreshing = True
+        self._audio_generation += 1
+        generation = self._audio_generation
         self.statusMessage.emit("正在刷新音频设备（会短暂中断麦克风/播放）…")
 
         async def _refresh():
             from src.core.event_bus import Events
             from src.utils.audio_utils import list_audio_devices
 
-            # Future 作 payload：AudioPlugin 在 handler 里 set_result(设备列表)
-            # emit 会 await 所有 handler，返回时 future 通常已完成
             loop = asyncio.get_running_loop()
-            fut: asyncio.Future = loop.create_future()
-            await event_bus.emit(Events.AUDIO_DEVICES_REFRESH_REQUEST, fut)
-            if fut.done():
-                result = fut.result()
-            else:
-                logger.warning("AudioPlugin 未完成设备刷新 Future，本地枚举兜底")
-                result = list_audio_devices(include_virtual=True)
-                if not fut.done():
-                    fut.set_result(result)
-            return result if isinstance(result, dict) else {"input": [], "output": []}
+            future = loop.create_future()
+            await event_bus.emit(Events.AUDIO_DEVICES_REFRESH_REQUEST, future)
+            if future.done():
+                return future.result()
+            logger.warning("AudioPlugin 未完成设备刷新 Future，本地枚举兜底")
+            return await asyncio.to_thread(list_audio_devices, include_virtual=True)
 
-        def _on_task_done(task: asyncio.Task):
-            def _apply():
-                try:
-                    if task.cancelled():
-                        devices = {"input": [], "output": []}
-                    else:
-                        exc = task.exception()
-                        if exc is not None:
-                            logger.error(f"设备刷新任务异常: {exc}", exc_info=exc)
-                            devices = {"input": [], "output": []}
-                        else:
-                            devices = task.result()
-                except Exception as e:
-                    logger.error(f"读取刷新结果失败: {e}", exc_info=True)
-                    devices = {"input": [], "output": []}
-                try:
-                    if not isinstance(devices, dict):
-                        devices = {"input": [], "output": []}
-                    self._apply_device_lists(devices)
-                    n_in = len(self._input_devices)
-                    n_out = len(self._output_devices)
-                    self.statusMessage.emit(
-                        f"设备列表已刷新（输入 {n_in} / 输出 {n_out}）"
-                    )
-                finally:
-                    self._audio_devices_refreshing = False
+        def _on_task_done(task):
+            try:
+                devices, error = task.result(), None
+            except asyncio.CancelledError:
+                devices, error = None, "刷新已取消"
+            except Exception as exc:
+                logger.error("设备刷新任务异常: %s", exc, exc_info=True)
+                devices, error = None, str(exc)
+            self._schedule_ui(
+                lambda: self._finish_audio_devices(
+                    generation, devices, error, refreshed=True
+                )
+            )
 
-            self._schedule_ui(_apply)
-
+        coroutine = _refresh()
         try:
-            task = task_manager.spawn(_refresh(), name="ui:audio_devices_refresh")
+            task = task_manager.spawn(coroutine, name="ui:audio_devices_refresh")
             if task is None:
-                self._audio_devices_refreshing = False
-                self._load_audio_devices(force=True)
-                self.statusMessage.emit("应用正在关闭，已本地枚举")
+                coroutine.close()
+                self._finish_audio_devices(generation, None, "应用正在关闭")
                 return
             task.add_done_callback(_on_task_done)
-        except Exception as e:
-            self._audio_devices_refreshing = False
-            logger.error(f"无法调度设备刷新: {e}", exc_info=True)
-            self._load_audio_devices(force=True)
-            self.statusMessage.emit(f"设备刷新失败，已本地枚举: {e}")
-
-    def _schedule_ui(self, fn) -> None:
-        """把回调丢回 Qt 主线程（spawn 的 done 可能在 loop 线程）."""
-        try:
-            from PySide6.QtCore import QTimer
-
-            QTimer.singleShot(0, fn)
-        except Exception:
-            try:
-                fn()
-            except Exception as e:
-                logger.error(f"UI 回调失败: {e}", exc_info=True)
+        except Exception as exc:
+            coroutine.close()
+            self._finish_audio_devices(generation, None, str(exc))
 
     def _get_selectedInputIndex(self) -> int:
         """获取当前选中的输入设备索引."""

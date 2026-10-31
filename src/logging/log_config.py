@@ -7,7 +7,7 @@ import os
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 
 class Environment(Enum):
@@ -25,7 +25,7 @@ class LoggingConfig:
     level: str = "INFO"
     format_type: str = "colored"  # colored, json, simple
 
-    log_dir: Optional[Path] = None
+    log_dir: Path | None = None
     log_file: str = "app.log"
     error_log_file: str = "error.log"
 
@@ -62,6 +62,7 @@ class LoggingConfig:
             "urllib3": "WARNING",
             "websockets": "WARNING",
             "asyncio": "WARNING",
+            "qasync": "WARNING",
             "paho": "WARNING",
             "PIL": "WARNING",
             "matplotlib": "WARNING",
@@ -98,6 +99,10 @@ def load_logging_config(app_config: Any | None = None) -> LoggingConfig:
         app_config: 可选 ConfigManager 实例；未传时若已 initialize_config 则读取 LOGGING 段。
     """
     config = LoggingConfig()
+    env = _get_environment()
+    # Environment defaults apply only when the application has no explicit level.
+    if env == Environment.DEVELOPMENT:
+        config.level = "DEBUG"
 
     try:
         if app_config is None:
@@ -147,13 +152,6 @@ def load_logging_config(app_config: Any | None = None) -> LoggingConfig:
     if env_level:
         config.level = env_level.upper()
     config.format_type = os.environ.get("LOG_FORMAT", config.format_type)
-
-    env = _get_environment()
-    if not env_level:
-        if env == Environment.DEVELOPMENT:
-            config.level = "DEBUG"
-        elif env == Environment.PRODUCTION:
-            config.level = "INFO"
 
     if env == Environment.PRODUCTION:
         config.enable_json_file = True

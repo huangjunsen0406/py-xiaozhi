@@ -241,7 +241,7 @@ def test_wake_word_save_propagates_commit_failure(monkeypatch, tmp_path):
     assert model.saveWakeWord() is False
     assert signals.errors and not signals.saved
     assert not any("唤醒词已保存" in status for status in signals.status)
-    assert (tmp_path / "en_keywords.txt").read_text() == "TEST @test\n"
+    assert not (tmp_path / "en_keywords.txt").exists()
 
 
 @pytest.mark.parametrize("word", ["", "cannot-convert"])

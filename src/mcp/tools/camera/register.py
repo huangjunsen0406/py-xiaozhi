@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import threading
 from collections.abc import Callable
 
 from src.logging import get_logger
@@ -29,19 +30,41 @@ def create_camera(config=None):
     return NormalCamera(config=config)
 
 
+def _get_capture_lock(camera):
+    lock = getattr(camera, "_mcp_capture_lock", None)
+    if lock is None:
+        lock = threading.Lock()
+        camera._mcp_capture_lock = lock
+    return lock
+
+
+def _capture_image(camera, capture_lock, *capture_args):
+    # Acquire/release in the worker: cancellation cannot unlock active capture.
+    if not capture_lock.acquire(blocking=False):
+        return None
+    try:
+        if not camera.capture(*capture_args):
+            return None
+        return bytes(camera.get_jpeg_data()["buf"]) or None
+    finally:
+        capture_lock.release()
+
+
 def register_camera_tools(add_tool: Callable[[McpTool], None], camera) -> None:
+    capture_lock = _get_capture_lock(camera)
+
     async def take_photo(arguments: dict) -> str:
         logger.info(f"Using camera implementation: {camera.__class__.__name__}")
         question = arguments.get("question", "")
         logger.info(f"Taking photo with question: {question}")
 
-        success = await asyncio.to_thread(camera.capture)
-        if not success:
+        image_data = await asyncio.to_thread(_capture_image, camera, capture_lock)
+        if image_data is None:
             logger.error("Failed to capture photo")
             return json.dumps({"success": False, "message": "Failed to capture photo"})
 
         logger.info("Photo captured, starting analysis...")
-        return await asyncio.to_thread(camera.analyze, question)
+        return await asyncio.to_thread(camera.analyze, question, image_data=image_data)
 
     add_tool(
         McpTool(

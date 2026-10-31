@@ -58,6 +58,7 @@ class ProtocolManager:
         )
         self._audio_consumer_task: Optional[asyncio.Task] = None
         self._audio_consumer_running = False
+        self._accepting_incoming_audio = True
 
     def set_task_manager(self, task_manager: "TaskManager") -> None:
         """注入 TaskManager（容器初始化后可再绑定）."""
@@ -169,19 +170,33 @@ class ProtocolManager:
         """单消费者串行处理入站音频，避免 per-frame 任务爆炸."""
         while True:
             data = await self._audio_queue.get()
-            if data is None:
-                # 毒丸：退出
-                return
             try:
+                if data is None:
+                    return
                 if self._incoming_audio_handler:
                     await self._incoming_audio_handler(data)
                 else:
                     await self._event_bus.emit(Events.INCOMING_AUDIO, data)
             except Exception as e:
                 logger.error(f"处理入站音频失败: {e}", exc_info=True)
+            finally:
+                self._audio_queue.task_done()
+
+    def discard_incoming_audio(self) -> None:
+        """Cancel queued/late downlink until the next TTS start control frame."""
+        self._accepting_incoming_audio = False
+        while not self._audio_queue.empty():
+            self._audio_queue.get_nowait()
+            self._audio_queue.task_done()
+
+    async def wait_for_incoming_audio(self) -> None:
+        """Wait for already received Opus frames to reach the playback FIFO."""
+        await self._audio_queue.join()
 
     def _enqueue_audio(self, data: bytes) -> None:
         """有界入队：满则丢最旧帧再放入最新帧."""
+        if not self._accepting_incoming_audio:
+            return
         try:
             self._audio_queue.put_nowait(data)
             return
@@ -191,6 +206,7 @@ class ProtocolManager:
         # 丢弃最旧
         try:
             self._audio_queue.get_nowait()
+            self._audio_queue.task_done()
         except asyncio.QueueEmpty:
             pass
         try:
@@ -199,44 +215,28 @@ class ProtocolManager:
             logger.warning("入站音频队列仍满，丢弃当前帧")
 
     async def _stop_audio_consumer(self) -> None:
-        """停止 consumer 并清空队列."""
-        if self._audio_consumer_task and not self._audio_consumer_task.done():
-            try:
-                self._audio_queue.put_nowait(None)
-            except asyncio.QueueFull:
-                # 队列满时强制腾一个位置放毒丸
-                try:
-                    self._audio_queue.get_nowait()
-                except asyncio.QueueEmpty:
-                    pass
-                try:
-                    self._audio_queue.put_nowait(None)
-                except asyncio.QueueFull:
-                    self._audio_consumer_task.cancel()
-
-            try:
-                await self._audio_consumer_task
-            except asyncio.CancelledError:
-                pass
-            except Exception as e:
-                logger.debug(f"等待音频 consumer 退出时异常: {e}")
-
+        """Cancel on shutdown; a concurrent queue clear cannot erase cancellation."""
+        task = self._audio_consumer_task
+        if task is not None and not task.done():
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
         self._audio_consumer_task = None
         self._audio_consumer_running = False
-
-        # 清空残留
         while not self._audio_queue.empty():
-            try:
-                self._audio_queue.get_nowait()
-            except asyncio.QueueEmpty:
-                break
+            self._audio_queue.get_nowait()
+            self._audio_queue.task_done()
 
     async def _on_network_error(self, error_message: str = None) -> None:
+        self.discard_incoming_audio()
         if error_message:
             logger.error(f"网络错误: {error_message}")
         await self._event_bus.emit(Events.NETWORK_ERROR, error_message)
 
     def _on_incoming_json(self, json_data: dict) -> None:
+        # Open the gate synchronously: binary may arrive before the async
+        # session handler has had a chance to process this start message.
+        if json_data.get("type") == "tts" and json_data.get("state") == "start":
+            self._accepting_incoming_audio = True
         self._spawn(
             self._event_bus.emit(Events.INCOMING_JSON, json_data),
             name="protocol:incoming_json",
@@ -255,6 +255,7 @@ class ProtocolManager:
         await self._event_bus.emit(Events.PROTOCOL_CONNECTED, self._protocol)
 
     async def _on_audio_channel_closed(self) -> None:
+        self.discard_incoming_audio()
         logger.info("协议通道已关闭")
         await self._event_bus.emit(Events.AUDIO_CHANNEL_CLOSED)
         await self._event_bus.emit(Events.PROTOCOL_DISCONNECTED)
@@ -330,6 +331,7 @@ class ProtocolManager:
     async def disconnect(self) -> None:
         """结束当前音频会话，但允许协议复用其控制连接."""
         self._open_generation += 1
+        self.discard_incoming_audio()
         if self._protocol:
             try:
                 await self._protocol.close_audio_channel()
@@ -341,6 +343,7 @@ class ProtocolManager:
         """彻底关闭协议及其后台资源（应用退出路径）."""
         self._shutdown = True
         self._open_generation += 1
+        self.discard_incoming_audio()
         if self._protocol:
             try:
                 await self._protocol.shutdown()

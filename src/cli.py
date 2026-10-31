@@ -54,9 +54,10 @@ def _configure_environment(mode: str) -> None:
             locale.setlocale(locale.LC_ALL, ".UTF-8")
         except locale.Error:
             pass
-    os.environ["QSG_RHI_BACKEND"] = "opengl"
+    os.environ.setdefault("QSG_RHI_BACKEND", "opengl")
+    # qasync and the GUI must use the same binding as our PySide6 imports.
     os.environ["QT_API"] = "pyside6"
-    os.environ["QT_QUICK_CONTROLS_STYLE"] = "Basic"
+    os.environ.setdefault("QT_QUICK_CONTROLS_STYLE", "Basic")
     is_wayland = (
         os.environ.get("WAYLAND_DISPLAY")
         or os.environ.get("XDG_SESSION_TYPE") == "wayland"

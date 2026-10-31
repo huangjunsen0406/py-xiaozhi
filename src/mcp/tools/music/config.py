@@ -30,7 +30,6 @@ def load_music_config(config=None) -> dict:
         "URL_API": pick(cm, "MUSIC.URL_API", DEFAULT_URL_API),
         "URL_API_KEY": pick(cm, "MUSIC.URL_API_KEY", DEFAULT_URL_API_KEY),
         "LYRICS_URL": pick(cm, "MUSIC.LYRICS_URL", DEFAULT_LYRICS_URL),
-        "DEFAULT_SOURCE": pick(cm, "MUSIC.DEFAULT_PLATFORM", "kw") or "kw",
         "DEFAULT_BR": pick(cm, "MUSIC.DEFAULT_QUALITY", "320k") or "320k",
         "SEARCH_LIMIT": 20,
         "HEADERS": {

@@ -104,20 +104,19 @@ class SettingsWakeWordMixin:
             self._set_value("WAKE_WORD_OPTIONS.WAKE_WORD_LANG", lang)
             self._set_value("WAKE_WORD_OPTIONS.MODEL_PATH", model_path)
 
-            # 写入 keywords.txt 到用户数据目录
-            from src.utils.resource_finder import get_keywords_dir
+            from src.utils.keyword_writer import commit_with_keywords
 
-            keywords_dir = get_keywords_dir()
-            keywords_dir.mkdir(parents=True, exist_ok=True)
-            keywords_path = keywords_dir / f"{lang}_keywords.txt"
-
-            with open(keywords_path, "w", encoding="utf-8") as f:
-                f.write(keyword_line + "\n")
-
-            # keywords 写入成功后仍须配置提交/运行时加载成功，才能报告成功。
-            if not self.save():
+            error = commit_with_keywords(
+                self._config_manager,
+                self._config,
+                lang,
+                keyword_line,
+                commit=lambda: None if self.save() else self._error,
+            )
+            if error is not None:
+                self.set_error(error)
                 return False
-            logger.info(f"唤醒词已保存: {self._wake_word} -> {keywords_path}")
+            logger.info("唤醒词已保存: %s", self._wake_word)
             self.statusMessage.emit(f"唤醒词已保存 ({lang.upper()})")
             return True
 

@@ -57,7 +57,7 @@ def test_default_components_do_not_read_process_config_or_create_user_paths(
     notify = NotificationPlayer()
     assert codec.config.config_file is None
     assert detector.config.config_file is None
-    assert music.config["DEFAULT_SOURCE"] == "kw"
+    assert music.config["DEFAULT_BR"] == "320k"
     assert notify.audio_config is not codec.audio_config
 
 
@@ -116,13 +116,13 @@ def test_device_frames_use_injected_audio_format(monkeypatch):
 
 def test_music_settings_and_decoders_follow_their_own_runtime():
     first = MusicPlayer(
-        ConfigManager.from_dict({"MUSIC": {"DEFAULT_PLATFORM": "first"}})
+        ConfigManager.from_dict({"MUSIC": {"DEFAULT_QUALITY": "128k"}})
     )
     second = MusicPlayer(
-        ConfigManager.from_dict({"MUSIC": {"DEFAULT_PLATFORM": "second"}})
+        ConfigManager.from_dict({"MUSIC": {"DEFAULT_QUALITY": "320k"}})
     )
-    assert first.config["DEFAULT_SOURCE"] == "first"
-    assert second.config["DEFAULT_SOURCE"] == "second"
+    assert first.config["DEFAULT_BR"] == "128k"
+    assert second.config["DEFAULT_BR"] == "320k"
     first._engine.audio_codec = SimpleNamespace(
         audio_config=AudioConfig(OUTPUT_SAMPLE_RATE=16000, FRAME_DURATION=40)
     )

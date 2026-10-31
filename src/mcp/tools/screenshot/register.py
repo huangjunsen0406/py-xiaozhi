@@ -6,6 +6,7 @@ from collections.abc import Callable
 
 from src.logging import get_logger
 from src.mcp.tooling import McpTool, Property, PropertyList, PropertyType
+from src.mcp.tools.camera.register import _capture_image, _get_capture_lock
 
 from .screenshot_camera import ScreenshotCamera
 
@@ -26,6 +27,7 @@ def register_screenshot_tools(
     photo_camera: 可选，用于分析时复用 explain URL/token（与 take_photo 同一 camera）。
     """
     camera = create_screenshot_camera()
+    capture_lock = _get_capture_lock(camera)
     if photo_camera is not None and hasattr(photo_camera, "get_explain_url"):
         # 与拍照共用 vision 配置（若已配置）
         try:
@@ -81,15 +83,17 @@ def register_screenshot_tools(
             f"Taking screenshot with question: {question}, display: {display_id}"
         )
 
-        success = await asyncio.to_thread(camera.capture, display_id)
-        if not success:
+        image_data = await asyncio.to_thread(
+            _capture_image, camera, capture_lock, display_id
+        )
+        if image_data is None:
             logger.error("Failed to capture screenshot")
             return json.dumps(
                 {"success": False, "message": "Failed to capture screenshot"}
             )
 
         logger.info("Screenshot captured, starting analysis...")
-        return await asyncio.to_thread(camera.analyze, question)
+        return await asyncio.to_thread(camera.analyze, question, image_data=image_data)
 
     add_tool(
         McpTool(

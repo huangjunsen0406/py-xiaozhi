@@ -217,6 +217,17 @@ def test_gui_environment_is_configured_before_import(monkeypatch):
     assert os.environ["QT_QPA_PLATFORM"] == "offscreen"
 
 
+def test_gui_environment_preserves_backend_and_style_but_requires_pyside(monkeypatch):
+    monkeypatch.setattr(cli.locale, "setlocale", lambda *args: None)
+    monkeypatch.setenv("QSG_RHI_BACKEND", "metal")
+    monkeypatch.setenv("QT_QUICK_CONTROLS_STYLE", "Fusion")
+    monkeypatch.setenv("QT_API", "pyqt6")
+    cli._configure_environment("gui")
+    assert os.environ["QSG_RHI_BACKEND"] == "metal"
+    assert os.environ["QT_QUICK_CONTROLS_STYLE"] == "Fusion"
+    assert os.environ["QT_API"] == "pyside6"
+
+
 @pytest.mark.parametrize("mode", ["gpio", "gui"])
 def test_main_with_real_event_loop_and_fake_runtime(tmp_path, mode):
     if mode == "gui" and any(

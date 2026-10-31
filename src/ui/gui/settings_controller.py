@@ -56,7 +56,7 @@ class SettingsController:
         """Release the runtime provider even if Qt keeps the model alive."""
         self._runtime_tool_names = None
         if self._settings_model is not None:
-            self._settings_model._runtime_tool_names = lambda: ()
+            self._settings_model.close()
 
     def _on_config_saved(self) -> None:
         logger.info("SettingsController: 配置已保存，触发热重载")

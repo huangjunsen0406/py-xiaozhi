@@ -371,37 +371,19 @@ class ScreenshotCamera(BaseCamera):
 
             for cmd_base in screenshot_commands:
                 try:
-                    # 创建临时文件
-                    with tempfile.NamedTemporaryFile(
-                        suffix=".jpg", delete=False
-                    ) as temp_file:
-                        temp_path = temp_file.name
-
-                    # 构建完整命令
-                    cmd = cmd_base + [temp_path]
-
-                    # 执行命令
-                    result = subprocess.run(
-                        cmd, capture_output=True, text=True, timeout=10
-                    )
-
-                    if result.returncode == 0 and os.path.exists(temp_path):
-                        # 读取截图数据
-                        with open(temp_path, "rb") as f:
-                            screenshot_data = f.read()
-
-                        # 清理临时文件
-                        os.unlink(temp_path)
-
-                        logger.debug(
-                            f"Successfully captured screenshot with: {' '.join(cmd_base)}"
+                    with tempfile.TemporaryDirectory(
+                        prefix="xiaozhi-screenshot-"
+                    ) as directory:
+                        temp_path = os.path.join(directory, "capture.jpg")
+                        result = subprocess.run(
+                            cmd_base + [temp_path],
+                            capture_output=True,
+                            text=True,
+                            timeout=10,
                         )
-                        return screenshot_data
-                    else:
-                        # 清理临时文件
-                        if os.path.exists(temp_path):
-                            os.unlink(temp_path)
-
+                        if result.returncode == 0 and os.path.exists(temp_path):
+                            with open(temp_path, "rb") as image_file:
+                                return image_file.read()
                 except subprocess.TimeoutExpired:
                     logger.warning(
                         f"Screenshot command timed out: {' '.join(cmd_base)}"
@@ -453,38 +435,31 @@ class ScreenshotCamera(BaseCamera):
 
             from PIL import Image
 
-            with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as temp_file:
-                temp_path = temp_file.name
-
-            cmd = [
-                "screencapture",
-                "-D",
-                str(display_num),
-                "-x",
-                "-t",
-                "png",
-                temp_path,
-            ]
-            result = subprocess.run(cmd, capture_output=True, text=True)
-
-            if result.returncode == 0 and os.path.exists(temp_path):
-                try:
-                    img = Image.open(temp_path)
-                    screenshot = img.copy()
-                    os.unlink(temp_path)
-                    logger.debug(f"Captured display {display_num}: {screenshot.size}")
-                    return screenshot
-                except Exception as e:
-                    logger.error(f"Failed to read display {display_num}: {e}", exc_info=True)
-                    os.unlink(temp_path)
-                    return None
-            else:
-                logger.error(
-                    f"screencapture failed for display {display_num}: {result.stderr}"
+            with tempfile.TemporaryDirectory(
+                prefix="xiaozhi-screenshot-"
+            ) as directory:
+                temp_path = os.path.join(directory, "capture.png")
+                cmd = [
+                    "screencapture",
+                    "-D",
+                    str(display_num),
+                    "-x",
+                    "-t",
+                    "png",
+                    temp_path,
+                ]
+                result = subprocess.run(
+                    cmd, capture_output=True, text=True, timeout=10
                 )
-                if os.path.exists(temp_path):
-                    os.unlink(temp_path)
-                return None
+                if result.returncode != 0 or not os.path.exists(temp_path):
+                    logger.debug(
+                        f"screencapture failed for display {display_num}: {result.stderr}"
+                    )
+                    return None
+                with Image.open(temp_path) as image:
+                    screenshot = image.copy()
+                logger.debug(f"Captured display {display_num}: {screenshot.size}")
+                return screenshot
 
         except Exception as e:
             logger.error(f"Single display capture failed: {e}", exc_info=True)
@@ -496,70 +471,24 @@ class ScreenshotCamera(BaseCamera):
         Returns:
             合成后的PIL Image对象
         """
+        displays = []
         try:
-            import os
-            import subprocess
-            import tempfile
-
-            from PIL import Image
-
-            # 检测所有可用的显示器
-            displays = []
-            for display_id in range(1, 5):  # 检测最多4个显示器
-                with tempfile.NamedTemporaryFile(
-                    suffix=".png", delete=False
-                ) as temp_file:
-                    temp_path = temp_file.name
-
-                cmd = [
-                    "screencapture",
-                    "-D",
-                    str(display_id),
-                    "-x",
-                    "-t",
-                    "png",
-                    temp_path,
-                ]
-                result = subprocess.run(cmd, capture_output=True, text=True)
-
-                if result.returncode == 0 and os.path.exists(temp_path):
-                    try:
-                        img = Image.open(temp_path)
-                        displays.append(
-                            {
-                                "id": display_id,
-                                "size": img.size,
-                                "image": img.copy(),
-                                "path": temp_path,
-                            }
-                        )
-                        logger.debug(f"Found display {display_id}: {img.size}")
-                    except Exception as e:
-                        logger.debug(f"Failed to read display {display_id}: {e}")
-                        os.unlink(temp_path)
-                else:
-                    if os.path.exists(temp_path):
-                        os.unlink(temp_path)
-
+            for display_id in range(1, 5):
+                image = self._capture_single_display_macos(display_id)
+                if image is not None:
+                    displays.append(
+                        {"id": display_id, "size": image.size, "image": image}
+                    )
             if not displays:
                 logger.error("No displays found")
                 return None
-
-            # 清理临时文件
-            for display in displays:
-                try:
-                    os.unlink(display["path"])
-                except Exception as e:
-                    logger.debug(f"清理截图临时文件失败: {e}")
-
             if len(displays) == 1:
-                # 单显示器，直接返回
                 return displays[0]["image"]
-            else:
-                # 多显示器，需要合成
-                logger.debug(f"Compositing {len(displays)} displays")
-                return self._composite_displays(displays)
-
+            return self._composite_displays(displays)
         except Exception as e:
             logger.error(f"All displays capture failed: {e}", exc_info=True)
             return None
+        finally:
+            if len(displays) > 1:
+                for display in displays:
+                    display["image"].close()

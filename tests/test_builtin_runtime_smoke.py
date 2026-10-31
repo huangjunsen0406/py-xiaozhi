@@ -31,6 +31,9 @@ class MemoryCodec:
     async def initialize(self):
         self.initialized += 1
 
+    def set_encode_gate(self, gate):
+        self.encode_gate = gate
+
     def set_encoded_callback(self, callback):
         self.encoded_callback = callback
 
@@ -150,9 +153,7 @@ class MemoryTransport(Protocol):
 
 @pytest.fixture
 def boundaries(monkeypatch, tmp_path):
-    for name in (
-        "DATA", "CACHE", "LOG", "MUSIC_CACHE", "KEYWORDS"
-    ):
+    for name in ("DATA", "CACHE", "LOG", "MUSIC_CACHE", "KEYWORDS"):
         monkeypatch.setenv(f"XIAOZHI_{name}_DIR", str(tmp_path / name.lower()))
     monkeypatch.delenv("XIAOZHI_DISABLE_AUDIO", raising=False)
     from src.utils.resource_finder import clear_path_caches
@@ -181,7 +182,9 @@ def boundaries(monkeypatch, tmp_path):
     monkeypatch.setattr(
         VolumeController,
         "_create_backend",
-        lambda self: SimpleNamespace(get_volume=lambda: 50, set_volume=lambda value: None),
+        lambda self: SimpleNamespace(
+            get_volume=lambda: 50, set_volume=lambda value: None
+        ),
     )
     try:
         yield SimpleNamespace(viewport=viewport, keyboard=keyboard, transport=transport)
@@ -214,19 +217,27 @@ async def test_builtin_assembly_normal_lifecycle_has_no_error_logs(
     before = asyncio.all_tasks()
     runtime = asyncio.create_task(core.run(mode="tui"))
     viewport, keyboard, transport = (
-        boundaries.viewport, boundaries.keyboard, boundaries.transport
+        boundaries.viewport,
+        boundaries.keyboard,
+        boundaries.transport,
     )
     try:
         await asyncio.wait_for(transport.ready.wait(), 2)
         await asyncio.wait_for(viewport.started.wait(), 1)
         assert [plugin.name for plugin in core.plugins.plugins] == [
-            "audio", "mcp", "wake_word", "ui", "shortcuts"
+            "audio",
+            "mcp",
+            "wake_word",
+            "ui",
+            "shortcuts",
         ]
         assert core.plugins.failed_plugins() == []
         audio = core.plugins.get_plugin("audio")
         codec = audio.codec
         music, notifications, server = (
-            core.music_player, core.notification_player, core.mcp_server
+            core.music_player,
+            core.notification_player,
+            core.mcp_server,
         )
         assert type(codec) is MemoryCodec and codec.initialized == 1
         assert core.session.audio is codec
@@ -235,7 +246,9 @@ async def test_builtin_assembly_normal_lifecycle_has_no_error_logs(
         assert len(keyboard._shortcuts) == 5 and keyboard.starts == 1
         tool_names = {tool.name for tool in server.tools}
         assert {
-            "take_photo", "music_player.get_status", "self.audio_speaker.get_volume"
+            "take_photo",
+            "music_player.get_status",
+            "self.audio_speaker.get_volume",
         } <= tool_names
 
         codecs = []
@@ -292,14 +305,20 @@ async def test_builtin_assembly_normal_lifecycle_has_no_error_logs(
         assert codec.incoming_audio == [b"encoded speech"]
         assert ("聆听中...", True) in viewport.statuses
 
-        await deliver({
-            "type": "mcp",
-            "payload": {
-                "jsonrpc": "2.0", "id": 7, "method": "tools/call",
-                "params": {"name": "music_player.get_status", "arguments": {}},
-            },
-        })
-        responses = [item["payload"] for item in transport.sent if item["type"] == "mcp"]
+        await deliver(
+            {
+                "type": "mcp",
+                "payload": {
+                    "jsonrpc": "2.0",
+                    "id": 7,
+                    "method": "tools/call",
+                    "params": {"name": "music_player.get_status", "arguments": {}},
+                },
+            }
+        )
+        responses = [
+            item["payload"] for item in transport.sent if item["type"] == "mcp"
+        ]
         assert len(responses) == 1 and responses[0]["id"] == 7
         assert "error" not in responses[0]
         assert not responses[0]["result"].get("isError", False)
@@ -327,9 +346,9 @@ async def test_builtin_assembly_normal_lifecycle_has_no_error_logs(
         await asyncio.sleep(0)
         assert not [task for task in asyncio.all_tasks() - before if not task.done()]
         records = caplog.get_records("setup") + caplog.get_records("call")
-        assert not [
-            record for record in records if record.levelno >= logging.ERROR
-        ], caplog.text
+        assert not [record for record in records if record.levelno >= logging.ERROR], (
+            caplog.text
+        )
     finally:
         core.tasks.request_shutdown()
         await asyncio.wait_for(runtime, 2)

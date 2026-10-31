@@ -15,21 +15,18 @@ class SettingsCameraDevicesMixin:
 
         不在应用启动时调用；仅在打开设置 / 刷新 / 摄像头页时触发。
         """
-        if self._cameras_loading:
+        if self._closed or self._cameras_loading:
             return
-        if self._cameras_loaded_once and not force and self._cameras:
+        if self._cameras_loaded_once and not force:
             return
 
         self._cameras_loading = True
-        self._run_worker(
-            self._do_load_cameras,
-            name="settings:scan_cameras",
-            clear_flags=lambda: setattr(self, "_cameras_loading", False),
-        )
+        self._run_worker(self._do_load_cameras, name="settings:scan_cameras")
 
     def _do_load_cameras(self):
         """执行摄像头扫描（OpenCV/V4L2 + 可选 picamera2）."""
         cameras: list[dict] = []
+        error = None
         try:
             from src.mcp.tools.camera.capture_backend import list_camera_devices
 
@@ -47,8 +44,13 @@ class SettingsCameraDevicesMixin:
             logger.info(f"摄像头扫描完成: 找到 {len(cameras)} 个")
         except Exception as e:
             logger.error(f"扫描摄像头失败: {e}", exc_info=True)
-            raise
-        finally:
+            error = str(e)
+
+        def apply():
+            self._cameras_loading = False
+            if error is not None:
+                self.statusMessage.emit(f"[错误] 摄像头枚举失败: {error}")
+                return
             self._cameras = cameras
             self._cameras_loaded_once = True
             self.devicesChanged.emit()
@@ -57,6 +59,8 @@ class SettingsCameraDevicesMixin:
                 if cameras
                 else "未检测到摄像头（Pi CSI 需安装 picamera2）"
             )
+
+        self._schedule_ui(apply)
 
     @Slot(result=list)
     def getCameras(self) -> list:

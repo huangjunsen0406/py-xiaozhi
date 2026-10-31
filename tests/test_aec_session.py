@@ -269,7 +269,10 @@ async def test_old_tts_stop_does_not_clear_or_override_new_state(
         resume.set()
         await pending
     assert c.state.device_state == expected
-    c.codec.clear_audio_queue.assert_not_awaited()
+    if new_event == "channel_closed":
+        c.codec.clear_audio_queue.assert_awaited_once()
+    else:
+        c.codec.clear_audio_queue.assert_not_awaited()
 
 
 @pytest.mark.asyncio
