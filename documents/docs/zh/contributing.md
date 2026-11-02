@@ -21,7 +21,7 @@ outline: deep
 
 ### 基本要求
 
-- Python 3.9 或更高版本
+- Python 3.10 或更高版本
 - Git 版本控制系统
 - 基本的 Python 开发工具（推荐使用 Visual Studio Code）
 
@@ -60,11 +60,15 @@ git remote -v
 - 其他依赖需要查看指南下的相关文档
 ```bash
 # 创建并激活虚拟环境（推荐）
-python -m venv venv
-source venv/bin/activate  # 在 Windows 上使用: venv\Scripts\activate
+python -m venv .venv
+source .venv/bin/activate  # 在 Windows 上使用: .venv\Scripts\activate
 
-# 安装项目依赖
-pip install -r requirements.txt
+# 安装 GUI、TUI 和开发工具（uv 管理虚拟环境）
+uv sync --extra gui --extra tui --group dev
+
+# 或使用上面的虚拟环境，通过 pip 安装
+# pip install -e '.[gui,tui]'
+# pip install pytest pytest-asyncio ruff pyinstaller
 ```
 
 ## 开发流程

@@ -27,15 +27,15 @@ cd py-xiaozhi
 # 基础安装
 uv sync
 
-# GUI + 开发工具
-uv sync --extra gui --group dev
+# GUI + TUI + 开发工具
+uv sync --extra gui --extra tui --group dev
 ```
 
 如果你不使用 `uv`，可以使用以下兼容方案：
 
 ```bash
 pip install -e .
-pip install -e '.[gui]'
+pip install -e '.[gui,tui]'
 pip install pytest pytest-asyncio ruff pyinstaller
 ```
 
@@ -68,7 +68,7 @@ pytest
 如有必要，也请验证对应运行路径，例如：
 
 - GUI 改动：运行 `python main.py`
-- CLI 改动：运行 `python main.py --mode cli`
+- TUI 改动：运行 `python main.py --mode tui`（需安装 `tui` extra）
 - 协议改动：验证 `websocket` 或 `mqtt`
 - 文档改动：在 `documents/` 下本地预览
 
