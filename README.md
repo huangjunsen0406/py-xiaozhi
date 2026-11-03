@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/huangjunsen0406-py-xiaozhi-badge.png)](https://mseep.ai/app/huangjunsen0406-py-xiaozhi)
+
 # py-xiaozhi
 
 <p align="center" class="trendshift">
