@@ -121,6 +121,9 @@ class _FakeUdp:
         self.reset_count += 1
         self._ready = False
 
+    async def reset_session_async(self):
+        self.reset_session()
+
     def is_ready(self):
         return self._ready
 
@@ -135,7 +138,6 @@ async def test_mqtt_mcp_tools_list_before_hello_reaches_server(
 ):
     """网关可在 MQTT CONNACK 后、客户端 hello 前拉取工具清单."""
     from src.protocols import mqtt_protocol as mqtt_module
-
 
     task_manager = TaskManager()
     task_manager.initialize()
@@ -199,7 +201,6 @@ async def test_mqtt_mcp_tools_list_before_hello_reaches_server(
 @pytest.mark.asyncio
 async def test_mqtt_send_text_rejects_publish_enqueue_failure(monkeypatch):
     from src.protocols import mqtt_protocol as mqtt_module
-
 
     protocol = mqtt_module.MqttProtocol(asyncio.get_running_loop())
     result = _PublishedMessage(mqtt_module.mqtt.MQTT_ERR_NO_CONN)

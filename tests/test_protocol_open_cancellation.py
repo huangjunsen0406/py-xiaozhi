@@ -209,7 +209,9 @@ async def test_unsuccessful_mqtt_open_discards_udp_but_preserves_control(
         resets.append("reset")
 
     protocol._udp = SimpleNamespace(
-        is_ready=lambda: ready["value"], reset_session=reset
+        is_ready=lambda: ready["value"],
+        reset_session=reset,
+        reset_session_async=AsyncMock(side_effect=reset),
     )
     entered = asyncio.Event()
     blocker = asyncio.Event()

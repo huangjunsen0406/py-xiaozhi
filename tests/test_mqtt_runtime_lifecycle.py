@@ -6,7 +6,7 @@ import secrets
 import threading
 import time
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 
 import paho.mqtt.client as mqtt
 import pytest
@@ -48,6 +48,7 @@ def broker(monkeypatch):
     def factory(**kwargs):
         client = real_client(**kwargs)
         client.connect_async = Mock()
+        client.username_pw_set = Mock(wraps=client.username_pw_set)
         client.loop_start = Mock(side_effect=lambda: on_start(client))
         client.loop_stop = Mock()
         client.disconnect = Mock()
@@ -284,5 +285,126 @@ async def test_shutdown_publishes_goodbye_before_disposing_broker(broker):
         client.disconnect.assert_called_once()
         assert protocol.mqtt_client is None
         assert await protocol.open_audio_channel() is False
+    finally:
+        await protocol.shutdown()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("entry", ["start", "open_audio_channel"])
+@pytest.mark.parametrize(
+    ("key", "value"),
+    [
+        ("endpoint", "localhost:2883"),
+        ("client_id", "updated-client"),
+        ("username", "updated-user"),
+        ("password", "updated-test-credential"),
+        ("publish_topic", "updated-out"),
+        ("subscribe_topic", "updated-in"),
+    ],
+)
+async def test_mqtt_config_change_rebuilds_control_and_unchanged_config_reuses_it(
+    broker, monkeypatch, entry, key, value
+):
+    broker.acknowledge["value"] = True
+    protocol = MqttProtocol(asyncio.get_running_loop(), config=config())
+    opened = AsyncMock(return_value=True)
+    monkeypatch.setattr(protocol, "_open_udp_audio_session", opened)
+    try:
+        assert await protocol.start()
+        old = protocol.mqtt_client
+        assert await protocol.start()
+        assert broker.clients == [old]
+        assert not protocol.udp_running
+        assert protocol.config.update_config(
+            f"SYSTEM_OPTIONS.NETWORK.MQTT_INFO.{key}", value, save=False
+        )
+        assert await getattr(protocol, entry)()
+        new = protocol.mqtt_client
+        assert new is not old
+        assert len(broker.clients) == 2
+        old.loop_stop.assert_called_once()
+        old.disconnect.assert_called_once()
+        settings = protocol.config.get_config("SYSTEM_OPTIONS.NETWORK.MQTT_INFO")
+        new.connect_async.assert_called_once_with(
+            "localhost", 2883 if key == "endpoint" else 1883, keepalive=60
+        )
+        new.username_pw_set.assert_called_once_with(
+            settings["username"], settings["password"]
+        )
+        assert new._client_id.decode() == settings["client_id"]
+        assert protocol.publish_topic == settings["publish_topic"]
+        new.subscribe.assert_called_once_with(settings["subscribe_topic"], qos=1)
+        assert protocol._control_ready_client is new
+        assert not protocol.udp_running
+        if entry == "start":
+            opened.assert_not_awaited()
+        else:
+            opened.assert_awaited_once()
+
+        # Settings stay fixed: both entry points continue to reuse this client.
+        assert await protocol.start()
+        assert protocol.mqtt_client is new
+        assert len(broker.clients) == 2
+        # Disposed Paho callbacks cannot close or subscribe on the replacement.
+        broker.ack(old)
+        old.on_disconnect(old, None, 1)
+        await asyncio.sleep(0)
+        assert protocol.mqtt_client is new
+        new.loop_stop.assert_not_called()
+        new.disconnect.assert_not_called()
+        old.subscribe.assert_called_once_with("in", qos=1)
+        new.subscribe.assert_called_once_with(settings["subscribe_topic"], qos=1)
+    finally:
+        await protocol.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_control_config_refresh_closes_audio_before_disposing_old_client(broker):
+    broker.acknowledge["value"] = True
+    protocol = MqttProtocol(asyncio.get_running_loop(), config=config())
+    try:
+        assert await protocol.start()
+        old = protocol.mqtt_client
+        protocol.connected = True
+        protocol.session_id = "old-session"
+
+        async def on_closed():
+            assert protocol.mqtt_client is old
+            old.loop_stop.assert_not_called()
+            old.disconnect.assert_not_called()
+            assert not protocol.connected
+            assert protocol.session_id == ""
+            assert protocol._udp.aes_key is None
+
+        closed = AsyncMock(side_effect=on_closed)
+        protocol.on_audio_channel_closed(closed)
+        assert protocol.config.update_config(
+            "SYSTEM_OPTIONS.NETWORK.MQTT_INFO.subscribe_topic", "new-in", save=False
+        )
+        assert await protocol.start()
+        closed.assert_awaited_once()
+        old.disconnect.assert_called_once()
+        assert protocol.mqtt_client is not old
+        assert not protocol.udp_running
+        assert not protocol.connected
+    finally:
+        await protocol.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_cleared_mqtt_config_drops_old_control_instead_of_reusing_it(broker):
+    broker.acknowledge["value"] = True
+    protocol = MqttProtocol(asyncio.get_running_loop(), config=config())
+    try:
+        assert await protocol.start()
+        old = protocol.mqtt_client
+        assert protocol.config.update_config(
+            "SYSTEM_OPTIONS.NETWORK.MQTT_INFO", None, save=False
+        )
+        assert await protocol.start() is False
+        old.loop_stop.assert_called_once()
+        old.disconnect.assert_called_once()
+        assert protocol.mqtt_client is None
+        assert len(broker.clients) == 1
     finally:
         await protocol.shutdown()

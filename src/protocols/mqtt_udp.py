@@ -90,18 +90,21 @@ class MqttUdpChannel:
         self.thread.start()
         logger.info(f"UDP接收线程已启动，监听来自 {self.server}:{self.port} 的数据")
 
-    def stop(self) -> None:
-        """停止接收线程并关闭套接字."""
+    def _request_stop(self) -> None:
+        """立即停用旧会话，丢弃已排队及迟到的音频帧。"""
         with self._audio_lock:
             self.running = False
             self._audio_generation += 1
             self._audio_queue.clear()
             self._audio_wake_pending = False
+
+    def stop(self) -> None:
+        """同步等待接收线程退出；异步生命周期使用 reset_session_async。"""
+        self._request_stop()
         if self.thread and self.thread.is_alive():
-            try:
-                self.thread.join(1.0)
-            except RuntimeError:
-                pass
+            # recvfrom 有 0.5s 超时。必须真正退出后才能复用会话字段，
+            # 不能依赖跨线程 close 在所有平台唤醒 recvfrom。
+            self.thread.join()
         self.thread = None
 
         if self.socket:
@@ -110,6 +113,20 @@ class MqttUdpChannel:
             except Exception as e:
                 logger.error(f"关闭UDP套接字失败: {e}", exc_info=True)
         self.socket = None
+
+    async def reset_session_async(self) -> None:
+        """停用旧帧后在线程中等待退出；取消也要等资源释放完成。"""
+        self._request_stop()
+        cleanup = asyncio.create_task(asyncio.to_thread(self.reset_session))
+        cancelled = False
+        while not cleanup.done():
+            try:
+                await asyncio.shield(cleanup)
+            except asyncio.CancelledError:
+                cancelled = True
+        cleanup.result()
+        if cancelled:
+            raise asyncio.CancelledError
 
     def reset_session(self) -> None:
         """goodbye 后清空会话侧字段."""
