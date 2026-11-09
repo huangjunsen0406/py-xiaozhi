@@ -144,7 +144,7 @@ async def test_reload_failure_rolls_back_partial_streams_through_event_bus(
     plugin = AudioPlugin()
     plugin.codec = codec
     bus = EventBus()
-    plugin._ctx = SimpleNamespace(event_bus=bus)
+    plugin._ctx = SimpleNamespace(event_bus=bus, get_config=lambda: codec.config)
     published = []
 
     async def changed(value=None):
