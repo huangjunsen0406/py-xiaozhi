@@ -45,7 +45,6 @@
 |                                                                     |                                                                                                                                                                             |
 | ------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [**Token能量站**](https://factory.pub/register?aff=3rXc)            | 感谢 Token能量站 赞助了本项目！提供 **GPT、Grok、Claude** 等主流模型的 API 中转服务，稳定可靠，价格实惠。**[点击注册](https://factory.pub/register?aff=3rXc)**              |
-| [**良心AI**](https://www.openailaozu.com/register?aff=5Y7JEH5HBTXS) | 感谢 良心AI 赞助了本项目！提供 **GPT、Claude、Gemini** 等主流模型的 API 中转服务，国内直连，稳定高速。**[点击注册](https://www.openailaozu.com/register?aff=5Y7JEH5HBTXS)** |
 
 </details>
 
@@ -77,7 +76,7 @@ py-xiaozhi 是一个轻量级、跨平台的多模态 AI 交互主控框架，�
 - **MCP 工具生态** — 音乐播放、摄像头、截图、应用管理、天气查询、音量控制
 - **Opus 编解码** — 音频编解码和实时重采样
 - **唤醒词检测** — 基于 Sherpa-ONNX 离线识别，支持多唤醒词和拼音匹配
-- **多界面模式** — GUI（PySide6 + QML）/ CLI / GPIO，适应不同环境
+- **多界面模式** — GUI（PySide6 + QML）/ TUI / GPIO，适应不同环境
 - **系统托盘 & 全局快捷键** — 后台运行，快捷操作
 - **WebSocket / MQTT** — 双协议通信，支持 WSS 加密传输
 - **设备激活** — v1/v2 双协议，自动验证码和设备指纹
@@ -96,17 +95,24 @@ py-xiaozhi 是一个轻量级、跨平台的多模态 AI 交互主控框架，�
 git clone https://github.com/huangjunsen0406/py-xiaozhi.git
 cd py-xiaozhi
 
-# 基础安装（CLI / GPIO 模式）
+# 基础安装（Linux GPIO 模式）
 uv sync                        # 推荐
 # 或: pip install -e .
+
+# TUI 模式（额外安装 Textual）
+uv sync --extra tui
+# 或: pip install -e '.[tui]'
 
 # GUI 模式（额外安装 PySide6 + qasync）
 uv sync --extra gui            # 推荐
 # 或: pip install -e '.[gui]'
 
+# 完整开发环境（GUI + TUI + 测试/打包工具）
+uv sync --extra gui --extra tui --group dev
+
 # 运行
 python main.py                 # GUI 模式（默认）
-python main.py --mode cli      # CLI 模式
+python main.py --mode tui      # TUI 模式
 python main.py --protocol mqtt # MQTT 协议
 ```
 
@@ -127,7 +133,7 @@ py-xiaozhi/
 │   │   └── tools/              # 工具模块（music/camera/screenshot/app/weather/volume）
 │   ├── ui/                     # 用户界面
 │   │   ├── gui/                # PySide6 + QML 图形界面
-│   │   ├── cli/                # 命令行界面
+│   │   ├── tui/                # Textual 全屏终端界面
 │   │   └── gpio/               # GPIO 嵌入式界面
 │   └── utils/                  # 工具函数
 ├── libs/                       # 第三方原生库（libopus / webrtc_apm）
@@ -138,19 +144,19 @@ py-xiaozhi/
 
 ## 状态流转
 
+设备状态由 `StateManager` 管理，会话动作由 `ConversationSession` 协调。以下展示主要流转；连接建立由协议层负责，不是独立的设备状态。
+
+```text
+IDLE -- 唤醒/按钮，连接及 listen 请求成功 --> LISTENING
+LISTENING -- 收到 TTS 开始 --> SPEAKING
+SPEAKING -- 播放完成，继续对话 --> LISTENING
+SPEAKING -- 播放完成，不继续对话 --> IDLE
+LISTENING -- 停止/中断 --> IDLE
+IDLE -- 收到服务端通知 --> NOTIFYING
+NOTIFYING -- 通知结束/取消 --> IDLE
 ```
-                    +----------------+
-                    |                |
-                    v                |
-+------+  唤醒/按钮  +------------+  |   +------------+
-| IDLE | ---------> | CONNECTING | -+-> | LISTENING  |
-+------+            +------------+      +------------+
-   ^                                          |
-   |                                          | 语音识别完成
-   |        +------------+                    v
-   +------- |  SPEAKING  | <-----------------+
-    完成播放 +------------+
-```
+
+`NOTIFYING` 表示播放服务端单向通知；唤醒或用户操作可以取消通知并进入对话流程。
 
 ## 参与贡献
 

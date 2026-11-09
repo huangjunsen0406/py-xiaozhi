@@ -7,6 +7,7 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 from src.core.event_bus import EventBus, Events
+from src.core.settings import SettingsApplier
 from src.logging import get_logger
 from src.ui.shared.event_emitter import safe_emit
 from src.ui.tui.settings_services import SettingsServices
@@ -37,7 +38,7 @@ class TuiViewManager:
         self._settings_services = SettingsServices(
             self._config_manager, event_bus, runtime_tool_names
         )
-        self._reconnect_snapshot = self._reconnect_values()
+        self._settings_applier = SettingsApplier(self._config_manager, event_bus)
         self._running = False
         self._loop: asyncio.AbstractEventLoop | None = None
         self._app: XiaozhiTuiApp | None = None
@@ -132,39 +133,15 @@ class TuiViewManager:
         else:
             self._safe_emit(Events.UI_SEND_TEXT, {"text": cmd})
 
-    def _reconnect_values(self) -> dict:
-        from src.mcp.tool_catalog import normalize_disabled
-        from src.ui.tui.settings_data import SETTING_SECTIONS
-
-        values = {
-            field.path: self._config_manager.get_config(field.path)
-            for _, fields in SETTING_SECTIONS
-            for field in fields
-            if getattr(field, "effect", "hot") == "reconnect"
-        }
-        values["MCP_TOOLS.DISABLED"] = sorted(
-            normalize_disabled(
-                self._config_manager.get_config("MCP_TOOLS.DISABLED", [])
-            )
-        )
-        return values
-
     def _on_settings_saved(self) -> None:
         """配置提交成功后统一应用；关闭拒绝不另起任务。"""
-        current = self._reconnect_values()
-        reconnect = current != self._reconnect_snapshot
-        self._reconnect_snapshot = current
-
-        async def apply_settings():
-            await self._event_bus.emit(Events.CONFIG_CHANGED)
-            if reconnect:
-                await self._event_bus.emit(Events.PROTOCOL_RECONNECT_REQUEST)
-
         if self._task_manager is not None:
-            self._task_manager.schedule_nowait(apply_settings)
+            self._task_manager.schedule_nowait(self._settings_applier.apply)
         elif self._app is not None and self._app.is_running:
             self._app.run_worker(
-                apply_settings(), group="settings-apply", exit_on_error=False
+                self._settings_applier.apply(),
+                group="settings-apply",
+                exit_on_error=False,
             )
 
     def _safe_emit(self, event: str, data=None):

@@ -121,6 +121,9 @@ class _FakeUdp:
         self.reset_count += 1
         self._ready = False
 
+    async def reset_session_async(self):
+        self.reset_session()
+
     def is_ready(self):
         return self._ready
 
@@ -135,7 +138,6 @@ async def test_mqtt_mcp_tools_list_before_hello_reaches_server(
 ):
     """网关可在 MQTT CONNACK 后、客户端 hello 前拉取工具清单."""
     from src.protocols import mqtt_protocol as mqtt_module
-
 
     task_manager = TaskManager()
     task_manager.initialize()
@@ -200,7 +202,6 @@ async def test_mqtt_mcp_tools_list_before_hello_reaches_server(
 async def test_mqtt_send_text_rejects_publish_enqueue_failure(monkeypatch):
     from src.protocols import mqtt_protocol as mqtt_module
 
-
     protocol = mqtt_module.MqttProtocol(asyncio.get_running_loop())
     result = _PublishedMessage(mqtt_module.mqtt.MQTT_ERR_NO_CONN)
     protocol.mqtt_client = _FakeMqttClient(result)
@@ -244,6 +245,7 @@ async def test_mqtt_connection_uses_controlled_reconnect_and_disconnects_cleanly
     monkeypatch.setattr(mqtt_module.mqtt, "Client", create_client)
 
     closed = asyncio.Event()
+    error_reported = asyncio.Event()
     errors = []
 
     async def on_closed():
@@ -251,20 +253,26 @@ async def test_mqtt_connection_uses_controlled_reconnect_and_disconnects_cleanly
 
     async def on_error(reason):
         errors.append(reason)
+        error_reported.set()
 
     protocol.on_audio_channel_closed(on_closed)
     protocol.on_network_error(on_error)
 
-    assert await protocol.connect() is True
-    assert clients[0].kwargs["reconnect_on_failure"] is False
+    try:
+        assert await protocol.connect() is True
+        assert clients[0].kwargs["reconnect_on_failure"] is False
 
-    # 两次成功回调只会完成本次 connect() 的 Future 一次，不抛 InvalidStateError。
-    clients[0].on_disconnect(clients[0], None, 7)
-    await asyncio.wait_for(closed.wait(), timeout=1.0)
+        # 两次成功回调只会完成本次 connect() 的 Future 一次，不抛 InvalidStateError。
+        clients[0].on_disconnect(clients[0], None, 7)
+        await asyncio.wait_for(closed.wait(), timeout=1.0)
+        # 音频关闭由共享任务完成；Broker 处理任务恢复后才上报网络错误。
+        await asyncio.wait_for(error_reported.wait(), timeout=1.0)
 
-    assert protocol.connected is False
-    assert clients[0].loop_stop_called
-    assert errors == ["连接丢失: MQTT连接断开: 7"]
+        assert protocol.connected is False
+        assert clients[0].loop_stop_called
+        assert errors == ["连接丢失: MQTT连接断开: 7"]
+    finally:
+        await protocol.shutdown()
 
 
 @pytest.mark.asyncio

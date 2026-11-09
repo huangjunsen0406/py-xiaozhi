@@ -43,8 +43,6 @@ class SettingsModel(
     testComplete = Signal(str, bool)
     wakeWordChanged = Signal()
     configSaved = Signal()
-    # MCP 工具禁用列表相对打开/上次保存是否变化 → 保存后可能触发重连
-    mcpToolsNeedReconnect = Signal()
     _uiCallbackRequested = Signal(object)
 
     def __init__(
@@ -88,13 +86,10 @@ class SettingsModel(
         self._wake_word: str = ""
         self._wake_word_lang: str = "zh"
         self._wake_word_preview: str = ""
-        # 打开设置时快照，保存时对比是否变更 MCP 工具暴露
-        self._mcp_disabled_snapshot: list[str] = []
 
         # 启动仅读配置；音频/摄像头/唤醒词预览延后到打开设置时再处理
         self._load_config()
         self._load_wake_word(update_preview=False)
-        self._snapshot_mcp_disabled()
 
     @Slot(object)
     def _run_ui_callback(self, callback) -> None:
@@ -191,36 +186,18 @@ class SettingsModel(
         config[keys[-1]] = value
         self.settingsChanged.emit()
 
-    def _snapshot_mcp_disabled(self) -> None:
-        from src.mcp.tool_catalog import normalize_disabled
-
-        raw = self._get_value("MCP_TOOLS.DISABLED", []) or []
-        self._mcp_disabled_snapshot = list(normalize_disabled(raw))
-
     @Slot(result=bool)
     def save(self) -> bool:
         """提交草稿并更新运行时；失败时保留草稿供用户重试."""
         self.set_error("")
         self.statusReset.emit()
         try:
-            from src.mcp.tool_catalog import normalize_disabled
-
-            new_disabled = normalize_disabled(
-                self._get_value("MCP_TOOLS.DISABLED", []) or []
-            )
-            mcp_changed = sorted(new_disabled) != sorted(self._mcp_disabled_snapshot)
-
             error = self._config_manager.commit_draft(self._config)
             if error is not None:
                 self.set_error(error)
                 return False
             logger.info("设置已保存并加载到运行时配置")
-            self._snapshot_mcp_disabled()
-            if mcp_changed:
-                self.statusMessage.emit("配置已保存（MCP 工具变更，将重连以更新）")
-                self.mcpToolsNeedReconnect.emit()
-            else:
-                self.statusMessage.emit("配置已保存")
+            self.statusMessage.emit("配置已保存")
             self.configSaved.emit()
             return True
         except Exception as e:
@@ -233,7 +210,6 @@ class SettingsModel(
         """丢弃草稿并恢复当前运行时快照，不枚举设备或加载模型."""
         self._load_config()
         self._load_wake_word(update_preview=False)
-        self._snapshot_mcp_disabled()
         self.set_error("")
         self.statusReset.emit()
         self.settingsChanged.emit()

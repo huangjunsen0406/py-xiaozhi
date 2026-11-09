@@ -27,15 +27,15 @@ cd py-xiaozhi
 # Base install
 uv sync
 
-# GUI + development tools
-uv sync --extra gui --group dev
+# GUI + TUI + development tools
+uv sync --extra gui --extra tui --group dev
 ```
 
 If you do not use `uv`, use the fallback commands below:
 
 ```bash
 pip install -e .
-pip install -e '.[gui]'
+pip install -e '.[gui,tui]'
 pip install pytest pytest-asyncio ruff pyinstaller
 ```
 
@@ -68,7 +68,7 @@ pytest
 Please also verify the relevant runtime path when applicable, for example:
 
 - GUI changes: launch `python main.py`
-- CLI changes: launch `python main.py --mode cli`
+- TUI changes: launch `python main.py --mode tui` (requires the `tui` extra)
 - Protocol changes: verify `websocket` or `mqtt` behavior
 - Docs changes: preview under `documents/`
 

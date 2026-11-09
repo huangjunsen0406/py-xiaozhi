@@ -55,6 +55,7 @@ class MqttProtocol(Protocol):
         )
         self.mqtt_client = None
         self._control_ready_client = None
+        self._control_config = None
         self._control_connect_future = None
         self._shutdown = False
         self._audio_generation = 0
@@ -82,6 +83,8 @@ class MqttProtocol(Protocol):
         self.server_hello_event = asyncio.Event()
         self._control_connect_lock = asyncio.Lock()
         self._control_reconnect_task: asyncio.Task | None = None
+        self._udp_reset_lock = asyncio.Lock()
+        self._audio_close_task: asyncio.Task | None = None
 
     # ---- 兼容旧属性（诊断 / 测试）----
     @property
@@ -102,6 +105,8 @@ class MqttProtocol(Protocol):
 
     def _on_udp_audio(self, audio_data: bytes) -> None:
         """在 event loop 线程：把 UDP 帧交给协议 on_incoming_audio."""
+        if not self.connected:
+            return
         cb = self._on_incoming_audio
         if not cb:
             return
@@ -162,8 +167,27 @@ class MqttProtocol(Protocol):
             self._schedule_control_reconnect()
         return connected
 
+    def _read_control_config(self) -> dict:
+        config = self.config.get_config("SYSTEM_OPTIONS.NETWORK.MQTT_INFO")
+        if not isinstance(config, dict):
+            config = {}
+        snapshot = {
+            key: config.get(key)
+            for key in (
+                "endpoint",
+                "client_id",
+                "username",
+                "password",
+                "publish_topic",
+                "subscribe_topic",
+            )
+        }
+        if snapshot["subscribe_topic"] == "null":
+            snapshot["subscribe_topic"] = None
+        return snapshot
+
     async def _connect_control_channel(self) -> bool:
-        """连接并订阅 Broker 控制通道，不改变音频会话状态。"""
+        """连接并订阅 Broker；配置变更时先结束旧会话再重建连接。"""
         if self._is_closing or self._shutdown:
             logger.warning("连接正在关闭中，取消新的连接尝试")
             return False
@@ -172,6 +196,7 @@ class MqttProtocol(Protocol):
             self.mqtt_client is self._control_ready_client
             and self.mqtt_client
             and self.mqtt_client.is_connected()
+            and self._control_config == self._read_control_config()
         ):
             return True
 
@@ -182,15 +207,19 @@ class MqttProtocol(Protocol):
                 self.mqtt_client is self._control_ready_client
                 and self.mqtt_client
                 and self.mqtt_client.is_connected()
+                and self._control_config == self._read_control_config()
             ):
                 return True
+            if self.mqtt_client and self._control_config != self._read_control_config():
+                await self._close_udp_audio_session()
+                self._disconnect_mqtt_client()
             return await self._create_control_connection()
 
     async def _create_control_connection(self) -> bool:
         """创建一次新的 Paho client 并等待 CONNACK。"""
 
         try:
-            mqtt_config = self.config.get_config("SYSTEM_OPTIONS.NETWORK.MQTT_INFO")
+            mqtt_config = self._read_control_config()
             logger.debug("读取MQTT控制连接配置")
             self.endpoint = mqtt_config.get("endpoint")
             self.client_id = mqtt_config.get("client_id")
@@ -201,6 +230,7 @@ class MqttProtocol(Protocol):
             logger.info(f"已从OTA服务器获取MQTT配置: {self.endpoint}")
         except Exception as e:
             logger.warning(f"从OTA服务器获取MQTT配置失败: {e}", exc_info=True)
+            return False
 
         if (
             not self.endpoint
@@ -212,10 +242,6 @@ class MqttProtocol(Protocol):
             if self._on_network_error:
                 await self._on_network_error("MQTT配置不完整")
             return False
-
-        if self.subscribe_topic == "null":
-            self.subscribe_topic = None
-            logger.info("订阅主题为null，将不订阅任何主题")
 
         if self.mqtt_client:
             self._disconnect_mqtt_client()
@@ -239,6 +265,7 @@ class MqttProtocol(Protocol):
         )
         client = self.mqtt_client
         self._control_ready_client = None
+        self._control_config = mqtt_config
         client.username_pw_set(self.username, self.password)
 
         if use_tls:
@@ -377,13 +404,39 @@ class MqttProtocol(Protocol):
             if self._control_connect_future is connect_future:
                 self._control_connect_future = None
 
+    async def _reset_udp_session(self) -> None:
+        # Opening, goodbye and shutdown must not reset shared channel fields
+        # concurrently while the previous receiver is still exiting.
+        async with self._udp_reset_lock:
+            await self._udp.reset_session_async()
+
+    async def _wait_for_audio_close(self, task: asyncio.Task) -> None:
+        """调用方取消后仍等待它已请求的关闭完成，再传播取消。"""
+        cancelled = False
+        while not task.done():
+            try:
+                await asyncio.shield(task)
+            except asyncio.CancelledError:
+                cancelled = True
+        task.result()
+        if cancelled:
+            raise asyncio.CancelledError
+
     async def _open_udp_audio_session(self) -> bool:
         """在已连接的 MQTT 控制通道上协商并打开一个 UDP 音频会话."""
+        closing = self._audio_close_task
+        if closing is not None and closing is not asyncio.current_task():
+            await self._wait_for_audio_close(closing)
+        if self._shutdown or self._is_closing:
+            return False
         self._audio_generation += 1
         generation = self._audio_generation
         self.server_hello_event = asyncio.Event()
+        self.connected = False
         self.session_id = ""
-        self._udp.reset_session()
+        await self._reset_udp_session()
+        if generation != self._audio_generation or self._shutdown or self._is_closing:
+            return False
 
         hello_message = {
             "type": "hello",
@@ -429,7 +482,7 @@ class MqttProtocol(Protocol):
             return True
         except Exception as e:
             logger.error(f"创建UDP套接字失败: {e}", exc_info=True)
-            self._udp.reset_session()
+            await self._reset_udp_session()
             if self._on_network_error:
                 await self._on_network_error(f"创建UDP连接失败: {e}")
             return False
@@ -455,6 +508,8 @@ class MqttProtocol(Protocol):
                 return
 
             if msg_type == "hello":
+                if self._udp_reset_lock.locked():
+                    return
                 logger.debug("收到UDP会话hello")
                 transport = data.get("transport")
                 if transport != "udp":
@@ -557,24 +612,18 @@ class MqttProtocol(Protocol):
     async def open_audio_channel(self) -> bool:
         if self._shutdown or self._is_closing:
             return False
-        if self.is_audio_channel_opened():
-            return True
         if not await self._connect_control_channel():
             self._schedule_control_reconnect()
             return False
+        if self.is_audio_channel_opened():
+            return True
         return await self._open_udp_audio_session()
 
     async def close_audio_channel(self):
         """结束当前 UDP 会话，保留 MQTT 控制连接以便下次复用."""
-        self._audio_generation += 1
-        self.server_hello_event.set()
         self._is_closing = True
         try:
-            await self._cancel_monitor_task()
-            if self.session_id and self.mqtt_client and self.mqtt_client.is_connected():
-                goodbye_msg = {"type": "goodbye", "session_id": self.session_id}
-                await self.send_text(json.dumps(goodbye_msg))
-            await self._close_udp_audio_session()
+            await self._close_udp_audio_session(send_goodbye=True)
         except Exception as e:
             logger.error(f"关闭音频通道时出错: {e}", exc_info=True)
         finally:
@@ -592,21 +641,50 @@ class MqttProtocol(Protocol):
         try:
             if generation is not None and generation != self._audio_generation:
                 return
-            await self._cancel_monitor_task()
-            if generation is not None and generation != self._audio_generation:
-                return
             await self._close_udp_audio_session()
         except Exception as e:
             logger.error(f"处理goodbye消息时出错: {e}", exc_info=True)
 
-    async def _close_udp_audio_session(self) -> None:
-        """释放 UDP 会话状态，不触碰仍可复用的 MQTT broker 连接."""
-        was_open = self.connected or self._udp.is_ready()
-        self._udp.reset_session()
-        self.connected = False
-        self.session_id = ""
-        logger.info("UDP音频会话已关闭，保留MQTT控制连接")
+    async def _close_udp_audio_session(self, *, send_goodbye: bool = False) -> None:
+        """共享一次关闭，旧会话先失效，接收线程退出后再通知上层。"""
+        task = self._audio_close_task
+        if task is asyncio.current_task():
+            return
+        if task is None or task.done():
+            was_open = self.connected or self._udp.is_ready()
+            session_id = self.session_id
+            self._audio_generation += 1
+            self.server_hello_event.set()
+            self.connected = False
+            self.session_id = ""
+            task = asyncio.create_task(
+                self._finish_audio_close(was_open, session_id, send_goodbye),
+                name="mqtt:audio_close",
+            )
+            self._audio_close_task = task
+        try:
+            await self._wait_for_audio_close(task)
+        finally:
+            if self._audio_close_task is task and task.done():
+                self._audio_close_task = None
 
+    async def _finish_audio_close(
+        self, was_open: bool, session_id: str, send_goodbye: bool
+    ) -> None:
+        try:
+            await self._cancel_monitor_task()
+            if (
+                send_goodbye
+                and session_id
+                and self.mqtt_client
+                and self.mqtt_client.is_connected()
+            ):
+                await self.send_text(
+                    json.dumps({"type": "goodbye", "session_id": session_id})
+                )
+        finally:
+            await self._reset_udp_session()
+        logger.info("UDP音频会话已关闭，保留MQTT控制连接")
         if was_open and self._on_audio_channel_closed:
             await self._on_audio_channel_closed()
 
@@ -616,19 +694,13 @@ class MqttProtocol(Protocol):
         if client is None or client is not self.mqtt_client:
             return
 
-        was_audio_open = self.connected or self._udp.is_ready()
         await self._cancel_monitor_task()
         if client is not self.mqtt_client:
             return
         self._audio_generation += 1
         self.server_hello_event.set()
         self._disconnect_mqtt_client()
-
-        if was_audio_open:
-            await self._close_udp_audio_session()
-        else:
-            self._udp.reset_session()
-            self.session_id = ""
+        await self._close_udp_audio_session()
 
         if not self._is_closing and not self._shutdown and self._on_network_error:
             await self._on_network_error(f"连接丢失: {reason}")
@@ -694,6 +766,7 @@ class MqttProtocol(Protocol):
         if self.mqtt_client is client:
             self.mqtt_client = None
             self._last_activity_time = None
+            self._control_config = None
         if self._control_ready_client is client:
             self._control_ready_client = None
         try:
@@ -745,10 +818,17 @@ class MqttProtocol(Protocol):
         await self._handle_broker_disconnect(reason, client=self.mqtt_client)
 
     async def _do_cleanup(self):
-        self._udp.reset_session()
+        self._audio_generation += 1
+        self.server_hello_event.set()
         self.connected = False
         self.session_id = ""
-        self._disconnect_mqtt_client()
+        closing = self._audio_close_task
+        try:
+            if closing is not None and closing is not asyncio.current_task():
+                await self._wait_for_audio_close(closing)
+            await self._reset_udp_session()
+        finally:
+            self._disconnect_mqtt_client()
 
     def get_connection_info(self) -> dict:
         info = super().get_connection_info()

@@ -38,6 +38,7 @@ class AudioPlugin(Plugin):
         self._accepting = False
         self._loop = None
         self._sender_task = None
+        self._audio_settings_snapshot = None
 
     async def setup(self, ctx: "PluginContext", cmd: "PluginCommands") -> None:
         await super().setup(ctx, cmd)
@@ -53,6 +54,7 @@ class AudioPlugin(Plugin):
                 config=ctx.get_config(), audio_config=ctx.audio_config
             )
             await self.codec.initialize()
+            self._audio_settings_snapshot = self._audio_settings()
             self.codec.set_encoded_callback(self._on_encoded_audio)
             self.codec.set_encode_gate(
                 lambda: self._accepting and self._should_send_microphone_audio()
@@ -110,12 +112,27 @@ class AudioPlugin(Plugin):
         except Exception as e:
             logger.warning(f"发布 AUDIO_CODEC_CHANGED 失败: {e}", exc_info=True)
 
+    def _audio_settings(self) -> dict:
+        config = self._ctx.get_config()
+        return {
+            "devices": config.get_config("AUDIO_DEVICES", {}),
+            "aec": {
+                key: config.get_config(f"AEC_OPTIONS.{key}")
+                for key in ("ENABLED", "FRAME_DELAY", "ENABLE_PREPROCESS")
+            },
+        }
+
     async def _on_config_changed(self, data=None):
-        """配置变更时重新加载音频设备（含 PortAudio 重枚举）."""
+        """仅音频相关设置变化时重建设备和处理管线。"""
         if self.codec and not self.failed:
-            logger.info("AudioPlugin: 收到配置变更事件，重新加载音频设备")
+            if self._audio_settings() == self._audio_settings_snapshot:
+                return
+            logger.info("AudioPlugin: 音频设置变更，重新加载音频设备")
+            # 失败或取消后仍需重试，包括用户将设置改回原值的情况。
+            self._audio_settings_snapshot = None
             await self._publish_audio_codec(None)
             if await self.codec.reload_devices(reenumerate=True):
+                self._audio_settings_snapshot = self._audio_settings()
                 await self._publish_audio_codec(self.codec)
 
     async def _on_devices_refresh_request(self, data=None):
@@ -135,6 +152,7 @@ class AudioPlugin(Plugin):
             )
 
             if self.codec:
+                self._audio_settings_snapshot = None
                 await self._publish_audio_codec(None)
                 # 停流后才能安全 _terminate PortAudio
                 self.codec.stop_streams_for_enumeration()
@@ -145,6 +163,7 @@ class AudioPlugin(Plugin):
                 if not ok:
                     logger.error("AudioPlugin: 设备刷新后重新打开音频流失败")
                 else:
+                    self._audio_settings_snapshot = self._audio_settings()
                     await self._publish_audio_codec(self.codec)
             else:
                 # 无 codec（禁用音频）时仍尽量枚举，供设置页展示

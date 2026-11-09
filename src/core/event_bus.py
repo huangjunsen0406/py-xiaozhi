@@ -72,7 +72,7 @@ class Events:
 
     # 配置变更事件
     CONFIG_CHANGED = "config_changed"  # 配置已变更（需要热重载）
-    # MCP 工具暴露变更后：断开并重连协议，使服务端重新 tools/list
+    # 设置变更后刷新连接配置及服务端工具列表
     PROTOCOL_RECONNECT_REQUEST = "protocol_reconnect_request"
 
 

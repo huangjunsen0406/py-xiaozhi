@@ -7,6 +7,7 @@ import pytest
 
 from src.constants.constants import AudioConfig, DeviceState
 from src.core.event_bus import EventBus, Events
+from src.utils.config_manager import ConfigManager
 
 
 class _FakeState:
@@ -424,7 +425,12 @@ async def test_device_reload_cancels_notification_before_reset(
     codec = Codec()
     plugin = AudioPlugin()
     plugin.codec = codec
-    plugin._ctx = SimpleNamespace(event_bus=bus, audio_config=codec.audio_config)
+    config = ConfigManager.from_dict()
+    plugin._ctx = SimpleNamespace(
+        event_bus=bus, audio_config=codec.audio_config, get_config=lambda: config
+    )
+    plugin._audio_settings_snapshot = plugin._audio_settings()
+    config.update_config("AEC_OPTIONS.FRAME_DELAY", 4, save=False)
     await bus.emit(Events.AUDIO_CODEC_CHANGED, codec)
     await session._handle_notify({"audio_url": "https://example.test/a.ogg"})
     await _wait_for_pcm(codec, 1)

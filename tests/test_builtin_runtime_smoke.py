@@ -258,6 +258,9 @@ async def test_builtin_assembly_normal_lifecycle_has_no_error_logs(
 
         core.event_bus.on(Events.AUDIO_CODEC_CHANGED, observe_codec)
         await core.event_bus.emit(Events.CONFIG_CHANGED)
+        assert codecs == [] and codec.reloads == []
+        config.update_config("AEC_OPTIONS.FRAME_DELAY", 4, save=False)
+        await core.event_bus.emit(Events.CONFIG_CHANGED)
         assert codecs == [None, codec]
         assert codec.reloads == [True]
         assert core.session.audio is codec

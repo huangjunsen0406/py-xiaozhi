@@ -2,7 +2,8 @@
 
 from collections.abc import Callable
 
-from src.core.event_bus import EventBus, Events
+from src.core.event_bus import EventBus
+from src.core.settings import SettingsApplier
 from src.core.task_manager import TaskManager
 from src.logging import get_logger
 from src.ui.shared.bridge import EventBridge
@@ -25,7 +26,10 @@ class SettingsController:
         self._event_bus = event_bus
         self._tasks = tasks
         self._bridge = bridge
-        self._config_manager = config_manager
+        self._config_manager = (
+            config_manager if config_manager is not None else ConfigManager.from_dict()
+        )
+        self._settings_applier = SettingsApplier(self._config_manager, event_bus)
         self._runtime_tool_names = runtime_tool_names
         self._settings_model = None
         self._bridge.openSettingsRequested.connect(self.open_settings)
@@ -46,9 +50,6 @@ class SettingsController:
                 runtime_tool_names=self._runtime_tool_names,
             )
             self._settings_model.configSaved.connect(self._on_config_saved)
-            self._settings_model.mcpToolsNeedReconnect.connect(
-                self._on_mcp_tools_need_reconnect
-            )
             logger.debug("SettingsController: SettingsModel 已懒加载")
         return self._settings_model
 
@@ -59,18 +60,8 @@ class SettingsController:
             self._settings_model.close()
 
     def _on_config_saved(self) -> None:
-        logger.info("SettingsController: 配置已保存，触发热重载")
-        self._tasks.spawn(
-            self._event_bus.emit(Events.CONFIG_CHANGED), name="ui:config_changed"
-        )
-
-    def _on_mcp_tools_need_reconnect(self) -> None:
-        """MCP 工具黑名单变更：请求会话层断开并重连以刷新服务端 tools/list."""
-        logger.info("SettingsController: MCP 工具列表变更，请求协议重连")
-        self._tasks.spawn(
-            self._event_bus.emit(Events.PROTOCOL_RECONNECT_REQUEST),
-            name="ui:protocol_reconnect",
-        )
+        logger.info("SettingsController: 配置已保存，应用运行时设置")
+        self._tasks.spawn(self._settings_applier.apply(), name="ui:apply_settings")
 
     def open_settings(self) -> None:
         """reload 配置/设备列表，再让 QML 显示设置窗."""
