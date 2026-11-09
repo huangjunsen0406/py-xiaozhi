@@ -6,6 +6,7 @@ import math
 from dataclasses import dataclass
 from typing import Any
 
+from src.core.settings import requires_protocol_reconnect
 from src.logging import get_logger
 from src.utils.config_manager import ConfigManager
 
@@ -25,6 +26,10 @@ class SettingField:
     maximum: float | None = None
     effect: str = "hot"
 
+    def __post_init__(self) -> None:
+        if requires_protocol_reconnect(self.path):
+            object.__setattr__(self, "effect", "reconnect")
+
 
 SETTING_SECTIONS: list[tuple[str, list[SettingField]]] = [
     (
@@ -34,43 +39,36 @@ SETTING_SECTIONS: list[tuple[str, list[SettingField]]] = [
                 "SYSTEM_OPTIONS.NETWORK.OTA_VERSION_URL",
                 "OTA URL",
                 help="OTA / 激活配置地址",
-                effect="reconnect",
             ),
             SettingField(
                 "SYSTEM_OPTIONS.NETWORK.WEBSOCKET_URL",
                 "WebSocket URL",
                 help="WebSocket 服务地址",
-                effect="reconnect",
             ),
             SettingField(
                 "SYSTEM_OPTIONS.DEVICE_ID",
                 "设备 ID",
                 help="Device-Id（通常为 MAC）",
-                effect="reconnect",
             ),
             SettingField(
                 "SYSTEM_OPTIONS.CLIENT_ID",
                 "客户端 ID",
                 help="Client-Id",
-                effect="reconnect",
             ),
             SettingField(
                 "SYSTEM_OPTIONS.NETWORK.WEBSOCKET_ACCESS_TOKEN",
                 "WebSocket 访问令牌",
                 kind="secret",
-                effect="reconnect",
             ),
             SettingField(
                 "SYSTEM_OPTIONS.NETWORK.AUTHORIZATION_URL",
                 "授权 URL",
-                effect="reconnect",
             ),
             SettingField(
                 "SYSTEM_OPTIONS.NETWORK.ACTIVATION_VERSION",
                 "激活版本",
                 kind="choice",
                 choices=("v1", "v2"),
-                effect="reconnect",
             ),
         ],
     ),
@@ -95,7 +93,6 @@ SETTING_SECTIONS: list[tuple[str, list[SettingField]]] = [
                 kind="choice",
                 choices=("24000", "16000"),
                 help="官方 24000 / 第三方常 16000",
-                effect="reconnect",
             ),
             SettingField(
                 "AUDIO_DEVICES.frame_duration",
@@ -103,7 +100,6 @@ SETTING_SECTIONS: list[tuple[str, list[SettingField]]] = [
                 kind="choice",
                 choices=("20", "40", "60"),
                 help="20 低延迟 / 60 低 CPU",
-                effect="reconnect",
             ),
         ],
     ),
@@ -135,33 +131,27 @@ SETTING_SECTIONS: list[tuple[str, list[SettingField]]] = [
             SettingField(
                 "SYSTEM_OPTIONS.NETWORK.MQTT_INFO.endpoint",
                 "MQTT 地址",
-                effect="reconnect",
             ),
             SettingField(
                 "SYSTEM_OPTIONS.NETWORK.MQTT_INFO.client_id",
                 "MQTT 客户端 ID",
-                effect="reconnect",
             ),
             SettingField(
                 "SYSTEM_OPTIONS.NETWORK.MQTT_INFO.username",
                 "MQTT 用户名",
-                effect="reconnect",
             ),
             SettingField(
                 "SYSTEM_OPTIONS.NETWORK.MQTT_INFO.password",
                 "MQTT 密码",
                 kind="secret",
-                effect="reconnect",
             ),
             SettingField(
                 "SYSTEM_OPTIONS.NETWORK.MQTT_INFO.publish_topic",
                 "MQTT 发布主题",
-                effect="reconnect",
             ),
             SettingField(
                 "SYSTEM_OPTIONS.NETWORK.MQTT_INFO.subscribe_topic",
                 "MQTT 订阅主题",
-                effect="reconnect",
             ),
         ],
     ),

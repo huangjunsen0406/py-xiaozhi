@@ -372,11 +372,12 @@ class ConversationSession:
         return await self.protocol.connect()
 
     async def _on_protocol_reconnect_request(self, _=None) -> None:
-        """设置保存后 MCP 工具列表变更：已连接则断开并重连，便于服务端重新 list.
+        """设置变更后刷新连接配置；已连接时重新协商音频及工具列表。
 
-        仅刷新协议/工具视图，不恢复聆听会话（避免保存设置后进入「聆听中」）。
+        重连后不恢复聆听会话，保存设置仍回到待命状态。
         """
         if not self.protocol.is_audio_channel_opened():
+            await self.protocol.start()
             return
         self._reset_tts()
         self.state.set_keep_listening(False)

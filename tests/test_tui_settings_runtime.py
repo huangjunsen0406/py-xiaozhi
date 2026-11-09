@@ -13,7 +13,19 @@ from src.utils.config_manager import ConfigManager
 
 
 @pytest.mark.asyncio
-async def test_saved_tools_reload_before_reconnect_and_unchanged_tools_do_not_reconnect():
+@pytest.mark.parametrize(
+    "path,value",
+    [
+        ("MCP_TOOLS.DISABLED", ["demo.disabled"]),
+        ("SYSTEM_OPTIONS.NETWORK.WEBSOCKET_URL", "wss://changed.example"),
+        ("SYSTEM_OPTIONS.NETWORK.MQTT_INFO.endpoint", "mqtt.example:8883"),
+        ("SYSTEM_OPTIONS.DEVICE_ID", "new-device"),
+        ("AUDIO_DEVICES.frame_duration", 40),
+    ],
+)
+async def test_saved_settings_reload_before_reconnect_and_noop_save_skips_reconnect(
+    path, value
+):
     bus, tasks = EventBus(), TaskManager()
     tasks.initialize()
     config = ConfigManager.from_dict()
@@ -33,7 +45,7 @@ async def test_saved_tools_reload_before_reconnect_and_unchanged_tools_do_not_re
     bus.on(Events.CONFIG_CHANGED, changed)
     bus.on(Events.PROTOCOL_RECONNECT_REQUEST, reconnect)
     try:
-        config.update_config("MCP_TOOLS.DISABLED", ["demo.disabled"], save=False)
+        config.update_config(path, value, save=False)
         view._on_settings_saved()
         await asyncio.wait_for(reconnected.wait(), 1)
         assert delivered == ["config", "reconnect"]

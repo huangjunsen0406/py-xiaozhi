@@ -1,5 +1,6 @@
 """Settings transactions through real Qt objects, without a GUI or devices."""
 
+import asyncio
 import json
 from pathlib import Path
 from types import SimpleNamespace
@@ -9,7 +10,9 @@ import pytest
 
 pytest.importorskip("PySide6.QtCore")
 
-from src.core.event_bus import EventBus
+from src.constants.constants import AudioConfig
+from src.core.event_bus import EventBus, Events
+from src.core.task_manager import TaskManager
 from src.ui.gui.models.settings_model import SettingsModel
 from src.ui.gui.settings_controller import SettingsController
 from src.ui.shared.bridge.event_bridge import EventBridge
@@ -27,11 +30,10 @@ def devices(monkeypatch):
 
 
 def observe(model):
-    signals = SimpleNamespace(saved=[], errors=[], status=[], reconnect=[])
+    signals = SimpleNamespace(saved=[], errors=[], status=[])
     model.configSaved.connect(lambda: signals.saved.append(True))
     model.errorOccurred.connect(signals.errors.append)
     model.statusMessage.connect(signals.status.append)
-    model.mcpToolsNeedReconnect.connect(lambda: signals.reconnect.append(True))
     return signals
 
 
@@ -137,13 +139,13 @@ def test_apply_failure_retains_draft_and_suppresses_hot_reload(
     assert json.loads(config.config_file.read_text())["SYSTEM_OPTIONS"]["DEVICE_ID"] == "on-disk-only"
     assert config.get_config("SYSTEM_OPTIONS.DEVICE_ID") == before
     assert model.deviceId == "on-disk-only"
-    assert not signals.saved and not signals.reconnect
+    assert not signals.saved
     assert "已写入" in signals.errors[-1] and "运行时" in signals.errors[-1]
     assert not any("配置已保存" in status for status in signals.status)
 
     monkeypatch.setattr(config, "reload_config", ConfigManager.reload_config.__get__(config))
     assert model.save() is True
-    assert signals.saved == [True] and signals.reconnect == [True]
+    assert signals.saved == [True]
     assert config.get_config("SYSTEM_OPTIONS.DEVICE_ID") == "on-disk-only"
 
 
@@ -170,10 +172,10 @@ def test_real_reload_read_failure_keeps_draft_and_suppresses_success(
     assert config.get_config("") == before
     assert model.deviceId == "disk-only"
     assert json.loads(config.config_file.read_text())["SYSTEM_OPTIONS"]["DEVICE_ID"] == "disk-only"
-    assert not signals.saved and not signals.reconnect
+    assert not signals.saved
     assert "已写入" in signals.errors[-1] and "运行时" in signals.errors[-1]
     assert model.save() is True
-    assert signals.saved == [True] and signals.reconnect == [True]
+    assert signals.saved == [True]
 
 
 def test_atomic_replace_failure_keeps_previous_config_and_draft(monkeypatch, tmp_path):
@@ -224,7 +226,63 @@ def test_success_emits_config_changed_only_after_runtime_applies(monkeypatch, tm
     assert scheduled == []
     monkeypatch.setattr(config, "reload_config", reload)
     assert model.save() is True
-    assert scheduled == [("ui:config_changed", "applied")]
+    assert scheduled == [("ui:apply_settings", "applied")]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"SYSTEM_OPTIONS.NETWORK.WEBSOCKET_URL": "wss://changed.example"},
+        {"SYSTEM_OPTIONS.NETWORK.MQTT_INFO.endpoint": "mqtt.example:8883"},
+        {"SYSTEM_OPTIONS.DEVICE_ID": "new-device"},
+        {
+            "AUDIO_DEVICES.frame_duration": 40,
+            "MCP_TOOLS.DISABLED": ["music_player.stop"],
+        },
+    ],
+)
+async def test_gui_save_reloads_before_reconnecting_and_noop_save_skips_reconnect(
+    changes,
+):
+    config = ConfigManager.from_dict({"AUDIO_DEVICES": {"frame_duration": 20}})
+    audio = AudioConfig.from_config(config)
+    bus, tasks = EventBus(), TaskManager()
+    tasks.initialize()
+    controller = SettingsController(bus, tasks, EventBridge(bus), config)
+    model = controller.ensure_model()
+    events = []
+    reconnected = asyncio.Event()
+    reloaded = asyncio.Event()
+
+    async def reload():
+        await asyncio.sleep(0)
+        audio.reload(config)
+        events.append(("reload", audio.FRAME_DURATION))
+        reloaded.set()
+
+    def reconnect():
+        events.append(("reconnect", audio.FRAME_DURATION))
+        reconnected.set()
+
+    bus.on(Events.CONFIG_CHANGED, reload)
+    bus.on(Events.PROTOCOL_RECONNECT_REQUEST, reconnect)
+    try:
+        for path, value in changes.items():
+            model._set_value(path, value)
+        assert model.save()
+        await asyncio.wait_for(reconnected.wait(), 1)
+        expected_frame = changes.get("AUDIO_DEVICES.frame_duration", 20)
+        assert events == [("reload", expected_frame), ("reconnect", expected_frame)]
+        events.clear()
+        reloaded.clear()
+        assert model.save()
+        await asyncio.wait_for(reloaded.wait(), 1)
+        await asyncio.sleep(0)
+        assert events == [("reload", expected_frame)]
+    finally:
+        controller.close()
+        await tasks.cancel_all()
 
 
 def test_wake_word_save_propagates_commit_failure(monkeypatch, tmp_path):

@@ -1771,7 +1771,6 @@ def test_settings_model_save_is_atomic(tmp_path):
 
     model = sm_mod.SettingsModel(config_manager=sm_mod.ConfigManager(config_file=cfg))
     model._config = {"CONFIG_VERSION": 1, "MCP_TOOLS": {"DISABLED": ["a.b"]}}
-    model._mcp_disabled_snapshot = []
     # save 会 emit Qt signals；无 QApp 时可能仍可用
     try:
         from PySide6.QtWidgets import QApplication
