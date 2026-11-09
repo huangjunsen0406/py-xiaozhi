@@ -245,6 +245,7 @@ async def test_mqtt_connection_uses_controlled_reconnect_and_disconnects_cleanly
     monkeypatch.setattr(mqtt_module.mqtt, "Client", create_client)
 
     closed = asyncio.Event()
+    error_reported = asyncio.Event()
     errors = []
 
     async def on_closed():
@@ -252,20 +253,26 @@ async def test_mqtt_connection_uses_controlled_reconnect_and_disconnects_cleanly
 
     async def on_error(reason):
         errors.append(reason)
+        error_reported.set()
 
     protocol.on_audio_channel_closed(on_closed)
     protocol.on_network_error(on_error)
 
-    assert await protocol.connect() is True
-    assert clients[0].kwargs["reconnect_on_failure"] is False
+    try:
+        assert await protocol.connect() is True
+        assert clients[0].kwargs["reconnect_on_failure"] is False
 
-    # 两次成功回调只会完成本次 connect() 的 Future 一次，不抛 InvalidStateError。
-    clients[0].on_disconnect(clients[0], None, 7)
-    await asyncio.wait_for(closed.wait(), timeout=1.0)
+        # 两次成功回调只会完成本次 connect() 的 Future 一次，不抛 InvalidStateError。
+        clients[0].on_disconnect(clients[0], None, 7)
+        await asyncio.wait_for(closed.wait(), timeout=1.0)
+        # 音频关闭由共享任务完成；Broker 处理任务恢复后才上报网络错误。
+        await asyncio.wait_for(error_reported.wait(), timeout=1.0)
 
-    assert protocol.connected is False
-    assert clients[0].loop_stop_called
-    assert errors == ["连接丢失: MQTT连接断开: 7"]
+        assert protocol.connected is False
+        assert clients[0].loop_stop_called
+        assert errors == ["连接丢失: MQTT连接断开: 7"]
+    finally:
+        await protocol.shutdown()
 
 
 @pytest.mark.asyncio
