@@ -36,15 +36,26 @@
 <details open>
 <summary>点击折叠</summary>
 
-[**GitDo.net**](https://gitdo.net/)
+<a href="https://www.dynadot.com/zh/black-friday-sale?utm_source=github&amp;utm_medium=display&amp;utm_campaign=Promo&amp;drefid=5656">
+  <img src="./assets/dynadot-logo.png" alt="Dynadot" width="220" />
+</a>
 
-感谢 GitDo.net 赞助了本项目！GitDo.net 是一个 AI API 聚合中转平台，一个 API Key 即可调用 **Claude、Gemini、GPT** 等主流模型，国内直连、无需魔法、稳定高效，是企业级 AI 编程和应用的理想选择。**[点击访问 GitDo.net](https://gitdo.net/)**
+Dynadot是ICANN认证，域名保有量全球前五的域名注册商，首屈一指的国际域名交易平台。为所有用户提供以域名为中心的域名注册，域名交易，域名管理，以及企业邮箱及建站服务。为所有用户提供多种域名优惠，并支持免费提交域名抢注需求。[Dynadot黑五活动](https://www.dynadot.com/zh/black-friday-sale?utm_source=github&utm_medium=display&utm_campaign=Promo&drefid=5656)正式上线！探索我们的官方优惠页面，个位数价格注册域名，五折购入建站工具与专业版邮箱。
 
 ---
 
-|                                                                     |                                                                                                                                                                             |
-| ------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [**Token能量站**](https://factory.pub/register?aff=3rXc)            | 感谢 Token能量站 赞助了本项目！提供 **GPT、Grok、Claude** 等主流模型的 API 中转服务，稳定可靠，价格实惠。**[点击注册](https://factory.pub/register?aff=3rXc)**              |
+<table>
+  <tbody>
+    <tr>
+      <td><a href="https://factory.pub/register?aff=3rXc"><strong>Token能量站</strong></a></td>
+      <td>感谢 Token能量站 赞助了本项目！提供 <strong>GPT、Grok、Claude</strong> 等主流模型的 API 中转服务，稳定可靠，价格实惠。<strong><a href="https://factory.pub/register?aff=3rXc">点击注册</a></strong></td>
+    </tr>
+    <tr>
+      <td><a href="https://gitdo.net/"><strong>GitDo.net</strong></a></td>
+      <td>感谢 GitDo.net 赞助了本项目！GitDo.net 是一个 AI API 聚合中转平台，一个 API Key 即可调用 <strong>Claude、Gemini、GPT</strong> 等主流模型，国内直连、无需魔法、稳定高效，是企业级 AI 编程和应用的理想选择。<strong><a href="https://gitdo.net/">点击访问 GitDo.net</a></strong></td>
+    </tr>
+  </tbody>
+</table>
 
 </details>
 

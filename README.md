@@ -38,15 +38,26 @@ English | [简体中文](README.zh.md)
 <details open>
 <summary>Click to collapse</summary>
 
-[**GitDo.net**](https://gitdo.net/)
+<a href="https://www.dynadot.com/zh/black-friday-sale?utm_source=github&amp;utm_medium=display&amp;utm_campaign=Promo&amp;drefid=5656">
+  <img src="./assets/dynadot-logo.png" alt="Dynadot" width="220" />
+</a>
 
-Thanks to GitDo.net for sponsoring this project! GitDo.net is an AI API aggregation platform — one API Key for **Claude, Gemini, GPT** and other major models. Direct connection, no proxy needed, stable and efficient. An ideal choice for enterprise-grade AI programming. **[Visit GitDo.net](https://gitdo.net/)**
+Dynadot是ICANN认证，域名保有量全球前五的域名注册商，首屈一指的国际域名交易平台。为所有用户提供以域名为中心的域名注册，域名交易，域名管理，以及企业邮箱及建站服务。为所有用户提供多种域名优惠，并支持免费提交域名抢注需求。[Dynadot黑五活动](https://www.dynadot.com/zh/black-friday-sale?utm_source=github&utm_medium=display&utm_campaign=Promo&drefid=5656)正式上线！探索我们的官方优惠页面，个位数价格注册域名，五折购入建站工具与专业版邮箱。
 
 ---
 
-|                                                                     |                                                                                                                                                                                                                                             |
-| ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [**Token能量站**](https://factory.pub/register?aff=3rXc)            | Thanks to Token能量站 (Factory.pub) for sponsoring this project! Providing API relay for **GPT, Grok, Claude** and other major models — stable, reliable, and affordable. **[Register here](https://factory.pub/register?aff=3rXc)**        |
+<table>
+  <tbody>
+    <tr>
+      <td><a href="https://factory.pub/register?aff=3rXc"><strong>Token能量站</strong></a></td>
+      <td>Thanks to Token能量站 (Factory.pub) for sponsoring this project! Providing API relay for <strong>GPT, Grok, Claude</strong> and other major models — stable, reliable, and affordable. <strong><a href="https://factory.pub/register?aff=3rXc">Register here</a></strong></td>
+    </tr>
+    <tr>
+      <td><a href="https://gitdo.net/"><strong>GitDo.net</strong></a></td>
+      <td>Thanks to GitDo.net for sponsoring this project! GitDo.net is an AI API aggregation platform — one API Key for <strong>Claude, Gemini, GPT</strong> and other major models. Direct connection, no proxy needed, stable and efficient. An ideal choice for enterprise-grade AI programming. <strong><a href="https://gitdo.net/">Visit GitDo.net</a></strong></td>
+    </tr>
+  </tbody>
+</table>
 
 </details>
 
