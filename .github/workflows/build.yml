@@ -121,6 +121,21 @@ jobs:
         shell: bash
         run: echo "C:/Program Files (x86)/Inno Setup 6" >> $GITHUB_PATH
 
+      - name: Setup MSVC (Windows)
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Build native system_loopback library
+        shell: bash
+        run: |
+          if [ "${{ runner.os }}" = "macOS" ]; then
+            python3 scripts/build_system_loopback.py --arch "${{ matrix.mac_arch }}"
+          elif [ "${{ runner.os }}" = "Windows" ]; then
+            python scripts/build_system_loopback.py --arch x64
+          else
+            python3 scripts/build_system_loopback.py
+          fi
+
       - name: Install Python dependencies
         shell: bash
         run: |
