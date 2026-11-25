@@ -306,10 +306,70 @@ jobs:
           done
           ls -lh dist/release
 
-      - name: Upload to GitHub Release
-        uses: softprops/action-gh-release@v2
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
         with:
-          files: dist/release/*
-          fail_on_unmatched_files: true
+          name: release-${{ matrix.platform }}
+          path: dist/release/*
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Publish Release Assets
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all platform artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          merge-multiple: true
+          path: dist/release
+
+      - name: List downloaded release assets
+        run: |
+          ls -lh dist/release
+          shopt -s nullglob
+          files=(dist/release/*)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "::error::未下载到任何发布产物"
+            exit 1
+          fi
+
+      - name: Upload assets to GitHub Release (with retry)
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          # 若 release.yml 仍在创建 Release，最多等待 30s；仍不存在则自动创建
+          for i in 1 2 3 4 5 6; do
+            if gh release view "$TAG" >/dev/null 2>&1; then
+              break
+            fi
+            if [ "$i" -eq 6 ]; then
+              gh release create "$TAG" --title "$TAG" --generate-notes
+            else
+              sleep 5
+            fi
+          done
+
+          # 单线程逐文件上传并带指数退避重试，避免多 job 并发写入触发 GitHub API 500
+          for f in dist/release/*; do
+            echo "Uploading $f ..."
+            ok=0
+            for attempt in 1 2 3 4; do
+              if gh release upload "$TAG" "$f" --clobber; then
+                ok=1
+                break
+              fi
+              delay=$((attempt * 5))
+              echo "::warning::上传 $f 失败（第 ${attempt} 次），${delay}s 后重试..."
+              sleep "$delay"
+            done
+            if [ "$ok" -ne 1 ]; then
+              echo "::error::上传 $f 连续失败"
+              exit 1
+            fi
+          done
