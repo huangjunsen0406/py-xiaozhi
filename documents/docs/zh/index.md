@@ -21,14 +21,14 @@ features:
     details: 支持语音输入与识别，实现智能人机交互，提供自然流畅的对话体验。采用异步架构设计，支持实时音频处理和低延迟响应。
   - title: 视觉多模态
     details: 支持图像识别和处理，提供多模态交互能力，理解图像内容。集成OpenCV摄像头处理，支持实时视觉分析。
-  - title: MCP工具服务器
-    details: 基于JSON-RPC 2.0协议的模块化工具系统，内置音乐播放、八字命理等丰富功能，可动态扩展工具插件。
-  - title: IoT 设备集成
-    details: 采用Thing抽象模式设计，支持智能家居设备控制，包括灯光、音量、温度传感器等，集成Home Assistant智能家居平台，可轻松扩展。
-  - title: 高性能音频处理
-    details: 基于Opus编解码的实时音频传输，支持智能重采样技术，5ms音频帧间隔处理，确保低延迟高质量的音频体验。
-  - title: 跨平台支持
-    details: 兼容Windows 10+、macOS 10.15+和Linux系统，支持GUI和CLI双模式运行，自适应不同平台的音频设备和系统接口。
+  - title: MCP 工具与外挂生态
+    details: 基于 JSON-RPC 2.0 协议的模块化工具系统，内置系统音量/应用、摄像头、截图与天气工具；支持从设置页直接导入 ZIP / 目录外挂插件及子进程隔离运行。
+  - title: 通用媒体播放底座
+    details: 音频层（AudioMixer + AudioDecoder）与通用 MediaPlayer 彻底解耦，自动处理 TTS 语音焦点与闪避；音频类外挂插件只需提供直链或本地文件即可播放。
+  - title: 低延迟音频与内置 AEC
+    details: 基于 Opus 编解码与 SoXR 重采样的实时语音链路，内置三端 WebRTC APM 回声消除，支持实时对话与随时打断。
+  - title: 跨平台多界面
+    details: 兼容 Windows 10+、macOS 10.15+ 和 Linux（含树莓派），统一 ViewPort 支持 GUI（PySide6/QML）、TUI（Textual）与 GPIO 三种交互界面。
 ---
 
 <style>

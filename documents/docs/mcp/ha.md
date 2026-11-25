@@ -187,8 +187,6 @@ When the control results do not meet expectations:
 **Known Issues:**
 
 - Light control may conflict with built-in screen control
-- Music control may conflict with built-in music functions
-- These issues will be resolved after the XiaoZhi server supports built-in tool selection next month
 
 ### 4. Debug Logs
 

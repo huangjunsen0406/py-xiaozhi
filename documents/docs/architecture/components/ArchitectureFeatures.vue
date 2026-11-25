@@ -22,7 +22,7 @@ const architectureFeatures = [
   },
   {
     title: 'Multi UI',
-    description: 'GUI / CLI / GPIO share one ViewPort',
+    description: 'GUI / TUI / GPIO share one ViewPort',
     icon: ShareIcon
   },
   {
@@ -31,8 +31,8 @@ const architectureFeatures = [
     icon: ArrowsRightLeftIcon
   },
   {
-    title: 'Plugins',
-    description: 'Audio, MCP, UI, shortcuts, wake word',
+    title: 'Plugin ecosystem',
+    description: 'Modular core plugins plus ZIP-installable external MCP plugins',
     icon: PuzzlePieceIcon
   },
   {

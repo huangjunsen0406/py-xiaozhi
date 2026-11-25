@@ -1,7 +1,7 @@
 <template>
   <div class="chart-container">
     <div ref="architectureChart" class="w-full h-[500px]"></div>
-    <p class="chart-description">核心架构：容器编排 → 插件 / 协议 / 音频 / 界面</p>
+    <p class="chart-description">核心架构：容器编排 → 插件 / 协议 / 音频与媒体 / MCP / 界面</p>
   </div>
 </template>
 
@@ -52,29 +52,36 @@ const createChartOption = (darkMode) => ({
         { name: 'EventBus', value: '事件总线', category: 0, symbolSize: 55 },
         { name: 'PluginManager', value: '插件', category: 1, symbolSize: 50 },
         { name: 'ProtocolManager', value: '协议', category: 1, symbolSize: 50 },
-        { name: 'AudioCodec', value: '音频', category: 1, symbolSize: 50 },
-        { name: 'MCP Server', value: 'MCP', category: 1, symbolSize: 50 },
-        { name: 'ViewPort', value: '界面', category: 1, symbolSize: 50 },
+        { name: 'AudioCodec', value: '音频与混音', category: 1, symbolSize: 50 },
+        { name: 'MediaPlayer', value: '通用媒体底座', category: 1, symbolSize: 48 },
+        { name: 'MCP Server', value: 'MCP 服务', category: 1, symbolSize: 50 },
+        { name: 'ViewPort', value: '统一界面层', category: 1, symbolSize: 50 },
         { name: 'WebSocket', value: 'WS', category: 2, symbolSize: 32 },
         { name: 'MQTT', value: 'MQTT', category: 2, symbolSize: 32 },
         { name: 'AudioPlugin', value: '音频插件', category: 2, symbolSize: 32 },
+        { name: 'AudioMixer / AEC', value: '混音与回声消除', category: 2, symbolSize: 32 },
         { name: 'UIPlugin', value: 'UI插件', category: 2, symbolSize: 32 },
-        { name: 'MCP工具', value: '工具', category: 2, symbolSize: 32 },
-        { name: 'Gui/Cli/Gpio', value: '界面实现', category: 2, symbolSize: 32 }
+        { name: '内置工具 / 外挂插件', value: 'MCP 工具与外挂', category: 2, symbolSize: 32 },
+        { name: 'GUI / TUI / GPIO', value: '界面实现', category: 2, symbolSize: 32 }
       ],
       links: [
         { source: 'ServiceContainer', target: 'EventBus' },
         { source: 'ServiceContainer', target: 'PluginManager' },
         { source: 'ServiceContainer', target: 'ProtocolManager' },
+        { source: 'ServiceContainer', target: 'MediaPlayer' },
         { source: 'PluginManager', target: 'AudioPlugin' },
         { source: 'PluginManager', target: 'UIPlugin' },
         { source: 'PluginManager', target: 'MCP Server' },
         { source: 'AudioPlugin', target: 'AudioCodec' },
+        { source: 'AudioCodec', target: 'AudioMixer / AEC' },
+        { source: 'MediaPlayer', target: 'AudioCodec' },
+        { source: 'MediaPlayer', target: 'EventBus' },
         { source: 'UIPlugin', target: 'ViewPort' },
-        { source: 'ViewPort', target: 'Gui/Cli/Gpio' },
+        { source: 'ViewPort', target: 'GUI / TUI / GPIO' },
         { source: 'ProtocolManager', target: 'WebSocket' },
         { source: 'ProtocolManager', target: 'MQTT' },
-        { source: 'MCP Server', target: 'MCP工具' },
+        { source: 'MCP Server', target: '内置工具 / 外挂插件' },
+        { source: '内置工具 / 外挂插件', target: 'MediaPlayer' },
         { source: 'EventBus', target: 'PluginManager' }
       ],
       categories: [

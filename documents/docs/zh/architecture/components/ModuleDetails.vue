@@ -76,33 +76,51 @@ const modules = [
     name: 'src/audio_codecs/',
     icon: DocumentIcon,
     features: [
-      'Opus 编解码与重采样',
-      '设备热刷新与热重载'
+      'Opus 编解码、SoXR 重采样与热重载',
+      '独立多轨 AudioMixer（TTS / 通知 / 背景流闪避）',
+      '通用 FFmpeg AudioDecoder，与音源彻底解耦'
     ]
   },
   {
     name: 'src/audio_processing/',
     icon: SpeakerXMarkIcon,
     features: [
-      '离线唤醒词检测',
-      '复用麦克风 PCM 流'
+      '内置 WebRTC APM 回声消除（预留 FarEndSource 扩展）',
+      '离线唤醒词检测（复用麦克风 PCM 流）'
+    ]
+  },
+  {
+    name: 'src/media/',
+    icon: BoltIcon,
+    features: [
+      '无音源依赖的通用 MediaPlayer 底座',
+      '自主 TTS Audio Focus（AEC 并行闪避 / 旁路暂停恢复）',
+      'URL 协议与请求头安全校验、owner_id 归属隔离'
+    ]
+  },
+  {
+    name: 'src/notifications/',
+    icon: LightBulbIcon,
+    features: [
+      '服务端单向通知流式解码与播报',
+      '通知字幕事件同步与打断管理'
     ]
   },
   {
     name: 'src/mcp/',
     icon: WrenchIcon,
     features: [
-      '音乐、摄像头、截图、音量等工具',
-      '容器注入注册；支持外挂插件',
-      '摄像头支持 USB 与树莓派 CSI'
+      '内置系统应用、音量、摄像头（USB/CSI）、截图、天气工具',
+      '外挂插件管理：ZIP/目录导入、子进程双向 RPC、受控 media_player',
+      '有外挂加载时按条件注册通用媒体播控工具（media.*）'
     ]
   },
   {
     name: 'src/ui/',
     icon: ComputerDesktopIcon,
     features: [
-      'GUI / CLI / GPIO 统一 ViewPort',
-      'PySide6 + QML 主界面与设置',
+      'GUI / TUI / GPIO 统一 ViewPort',
+      'PySide6 + QML 主界面与设置（含外挂安装与管理）',
       '冷启动不抢前台（macOS）'
     ]
   },

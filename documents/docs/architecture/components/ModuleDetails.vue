@@ -76,33 +76,51 @@ const modules = [
     name: 'src/audio_codecs/',
     icon: DocumentIcon,
     features: [
-      'Opus codec and resampling',
-      'Hot refresh and reload of devices'
+      'Opus codec, SoXR resampling, and hot reload',
+      'Standalone multi-track AudioMixer (TTS / notify / media ducking)',
+      'Generic FFmpeg AudioDecoder decoupled from audio sources'
     ]
   },
   {
     name: 'src/audio_processing/',
     icon: SpeakerXMarkIcon,
     features: [
-      'Offline wake-word detection',
-      'Reuses microphone PCM'
+      'Built-in WebRTC APM echo cancellation (extensible FarEndSource)',
+      'Offline wake-word detection reusing microphone PCM'
+    ]
+  },
+  {
+    name: 'src/media/',
+    icon: BoltIcon,
+    features: [
+      'Source-agnostic MediaPlayer foundation',
+      'Autonomous TTS audio focus (AEC ducking / bypass pause-resume)',
+      'URL/header validation and owner_id isolation'
+    ]
+  },
+  {
+    name: 'src/notifications/',
+    icon: LightBulbIcon,
+    features: [
+      'One-way server notification streaming playback',
+      'Notification subtitle sync and interruption handling'
     ]
   },
   {
     name: 'src/mcp/',
     icon: WrenchIcon,
     features: [
-      'Music, camera, screenshot, volume, and more',
-      'Container injection; optional external plugins',
-      'Camera: USB and Raspberry Pi CSI'
+      'Built-in app, volume, camera (USB/CSI), screenshot, weather tools',
+      'External plugins: ZIP/folder import, subprocess RPC, MediaPlayerFacade',
+      'Conditional generic media transport tools (media.*) when plugins load'
     ]
   },
   {
     name: 'src/ui/',
     icon: ComputerDesktopIcon,
     features: [
-      'GUI / CLI / GPIO via ViewPort',
-      'PySide6 + QML main window and settings',
+      'GUI / TUI / GPIO via unified ViewPort',
+      'PySide6 + QML main window and settings (with plugin installer)',
       'Cold start does not steal focus (macOS)'
     ]
   },
