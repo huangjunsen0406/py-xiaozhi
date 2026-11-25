@@ -23,25 +23,29 @@ _container: "ServiceContainer | None" = None
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     """Parse only the supplied arguments, or sys.argv for a command-line launch."""
     from src.constants.system import SystemConstants
+    from src.i18n import set_language, t
+
+    if env_lang := os.environ.get("XIAOZHI_LANG"):
+        set_language(env_lang)
 
     parser = argparse.ArgumentParser(description=SystemConstants.APP_DISPLAY_NAME)
     parser.add_argument(
         "--mode",
         choices=["gui", "tui", "gpio"],
         default="gui",
-        help="运行模式（默认 gui）：gui / tui(全屏终端) / gpio(仅Linux)",
+        help=t("cli.mode_help"),
     )
     parser.add_argument(
         "--protocol",
         choices=["mqtt", "websocket"],
         default="websocket",
         metavar="PROTOCOL",
-        help="通信协议：mqtt 或 websocket（默认 websocket）",
+        help=t("cli.protocol_help"),
     )
     parser.add_argument(
         "--skip-activation",
         action="store_true",
-        help="跳过激活流程，直接启动应用（仅用于调试）",
+        help=t("cli.skip_activation_help"),
     )
     return parser.parse_args(argv)
 
@@ -234,6 +238,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         from src.utils.config_manager import initialize_config
 
         config = initialize_config()
+        from src.i18n import apply_language_from_config
+
+        apply_language_from_config(config)
         from src.logging import load_logging_config, setup_logging
 
         logging_config = load_logging_config(config)

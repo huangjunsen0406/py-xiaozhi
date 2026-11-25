@@ -78,6 +78,7 @@ class ConfigManager:
         "SYSTEM_OPTIONS": {
             "CLIENT_ID": None,
             "DEVICE_ID": None,
+            "LANGUAGE": "auto",  # auto | zh_CN | en_US | vi_VN
             "WINDOW_SIZE_MODE": "default",
             "NETWORK": {
                 "OTA_VERSION_URL": "https://api.tenclass.net/xiaozhi/ota/",
@@ -483,13 +484,15 @@ class ConfigManager:
         文件配置先原子写盘，再加载运行时配置；加载失败时仅恢复运行时，
         保留已经写入的磁盘内容。提交不会应用 PATHS 覆盖或迁移目录。
         """
+        from src.i18n import t
+
         memory_only = self._memory_only
         try:
             candidate = copy.deepcopy(draft)
             previous = None if memory_only else copy.deepcopy(self._config)
         except Exception as e:
             logger.error("配置草稿复制失败: %s", e, exc_info=True)
-            return f"配置草稿复制失败: {e}"
+            return t("settings.draft_copy_failed", error=e)
 
         if memory_only:
             self._config = candidate
@@ -497,10 +500,10 @@ class ConfigManager:
 
         try:
             if not self._save_config(candidate):
-                return "保存配置失败，请检查文件权限和磁盘空间"
+                return t("settings.save_disk_failed")
         except Exception as e:
             logger.error("保存配置失败: %s", e, exc_info=True)
-            return f"保存配置失败: {e}"
+            return t("settings.save_failed", error=e)
 
         try:
             if self.reload_config(apply_paths=False, strict=True):
@@ -508,9 +511,9 @@ class ConfigManager:
         except Exception as e:
             logger.error("草稿写入后运行时加载失败: %s", e, exc_info=True)
             self._config = previous
-            return f"配置已写入，但运行时加载失败: {e}"
+            return t("settings.reload_failed", error=e)
         self._config = previous
-        return "配置已写入，但运行时加载失败，请重试或重启应用"
+        return t("settings.reload_failed_retry")
 
     @_synchronized
     def reload_config(

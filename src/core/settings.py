@@ -29,6 +29,9 @@ class SettingsApplier:
         self._config = config
         self._event_bus = event_bus
         self._reconnect_snapshot = self._reconnect_values()
+        self._language_snapshot = self._config.get_config(
+            "SYSTEM_OPTIONS.LANGUAGE", "auto"
+        )
         self._lock = asyncio.Lock()
 
     def _reconnect_values(self) -> dict:
@@ -40,7 +43,13 @@ class SettingsApplier:
         return values
 
     async def apply(self) -> None:
+        from src.i18n import apply_language_from_config
+
         async with self._lock:
+            current_lang = self._config.get_config("SYSTEM_OPTIONS.LANGUAGE", "auto")
+            if current_lang != self._language_snapshot:
+                apply_language_from_config(self._config)
+                self._language_snapshot = current_lang
             current = self._reconnect_values()
             await self._event_bus.emit(Events.CONFIG_CHANGED)
             if current != self._reconnect_snapshot:
