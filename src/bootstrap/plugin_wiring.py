@@ -14,11 +14,13 @@ if TYPE_CHECKING:
 
 def bind_shared_services(container: ServiceContainer) -> None:
     from src.mcp.mcp_server import McpServer
-    from src.mcp.tools.music.music_player import MusicPlayer
+    from src.media.media_player import MediaPlayer
     from src.notifications.notification_player import NotificationPlayer
 
     container.mcp_server = McpServer(config=container.config)
-    container.music_player = MusicPlayer(config=container.config)
+    container.media_player = MediaPlayer(
+        config=container.config, audio_config=container.audio_config
+    )
     container.notification_player = NotificationPlayer(
         audio_config=container.audio_config
     )
@@ -33,7 +35,7 @@ def unbind_shared_services(container: ServiceContainer) -> None:
         container.event_bus.off(event, handler)
     container._builtin_subscriptions = []
     container.session.set_notification_player(None)
-    container.music_player = None
+    container.media_player = None
     container.mcp_server = None
     container.notification_player = None
 
@@ -84,9 +86,11 @@ async def setup_plugins(
             return tuple(tool.name for tool in server.tools)
 
         audio = AudioPlugin()
+        if container.media_player is not None:
+            container.media_player.attach(container.event_bus, ctx)
         container.plugins.register(
             audio,
-            McpPlugin(server=container.mcp_server, music_player=container.music_player),
+            McpPlugin(server=container.mcp_server, media_player=container.media_player),
             WakeWordPlugin(audio=audio),
             UIPlugin(
                 mode=mode,
@@ -114,8 +118,8 @@ def register_cleanup_resources(container: ServiceContainer) -> None:
 
     if container.mcp_server is not None:
         pool.register("mcp.server", container.mcp_server.detach)
-    if container.music_player is not None:
-        pool.register("music_player", container.music_player.detach)
+    if container.media_player is not None:
+        pool.register("media_player", container.media_player.detach)
     if container.notification_player is not None:
         player = container.notification_player
 

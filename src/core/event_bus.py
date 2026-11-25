@@ -35,7 +35,7 @@ class Events:
     # 音频通道
     AUDIO_CHANNEL_OPENED = "audio_channel_opened"
     AUDIO_CHANNEL_CLOSED = "audio_channel_closed"
-    # AudioCodec 生命周期（AudioPlugin → MusicPlayer 等订阅者，避免直连 set）
+    # AudioCodec 生命周期（AudioPlugin → 订阅者，避免直连 set）
     AUDIO_CODEC_CHANGED = "audio_codec_changed"
     # 请求重新枚举音频设备（设置页刷新；需先停流再 PortAudio reinit）
     # payload: 可选 asyncio.Future，完成时 set_result(list|dict|None)
@@ -44,16 +44,12 @@ class Events:
     # 系统级提示（降级模式横幅等，payload: str）
     SYSTEM_NOTICE = "system_notice"
 
-    # 音乐播放器事件
-    MUSIC_STATE_CHANGED = "music_state_changed"  # 播放状态变化
-    MUSIC_LYRICS_UPDATE = "music_lyrics_update"  # 歌词更新
+    # 通用媒体播放器事件
+    MEDIA_STATE_CHANGED = "media_state_changed"  # 播放状态变化
+    MEDIA_SUBTITLE_UPDATE = "media_subtitle_update"  # 副标题/歌词更新
 
     # 服务端单向通知字幕（payload: str）
     NOTIFICATION_SUBTITLE = "notification_subtitle"
-
-    # 音乐控制命令（从外部控制 MusicPlayer）
-    MUSIC_PAUSE_REQUEST = "music_pause_request"  # 请求暂停（如 TTS）
-    MUSIC_RESUME_REQUEST = "music_resume_request"  # 请求恢复
 
     # UI 操作（界面 → 插件）
     UI_BUTTON_PRESS = "ui_button_press"  # 手动：按下
