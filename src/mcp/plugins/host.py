@@ -12,12 +12,13 @@ from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
 from src.logging import get_logger
+from src.mcp.plugins.media_facade import PluginLifecycle
 from src.mcp.tooling import McpTool, Property, PropertyList, PropertyType
 
 logger = get_logger()
 
-# 默认允许的 host.get 名称（music_player 等需配置显式加入）
-DEFAULT_ALLOW_GET = frozenset({"config_readonly", "logger"})
+# 默认允许的 host.get 名称（media_player 等需配置显式加入）
+DEFAULT_ALLOW_GET = frozenset({"config_readonly", "logger", "data_dir"})
 
 
 def config_readonly_snapshot(config: Any) -> dict[str, Any]:
@@ -97,23 +98,34 @@ class McpHost:
         add_tool: Callable[[McpTool], None],
         *,
         capabilities: dict[str, Any] | None = None,
+        capability_factories: dict[str, Callable[[str, PluginLifecycle], Any]] | None = None,
         allow_get: Sequence[str] | None = None,
         plugin_id: str | None = None,
+        lifecycle: PluginLifecycle | None = None,
     ) -> None:
         self._add_tool = add_tool
         self._capabilities = dict(capabilities or {})
+        self._capability_factories = dict(capability_factories or {})
+        self._resolved_caps: dict[str, Any] = {}
         if "config_readonly" in self._capabilities:
             self._capabilities["config_readonly"] = ReadOnlyConfig(
                 self._capabilities["config_readonly"]
             )
-        self._allow_get = frozenset(allow_get) if allow_get is not None else DEFAULT_ALLOW_GET
+        self._allow_get = (
+            frozenset(allow_get) if allow_get is not None else DEFAULT_ALLOW_GET
+        )
         self._plugin_id = plugin_id or "unknown"
+        self._lifecycle = lifecycle or PluginLifecycle(self._plugin_id)
         self._registered_names: list[str] = []
         self._registration_open = True
 
     @property
     def plugin_id(self) -> str:
         return self._plugin_id
+
+    @property
+    def lifecycle(self) -> PluginLifecycle:
+        return self._lifecycle
 
     @property
     def registered_tool_names(self) -> list[str]:
@@ -127,15 +139,14 @@ class McpHost:
             raise ValueError(f"Tool name conflict: {tool.name}")
         self._add_tool(tool)
         self._registered_names.append(tool.name)
-        logger.info(
-            "[MCP插件:%s] 注册工具: %s", self._plugin_id, tool.name
-        )
+        logger.info("[MCP插件:%s] 注册工具: %s", self._plugin_id, tool.name)
 
     def close_registration(self) -> None:
         self._registration_open = False
 
     def get(self, name: str) -> Any:
         """按白名单返回宿主能力；未授权或未提供则 None."""
+        self._lifecycle.assert_active()
         if name not in self._allow_get:
             logger.warning(
                 "[MCP插件:%s] host.get(%r) 不在白名单 %s",
@@ -146,6 +157,20 @@ class McpHost:
             return None
         if name == "logger":
             return get_logger()
+        if name == "data_dir":
+            if "data_dir" not in self._resolved_caps:
+                from src.utils.resource_finder import get_mcp_plugin_data_dir
+
+                self._resolved_caps["data_dir"] = get_mcp_plugin_data_dir(
+                    self._plugin_id
+                )
+            return self._resolved_caps["data_dir"]
+        if name in self._capability_factories:
+            if name not in self._resolved_caps:
+                self._resolved_caps[name] = self._capability_factories[name](
+                    self._plugin_id, self._lifecycle
+                )
+            return self._resolved_caps[name]
         return self._capabilities.get(name)
 
     def tool(

@@ -1,0 +1,21 @@
+{
+  "id": "demo_media_plugin",
+  "name": "示例媒体播放插件",
+  "version": "1.0.0",
+  "description": "演示如何通过 host.get('media_player') 与 host.get('data_dir') 播放任意音频流或本地文件",
+  "api_version": 1,
+  "runtime": "python-subprocess",
+  "entry": "plugin:register",
+  "tool_name_prefix": "demo_media.",
+  "enabled_by_default": true,
+  "tools": [
+    {
+      "name": "demo_media.play_url",
+      "title": "播放音频地址"
+    },
+    {
+      "name": "demo_media.list_history",
+      "title": "最近播放记录"
+    }
+  ]
+}

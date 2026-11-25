@@ -96,6 +96,9 @@ class McpServer:
             self.add_tools_atomic, self.remove_tools_by_names
         )
         self._common_tool_names: set[str] = set()
+        self._media_transport_tool_names: set[str] = set()
+        self._media_player = None
+        self._last_loaded_plugins: list = []
 
     def set_send_callback(self, callback: Callable | None):
         """
@@ -156,49 +159,90 @@ class McpServer:
         """兼容诊断读取；归属仅由运行时安装记录生成。"""
         return self._plugin_runtime.tool_owner
 
+    @property
+    def last_loaded_plugins(self) -> list:
+        """最近一次扫描加载外挂的诊断记录."""
+        return list(self._last_loaded_plugins)
+
     def unload_plugin(self, plugin_id: str) -> int:
         """卸载插件工具和 worker，零工具插件也使用同一路径。"""
-        return self._plugin_runtime.unload(plugin_id)
+        removed = self._plugin_runtime.unload(plugin_id)
+        self._sync_conditional_media_tools(
+            has_active_external=bool(self._plugin_runtime._installations)
+        )
+        return removed
 
     def _unload_external_plugins(self) -> None:
         self._plugin_runtime.unload_all()
+        self._remove_conditional_media_tools()
+
+    def _remove_conditional_media_tools(self) -> None:
+        if self._media_transport_tool_names:
+            self.remove_tools_by_names(self._media_transport_tool_names)
+            self._media_transport_tool_names.clear()
+
+    def _media_player_authorized(self) -> bool:
+        allow = self.config.get_config("MCP_PLUGINS.ALLOW_HOST_GET", [])
+        return isinstance(allow, list) and "media_player" in allow
+
+    def _sync_conditional_media_tools(self, *, has_active_external: bool) -> None:
+        """仅当已授权 media_player 且存在活跃外挂时，注册 5 个通用播控工具."""
+        should_expose = (
+            self._media_player is not None
+            and self._media_player_authorized()
+            and has_active_external
+        )
+        if not should_expose:
+            self._remove_conditional_media_tools()
+            return
+        if self._media_transport_tool_names:
+            return
+        from src.mcp.tools.media import register_media_tools
+
+        staged: list[McpTool] = []
+        register_media_tools(staged.append, self._media_player)
+        existing = {tool.name for tool in self.tools}
+        to_add = [tool for tool in staged if tool.name not in existing]
+        if to_add:
+            self.add_tools_atomic(to_add)
+            self._media_transport_tool_names = {tool.name for tool in to_add}
 
     def reload_external_plugins(
-        self, music_player=None, volume_controller=None
+        self, media_player=None, volume_controller=None
     ) -> list:
-        """仅重载外挂：先卸掉已知外挂工具，再按配置扫描加载.
-
-        注意：不会重新 register 内置工具；内置应已在 tools 中。
-        """
+        """仅重载外挂：先卸掉已知外挂工具，再按配置扫描加载并同步条件播控工具."""
         self._unload_external_plugins()
+        if media_player is not None:
+            self._media_player = media_player
+        active_player = self._media_player
 
         from src.mcp.plugins.loader import load_mcp_plugins_from_config
+        from src.mcp.plugins.media_facade import MediaPlayerFacade
 
         capabilities = {"config_readonly": self.config}
-        if music_player is not None:
-            capabilities["music_player"] = music_player
+        capability_factories = {}
+        if active_player is not None:
+            capability_factories["media_player"] = (
+                lambda plugin_id, lifecycle, player=active_player: MediaPlayerFacade(
+                    player, plugin_id=plugin_id, lifecycle=lifecycle
+                )
+            )
 
-        return load_mcp_plugins_from_config(
+        loaded = load_mcp_plugins_from_config(
             self.add_tool,
             config=self.config,
             capabilities=capabilities,
+            capability_factories=capability_factories,
             runtime=self._plugin_runtime,
         )
+        self._last_loaded_plugins = list(loaded)
+        has_active_external = any(not item.error for item in loaded)
+        self._sync_conditional_media_tools(has_active_external=has_active_external)
+        return loaded
 
-    def register_builtin_tools(self, music_player=None, volume_controller=None):
-        """
-        添加通用工具（全部经 register_* 显式挂载）.
-
-        music_player: 容器注入的 MusicPlayer；提供时注册音乐工具。
-        volume_controller: 可选注入的 VolumeController；未提供时由 register 内创建。
-        camera / screenshot 由 McpPlugin 在 setup 中单独 register。
-        """
-        # 先暂存新工具，注册失败时保留现有工具和外挂会话。
+    def register_builtin_tools(self, volume_controller=None):
+        """添加通用内置工具（零媒体/音源耦合）."""
         common_tools: list[McpTool] = []
-        if music_player is not None:
-            from src.mcp.tools.music import register_music_tools
-
-            register_music_tools(common_tools.append, music_player)
 
         from src.mcp.tools.app import register_app_tools
         from src.mcp.tools.volume import register_volume_tools
@@ -220,11 +264,11 @@ class McpServer:
         self.tools = common_tools + preserved
         self._common_tool_names = {tool.name for tool in common_tools}
 
-    def add_common_tools(self, music_player=None, volume_controller=None):
+    def add_common_tools(self, media_player=None, volume_controller=None):
         """兼容旧调用；新装配分别注册内置工具和加载外挂。"""
-        self.register_builtin_tools(music_player, volume_controller)
+        self.register_builtin_tools(volume_controller)
         try:
-            return self.reload_external_plugins(music_player, volume_controller)
+            return self.reload_external_plugins(media_player, volume_controller)
         except Exception as e:
             logger.error(f"加载外挂 MCP 插件失败: {e}", exc_info=True)
             return []

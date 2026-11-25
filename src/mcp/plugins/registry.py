@@ -12,6 +12,7 @@ from src.mcp.tooling import McpTool
 logger = get_logger()
 
 if TYPE_CHECKING:
+    from src.mcp.plugins.media_facade import PluginLifecycle
     from src.mcp.plugins.subprocess_runtime import PluginSubprocessSession
 
 
@@ -19,6 +20,7 @@ if TYPE_CHECKING:
 class PluginInstallation:
     tool_names: tuple[str, ...]
     session: PluginSubprocessSession | None = None
+    lifecycle: PluginLifecycle | None = None
 
 
 class PluginRuntime:
@@ -51,6 +53,7 @@ class PluginRuntime:
         tools: list[McpTool],
         *,
         session: PluginSubprocessSession | None = None,
+        lifecycle: PluginLifecycle | None = None,
     ) -> None:
         """整批工具提交成功后才接管安装；失败的 session 仍由 loader 回收。"""
         if self.has_plugin(plugin_id):
@@ -60,7 +63,7 @@ class PluginRuntime:
             raise ValueError(f"插件工具名称冲突: {plugin_id}")
         if set(names) & self.tool_owner.keys():
             raise ValueError(f"插件工具归属冲突: {plugin_id}")
-        installation = PluginInstallation(names, session)
+        installation = PluginInstallation(names, session, lifecycle)
         self._add_tools_atomic(tools)
         self._installations[plugin_id] = installation
 
@@ -69,6 +72,8 @@ class PluginRuntime:
         if installation is None:
             return 0
         try:
+            if installation.lifecycle is not None:
+                installation.lifecycle.revoke()
             return self._remove_tools_by_names(set(installation.tool_names))
         finally:
             if installation.session is not None:

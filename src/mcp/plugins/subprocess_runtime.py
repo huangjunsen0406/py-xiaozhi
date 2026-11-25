@@ -7,11 +7,13 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import json
 import os
 import subprocess
 import sys
 import threading
+import time
 from pathlib import Path
 from typing import Any
 
@@ -39,6 +41,8 @@ class PluginSubprocessSession:
         platform_tag: str,
         allow_get: list[str],
         capabilities: dict[str, Any],
+        rpc_capabilities: dict[str, Any] | None = None,
+        lifecycle: Any | None = None,
         python_executable: str | None = None,
         call_timeout: float = DEFAULT_CALL_TIMEOUT,
     ) -> None:
@@ -48,6 +52,8 @@ class PluginSubprocessSession:
         self.platform_tag = platform_tag
         self.allow_get = list(allow_get)
         self.capabilities = dict(capabilities)
+        self._rpc_capabilities = dict(rpc_capabilities or {})
+        self._lifecycle = lifecycle
         self.python_executable = python_executable or sys.executable
         self._frozen_worker = (
             bool(getattr(sys, "frozen", False)) and python_executable is None
@@ -57,6 +63,7 @@ class PluginSubprocessSession:
         self._id = 0
         self._lock = threading.Lock()
         self._call_lock = asyncio.Lock()
+        self._active_loop: asyncio.AbstractEventLoop | None = None
         self._tools_meta: list[dict[str, Any]] = []
 
     @property
@@ -98,6 +105,9 @@ class PluginSubprocessSession:
         ).start()
 
         app_root = str(get_app_root())
+        remote_caps = sorted(
+            name for name in self._rpc_capabilities if name in self.allow_get
+        )
         result = self._request(
             "bootstrap",
             {
@@ -107,6 +117,7 @@ class PluginSubprocessSession:
                 "platform_tag": self.platform_tag,
                 "allow_get": self.allow_get,
                 "capabilities": self._json_safe_caps(self.capabilities),
+                "remote_caps": remote_caps,
                 "app_root": app_root,
             },
             timeout=BOOTSTRAP_TIMEOUT,
@@ -124,20 +135,21 @@ class PluginSubprocessSession:
         return tools
 
     def _json_safe_caps(self, caps: dict[str, Any]) -> dict[str, Any]:
-        """capabilities 须可 JSON 序列化；对象类能力子进程无法使用，仅传快照."""
+        """capabilities 须可 JSON 序列化；受控对象能力通过 host_call RPC 代理."""
         out: dict[str, Any] = {}
         for k, v in caps.items():
             if k not in self.allow_get:
                 continue
             if k == "config_readonly":
                 out[k] = config_readonly_snapshot(v)
+            elif isinstance(v, Path):
+                out[k] = str(v)
             elif isinstance(v, (dict, list, str, int, float, bool)) or v is None:
                 try:
                     # JSON roundtrip copies nested containers as well.
                     out[k] = json.loads(json.dumps(v))
                 except (TypeError, ValueError):
                     pass
-            # music_player 等对象能力不跨进程传递。
         return out
 
     def _drain_stderr(self) -> None:
@@ -157,13 +169,72 @@ class PluginSubprocessSession:
         return self._id
 
     def _request(
-        self, method: str, params: dict[str, Any], *, timeout: float
+        self,
+        method: str,
+        params: dict[str, Any],
+        *,
+        timeout: float,
     ) -> dict[str, Any]:
         with self._lock:
             return self._request_locked(method, params, timeout=timeout)
 
+    def _read_line_with_timeout(
+        self, proc: subprocess.Popen[str], *, timeout: float, method: str
+    ) -> str:
+        line_holder: list[str | None] = [None]
+        err_holder: list[BaseException | None] = [None]
+
+        def _read() -> None:
+            try:
+                line_holder[0] = proc.stdout.readline()
+            except BaseException as e:  # noqa: BLE001
+                err_holder[0] = e
+
+        t = threading.Thread(target=_read, daemon=True)
+        t.start()
+        t.join(timeout=max(0.05, timeout))
+        if t.is_alive():
+            self.terminate()
+            raise TimeoutError(
+                f"插件 {self.plugin_id} 调用 {method} 超时（{timeout:.1f}s）"
+            )
+        if err_holder[0]:
+            raise RuntimeError(f"读子进程失败: {err_holder[0]}") from err_holder[0]
+        line = line_holder[0]
+        if not line:
+            raise RuntimeError(f"插件子进程无响应: {self.plugin_id}")
+        return line
+
+    def _execute_host_call(
+        self,
+        cap_name: str,
+        action: str,
+        kwargs: dict[str, Any],
+        *,
+        timeout: float,
+        event_loop: asyncio.AbstractEventLoop | None,
+    ) -> Any:
+        if self._lifecycle is not None:
+            self._lifecycle.assert_active()
+        if cap_name not in self.allow_get:
+            raise PermissionError(f"宿主能力未授权: {cap_name}")
+        cap = self._rpc_capabilities.get(cap_name)
+        if cap is None or not hasattr(cap, "dispatch_rpc"):
+            raise RuntimeError(f"宿主能力不支持跨进程调用: {cap_name}")
+        res = cap.dispatch_rpc(action, kwargs)
+        if inspect.isawaitable(res):
+            if event_loop is not None and event_loop.is_running():
+                fut = asyncio.run_coroutine_threadsafe(res, event_loop)
+                return fut.result(timeout=max(0.1, timeout))
+            return asyncio.run(res)
+        return res
+
     def _request_locked(
-        self, method: str, params: dict[str, Any], *, timeout: float
+        self,
+        method: str,
+        params: dict[str, Any],
+        *,
+        timeout: float,
     ) -> dict[str, Any]:
         proc = self._proc
         if proc is None or proc.stdin is None or proc.stdout is None:
@@ -184,49 +255,65 @@ class PluginSubprocessSession:
         except Exception as e:
             raise RuntimeError(f"写入子进程失败: {e}") from e
 
-        # 同步读一行（带超时）
-        line_holder: list[str | None] = [None]
-        err_holder: list[BaseException | None] = [None]
-
-        def _read() -> None:
+        deadline = time.monotonic() + timeout
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                self.terminate()
+                raise TimeoutError(
+                    f"插件 {self.plugin_id} 调用 {method} 超时（{timeout}s）"
+                )
+            line = self._read_line_with_timeout(proc, timeout=remaining, method=method)
             try:
-                line_holder[0] = proc.stdout.readline()
-            except BaseException as e:  # noqa: BLE001
-                err_holder[0] = e
+                msg = json.loads(line)
+            except Exception as e:
+                raise RuntimeError(f"子进程返回非 JSON: {line[:200]}") from e
 
-        t = threading.Thread(target=_read, daemon=True)
-        t.start()
-        t.join(timeout=timeout)
-        if t.is_alive():
-            self.terminate()
-            raise TimeoutError(
-                f"插件 {self.plugin_id} 调用 {method} 超时（{timeout}s）"
-            )
-        if err_holder[0]:
-            raise RuntimeError(f"读子进程失败: {err_holder[0]}") from err_holder[0]
-        line = line_holder[0]
-        if not line:
-            raise RuntimeError(f"插件子进程无响应: {self.plugin_id}")
+            # 子进程反向宿主能力调用（host_call）
+            if msg.get("method") == "host_call":
+                call_id = msg.get("id")
+                call_params = msg.get("params") or {}
+                try:
+                    value = self._execute_host_call(
+                        str(call_params.get("cap") or ""),
+                        str(call_params.get("action") or ""),
+                        dict(call_params.get("kwargs") or {}),
+                        timeout=max(0.1, deadline - time.monotonic()),
+                        event_loop=self._active_loop,
+                    )
+                    reply = {
+                        "id": call_id,
+                        "type": "host_response",
+                        "result": value,
+                    }
+                except Exception as exc:
+                    reply = {
+                        "id": call_id,
+                        "type": "host_response",
+                        "error": {"message": str(exc)},
+                    }
+                try:
+                    proc.stdin.write(json.dumps(reply, ensure_ascii=False) + "\n")
+                    proc.stdin.flush()
+                except Exception as e:
+                    raise RuntimeError(f"回写 host_response 失败: {e}") from e
+                continue
 
-        try:
-            msg = json.loads(line)
-        except Exception as e:
-            raise RuntimeError(f"子进程返回非 JSON: {line[:200]}") from e
-
-        if msg.get("id") != req_id:
-            raise RuntimeError(
-                f"子进程响应 id 不匹配: expect={req_id} got={msg.get('id')}"
-            )
-        if "error" in msg and msg["error"]:
-            err = msg["error"]
-            message = err.get("message") if isinstance(err, dict) else str(err)
-            raise RuntimeError(message or "worker error")
-        result = msg.get("result")
-        if not isinstance(result, dict):
-            raise RuntimeError(f"子进程 result 无效: {result!r}")
-        return result
+            if msg.get("id") != req_id:
+                raise RuntimeError(
+                    f"子进程响应 id 不匹配: expect={req_id} got={msg.get('id')}"
+                )
+            if "error" in msg and msg["error"]:
+                err = msg["error"]
+                message = err.get("message") if isinstance(err, dict) else str(err)
+                raise RuntimeError(message or "worker error")
+            result = msg.get("result")
+            if not isinstance(result, dict):
+                raise RuntimeError(f"子进程 result 无效: {result!r}")
+            return result
 
     async def call_tool(self, name: str, arguments: dict[str, Any]) -> Any:
+        self._active_loop = asyncio.get_running_loop()
         async with self._call_lock:
             request = asyncio.create_task(
                 asyncio.to_thread(self.call_tool_sync, name, arguments),

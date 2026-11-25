@@ -15,9 +15,14 @@ from typing import Any
 from src.constants.system import SystemConstants
 from src.logging import get_logger
 from src.mcp.plugins.host import DEFAULT_ALLOW_GET, McpHost
+from src.mcp.plugins.media_facade import PluginLifecycle
 from src.mcp.plugins.registry import PluginRuntime
 from src.mcp.tooling import McpTool
-from src.utils.resource_finder import get_user_data_dir
+from src.utils.resource_finder import (
+    get_mcp_plugin_data_dir,
+    get_mcp_plugins_dir,
+    get_user_data_dir,
+)
 
 logger = get_logger()
 
@@ -240,20 +245,27 @@ class PluginLoader:
     ) -> None:
         module_part, attr_part = entry.split(":", 1)
         staged: list[McpTool] = []
-        host = self._staging_host(plugin_id, staged)
+        lifecycle = PluginLifecycle(plugin_id)
+        host = self._staging_host(plugin_id, staged, lifecycle=lifecycle)
         _setup_plugin_sys_path(path, self._platform)
         try:
-            unique_name = f"mcp_plugin_{_safe_mod_name(plugin_id)}_{module_part}"
-            mod = _import_plugin_module(path, module_part, unique_name)
-            register_fn = getattr(mod, attr_part, None)
-            if not callable(register_fn):
-                raise RuntimeError(
-                    f"入口 {entry} 不可调用（模块 {module_part} 无属性 {attr_part}）"
-                )
-            register_fn(host)
-        finally:
-            host.close_registration()
-        names = self._commit_tools(plugin_id, staged, prefix=prefix)
+            try:
+                unique_name = f"mcp_plugin_{_safe_mod_name(plugin_id)}_{module_part}"
+                mod = _import_plugin_module(path, module_part, unique_name)
+                register_fn = getattr(mod, attr_part, None)
+                if not callable(register_fn):
+                    raise RuntimeError(
+                        f"入口 {entry} 不可调用（模块 {module_part} 无属性 {attr_part}）"
+                    )
+                register_fn(host)
+            finally:
+                host.close_registration()
+            names = self._commit_tools(
+                plugin_id, staged, prefix=prefix, lifecycle=lifecycle
+            )
+        except Exception:
+            lifecycle.revoke()
+            raise
         self._record(
             plugin_id, path, tool_names=names, runtime="python-inprocess"
         )
@@ -272,6 +284,14 @@ class PluginLoader:
 
         allow = list(self._base_host._allow_get)
         caps = dict(self._base_host._capabilities)
+        lifecycle = PluginLifecycle(plugin_id)
+        rpc_caps: dict[str, Any] = {}
+        if "data_dir" in self._base_host._allow_get:
+            rpc_caps["data_dir"] = _LazyDataDirCapability(plugin_id)
+        for cap_name, factory in self._base_host._capability_factories.items():
+            if cap_name in self._base_host._allow_get:
+                rpc_caps[cap_name] = factory(plugin_id, lifecycle)
+
         staged: list[McpTool] = []
         timeout = float(manifest.get("call_timeout") or 60)
         session = PluginSubprocessSession(
@@ -281,13 +301,15 @@ class PluginLoader:
             platform_tag=self._platform,
             allow_get=allow,
             capabilities=caps,
+            rpc_capabilities=rpc_caps,
+            lifecycle=lifecycle,
             call_timeout=timeout,
         )
         try:
             session.start_and_bootstrap()
             register_subprocess_plugin_tools(staged.append, session=session)
             names = self._commit_tools(
-                plugin_id, staged, prefix=prefix, session=session
+                plugin_id, staged, prefix=prefix, session=session, lifecycle=lifecycle
             )
             self._record(
                 plugin_id, path, tool_names=names, runtime="python-subprocess"
@@ -297,6 +319,7 @@ class PluginLoader:
                 plugin_id, len(names), path,
             )
         except Exception:
+            lifecycle.revoke()
             session.terminate()
             raise
 
@@ -306,7 +329,8 @@ class PluginLoader:
             self._record(plugin_id, path, error="disabled")
             return
         staged: list[McpTool] = []
-        host = self._staging_host(plugin_id, staged)
+        lifecycle = PluginLifecycle(plugin_id)
+        host = self._staging_host(plugin_id, staged, lifecycle=lifecycle)
         try:
             self._check_plugin_id(plugin_id)
             unique_name = f"mcp_plugin_{_safe_mod_name(plugin_id)}"
@@ -323,7 +347,7 @@ class PluginLoader:
                 register_fn(host)
             finally:
                 host.close_registration()
-            names = self._commit_tools(plugin_id, staged)
+            names = self._commit_tools(plugin_id, staged, lifecycle=lifecycle)
             self._record(
                 plugin_id, path, tool_names=names, runtime="python-inprocess"
             )
@@ -331,6 +355,7 @@ class PluginLoader:
                 "[MCP插件] 已加载单文件 %s (%d 工具)", plugin_id, len(names)
             )
         except Exception as e:
+            lifecycle.revoke()
             logger.error(
                 "[MCP插件] 单文件加载失败 %s: %s", plugin_id, e, exc_info=True
             )
@@ -341,16 +366,30 @@ class PluginLoader:
         if self._runtime.has_plugin(plugin_id):
             raise ValueError(f"插件 id 冲突: {plugin_id}")
 
-    def _staging_host(self, plugin_id: str, staged: list[McpTool]) -> McpHost:
+    def _staging_host(
+        self,
+        plugin_id: str,
+        staged: list[McpTool],
+        *,
+        lifecycle: PluginLifecycle,
+    ) -> McpHost:
         return McpHost(
             staged.append,
             capabilities=self._base_host._capabilities,
+            capability_factories=self._base_host._capability_factories,
             allow_get=self._base_host._allow_get,
             plugin_id=plugin_id,
+            lifecycle=lifecycle,
         )
 
     def _commit_tools(
-        self, plugin_id: str, tools: list[McpTool], *, prefix=None, session=None
+        self,
+        plugin_id: str,
+        tools: list[McpTool],
+        *,
+        prefix=None,
+        session=None,
+        lifecycle: PluginLifecycle | None = None,
     ) -> list[str]:
         """注册函数和 schema 校验结束后整批提交；失败时不登记归属。"""
         names = [tool.name for tool in tools]
@@ -360,7 +399,9 @@ class PluginLoader:
             if self.enforce_prefix:
                 raise ValueError(message)
             logger.warning("[MCP插件:%s] %s", plugin_id, message)
-        self._runtime.install(plugin_id, tools, session=session)
+        self._runtime.install(
+            plugin_id, tools, session=session, lifecycle=lifecycle
+        )
         return names
 
     def _record(
@@ -381,6 +422,18 @@ class PluginLoader:
                 runtime=runtime,
             )
         )
+
+
+class _LazyDataDirCapability:
+    """延迟创建并返回插件专属数据目录，避免未请求 data_dir 的插件触发磁盘 IO."""
+
+    def __init__(self, plugin_id: str) -> None:
+        self._plugin_id = plugin_id
+
+    def dispatch_rpc(self, action: str, kwargs: dict[str, Any] | None = None) -> str:
+        if action != "get":
+            raise ValueError(f"不支持的 data_dir 方法: {action}")
+        return str(get_mcp_plugin_data_dir(self._plugin_id))
 
 
 def _safe_mod_name(plugin_id: str) -> str:
@@ -431,6 +484,7 @@ def load_mcp_plugins_from_config(
     *,
     config=None,
     capabilities: dict | None = None,
+    capability_factories: dict | None = None,
     runtime: PluginRuntime | None = None,
 ) -> list[LoadedPlugin]:
     if config is None:
@@ -448,8 +502,7 @@ def load_mcp_plugins_from_config(
     if runtime is None:
         raise ValueError("加载外挂需要显式传入 server 持有的 PluginRuntime")
 
-    dir_cfg = _get("MCP_PLUGINS.DIR", None)
-    plugins_dir = Path(dir_cfg).expanduser() if dir_cfg else default_plugins_dir()
+    plugins_dir = get_mcp_plugins_dir(config)
     allow = _get("MCP_PLUGINS.ALLOW_HOST_GET", list(DEFAULT_ALLOW_GET))
     if not isinstance(allow, list):
         allow = list(DEFAULT_ALLOW_GET)
@@ -464,6 +517,7 @@ def load_mcp_plugins_from_config(
     host = McpHost(
         add_tool,
         capabilities=host_capabilities,
+        capability_factories=capability_factories,
         allow_get=allow,
     )
     loader = PluginLoader(

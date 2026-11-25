@@ -4,9 +4,9 @@
 -----------------
 1. **内置工具**放在 ``src/mcp/tools/<pkg>/register.py``，用 ``McpTool("name", ...)``
    或 ``McpTool(name="name", ...)`` 注册；目录由扫描这些文件得到，**不写死名单/中文标题**。
-2. **分组 id / 组标题** = 包目录名 ``<pkg>``（如 ``music``、``weather``、``camera``），
+2. **分组 id / 组标题** = 包目录名 ``<pkg>``（如 ``media``、``weather``、``camera``），
    与磁盘 ``tools/<pkg>`` 一致，设置页直接显示包名。
-3. **工具展示名** = name 最后一段（``music_player.pause`` → ``pause``）。
+3. **工具展示名** = name 最后一段（``media.pause`` → ``pause``）。
 4. **外挂**：manifest.tools / 源码 ``name=`` 启发式；组标题 = plugin id
    （若 manifest 有 ``name`` 字段则用该字段，属插件自描述而非宿主写死）。
 5. **禁用**配置：``MCP_TOOLS.DISABLED``（tool 全名列表）。
