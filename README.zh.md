@@ -89,6 +89,7 @@ py-xiaozhi 是一个轻量级、跨平台的多模态 AI 交互主控框架，�
 - **Opus 编解码** — 音频编解码和实时重采样
 - **唤醒词检测** — 基于 Sherpa-ONNX 离线识别，支持多唤醒词和拼音匹配
 - **多界面模式** — GUI（PySide6 + QML）/ TUI / GPIO，适应不同环境
+- **多语言界面（免重启热切换）** — 内置简体中文（`zh_CN`）、English（`en_US`）、Tiếng Việt（`vi_VN`），覆盖 GUI / TUI / 激活界面，支持设置页实时热切换与 `XIAOZHI_LANG` 环境变量覆盖
 - **系统托盘 & 全局快捷键** — 后台运行，快捷操作
 - **WebSocket / MQTT** — 双协议通信，支持 WSS 加密传输
 - **设备激活** — v1/v2 双协议，自动验证码和设备指纹
@@ -126,6 +127,7 @@ uv sync --extra gui --extra tui --group dev
 python main.py                 # GUI 模式（默认）
 python main.py --mode tui      # TUI 模式
 python main.py --protocol mqtt # MQTT 协议
+XIAOZHI_LANG=en_US python main.py # 指定界面语言（auto/zh_CN/en_US/vi_VN）
 ```
 
 ## 项目结构
@@ -136,6 +138,7 @@ py-xiaozhi/
 ├── src/
 │   ├── bootstrap/              # 应用引导与依赖注入
 │   ├── core/                   # 核心基础设施（事件总线、状态管理等）
+│   ├── i18n/                   # 纯标准库多语言引擎与中/英/越三语语言包
 │   ├── plugins/                # 插件系统（音频、UI、MCP、唤醒词、快捷键）
 │   ├── protocols/              # 通信协议（WebSocket / MQTT）
 │   ├── audio_codecs/           # 音频编解码、多轨 AudioMixer、通用 AudioDecoder

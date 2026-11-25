@@ -85,6 +85,7 @@ py-xiaozhi is a lightweight, cross-platform multi-modal AI interaction framework
 - **Decoupled Media Foundation** — Source-agnostic `MediaPlayer` over `AudioMixer` + FFmpeg `AudioDecoder` with automatic TTS audio focus and built-in cross-platform WebRTC APM echo cancellation
 - **Cross-platform Deployment** — Windows 10+ / macOS 10.15+ / Linux (x86_64 & ARM), optimized for Raspberry Pi and edge boards
 - **Multiple UI Modes** — PySide6 + QML GUI / TUI / GPIO, adapting to desktop, headless server, and embedded environments
+- **Multi-language UI (Hot-Switch)** — Built-in Simplified Chinese (`zh_CN`), English (`en_US`), and Vietnamese (`vi_VN`) across GUI, TUI, and activation flows, with zero-restart live switching and `XIAOZHI_LANG` override
 - **Offline Wake Word** — Sherpa-ONNX based on-device keyword spotting with custom wake word support
 - **IoT & Embodied AI Ready** — GPIO interface for robotics control, hardware actuation, and sensor integration
 - **WebSocket / MQTT** — Dual protocol communication with WSS/TLS encrypted transmission and auto-reconnection
@@ -172,6 +173,7 @@ py-xiaozhi/
 │   ├── bootstrap/              # Application bootstrap & dependency injection
 │   ├── constants/              # Constants
 │   ├── core/                   # Core infrastructure (event bus, state management, task management, etc.)
+│   ├── i18n/                   # Pure-stdlib i18n engine & zh_CN / en_US / vi_VN locale catalogs
 │   ├── logging/                # Logging subsystem
 │   ├── mcp/                    # MCP tool system & external plugin host
 │   │   ├── mcp_server.py       # MCP server
@@ -231,6 +233,9 @@ python main.py --mode tui
 # Specify communication protocol
 python main.py --protocol websocket  # WebSocket (default)
 python main.py --protocol mqtt       # MQTT protocol
+
+# Override UI language (auto / zh_CN / en_US / vi_VN)
+XIAOZHI_LANG=en_US python main.py
 ```
 
 ### Entry points and verification
