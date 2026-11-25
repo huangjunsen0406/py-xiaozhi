@@ -7,6 +7,7 @@ from PySide6.QtCore import QObject, Slot
 from src.core.event_bus import EventBus, Events
 from src.core.task_manager import TaskManager
 from src.logging import get_logger
+from src.ui.gui.i18n_bridge import I18nBridge
 from src.ui.gui.models import MainModel
 from src.ui.gui.qml_host import QmlAppHost
 from src.ui.gui.services import EmotionService, TrayService
@@ -42,6 +43,7 @@ class GuiViewManager(QObject):
             self._tasks.initialize()
 
         self._bridge = EventBridge(event_bus, task_manager=self._tasks)
+        self._i18n_bridge = I18nBridge()
         self._host = QmlAppHost()
         self._main_model = MainModel()
         self._emotion_service = EmotionService()
@@ -68,6 +70,7 @@ class GuiViewManager(QObject):
                 "mainModel": self._main_model,
                 "settingsModel": self._settings.ensure_model(),
                 "emotionService": self._emotion_service,
+                "i18n": self._i18n_bridge,
             }
         )
         self._host.load_main()
@@ -86,6 +89,8 @@ class GuiViewManager(QObject):
         try:
             self._host.shutdown()
         finally:
+            self._i18n_bridge.close()
+            self._main_model.close()
             self._settings.close()
             if self._owns_tasks:
                 await self._tasks.cancel_all()

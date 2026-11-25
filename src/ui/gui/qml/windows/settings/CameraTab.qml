@@ -9,9 +9,10 @@ ScrollView {
     id: root
     clip: true
 
-    // 测试状态
+    // 测试状态: 0=无, 1=成功, -1=失败/错误
     property bool cameraTesting: false
     property string testResult: ""
+    property int testState: 0
 
     // 进入摄像头页时再扫描（启动阶段不扫 OpenCV，避免冷启动卡顿）
     Component.onCompleted: {
@@ -37,8 +38,11 @@ ScrollView {
         }
         function onStatusMessage(message) {
             root.testResult = message
-            if (message.startsWith("[成功]") || message.startsWith("[失败]") || message.startsWith("[错误]")) {
+        }
+        function onTestComplete(type, success) {
+            if (type === "camera") {
                 root.cameraTesting = false
+                root.testState = success ? 1 : -1
             }
         }
     }
@@ -49,7 +53,7 @@ ScrollView {
 
         // 页面标题
         Text {
-            text: "摄像头设置"
+            text: i18n.s["settings.camera.title"]
             font.pixelSize: Theme.fontSizeXl
             font.weight: Font.DemiBold
             color: Theme.textPrimary
@@ -61,7 +65,7 @@ ScrollView {
             spacing: Theme.spacingMd
 
             Text {
-                text: "设备选择"
+                text: i18n.s["settings.camera.device_select"]
                 font.pixelSize: Theme.fontSizeMd
                 font.weight: Font.Medium
                 color: Theme.textSecondary
@@ -72,10 +76,11 @@ ScrollView {
                 spacing: Theme.spacingMd
 
                 Text {
-                    text: "摄像头"
+                    text: i18n.s["settings.camera.camera"]
                     font.pixelSize: Theme.fontSizeSm
                     color: Theme.textSecondary
-                    Layout.preferredWidth: 80
+                    Layout.preferredWidth: 100
+                    wrapMode: Text.WordWrap
                 }
 
                 XComboBox {
@@ -89,9 +94,9 @@ ScrollView {
                 }
 
                 Button {
-                    text: root.cameraTesting ? "测试中..." : "测试"
+                    text: root.cameraTesting ? i18n.s["common.testing"] : i18n.s["common.test"]
                     enabled: !root.cameraTesting
-                    Layout.preferredWidth: 70
+                    Layout.preferredWidth: Math.max(76, camTestText.implicitWidth + 20)
                     Layout.preferredHeight: 32
 
                     background: Rectangle {
@@ -100,6 +105,7 @@ ScrollView {
                     }
 
                     contentItem: Text {
+                        id: camTestText
                         text: parent.text
                         font.pixelSize: Theme.fontSizeSm
                         color: "white"
@@ -110,13 +116,14 @@ ScrollView {
                     onClicked: {
                         root.cameraTesting = true
                         root.testResult = ""
+                        root.testState = 0
                         if (settingsModel) settingsModel.testCamera()
                     }
                 }
 
                 Button {
-                    text: "刷新"
-                    Layout.preferredWidth: 70
+                    text: i18n.s["common.refresh"]
+                    Layout.preferredWidth: Math.max(76, camRefreshText.implicitWidth + 20)
                     Layout.preferredHeight: 32
 
                     background: Rectangle {
@@ -125,6 +132,7 @@ ScrollView {
                     }
 
                     contentItem: Text {
+                        id: camRefreshText
                         text: parent.text
                         font.pixelSize: Theme.fontSizeSm
                         color: Theme.textSecondary
@@ -150,7 +158,7 @@ ScrollView {
             spacing: Theme.spacingMd
 
             Text {
-                text: "视频参数"
+                text: i18n.s["settings.camera.video_params"]
                 font.pixelSize: Theme.fontSizeMd
                 font.weight: Font.Medium
                 color: Theme.textSecondary
@@ -163,10 +171,11 @@ ScrollView {
                 columnSpacing: Theme.spacingLg
 
                 Text {
-                    text: "分辨率"
+                    text: i18n.s["settings.camera.resolution"]
                     font.pixelSize: Theme.fontSizeSm
                     color: Theme.textSecondary
-                    Layout.preferredWidth: 80
+                    Layout.preferredWidth: 100
+                    wrapMode: Text.WordWrap
                 }
 
                 RowLayout {
@@ -215,7 +224,7 @@ ScrollView {
             spacing: Theme.spacingMd
 
             Text {
-                text: "视觉语言模型 (VL API)"
+                text: i18n.s["settings.camera.vl_api"]
                 font.pixelSize: Theme.fontSizeMd
                 font.weight: Font.Medium
                 color: Theme.textSecondary
@@ -228,10 +237,11 @@ ScrollView {
                 columnSpacing: Theme.spacingLg
 
                 Text {
-                    text: "API 地址"
+                    text: i18n.s["settings.camera.api_url"]
                     font.pixelSize: Theme.fontSizeSm
                     color: Theme.textSecondary
-                    Layout.preferredWidth: 80
+                    Layout.preferredWidth: 100
+                    wrapMode: Text.WordWrap
                 }
                 TextField {
                     id: vlApiUrlField
@@ -248,10 +258,11 @@ ScrollView {
                 }
 
                 Text {
-                    text: "API Key"
+                    text: i18n.s["settings.camera.api_key"]
                     font.pixelSize: Theme.fontSizeSm
                     color: Theme.textSecondary
-                    Layout.preferredWidth: 80
+                    Layout.preferredWidth: 100
+                    wrapMode: Text.WordWrap
                 }
                 XTextField {
                     id: vlApiKeyField
@@ -262,10 +273,11 @@ ScrollView {
                 }
 
                 Text {
-                    text: "模型"
+                    text: i18n.s["settings.camera.model"]
                     font.pixelSize: Theme.fontSizeSm
                     color: Theme.textSecondary
-                    Layout.preferredWidth: 80
+                    Layout.preferredWidth: 100
+                    wrapMode: Text.WordWrap
                 }
                 TextField {
                     id: vlModelsField
@@ -294,12 +306,10 @@ ScrollView {
         Rectangle {
             Layout.fillWidth: true
             height: 48
-            color: root.testResult.startsWith("[成功]") ? Theme.successLight :
-                   root.testResult.startsWith("[失败]") ? Theme.errorLight :
-                   root.testResult.startsWith("[错误]") ? Theme.errorLight : Theme.backgroundSecondary
-            border.color: root.testResult.startsWith("[成功]") ? Theme.successBorder :
-                          root.testResult.startsWith("[失败]") ? Theme.errorBorder :
-                          root.testResult.startsWith("[错误]") ? Theme.errorBorder : Theme.divider
+            color: root.testState === 1 ? Theme.successLight :
+                   root.testState === -1 ? Theme.errorLight : Theme.backgroundSecondary
+            border.color: root.testState === 1 ? Theme.successBorder :
+                          root.testState === -1 ? Theme.errorBorder : Theme.divider
             radius: Theme.radiusMd
             visible: root.testResult.length > 0 || root.cameraTesting
 
@@ -317,11 +327,10 @@ ScrollView {
 
                 Text {
                     Layout.fillWidth: true
-                    text: root.cameraTesting ? "正在测试摄像头..." : root.testResult
+                    text: root.cameraTesting ? i18n.s["settings.camera.testing_camera"] : root.testResult
                     font.pixelSize: Theme.fontSizeSm
-                    color: root.testResult.startsWith("[成功]") ? Theme.success :
-                           root.testResult.startsWith("[失败]") ? Theme.error :
-                           root.testResult.startsWith("[错误]") ? Theme.error : Theme.textSecondary
+                    color: root.testState === 1 ? Theme.success :
+                           root.testState === -1 ? Theme.error : Theme.textSecondary
                     elide: Text.ElideRight
                 }
             }
@@ -330,7 +339,7 @@ ScrollView {
         // 提示信息
         Text {
             Layout.fillWidth: true
-            text: "摄像头用于视觉识别功能。如需使用本地 VL 模型，请配置 API 地址和密钥。"
+            text: i18n.s["settings.camera.hint"]
             font.pixelSize: Theme.fontSizeSm
             color: Theme.textPlaceholder
             wrapMode: Text.WordWrap

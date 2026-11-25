@@ -32,7 +32,7 @@ ScrollView {
             // model 设置后重新同步 currentIndex
             inputCombo.currentIndex = settingsModel.selectedInputIndex
             outputCombo.currentIndex = settingsModel.selectedOutputIndex
-            addLog("设备列表已加载")
+            addLog(i18n.tr("settings.audio.log_loaded"))
         }
     }
 
@@ -45,7 +45,7 @@ ScrollView {
                 // model 设置后重新同步 currentIndex
                 inputCombo.currentIndex = settingsModel.selectedInputIndex
                 outputCombo.currentIndex = settingsModel.selectedOutputIndex
-                addLog("设备列表已刷新")
+                addLog(i18n.tr("settings.audio.log_refreshed"))
             }
         }
         function onTestComplete(type, success) {
@@ -70,7 +70,7 @@ ScrollView {
             spacing: Theme.spacingMd
 
             Text {
-                text: "音频设备"
+                text: i18n.s["settings.audio.title"]
                 font.pixelSize: Theme.fontSizeXl
                 font.weight: Font.DemiBold
                 color: Theme.textPrimary
@@ -79,8 +79,9 @@ ScrollView {
             Item { Layout.fillWidth: true }
 
             Button {
-                text: "刷新设备"
+                text: i18n.s["settings.audio.refresh_devices"]
                 Layout.preferredHeight: 32
+                Layout.preferredWidth: Math.max(92, refreshDevText.implicitWidth + 24)
 
                 background: Rectangle {
                     color: parent.pressed ? Theme.divider : (parent.hovered ? Theme.backgroundSecondary : Theme.backgroundHover)
@@ -88,6 +89,7 @@ ScrollView {
                 }
 
                 contentItem: Text {
+                    id: refreshDevText
                     text: parent.text
                     font.pixelSize: Theme.fontSizeSm
                     color: Theme.textSecondary
@@ -105,7 +107,7 @@ ScrollView {
             spacing: Theme.spacingMd
 
             Text {
-                text: "输入设备 (麦克风)"
+                text: i18n.s["settings.audio.input_section"]
                 font.pixelSize: Theme.fontSizeMd
                 font.weight: Font.Medium
                 color: Theme.textSecondary
@@ -126,9 +128,9 @@ ScrollView {
                 }
 
                 Button {
-                    text: root.inputTesting ? "测试中..." : "测试"
+                    text: root.inputTesting ? i18n.s["common.testing"] : i18n.s["common.test"]
                     enabled: !root.inputTesting
-                    Layout.preferredWidth: 80
+                    Layout.preferredWidth: Math.max(80, inTestText.implicitWidth + 20)
                     Layout.preferredHeight: 32
 
                     background: Rectangle {
@@ -137,6 +139,7 @@ ScrollView {
                     }
 
                     contentItem: Text {
+                        id: inTestText
                         text: parent.text
                         font.pixelSize: Theme.fontSizeSm
                         color: "white"
@@ -162,7 +165,7 @@ ScrollView {
                     anchors.left: parent.left
                     anchors.leftMargin: Theme.spacingMd
                     anchors.verticalCenter: parent.verticalCenter
-                    text: settingsModel ? settingsModel.inputDeviceInfo : ""
+                    text: (i18n.rev >= 0 && settingsModel) ? settingsModel.inputDeviceInfo : ""
                     font.pixelSize: Theme.fontSizeXs
                     color: Theme.textPlaceholder
                 }
@@ -182,7 +185,7 @@ ScrollView {
             spacing: Theme.spacingMd
 
             Text {
-                text: "输出设备 (扬声器)"
+                text: i18n.s["settings.audio.output_section"]
                 font.pixelSize: Theme.fontSizeMd
                 font.weight: Font.Medium
                 color: Theme.textSecondary
@@ -203,9 +206,9 @@ ScrollView {
                 }
 
                 Button {
-                    text: root.outputTesting ? "测试中..." : "测试"
+                    text: root.outputTesting ? i18n.s["common.testing"] : i18n.s["common.test"]
                     enabled: !root.outputTesting
-                    Layout.preferredWidth: 80
+                    Layout.preferredWidth: Math.max(80, outTestText.implicitWidth + 20)
                     Layout.preferredHeight: 32
 
                     background: Rectangle {
@@ -214,6 +217,7 @@ ScrollView {
                     }
 
                     contentItem: Text {
+                        id: outTestText
                         text: parent.text
                         font.pixelSize: Theme.fontSizeSm
                         color: "white"
@@ -239,7 +243,7 @@ ScrollView {
                     anchors.left: parent.left
                     anchors.leftMargin: Theme.spacingMd
                     anchors.verticalCenter: parent.verticalCenter
-                    text: settingsModel ? settingsModel.outputDeviceInfo : ""
+                    text: (i18n.rev >= 0 && settingsModel) ? settingsModel.outputDeviceInfo : ""
                     font.pixelSize: Theme.fontSizeXs
                     color: Theme.textPlaceholder
                 }
@@ -259,7 +263,7 @@ ScrollView {
             spacing: Theme.spacingMd
 
             Text {
-                text: "Opus 输出采样率"
+                text: i18n.s["settings.audio.opus_rate"]
                 font.pixelSize: Theme.fontSizeMd
                 font.weight: Font.Medium
                 color: Theme.textSecondary
@@ -272,12 +276,13 @@ ScrollView {
                 XComboBox {
                     id: sampleRateCombo
                     Layout.fillWidth: true
-                    model: ["24000 Hz (官方服务器)", "16000 Hz (第三方服务器)"]
+                    model: [i18n.s["settings.audio.opus_rate_24k"], i18n.s["settings.audio.opus_rate_16k"]]
                     currentIndex: settingsModel ? (settingsModel.opusOutputSampleRate === 24000 ? 0 : 1) : 0
                     onActivated: function(index) {
                         if (settingsModel) {
-                            settingsModel.opusOutputSampleRate = (index === 0) ? 24000 : 16000
-                            addLog("Opus 输出采样率已设置为 " + (index === 0 ? "24000" : "16000") + " Hz")
+                            var rate = (index === 0) ? 24000 : 16000
+                            settingsModel.opusOutputSampleRate = rate
+                            addLog(i18n.fmt("settings.audio.log_rate_set", { rate: rate }))
                         }
                     }
                     font.pixelSize: Theme.fontSizeSm
@@ -293,11 +298,14 @@ ScrollView {
 
                 Text {
                     anchors.left: parent.left
+                    anchors.right: parent.right
                     anchors.leftMargin: Theme.spacingMd
+                    anchors.rightMargin: Theme.spacingMd
                     anchors.verticalCenter: parent.verticalCenter
-                    text: "官方服务器使用 24kHz，第三方服务器通常使用 16kHz"
+                    text: i18n.s["settings.audio.opus_rate_hint"]
                     font.pixelSize: Theme.fontSizeXs
                     color: Theme.textPlaceholder
+                    elide: Text.ElideRight
                 }
             }
         }
@@ -315,7 +323,7 @@ ScrollView {
             spacing: Theme.spacingMd
 
             Text {
-                text: "音频帧长度"
+                text: i18n.s["settings.audio.frame_duration"]
                 font.pixelSize: Theme.fontSizeMd
                 font.weight: Font.Medium
                 color: Theme.textSecondary
@@ -328,7 +336,7 @@ ScrollView {
                 XComboBox {
                     id: frameDurationCombo
                     Layout.fillWidth: true
-                    model: ["20 ms (低延迟)", "40 ms (平衡)", "60 ms (低CPU)"]
+                    model: [i18n.s["settings.audio.frame_20"], i18n.s["settings.audio.frame_40"], i18n.s["settings.audio.frame_60"]]
                     currentIndex: {
                         if (!settingsModel) return 0
                         var duration = settingsModel.frameDuration
@@ -341,7 +349,7 @@ ScrollView {
                         if (settingsModel) {
                             var durations = [20, 40, 60]
                             settingsModel.frameDuration = durations[index]
-                            addLog("音频帧长度已设置为 " + durations[index] + " ms")
+                            addLog(i18n.fmt("settings.audio.log_frame_set", { ms: durations[index] }))
                         }
                     }
                     font.pixelSize: Theme.fontSizeSm
@@ -357,11 +365,14 @@ ScrollView {
 
                 Text {
                     anchors.left: parent.left
+                    anchors.right: parent.right
                     anchors.leftMargin: Theme.spacingMd
+                    anchors.rightMargin: Theme.spacingMd
                     anchors.verticalCenter: parent.verticalCenter
-                    text: "20ms 低延迟高CPU，60ms 高延迟低CPU（适合树莓派）"
+                    text: i18n.s["settings.audio.frame_hint"]
                     font.pixelSize: Theme.fontSizeXs
                     color: Theme.textPlaceholder
+                    elide: Text.ElideRight
                 }
             }
         }
@@ -369,7 +380,7 @@ ScrollView {
         // 提示信息
         Text {
             Layout.fillWidth: true
-            text: "点击测试按钮验证设备是否正常工作。输入测试会录制 3 秒音频，输出测试会播放 440Hz 测试音。"
+            text: i18n.s["settings.audio.test_hint"]
             font.pixelSize: Theme.fontSizeSm
             color: Theme.textPlaceholder
             wrapMode: Text.WordWrap
@@ -391,7 +402,7 @@ ScrollView {
                 Layout.fillWidth: true
 
                 Text {
-                    text: "状态日志"
+                    text: i18n.s["settings.audio.log_title"]
                     font.pixelSize: Theme.fontSizeMd
                     font.weight: Font.Medium
                     color: Theme.textSecondary
@@ -400,8 +411,9 @@ ScrollView {
                 Item { Layout.fillWidth: true }
 
                 Button {
-                    text: "清除日志"
+                    text: i18n.s["settings.audio.clear_log"]
                     Layout.preferredHeight: 28
+                    Layout.preferredWidth: Math.max(76, clearLogText.implicitWidth + 20)
 
                     background: Rectangle {
                         color: parent.pressed ? Theme.divider : (parent.hovered ? Theme.backgroundSecondary : Theme.backgroundHover)
@@ -409,6 +421,7 @@ ScrollView {
                     }
 
                     contentItem: Text {
+                        id: clearLogText
                         text: parent.text
                         font.pixelSize: Theme.fontSizeXs
                         color: Theme.textSecondary
@@ -418,7 +431,7 @@ ScrollView {
 
                     onClicked: {
                         root.statusLogs = []
-                        addLog("日志已清除")
+                        addLog(i18n.tr("settings.audio.log_cleared"))
                     }
                 }
             }

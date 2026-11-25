@@ -2,6 +2,7 @@
 
 from PySide6.QtCore import Slot
 
+from src.i18n import t
 from src.logging import get_logger
 
 logger = get_logger()
@@ -49,15 +50,15 @@ class SettingsCameraDevicesMixin:
         def apply():
             self._cameras_loading = False
             if error is not None:
-                self.statusMessage.emit(f"[错误] 摄像头枚举失败: {error}")
+                self.statusMessage.emit(t("settings.camera.scan_failed", error=error))
                 return
             self._cameras = cameras
             self._cameras_loaded_once = True
             self.devicesChanged.emit()
             self.statusMessage.emit(
-                f"摄像头列表已刷新（{len(cameras)} 个）"
+                t("settings.camera.refreshed", count=len(cameras))
                 if cameras
-                else "未检测到摄像头（Pi CSI 需安装 picamera2）"
+                else t("settings.camera.none_detected")
             )
 
         self._schedule_ui(apply)
@@ -118,16 +119,20 @@ class SettingsCameraDevicesMixin:
     def testCamera(self):
         """测试摄像头，捕获一帧并显示."""
         if not self._cameras:
-            self.statusMessage.emit("没有可用的摄像头")
+            self.statusMessage.emit(t("settings.camera.no_camera"))
+            self.testComplete.emit("camera", False)
             return
 
         idx = self._get_selectedCameraIndex()
         if idx < 0 or idx >= len(self._cameras):
-            self.statusMessage.emit("请先选择摄像头")
+            self.statusMessage.emit(t("settings.camera.select_first"))
+            self.testComplete.emit("camera", False)
             return
 
         camera = self._cameras[idx]
-        self.statusMessage.emit(f"正在测试摄像头 {camera['name']}...")
+        self.statusMessage.emit(
+            t("settings.camera.testing_name", name=camera["name"])
+        )
 
         self._run_worker(
             self._do_camera_test,
@@ -170,13 +175,11 @@ class SettingsCameraDevicesMixin:
         )
         jpeg = capture_jpeg(cfg)
         if not jpeg:
-            self.statusMessage.emit(
-                "[失败] 无法捕获图像（Pi CSI 请装 python3-picamera2 或改选 USB）"
-            )
+            self.statusMessage.emit(t("settings.camera.capture_failed"))
             self.testComplete.emit("camera", False)
             return
 
         self.statusMessage.emit(
-            f"[成功] 摄像头正常 (JPEG {len(jpeg)} bytes, {camera['name']})"
+            t("settings.camera.test_ok", size=len(jpeg), name=camera["name"])
         )
         self.testComplete.emit("camera", True)

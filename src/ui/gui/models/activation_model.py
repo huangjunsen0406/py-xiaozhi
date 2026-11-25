@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
 """激活窗口 ViewModel."""
 
-from PySide6.QtCore import Property, Signal
+from PySide6.QtCore import Property, Qt, Signal, Slot
 
+from src.i18n import off_locale_changed, on_locale_changed, t
 from src.ui.gui.models.base_model import BaseModel
 
 
@@ -17,16 +18,45 @@ class ActivationModel(BaseModel):
     statusColorChanged = Signal()
     isActivatedChanged = Signal()
     isActivatingChanged = Signal()
+    _localeChangeRequested = Signal(str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self._closed = False
         self._serial_number = "--"
         self._mac_address = "--"
         self._activation_code = "------"
-        self._activation_status = "未激活"
+        self._status_key: str | None = "activation.status.not_activated"
+        self._activation_status = t(self._status_key)
         self._status_color = "#F53F3F"  # error color
         self._is_activated = False
         self._is_activating = False
+        self._localeChangeRequested.connect(
+            self._on_locale_changed_ui, Qt.ConnectionType.QueuedConnection
+        )
+        on_locale_changed(self._on_locale_changed)
+
+    def _on_locale_changed(self, locale_code: str) -> None:
+        if self._closed:
+            return
+        try:
+            self._localeChangeRequested.emit(locale_code)
+        except RuntimeError:
+            pass
+
+    @Slot(str)
+    def _on_locale_changed_ui(self, _locale_code: str) -> None:
+        if self._closed or not self._status_key:
+            return
+        text = t(self._status_key)
+        if self._activation_status != text:
+            self._activation_status = text
+            self.activationStatusChanged.emit()
+
+    def close(self) -> None:
+        if not self._closed:
+            self._closed = True
+            off_locale_changed(self._on_locale_changed)
 
     # ========== Properties ==========
 
@@ -75,7 +105,10 @@ class ActivationModel(BaseModel):
             self._activation_code = code or "------"
             self.activationCodeChanged.emit()
 
-    def set_activation_status(self, status: str, color: str = None):
+    def set_activation_status(
+        self, status: str, color: str = None, *, status_key: str | None = None
+    ):
+        self._status_key = status_key
         if self._activation_status != status:
             self._activation_status = status
             self.activationStatusChanged.emit()
@@ -106,25 +139,32 @@ class ActivationModel(BaseModel):
         """更新激活码."""
         self.set_activation_code(code)
         if code and code != "------":
-            self.set_activation_status("激活中...", "#FF7D00")  # warning color
+            key = "activation.status.activating"
+            self.set_activation_status(t(key), "#FF7D00", status_key=key)
             self.set_activating(True)
 
     def set_status_activated(self):
         """设置为已激活状态."""
-        self.set_activation_status("已激活", "#00B42A")  # success color
+        key = "activation.status.activated"
+        self.set_activation_status(t(key), "#00B42A", status_key=key)
         self.set_activated(True)
         self.set_activating(False)
         self.set_activation_code("------")
 
     def set_status_not_activated(self):
         """设置为未激活状态."""
-        self.set_activation_status("未激活", "#F53F3F")  # error color
+        key = "activation.status.not_activated"
+        self.set_activation_status(t(key), "#F53F3F", status_key=key)
         self.set_activated(False)
         self.set_activating(False)
 
-    def set_status_inconsistent(self, local_activated: bool = False, server_activated: bool = False):
+    def set_status_inconsistent(
+        self, local_activated: bool = False, server_activated: bool = False
+    ):
         """设置状态不一致."""
         if local_activated and not server_activated:
-            self.set_activation_status("需重新激活", "#FF7D00")  # warning color
+            key = "activation.status.need_reactivate"
+            self.set_activation_status(t(key), "#FF7D00", status_key=key)
         else:
-            self.set_activation_status("已自动修复", "#00B42A")  # success color
+            key = "activation.status.auto_fixed"
+            self.set_activation_status(t(key), "#00B42A", status_key=key)

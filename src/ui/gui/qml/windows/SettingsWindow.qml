@@ -9,22 +9,22 @@ import "settings"
 AppWindow {
     id: root
 
-    width: 700
-    height: 550
-    minimumWidth: 600
-    minimumHeight: 450
-    title: "参数设置"
+    width: 740
+    height: 560
+    minimumWidth: 640
+    minimumHeight: 460
+    title: i18n.s["settings.title"]
     visible: false
     onClosing: settingsModel.discard()
 
     // Tab 配置
     readonly property var tabConfig: [
-        { name: "系统选项", component: "SystemOptionsTab.qml" },
-        { name: "MCP 工具", component: "McpToolsTab.qml" },
-        { name: "唤醒词", component: "WakeWordTab.qml" },
-        { name: "摄像头", component: "CameraTab.qml" },
-        { name: "音频设备", component: "AudioDeviceTab.qml" },
-        { name: "快捷键", component: "ShortcutsTab.qml" }
+        { key: "settings.tab.system", component: "SystemOptionsTab.qml" },
+        { key: "settings.tab.mcp", component: "McpToolsTab.qml" },
+        { key: "settings.tab.wake_word", component: "WakeWordTab.qml" },
+        { key: "settings.tab.camera", component: "CameraTab.qml" },
+        { key: "settings.tab.audio", component: "AudioDeviceTab.qml" },
+        { key: "settings.tab.shortcuts", component: "ShortcutsTab.qml" }
     ]
 
     // 直接使用 ColumnLayout，不需要额外的 Rectangle 层
@@ -35,7 +35,7 @@ AppWindow {
             // 自定义标题栏 - 平台自适应
             TitleBar {
                 Layout.fillWidth: true
-                title: "参数设置"
+                title: i18n.s["settings.title"]
                 showMaximize: true
                 onMinimizeClicked: root.showMinimized()
                 onMaximizeClicked: {
@@ -61,7 +61,7 @@ AppWindow {
 
                     // 左侧导航栏
                     Rectangle {
-                        Layout.preferredWidth: 150
+                        Layout.preferredWidth: 168
                         Layout.fillHeight: true
                         color: Theme.backgroundSecondary
 
@@ -95,7 +95,7 @@ AppWindow {
 
                                         Text {
                                             Layout.fillWidth: true
-                                            text: modelData.name
+                                            text: i18n.s[modelData.key]
                                             font.pixelSize: Theme.fontSizeMd
                                             color: tabBar.currentIndex === index ? Theme.primary : Theme.textSecondary
                                             elide: Text.ElideRight
@@ -217,9 +217,9 @@ AppWindow {
                     // 重置按钮
                     Button {
                         id: resetBtn
-                        Layout.preferredWidth: 80
+                        Layout.preferredWidth: Math.max(84, resetText.implicitWidth + 24)
                         Layout.preferredHeight: 34
-                        text: "重置"
+                        text: i18n.s["common.reset"]
 
                         background: Rectangle {
                             color: resetBtn.pressed ? Theme.errorLight : (resetBtn.hovered ? Theme.errorLight : "transparent")
@@ -229,6 +229,7 @@ AppWindow {
                         }
 
                         contentItem: Text {
+                            id: resetText
                             text: resetBtn.text
                             font.pixelSize: Theme.fontSizeSm
                             color: Theme.error
@@ -244,9 +245,9 @@ AppWindow {
                     // 取消按钮
                     Button {
                         id: cancelBtn
-                        Layout.preferredWidth: 80
+                        Layout.preferredWidth: Math.max(84, cancelText.implicitWidth + 24)
                         Layout.preferredHeight: 34
-                        text: "取消"
+                        text: i18n.s["common.cancel"]
 
                         background: Rectangle {
                             color: cancelBtn.pressed ? Theme.divider : (cancelBtn.hovered ? Theme.backgroundHover : Theme.backgroundSecondary)
@@ -256,6 +257,7 @@ AppWindow {
                         }
 
                         contentItem: Text {
+                            id: cancelText
                             text: cancelBtn.text
                             font.pixelSize: Theme.fontSizeSm
                             color: Theme.textSecondary
@@ -269,9 +271,9 @@ AppWindow {
                     // 保存按钮
                     Button {
                         id: saveBtn
-                        Layout.preferredWidth: 80
+                        Layout.preferredWidth: Math.max(84, saveText.implicitWidth + 24)
                         Layout.preferredHeight: 34
-                        text: "保存"
+                        text: i18n.s["common.save"]
 
                         background: Rectangle {
                             color: saveBtn.pressed ? Theme.primaryPressed : (saveBtn.hovered ? Theme.primaryHover : Theme.primary)
@@ -279,6 +281,7 @@ AppWindow {
                         }
 
                         contentItem: Text {
+                            id: saveText
                             text: saveBtn.text
                             font.pixelSize: Theme.fontSizeSm
                             color: "white"

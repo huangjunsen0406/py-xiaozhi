@@ -104,7 +104,7 @@ ScrollView {
         spacing: Theme.spacingLg
 
         Text {
-            text: "MCP 工具与外挂插件"
+            text: i18n.s["settings.mcp.title"]
             font.pixelSize: Theme.fontSizeXl
             font.weight: Font.DemiBold
             color: Theme.textPrimary
@@ -132,7 +132,7 @@ ScrollView {
                     spacing: Theme.spacingSm
 
                     Text {
-                        text: "外挂插件 (" + root.installedPlugins.length + ")"
+                        text: i18n.s["settings.mcp.plugins_header"].replace("{count}", root.installedPlugins.length)
                         font.pixelSize: Theme.fontSizeMd
                         font.weight: Font.Medium
                         color: Theme.textPrimary
@@ -141,19 +141,19 @@ ScrollView {
                     Item { Layout.fillWidth: true }
 
                     GroupActionButton {
-                        text: "导入 ZIP"
+                        text: i18n.s["settings.mcp.import_zip"]
                         onClicked: if (settingsModel) settingsModel.importMcpPluginZip()
                     }
                     GroupActionButton {
-                        text: "导入文件夹"
+                        text: i18n.s["settings.mcp.import_dir"]
                         onClicked: if (settingsModel) settingsModel.importMcpPluginDir()
                     }
                     GroupActionButton {
-                        text: "打开目录"
+                        text: i18n.s["common.open_dir"]
                         onClicked: if (settingsModel) settingsModel.openMcpPluginsDir()
                     }
                     GroupActionButton {
-                        text: "刷新"
+                        text: i18n.s["common.refresh"]
                         onClicked: if (settingsModel) settingsModel.refreshMcpPlugins()
                     }
                 }
@@ -168,12 +168,12 @@ ScrollView {
                         spacing: 2
 
                         Text {
-                            text: "允许外挂使用应用内播放"
+                            text: i18n.s["settings.mcp.allow_media_player"]
                             font.pixelSize: Theme.fontSizeSm
                             color: Theme.textPrimary
                         }
                         Text {
-                            text: "开启后，外挂可通过受控 media_player 播放音频，并启用宿主通用播控工具（暂停/停止/跳转）。保存后生效。"
+                            text: i18n.s["settings.mcp.allow_media_player_desc"]
                             font.pixelSize: Theme.fontSizeXs
                             color: Theme.textPlaceholder
                             wrapMode: Text.WordWrap
@@ -204,7 +204,7 @@ ScrollView {
 
                 Text {
                     visible: root.installedPlugins.length === 0
-                    text: "尚未安装外挂插件。可点击上方「导入 ZIP」或「导入文件夹」添加。"
+                    text: i18n.s["settings.mcp.no_plugins"]
                     font.pixelSize: Theme.fontSizeXs
                     color: Theme.textPlaceholder
                     wrapMode: Text.WordWrap
@@ -250,7 +250,7 @@ ScrollView {
 
                             Text {
                                 visible: !!(pluginRow.modelData.error || pluginRow.modelData.description)
-                                text: pluginRow.modelData.error ? ("错误: " + pluginRow.modelData.error) : (pluginRow.modelData.description || "")
+                                text: pluginRow.modelData.error ? i18n.s["settings.mcp.plugin_error"].replace("{error}", pluginRow.modelData.error) : (pluginRow.modelData.description || "")
                                 font.pixelSize: Theme.fontSizeXs
                                 color: pluginRow.modelData.error ? Theme.error : Theme.textSecondary
                                 elide: Text.ElideRight
@@ -259,7 +259,7 @@ ScrollView {
                         }
 
                         GroupActionButton {
-                            text: "卸载"
+                            text: i18n.s["common.uninstall"]
                             onClicked: {
                                 if (settingsModel)
                                     settingsModel.uninstallMcpPlugin(pluginRow.modelData.id)
@@ -272,7 +272,7 @@ ScrollView {
 
         Text {
             Layout.fillWidth: true
-            text: "控制哪些工具暴露给服务端。关闭后不出现在 tools/list，也无法调用。保存后若已连接将自动重连以更新列表。"
+            text: i18n.s["settings.mcp.tools_desc"]
             font.pixelSize: Theme.fontSizeXs
             color: Theme.textSecondary
             wrapMode: Text.WordWrap
@@ -308,14 +308,14 @@ ScrollView {
                     Item { Layout.fillWidth: true }
 
                     GroupActionButton {
-                        text: "全开"
+                        text: i18n.s["common.enable_all"]
                         onClicked: {
                             if (settingsModel)
                                 settingsModel.setMcpToolGroupEnabled(groupBlock.modelData.group, true)
                         }
                     }
                     GroupActionButton {
-                        text: "全关"
+                        text: i18n.s["common.disable_all"]
                         onClicked: {
                             if (settingsModel)
                                 settingsModel.setMcpToolGroupEnabled(groupBlock.modelData.group, false)

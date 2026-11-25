@@ -3,6 +3,7 @@
 from PySide6.QtCore import Slot
 
 from src.audio_processing.keyword_converters import convert_wake_word
+from src.i18n import t
 from src.logging import get_logger
 
 logger = get_logger()
@@ -37,7 +38,7 @@ class SettingsWakeWordMixin:
             self._wake_word_lang = lang
         except Exception as e:
             logger.error(f"转换唤醒词失败: {e}", exc_info=True)
-            self._wake_word_preview = f"转换失败: {e}"
+            self._wake_word_preview = t("settings.wake_word.convert_failed", error=e)
 
     def _get_wakeWord(self) -> str:
         return self._wake_word
@@ -62,7 +63,7 @@ class SettingsWakeWordMixin:
             是否保存成功
         """
         if not self._wake_word:
-            self.set_error("请输入唤醒词")
+            self.set_error(t("settings.wake_word.enter_prompt"))
             return False
 
         try:
@@ -87,11 +88,11 @@ class SettingsWakeWordMixin:
                 self.set_error(error)
                 return False
             logger.info("唤醒词已保存: %s", self._wake_word)
-            self.statusMessage.emit(f"唤醒词已保存 ({lang.upper()})")
+            self.statusMessage.emit(t("settings.wake_word.saved", lang=lang.upper()))
             return True
 
         except Exception as e:
             logger.error(f"保存唤醒词失败: {e}", exc_info=True)
-            self.set_error(f"保存唤醒词失败: {e}")
+            self.set_error(t("settings.wake_word.save_failed", error=e))
             return False
 

@@ -59,7 +59,7 @@ AppWindow {
 
                         Text {
                             anchors.centerIn: parent
-                            text: (mainModel && mainModel.statusText) ? mainModel.statusText : "待命"
+                            text: (mainModel && mainModel.statusText) ? mainModel.statusText : i18n.s["main.status.idle"]
                             font.pixelSize: Theme.fontSizeMd
                             font.weight: Font.Bold
                             color: Theme.primaryText
@@ -106,7 +106,7 @@ AppWindow {
                             Text {
                                 width: parent.width
                                 height: parent.height - (mediaLineText.visible ? 22 : 0)
-                                text: (mainModel && mainModel.ttsText) ? mainModel.ttsText : "待命"
+                                text: (mainModel && mainModel.ttsText) ? mainModel.ttsText : i18n.s["main.status.idle"]
                                 font.pixelSize: Theme.fontSizeSm
                                 color: Theme.textSecondary
                                 horizontalAlignment: Text.AlignHCenter
@@ -150,7 +150,7 @@ AppWindow {
                         Layout.fillWidth: true
                         Layout.maximumWidth: 140
                         Layout.preferredHeight: 38
-                        text: (mainModel && mainModel.buttonText) ? mainModel.buttonText : "按住后说话"
+                        text: (mainModel && mainModel.buttonText) ? mainModel.buttonText : i18n.s["main.button.hold_to_talk"]
                         visible: !(mainModel && mainModel.autoMode)
 
                         background: Rectangle {
@@ -164,6 +164,7 @@ AppWindow {
                             color: "white"
                             horizontalAlignment: Text.AlignHCenter
                             verticalAlignment: Text.AlignVCenter
+                            elide: Text.ElideRight
                         }
 
                         onClicked: if (eventBridge) eventBridge.onManualToggle()
@@ -176,7 +177,7 @@ AppWindow {
                         Layout.fillWidth: true
                         Layout.maximumWidth: 140
                         Layout.preferredHeight: 38
-                        text: (mainModel && mainModel.buttonText) ? mainModel.buttonText : "开始对话"
+                        text: (mainModel && mainModel.buttonText) ? mainModel.buttonText : i18n.s["main.button.start_chat"]
                         visible: mainModel && mainModel.autoMode
 
                         background: Rectangle {
@@ -190,6 +191,7 @@ AppWindow {
                             color: "white"
                             horizontalAlignment: Text.AlignHCenter
                             verticalAlignment: Text.AlignVCenter
+                            elide: Text.ElideRight
                         }
 
                         onClicked: if (eventBridge) eventBridge.onAutoStart()
@@ -202,7 +204,7 @@ AppWindow {
                         Layout.fillWidth: true
                         Layout.maximumWidth: 120
                         Layout.preferredHeight: 38
-                        text: "打断对话"
+                        text: i18n.s["main.button.abort_chat"]
 
                         background: Rectangle {
                             color: abortBtn.pressed ? Theme.divider : (abortBtn.hovered ? Theme.backgroundHover : Theme.backgroundSecondary)
@@ -217,6 +219,7 @@ AppWindow {
                             color: Theme.textPrimary
                             horizontalAlignment: Text.AlignHCenter
                             verticalAlignment: Text.AlignVCenter
+                            elide: Text.ElideRight
                         }
 
                         onClicked: if (eventBridge) eventBridge.onAbort()
@@ -250,10 +253,11 @@ AppWindow {
 
                                 Text {
                                     anchors.fill: parent
-                                    text: "输入文字..."
+                                    text: i18n.s["main.input.placeholder"]
                                     font: textInput.font
                                     color: Theme.textPlaceholder
                                     verticalAlignment: Text.AlignVCenter
+                                    elide: Text.ElideRight
                                     visible: !textInput.text && !textInput.activeFocus
                                 }
 
@@ -263,10 +267,10 @@ AppWindow {
 
                         Button {
                             id: sendBtn
-                            Layout.preferredWidth: 60
-                            Layout.maximumWidth: 84
+                            Layout.preferredWidth: 64
+                            Layout.maximumWidth: 88
                             Layout.preferredHeight: 38
-                            text: "发送"
+                            text: i18n.s["common.send"]
 
                             background: Rectangle {
                                 color: sendBtn.pressed ? Theme.primaryPressed : (sendBtn.hovered ? Theme.primaryHover : Theme.primary)
@@ -279,6 +283,7 @@ AppWindow {
                                 color: "white"
                                 horizontalAlignment: Text.AlignHCenter
                                 verticalAlignment: Text.AlignVCenter
+                                elide: Text.ElideRight
                             }
 
                             onClicked: sendText()
@@ -292,7 +297,7 @@ AppWindow {
                         Layout.fillWidth: true
                         Layout.maximumWidth: 120
                         Layout.preferredHeight: 38
-                        text: (mainModel && mainModel.modeText) ? mainModel.modeText : "手动对话"
+                        text: (mainModel && mainModel.modeText) ? mainModel.modeText : i18n.s["main.mode.manual"]
 
                         background: Rectangle {
                             color: modeBtn.pressed ? Theme.divider : (modeBtn.hovered ? Theme.backgroundHover : Theme.backgroundSecondary)
@@ -307,6 +312,7 @@ AppWindow {
                             color: Theme.textPrimary
                             horizontalAlignment: Text.AlignHCenter
                             verticalAlignment: Text.AlignVCenter
+                            elide: Text.ElideRight
                         }
 
                         onClicked: if (eventBridge) eventBridge.onAutoToggle()
@@ -319,7 +325,7 @@ AppWindow {
                         Layout.fillWidth: true
                         Layout.maximumWidth: 120
                         Layout.preferredHeight: 38
-                        text: "参数设置"
+                        text: i18n.s["main.button.settings"]
 
                         background: Rectangle {
                             color: settingsBtn.pressed ? Theme.divider : (settingsBtn.hovered ? Theme.backgroundHover : Theme.backgroundSecondary)
@@ -334,6 +340,7 @@ AppWindow {
                             color: Theme.textPrimary
                             horizontalAlignment: Text.AlignHCenter
                             verticalAlignment: Text.AlignVCenter
+                            elide: Text.ElideRight
                         }
 
                         onClicked: if (eventBridge) eventBridge.onOpenSettings()

@@ -15,7 +15,7 @@ ScrollView {
 
         // 页面标题
         Text {
-            text: "唤醒词设置"
+            text: i18n.s["settings.wake_word.title"]
             font.pixelSize: Theme.fontSizeXl
             font.weight: Font.DemiBold
             color: Theme.textPrimary
@@ -27,7 +27,7 @@ ScrollView {
             spacing: Theme.spacingMd
 
             Text {
-                text: "唤醒词"
+                text: i18n.s["settings.wake_word.section"]
                 font.pixelSize: Theme.fontSizeMd
                 font.weight: Font.Medium
                 color: Theme.textSecondary
@@ -39,7 +39,7 @@ ScrollView {
                 spacing: Theme.spacingMd
 
                 Text {
-                    text: "启用唤醒词"
+                    text: i18n.s["settings.wake_word.enable"]
                     font.pixelSize: Theme.fontSizeSm
                     color: Theme.textSecondary
                 }
@@ -64,10 +64,11 @@ ScrollView {
                 spacing: Theme.spacingMd
 
                 Text {
-                    text: "唤醒词"
+                    text: i18n.s["settings.wake_word.label"]
                     font.pixelSize: Theme.fontSizeSm
                     color: Theme.textSecondary
-                    Layout.preferredWidth: 80
+                    Layout.preferredWidth: 110
+                    wrapMode: Text.WordWrap
                 }
 
                 TextField {
@@ -75,7 +76,7 @@ ScrollView {
                     Layout.fillWidth: true
                     text: settingsModel ? settingsModel.wakeWord : ""
                     onTextChanged: if (settingsModel && text !== settingsModel.wakeWord) settingsModel.wakeWord = text
-                    placeholderText: "输入唤醒词，如「小智」或「Hey Jarvis」"
+                    placeholderText: i18n.s["settings.wake_word.placeholder"]
                     font.pixelSize: Theme.fontSizeSm
                     background: Rectangle {
                         radius: Theme.radiusSm
@@ -95,7 +96,7 @@ ScrollView {
                     Text {
                         id: langLabel
                         anchors.centerIn: parent
-                        text: settingsModel && settingsModel.wakeWordLang === "zh" ? "中文" : "English"
+                        text: settingsModel && settingsModel.wakeWordLang === "zh" ? i18n.s["common.lang_zh"] : i18n.s["common.lang_en"]
                         font.pixelSize: Theme.fontSizeXs
                         color: settingsModel && settingsModel.wakeWordLang === "zh" ? Theme.primary : Theme.success
                     }
@@ -119,7 +120,7 @@ ScrollView {
                     spacing: Theme.spacingXs
 
                     Text {
-                        text: "转换预览"
+                        text: i18n.s["settings.wake_word.preview"]
                         font.pixelSize: Theme.fontSizeXs
                         color: Theme.textPlaceholder
                     }
@@ -142,11 +143,12 @@ ScrollView {
                 Item { Layout.fillWidth: true }
 
                 Button {
-                    text: "保存唤醒词"
+                    text: i18n.s["settings.wake_word.save_btn"]
                     implicitHeight: 36
-                    implicitWidth: 120
+                    implicitWidth: Math.max(120, saveWakeText.implicitWidth + 28)
 
                     contentItem: Text {
+                        id: saveWakeText
                         text: parent.text
                         font.pixelSize: Theme.fontSizeSm
                         color: "white"
@@ -178,7 +180,7 @@ ScrollView {
             spacing: Theme.spacingMd
 
             Text {
-                text: "检测参数"
+                text: i18n.s["settings.wake_word.params"]
                 font.pixelSize: Theme.fontSizeMd
                 font.weight: Font.Medium
                 color: Theme.textSecondary
@@ -192,10 +194,11 @@ ScrollView {
 
                 // 线程数
                 Text {
-                    text: "线程数"
+                    text: i18n.s["settings.wake_word.threads"]
                     font.pixelSize: Theme.fontSizeSm
                     color: Theme.textSecondary
-                    Layout.preferredWidth: 80
+                    Layout.preferredWidth: 110
+                    wrapMode: Text.WordWrap
                 }
 
                 XSpinBox {
@@ -208,17 +211,20 @@ ScrollView {
                 }
 
                 Text {
-                    text: "建议设置为 CPU 核心数"
+                    text: i18n.s["settings.wake_word.threads_hint"]
                     font.pixelSize: Theme.fontSizeXs
                     color: Theme.textPlaceholder
+                    wrapMode: Text.WordWrap
+                    Layout.fillWidth: true
                 }
 
                 // 关键词得分
                 Text {
-                    text: "关键词得分"
+                    text: i18n.s["settings.wake_word.score"]
                     font.pixelSize: Theme.fontSizeSm
                     color: Theme.textSecondary
-                    Layout.preferredWidth: 80
+                    Layout.preferredWidth: 110
+                    wrapMode: Text.WordWrap
                 }
 
                 Slider {
@@ -240,10 +246,11 @@ ScrollView {
 
                 // 关键词阈值
                 Text {
-                    text: "关键词阈值"
+                    text: i18n.s["settings.wake_word.threshold"]
                     font.pixelSize: Theme.fontSizeSm
                     color: Theme.textSecondary
-                    Layout.preferredWidth: 80
+                    Layout.preferredWidth: 110
+                    wrapMode: Text.WordWrap
                 }
 
                 Slider {
@@ -275,7 +282,7 @@ ScrollView {
         // 提示信息
         Text {
             Layout.fillWidth: true
-            text: "支持中文和英文唤醒词。中文会自动转换为拼音格式，英文使用 BPE 分词。得分越高越严格，阈值越低越敏感。"
+            text: i18n.s["settings.wake_word.hint"]
             font.pixelSize: Theme.fontSizeSm
             color: Theme.textPlaceholder
             wrapMode: Text.WordWrap

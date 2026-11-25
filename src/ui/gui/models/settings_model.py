@@ -10,6 +10,12 @@ from typing import Any
 
 from PySide6.QtCore import Property, Qt, Signal, Slot
 
+from src.i18n import (
+    LANGUAGE_CHOICES,
+    apply_language_from_config,
+    set_language,
+    t,
+)
 from src.logging import get_logger
 from src.ui.gui.models.base_model import BaseModel
 from src.ui.gui.models.settings.audio_devices import SettingsAudioDevicesMixin
@@ -118,6 +124,7 @@ class SettingsModel(
         self._wake_word: str = ""
         self._wake_word_lang: str = "zh"
         self._wake_word_preview: str = ""
+        self._language_previewed: bool = False
 
         # 启动仅读配置；音频/摄像头/唤醒词预览延后到打开设置时再处理
         self._load_config()
@@ -170,7 +177,7 @@ class SettingsModel(
                     f"设置页后台任务失败 ({name or target}): {e}", exc_info=True
                 )
                 try:
-                    self.statusMessage.emit(f"[错误] {e}")
+                    self.statusMessage.emit(t("common.error_with_msg", error=e))
                 except RuntimeError:
                     pass
                 if test_kind is not None:
@@ -212,18 +219,22 @@ class SettingsModel(
             if error is not None:
                 self.set_error(error)
                 return False
+            self._language_previewed = False
             logger.info("设置已保存并加载到运行时配置")
-            self.statusMessage.emit("配置已保存")
+            self.statusMessage.emit(t("settings.saved"))
             self.configSaved.emit()
             return True
         except Exception as e:
             logger.error(f"保存配置失败: {e}", exc_info=True)
-            self.set_error(f"保存配置失败: {e}")
+            self.set_error(t("settings.save_failed", error=e))
             return False
 
     @Slot()
     def discard(self):
         """丢弃草稿并恢复当前运行时快照，不枚举设备或加载模型."""
+        if self._language_previewed:
+            self._language_previewed = False
+            apply_language_from_config(self._config_manager)
         self._load_config()
         self._load_wake_word(update_preview=False)
         self.set_error("")
@@ -244,6 +255,20 @@ class SettingsModel(
     # ========== QML Properties（元数据直映）==========
     clientId = _config_property(str, "SYSTEM_OPTIONS.CLIENT_ID", "", notify=settingsChanged)
     deviceId = _config_property(str, "SYSTEM_OPTIONS.DEVICE_ID", "", notify=settingsChanged)
+
+    def _get_language(self) -> str:
+        val = str(self._get_value("SYSTEM_OPTIONS.LANGUAGE", "auto") or "auto")
+        return val if val in LANGUAGE_CHOICES else "auto"
+
+    def _set_language(self, value: str) -> None:
+        val = str(value or "auto").strip()
+        if val not in LANGUAGE_CHOICES:
+            return
+        self._set_value("SYSTEM_OPTIONS.LANGUAGE", val)
+        self._language_previewed = True
+        set_language(val)
+
+    language = Property(str, _get_language, _set_language, notify=settingsChanged)
     otaUrl = _config_property(str, "SYSTEM_OPTIONS.NETWORK.OTA_VERSION_URL", "", notify=settingsChanged)
     websocketUrl = _config_property(str, "SYSTEM_OPTIONS.NETWORK.WEBSOCKET_URL", "", notify=settingsChanged)
     websocketToken = _config_property(str, "SYSTEM_OPTIONS.NETWORK.WEBSOCKET_ACCESS_TOKEN", "", notify=settingsChanged)
