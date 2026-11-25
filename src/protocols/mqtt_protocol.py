@@ -78,6 +78,8 @@ class MqttProtocol(Protocol):
         self._udp.set_audio_handler(self._on_udp_audio)
 
         self.server_hello_event = asyncio.Event()
+        self._hello_error: str | None = None
+        self._hello_probe_enabled: bool = False
         self._control_connect_lock = asyncio.Lock()
         self._control_reconnect_task: asyncio.Task | None = None
         self._udp_reset_lock = asyncio.Lock()
@@ -169,10 +171,20 @@ class MqttProtocol(Protocol):
                 "password",
                 "publish_topic",
                 "subscribe_topic",
+                "keepalive",
             )
         }
         if snapshot["subscribe_topic"] == "null":
             snapshot["subscribe_topic"] = None
+        raw_keepalive = snapshot.get("keepalive")
+        if (
+            isinstance(raw_keepalive, int)
+            and not isinstance(raw_keepalive, bool)
+            and raw_keepalive > 0
+        ):
+            snapshot["keepalive"] = raw_keepalive
+        else:
+            snapshot["keepalive"] = None
         return snapshot
 
     async def _connect_control_channel(self) -> bool:
@@ -299,6 +311,7 @@ class MqttProtocol(Protocol):
         self.password = mqtt_config.get("password")
         self.publish_topic = mqtt_config.get("publish_topic")
         self.subscribe_topic = mqtt_config.get("subscribe_topic")
+        self._keep_alive_interval = mqtt_config.get("keepalive") or 60
         logger.info(f"已从OTA服务器获取MQTT配置: {self.endpoint}")
 
         if (
@@ -408,6 +421,8 @@ class MqttProtocol(Protocol):
         self._audio_generation += 1
         generation = self._audio_generation
         self.server_hello_event = asyncio.Event()
+        self._hello_error = None
+        self._hello_probe_enabled = False
         self.connected = False
         self.session_id = ""
         await self._reset_udp_session()
@@ -432,10 +447,35 @@ class MqttProtocol(Protocol):
                 await self._on_network_error("等待响应超时")
             return False
 
+        if self._hello_error:
+            error = self._hello_error
+            logger.error("UDP 会话协商失败: %s", error)
+            if self._on_network_error:
+                await self._on_network_error(error)
+            return False
+
         if generation != self._audio_generation or self._shutdown:
             return False
         try:
             self._udp.start()
+            if self._hello_probe_enabled:
+                try:
+                    self._udp.start_probe(
+                        on_failure=lambda reason, gen=generation: self._on_udp_probe_failure(
+                            reason, gen
+                        )
+                    )
+                except Exception as probe_err:
+                    logger.error(
+                        "启动 UDP 探测失败 (udp_probe_auth_error): %s", probe_err
+                    )
+                    await self._reset_udp_session()
+                    if self._on_network_error:
+                        await self._on_network_error(
+                            f"UDP 探测认证失败 (udp_probe_auth_error): {probe_err}"
+                        )
+                    return False
+
             self.connected = True
             self._reconnect_attempts = 0
             self._start_connection_monitor()
@@ -453,6 +493,15 @@ class MqttProtocol(Protocol):
             if self._on_network_error:
                 await self._on_network_error(f"创建UDP连接失败: {e}")
             return False
+
+    async def _on_udp_probe_failure(self, reason: str, generation: int) -> None:
+        """已协商探测超时/异常：按规范关闭通道并上报错误，禁止静默降级."""
+        if generation != self._audio_generation or self._shutdown or self._is_closing:
+            return
+        logger.error("UDP 探测失败 (%s)，关闭当前音频通道", reason)
+        await self._close_udp_audio_session(send_goodbye=True)
+        if not self._shutdown and self._on_network_error:
+            await self._on_network_error(f"UDP 探测失败: {reason}")
 
     def _handle_control_message(self, client, payload):
         """Revalidate thread callback ownership on the loop before mutation."""
@@ -475,7 +524,7 @@ class MqttProtocol(Protocol):
                 return
 
             if msg_type == "hello":
-                if self._udp_reset_lock.locked():
+                if self._udp_reset_lock.locked() or self.connected:
                     return
                 logger.debug("收到UDP会话hello")
                 transport = data.get("transport")
@@ -483,23 +532,55 @@ class MqttProtocol(Protocol):
                     logger.error(f"不支持的传输方式: {transport}")
                     return
 
+                features = data.get("features")
+                probe_enabled = False
+                if features is not None:
+                    if not isinstance(features, dict):
+                        self._hello_error = "hello features 字段类型非法"
+                        self.server_hello_event.set()
+                        return
+                    if "udp_probe" in features:
+                        raw_probe = features["udp_probe"]
+                        if not isinstance(raw_probe, bool):
+                            self._hello_error = "hello features.udp_probe 必须为布尔值"
+                            self.server_hello_event.set()
+                            return
+                        probe_enabled = raw_probe
+
                 self.session_id = data.get("session_id", "")
 
                 udp = data.get("udp")
-                if not udp:
+                if not isinstance(udp, dict):
                     logger.error("UDP配置缺失")
                     return
 
-                self._udp.configure(
-                    server=udp.get("server"),
-                    port=udp.get("port"),
-                    aes_key=udp.get("key"),
-                    aes_nonce=udp.get("nonce"),
-                )
+                self._hello_probe_enabled = probe_enabled
+                try:
+                    if probe_enabled:
+                        self._udp.configure(
+                            server=udp.get("server"),
+                            port=udp.get("port"),
+                            aes_key=udp.get("key"),
+                            aes_nonce=udp.get("nonce"),
+                            probe_enabled=True,
+                        )
+                    else:
+                        self._udp.configure(
+                            server=udp.get("server"),
+                            port=udp.get("port"),
+                            aes_key=udp.get("key"),
+                            aes_nonce=udp.get("nonce"),
+                        )
+                except ValueError as exc:
+                    self._hello_error = f"无效的 UDP 加密参数: {exc}"
+                    self.server_hello_event.set()
+                    return
 
                 logger.info(
-                    f"收到服务器hello响应，UDP服务器: "
-                    f"{self._udp.server}:{self._udp.port}"
+                    "收到服务器hello响应，UDP服务器: %s:%s (udp_probe=%s)",
+                    self._udp.server,
+                    self._udp.port,
+                    probe_enabled,
                 )
 
                 self.server_hello_event.set()

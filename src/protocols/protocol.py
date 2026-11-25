@@ -7,6 +7,15 @@ from src.logging import get_logger
 logger = get_logger()
 
 
+def build_client_protocol_features() -> dict[str, bool]:
+    """当前客户端实际支持的协议能力（OTA protocol.features 与 hello features 同源）."""
+    return {
+        "mcp": True,
+        "mcp_20260728": True,
+        "udp_probe": True,
+    }
+
+
 class Protocol:
     def __init__(self):
         self.session_id = ""
@@ -198,7 +207,7 @@ class Protocol:
         return {
             "type": "hello",
             "version": version,
-            "features": {"mcp": True},
+            "features": build_client_protocol_features(),
             "transport": transport,
             "audio_params": {
                 "format": "opus",

@@ -10,6 +10,7 @@ import aiohttp
 
 from src.constants.system import SystemConstants
 from src.logging import get_logger
+from src.protocols.protocol import build_client_protocol_features
 
 if TYPE_CHECKING:
     from src.activation.identity import DeviceIdentity
@@ -93,14 +94,26 @@ class OtaConfigClient:
         activation_version = self._config.get_config(
             "SYSTEM_OPTIONS.NETWORK.ACTIVATION_VERSION", "v1"
         )
-        if activation_version == "v2":
-            headers["Activation-Version"] = SystemConstants.APP_VERSION
+        get_sn = getattr(self._identity, "get_serial_number", None)
+        serial_number = get_sn() if callable(get_sn) else None
+        if activation_version == "v2" and serial_number:
+            headers["Activation-Version"] = "2"
+            headers["Serial-Number"] = serial_number
+        else:
+            headers["Activation-Version"] = "1"
         return headers
 
     def _build_ota_payload(self) -> Dict:
         hmac_key = self._identity.load_efuse_data().get("hmac_key", "unknown")
+        device_id = self._config.get_config("SYSTEM_OPTIONS.DEVICE_ID")
+        client_id = self._config.get_config("SYSTEM_OPTIONS.CLIENT_ID")
         return {
+            "version": 2,
+            "language": "zh-CN",
+            "mac_address": device_id,
+            "uuid": client_id,
             "application": {
+                "name": SystemConstants.APP_NAME,
                 "version": SystemConstants.APP_VERSION,
                 "elf_sha256": hmac_key,
             },
@@ -108,7 +121,10 @@ class OtaConfigClient:
                 "type": SystemConstants.BOARD_TYPE,
                 "name": SystemConstants.APP_NAME,
                 "ip": self._local_ip,
-                "mac": self._config.get_config("SYSTEM_OPTIONS.DEVICE_ID"),
+                "mac": device_id,
+            },
+            "protocol": {
+                "features": build_client_protocol_features(),
             },
         }
 

@@ -8,7 +8,7 @@ import requests
 
 from src.logging import get_logger
 
-from .base_camera import BaseCamera
+from .base_camera import BaseCamera, get_vision_config_override
 
 logger = get_logger()
 
@@ -34,7 +34,13 @@ class NormalCamera(BaseCamera):
             logger.info("Vision service token has been set")
 
     def analyze(self, question: str, image_data: bytes | None = None) -> str:
-        if not self.explain_url:
+        override = get_vision_config_override()
+        if override is not None:
+            explain_url, explain_token = override
+        else:
+            explain_url, explain_token = self.explain_url, self.explain_token
+
+        if not explain_url:
             return json.dumps(
                 {"success": False, "message": "Image explain URL is not set"}
             )
@@ -49,8 +55,8 @@ class NormalCamera(BaseCamera):
             "Client-Id": self.config.get_config("SYSTEM_OPTIONS.CLIENT_ID"),
         }
 
-        if self.explain_token:
-            headers["Authorization"] = f"Bearer {self.explain_token}"
+        if explain_token:
+            headers["Authorization"] = f"Bearer {explain_token}"
 
         # 准备文件数据
         files = {
@@ -60,11 +66,11 @@ class NormalCamera(BaseCamera):
 
         try:
             logger.info(
-                f"[Vision] POST {self.explain_url}, "
+                f"[Vision] POST {explain_url}, "
                 f"question={question}, file_size={len(buf)} bytes"
             )
             response = requests.post(
-                self.explain_url, headers=headers, files=files, timeout=10
+                explain_url, headers=headers, files=files, timeout=10
             )
 
             # 检查响应状态

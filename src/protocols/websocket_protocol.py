@@ -47,11 +47,18 @@ class WebsocketProtocol(Protocol):
         client_id = self.config.get_config("SYSTEM_OPTIONS.CLIENT_ID")
 
         self.HEADERS = {
-            "Authorization": f"Bearer {access_token}",
             "Protocol-Version": "1",
             "Device-Id": device_id,  # 获取设备MAC地址
             "Client-Id": client_id,
         }
+        if access_token:
+            token_str = str(access_token).strip()
+            if token_str:
+                self.HEADERS["Authorization"] = (
+                    token_str if " " in token_str else f"Bearer {token_str}"
+                )
+        else:
+            self.HEADERS["Authorization"] = f"Bearer {access_token}"
 
     async def _open_websocket(self, current_ssl_context):
         """建立 WebSocket 连接，兼容新旧版 websockets 参数名."""
@@ -183,6 +190,7 @@ class WebsocketProtocol(Protocol):
         await self._cancel_task(task, label="消息任务")
 
         # Drop the owned reference before awaiting close.
+        self.session_id = ""
         websocket = self.websocket
         self.websocket = None
         if websocket and websocket.close_code is None:
@@ -406,6 +414,10 @@ class WebsocketProtocol(Protocol):
             if not transport or transport != "websocket":
                 logger.error(f"不支持的传输方式: {transport}")
                 return
+
+            session_id = data.get("session_id")
+            if isinstance(session_id, str):
+                self.session_id = session_id
 
             # 设置 hello 接收事件
             self.hello_received.set()

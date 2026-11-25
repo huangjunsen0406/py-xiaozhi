@@ -96,6 +96,7 @@ def register_screenshot_tools(
                 ]
             ),
             take_screenshot,
+            requires_vision=True,
         )
     )
     logger.info("已注册 take_screenshot（无全局单例）")

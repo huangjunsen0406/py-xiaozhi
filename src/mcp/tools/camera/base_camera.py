@@ -3,6 +3,9 @@ Base camera implementation.
 """
 
 from abc import ABC, abstractmethod
+from collections.abc import Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from typing import Any
 
 from src.logging import get_logger
@@ -11,6 +14,26 @@ from src.utils.config_manager import ConfigManager
 from .capture_backend import capture_jpeg, load_capture_config
 
 logger = get_logger()
+
+# 新版 MCP 2026-07-28 逐次视觉配置（按协程上下文隔离，不读写旧版实例字段）
+_VISION_OVERRIDE: ContextVar[tuple[str, str] | None] = ContextVar(
+    "mcp_vision_override", default=None
+)
+
+
+@contextmanager
+def vision_config_override(url: str, token: str = "") -> Iterator[None]:
+    """在当前请求上下文中绑定逐次视觉服务配置."""
+    ctx_token = _VISION_OVERRIDE.set((url, token))
+    try:
+        yield
+    finally:
+        _VISION_OVERRIDE.reset(ctx_token)
+
+
+def get_vision_config_override() -> tuple[str, str] | None:
+    """读取当前请求上下文的逐次视觉配置（None 表示未设置，走旧版配置）."""
+    return _VISION_OVERRIDE.get()
 
 
 class BaseCamera(ABC):
