@@ -122,8 +122,8 @@ class GpioViewManager:
     def set_chat_text(self, text: str):
         logger.info(f"[对话] {text}")
 
-    def set_music_line(self, text: str):
-        logger.info(f"[音乐] {text}")
+    def set_media_line(self, text: str):
+        logger.info(f"[媒体] {text}")
 
     def set_emotion(self, emotion: str):
         logger.debug(f"[表情] {emotion}")

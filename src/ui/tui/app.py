@@ -67,7 +67,7 @@ class XiaozhiTuiApp(App[None]):
     connected: reactive[bool] = reactive(False)
     auto_mode: reactive[bool] = reactive(False)
     chat_text: reactive[str] = reactive("")
-    music_line: reactive[str] = reactive("")
+    media_line: reactive[str] = reactive("")
     emotion: reactive[str] = reactive("neutral")
 
     def __init__(
@@ -97,7 +97,7 @@ class XiaozhiTuiApp(App[None]):
             yield Static("状态: 待命", id="status-line")
             yield Static("连接: 未连接 | 模式: 手动 | 表情: neutral", id="meta-line")
             yield Static("对话: —", id="chat-line")
-            yield Static("音乐: —", id="music-line")
+            yield Static("媒体: —", id="media-line")
         yield RichLog(id="log-panel", highlight=True, markup=True, max_lines=500)
         with Horizontal(id="input-row"):
             yield Input(
@@ -132,7 +132,7 @@ class XiaozhiTuiApp(App[None]):
     def watch_chat_text(self, _value: str) -> None:
         self._refresh_status_widgets()
 
-    def watch_music_line(self, _value: str) -> None:
+    def watch_media_line(self, _value: str) -> None:
         self._refresh_status_widgets()
 
     def watch_emotion(self, _value: str) -> None:
@@ -149,8 +149,8 @@ class XiaozhiTuiApp(App[None]):
             self.query_one("#chat-line", Static).update(
                 f"对话: {self.chat_text or '—'}"
             )
-            self.query_one("#music-line", Static).update(
-                f"音乐: {self.music_line or '—'}"
+            self.query_one("#media-line", Static).update(
+                f"媒体: {self.media_line or '—'}"
             )
         except NoMatches:
             pass

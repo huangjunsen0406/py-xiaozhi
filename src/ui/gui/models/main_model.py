@@ -10,7 +10,7 @@ class MainModel(BaseModel):
 
     # 信号
     ttsTextChanged = Signal()
-    musicLineChanged = Signal()
+    mediaLineChanged = Signal()
     emotionUrlChanged = Signal()
     statusTextChanged = Signal()
     connectedChanged = Signal()
@@ -21,7 +21,7 @@ class MainModel(BaseModel):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._tts_text = ""
-        self._music_line = ""
+        self._media_line = ""
         self._emotion_url = ""
         self._status_text = ""
         self._connected = False
@@ -36,9 +36,9 @@ class MainModel(BaseModel):
         # 历史属性名还是 ttsText，实际是对话内容
         return self._tts_text
 
-    @Property(str, notify=musicLineChanged)
-    def musicLine(self) -> str:
-        return self._music_line
+    @Property(str, notify=mediaLineChanged)
+    def mediaLine(self) -> str:
+        return self._media_line
 
     @Property(str, notify=emotionUrlChanged)
     def emotionUrl(self) -> str:
@@ -71,10 +71,10 @@ class MainModel(BaseModel):
             self._tts_text = text
             self.ttsTextChanged.emit()
 
-    def set_music_line(self, text: str):
-        if self._music_line != text:
-            self._music_line = text
-            self.musicLineChanged.emit()
+    def set_media_line(self, text: str):
+        if self._media_line != text:
+            self._media_line = text
+            self.mediaLineChanged.emit()
 
     def set_emotion_url(self, url: str):
         if self._emotion_url != url:

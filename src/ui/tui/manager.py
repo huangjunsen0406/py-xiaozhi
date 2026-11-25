@@ -47,7 +47,7 @@ class TuiViewManager:
         self._status = "待命"
         self._connected = False
         self._chat_text = ""
-        self._music_line = ""
+        self._media_line = ""
         self._emotion = "neutral"
 
     async def start(self, mode: str = "tui"):
@@ -77,7 +77,7 @@ class TuiViewManager:
         self._app.connected = self._connected
         self._app.auto_mode = self._auto_mode
         self._app.chat_text = self._chat_text
-        self._app.music_line = self._music_line
+        self._app.media_line = self._media_line
         self._app.emotion = self._emotion
 
         # UIPlugin 经 TaskManager.spawn 启动本协程；这里 await run_async
@@ -185,9 +185,9 @@ class TuiViewManager:
         self._chat_text = text
         self._set_app_attr("chat_text", text)
 
-    def set_music_line(self, text: str):
-        self._music_line = text
-        self._set_app_attr("music_line", text)
+    def set_media_line(self, text: str):
+        self._media_line = text
+        self._set_app_attr("media_line", text)
 
     def set_emotion(self, emotion: str):
         self._emotion = emotion

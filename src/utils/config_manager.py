@@ -26,7 +26,7 @@ def initialize_config() -> "ConfigManager":
     global _current
     if _current is None:
         _current = ConfigManager()
-        # 应用 PATHS 覆盖并迁移 cache/logs/music/keywords（config 目录不迁）
+        # 应用 PATHS 覆盖并迁移 cache/logs/keywords（config 目录不迁）
         try:
             from src.utils.resource_finder import apply_path_overrides_from_config
 
@@ -129,21 +129,18 @@ class ConfigManager:
         },
         "AEC_OPTIONS": {
             "ENABLED": False,
-            # AEC 在位时 TTS 不暂停音乐，混音闪避并行播放（引擎旁路则自动回退暂停）
-            "MUSIC_PARALLEL": True,
+            # AEC 在位时 TTS 不暂停背景媒体，由混音器自动闪避并行播放（旁路则自动回退暂停）
+            "MEDIA_PARALLEL": True,
             # 延迟补偿（协议帧数），实际 delay_ms = 40 + N * 帧长
             "FRAME_DELAY": 3,
             # 噪声抑制/高通预处理
             "ENABLE_PREPROCESS": True,
         },
         # 可写目录覆盖（config 仍固定在用户数据/config；null=默认）
-        # 环境变量优先：XIAOZHI_CACHE_DIR / XIAOZHI_LOG_DIR /
-        # XIAOZHI_MUSIC_CACHE_DIR / XIAOZHI_KEYWORDS_DIR / XIAOZHI_DATA_DIR
-        # 更改 CACHE/LOG/MUSIC/KEYWORDS 后启动时会从旧目录复制到新目录（不删旧）
+        # 环境变量优先：XIAOZHI_DATA_DIR / XIAOZHI_CACHE_DIR / XIAOZHI_LOG_DIR / XIAOZHI_KEYWORDS_DIR
         "PATHS": {
             "CACHE_DIR": None,
             "LOG_DIR": None,
-            "MUSIC_CACHE_DIR": None,
             "KEYWORDS_DIR": None,
         },
         # 外挂 MCP 插件（用户目录 mcp_plugins，自带 lib/）
@@ -152,7 +149,7 @@ class ConfigManager:
             "DIR": None,  # null = {用户数据}/mcp_plugins
             "ENABLED_IDS": [],  # 空 = 按插件 enabled_by_default
             "DISABLED_IDS": [],
-            "ALLOW_HOST_GET": ["config_readonly", "logger"],
+            "ALLOW_HOST_GET": ["config_readonly", "logger", "data_dir"],
             # 严格校验（默认关，避免示例包无 platforms/abi 时无法加载）
             "ENFORCE_PREFIX": False,
             "REQUIRE_PYTHON_ABI": False,
@@ -160,7 +157,7 @@ class ConfigManager:
         },
         # MCP 工具暴露（黑名单：不出现在 tools/list，call 亦拒绝）
         "MCP_TOOLS": {
-            "DISABLED": [],  # 如 ["music_player.stop", "self.application.launch"]
+            "DISABLED": [],  # 如 ["media.stop", "self.application.launch"]
         },
         "AUDIO_DEVICES": {
             "input_device_id": None,
@@ -192,15 +189,6 @@ class ConfigManager:
                 "paho": "WARNING",
                 "PIL": "WARNING",
             },
-        },
-        # 音乐 API（空字符串=运行时用内置默认 URL）
-        "MUSIC": {
-            "SEARCH_URL": "",
-            "URL_API": "",
-            "URL_API_KEY": "",
-            "LYRICS_URL": "",
-            "DEFAULT_PLATFORM": "kw",
-            "DEFAULT_QUALITY": "320k",
         },
     }
 

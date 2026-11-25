@@ -15,10 +15,7 @@ from src.ui.gui.models.base_model import BaseModel
 from src.ui.gui.models.settings.audio_devices import SettingsAudioDevicesMixin
 from src.ui.gui.models.settings.camera_devices import SettingsCameraDevicesMixin
 from src.ui.gui.models.settings.mcp_tools import SettingsMcpToolsMixin
-from src.ui.gui.models.settings.system_options import (
-    PATH_SPECS,
-    SettingsSystemOptionsMixin,
-)
+from src.ui.gui.models.settings.system_options import SettingsSystemOptionsMixin
 from src.ui.gui.models.settings.wake_word import SettingsWakeWordMixin
 from src.ui.shared.settings_helpers import get_draft_value, set_draft_value
 from src.utils.config_manager import ConfigManager
@@ -59,10 +56,6 @@ def _config_property(
         self._set_value(path, value)
 
     return Property(prop_type, _get, _set, notify=notify)
-
-
-def _default_path_property(kind: str, *, notify: Signal) -> Property:
-    return Property(str, lambda self: self._get_default_path(kind), notify=notify)
 
 
 class SettingsModel(
@@ -257,10 +250,6 @@ class SettingsModel(
     authorizationUrl = _config_property(str, "SYSTEM_OPTIONS.NETWORK.AUTHORIZATION_URL", "", notify=settingsChanged)
     activationVersion = _config_property(str, "SYSTEM_OPTIONS.NETWORK.ACTIVATION_VERSION", "v1", notify=settingsChanged)
     windowSizeMode = _config_property(str, "SYSTEM_OPTIONS.WINDOW_SIZE_MODE", "default", notify=settingsChanged)
-    musicSearchUrl = _config_property(str, "MUSIC.SEARCH_URL", "", notify=settingsChanged)
-    musicUrlApi = _config_property(str, "MUSIC.URL_API", "", notify=settingsChanged)
-    musicUrlApiKey = _config_property(str, "MUSIC.URL_API_KEY", "", notify=settingsChanged)
-    musicDefaultQuality = _config_property(str, "MUSIC.DEFAULT_QUALITY", "320k", notify=settingsChanged)
     mqttEndpoint = _config_property(str, "SYSTEM_OPTIONS.NETWORK.MQTT_INFO.endpoint", "", notify=settingsChanged)
     mqttClientId = _config_property(str, "SYSTEM_OPTIONS.NETWORK.MQTT_INFO.client_id", "", notify=settingsChanged)
     mqttUsername = _config_property(str, "SYSTEM_OPTIONS.NETWORK.MQTT_INFO.username", "", notify=settingsChanged)
@@ -268,47 +257,17 @@ class SettingsModel(
     mqttPublishTopic = _config_property(str, "SYSTEM_OPTIONS.NETWORK.MQTT_INFO.publish_topic", "", notify=settingsChanged)
     mqttSubscribeTopic = _config_property(str, "SYSTEM_OPTIONS.NETWORK.MQTT_INFO.subscribe_topic", "", notify=settingsChanged)
     aecEnabled = _config_property(bool, "AEC_OPTIONS.ENABLED", False, notify=settingsChanged)
-    aecMusicParallel = _config_property(bool, "AEC_OPTIONS.MUSIC_PARALLEL", True, notify=settingsChanged)
+    aecMediaParallel = _config_property(bool, "AEC_OPTIONS.MEDIA_PARALLEL", True, notify=settingsChanged)
     aecFrameDelay = _config_property(int, "AEC_OPTIONS.FRAME_DELAY", 3, notify=settingsChanged, coerce_int=True)
     aecEnablePreprocess = _config_property(bool, "AEC_OPTIONS.ENABLE_PREPROCESS", True, notify=settingsChanged)
 
-    pathCacheDir = _config_property(str, "PATHS.CACHE_DIR", "", notify=settingsChanged, strip=True)
-    pathLogDir = _config_property(str, "PATHS.LOG_DIR", "", notify=settingsChanged, strip=True)
-    pathMusicCacheDir = _config_property(str, "PATHS.MUSIC_CACHE_DIR", "", notify=settingsChanged, strip=True)
-    pathKeywordsDir = _config_property(str, "PATHS.KEYWORDS_DIR", "", notify=settingsChanged, strip=True)
-    pathMcpPluginsDir = _config_property(str, "MCP_PLUGINS.DIR", "", notify=settingsChanged, strip=True)
-    pathDefaultCacheDir = _default_path_property("cache", notify=settingsChanged)
-    pathDefaultLogDir = _default_path_property("log", notify=settingsChanged)
-    pathDefaultMusicCacheDir = _default_path_property("music", notify=settingsChanged)
-    pathDefaultKeywordsDir = _default_path_property("keywords", notify=settingsChanged)
-    pathDefaultMcpPluginsDir = _default_path_property("mcp", notify=settingsChanged)
-    pathHints = Property(
-        str, SettingsSystemOptionsMixin._get_pathHints, notify=settingsChanged
+    userDataDir = Property(
+        str, SettingsSystemOptionsMixin._get_userDataDir, notify=settingsChanged
     )
 
-    @Slot(str, result=str)
-    def browseDirectory(self, which: str) -> str:
-        """打开系统目录选择框。which: cache|log|music|keywords|mcp.
-
-        返回选中的路径；取消返回空串（QML 勿写回）。
-        """
-        which = (which or "").strip().lower()
-        spec = PATH_SPECS.get(which)
-        if spec is None:
-            return ""
-        config_path, title = spec
-        current = self._get_value(config_path, "") or ""
-        path = self._browse_directory(title, current, which)
-        if path:
-            self._set_value(config_path, path.strip())
-        return path
-
-    @Slot(str)
-    def clearPathDir(self, which: str) -> None:
-        """清空某项自定义路径（恢复默认）."""
-        spec = PATH_SPECS.get((which or "").strip().lower())
-        if spec is not None:
-            self._set_value(spec[0], "")
+    @Slot(result=bool)
+    def openUserDataDir(self) -> bool:
+        return self._open_user_data_dir()
 
     mcpToolsCatalogJson = Property(
         str, SettingsMcpToolsMixin._get_mcpToolsCatalogJson, notify=settingsChanged
@@ -319,6 +278,18 @@ class SettingsModel(
         SettingsMcpToolsMixin._set_mcpToolsDisabledJson,
         notify=settingsChanged,
     )
+    mcpAllowMediaPlayer = Property(
+        bool,
+        SettingsMcpToolsMixin._get_mcpAllowMediaPlayer,
+        SettingsMcpToolsMixin._set_mcpAllowMediaPlayer,
+        notify=settingsChanged,
+    )
+    mcpPluginsDir = Property(
+        str, SettingsMcpToolsMixin._get_mcpPluginsDir, notify=settingsChanged
+    )
+    mcpInstalledPluginsJson = Property(
+        str, SettingsMcpToolsMixin._get_mcpInstalledPluginsJson, notify=settingsChanged
+    )
 
     @Slot(str, bool)
     def setMcpToolEnabled(self, name: str, enabled: bool) -> None:
@@ -327,6 +298,26 @@ class SettingsModel(
     @Slot(str, bool)
     def setMcpToolGroupEnabled(self, group: str, enabled: bool) -> None:
         self._set_mcpToolGroupEnabled(group, enabled)
+
+    @Slot(result=bool)
+    def importMcpPluginZip(self) -> bool:
+        return self._import_mcp_plugin_zip()
+
+    @Slot(result=bool)
+    def importMcpPluginDir(self) -> bool:
+        return self._import_mcp_plugin_dir()
+
+    @Slot(str, result=bool)
+    def uninstallMcpPlugin(self, plugin_id: str) -> bool:
+        return self._uninstall_mcp_plugin(plugin_id)
+
+    @Slot(result=bool)
+    def openMcpPluginsDir(self) -> bool:
+        return self._open_mcp_plugins_dir()
+
+    @Slot()
+    def refreshMcpPlugins(self) -> None:
+        self._trigger_runtime_plugin_reload()
 
     wakeWordEnabled = _config_property(bool, "WAKE_WORD_OPTIONS.USE_WAKE_WORD", False, notify=settingsChanged)
     modelPath = _config_property(str, "WAKE_WORD_OPTIONS.MODEL_PATH", "models", notify=settingsChanged)

@@ -122,7 +122,7 @@ ScrollView {
                 }
 
                 Text {
-                    text: "音乐并行播放"
+                    text: "媒体并行播放"
                     font.pixelSize: Theme.fontSizeSm
                     color: Theme.textSecondary
                     Layout.preferredWidth: 100
@@ -131,8 +131,8 @@ ScrollView {
                 XSwitch {
                     enabled: aecEnabledSwitch.checked
                     opacity: aecEnabledSwitch.checked ? 1 : 0.45
-                    checked: settingsModel ? settingsModel.aecMusicParallel : true
-                    onToggled: if (settingsModel) settingsModel.aecMusicParallel = checked
+                    checked: settingsModel ? settingsModel.aecMediaParallel : true
+                    onToggled: if (settingsModel) settingsModel.aecMediaParallel = checked
                 }
 
                 Text {
@@ -449,190 +449,28 @@ ScrollView {
                 color: Theme.textSecondary
             }
 
-            Text {
-                Layout.fillWidth: true
-                text: "配置文件仍在用户数据目录。点「选择」打开系统文件夹对话框；「默认」清空为系统默认。保存后下次启动会从旧目录复制到新路径。"
-                font.pixelSize: Theme.fontSizeXs
-                color: Theme.textSecondary
-                wrapMode: Text.WordWrap
-            }
-
-            // 缓存
             RowLayout {
                 Layout.fillWidth: true
                 spacing: Theme.spacingSm
-                Text {
-                    text: "缓存目录"
-                    font.pixelSize: Theme.fontSizeSm
-                    color: Theme.textSecondary
-                    Layout.preferredWidth: 100
-                }
-                TextField {
-                    id: pathCacheField
-                    Layout.fillWidth: true
-                    text: settingsModel ? settingsModel.pathCacheDir : ""
-                    onTextEdited: if (settingsModel) settingsModel.pathCacheDir = text
-                    onEditingFinished: if (settingsModel) settingsModel.pathCacheDir = text
-                    placeholderText: settingsModel ? settingsModel.pathDefaultCacheDir : ""
-                    font.pixelSize: Theme.fontSizeSm
-                    background: Rectangle {
-                        radius: Theme.radiusSm
-                        color: Theme.backgroundSecondary
-                        border.color: pathCacheField.activeFocus ? Theme.primary : "transparent"
-                    }
-                }
-                Button {
-                    text: "选择"
-                    font.pixelSize: Theme.fontSizeSm
-                    Layout.preferredWidth: 64
-                    Layout.preferredHeight: 32
-                    background: Rectangle {
-                        radius: Theme.radiusSm
-                        color: parent.pressed ? Theme.backgroundHover : Theme.backgroundSecondary
-                        border.width: 1
-                        border.color: Theme.divider
-                    }
-                    contentItem: Text {
-                        text: parent.text
-                        font.pixelSize: Theme.fontSizeSm
-                        color: Theme.textPrimary
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
-                    }
-                    onClicked: {
-                        if (!settingsModel) return
-                        var p = settingsModel.browseDirectory("cache")
-                        if (p) pathCacheField.text = p
-                    }
-                }
-                Button {
-                    text: "默认"
-                    font.pixelSize: Theme.fontSizeSm
-                    Layout.preferredWidth: 64
-                    Layout.preferredHeight: 32
-                    background: Rectangle {
-                        radius: Theme.radiusSm
-                        color: parent.pressed ? Theme.backgroundHover : Theme.backgroundSecondary
-                        border.width: 1
-                        border.color: Theme.divider
-                    }
-                    contentItem: Text {
-                        text: parent.text
-                        font.pixelSize: Theme.fontSizeSm
-                        color: Theme.textPrimary
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
-                    }
-                    onClicked: {
-                        if (!settingsModel) return
-                        settingsModel.clearPathDir("cache")
-                        pathCacheField.text = ""
-                    }
-                }
-            }
 
-            // 日志
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: Theme.spacingSm
-                Text {
-                    text: "日志目录"
+                TextField {
+                    Layout.fillWidth: true
+                    readOnly: true
+                    text: settingsModel ? settingsModel.userDataDir : ""
                     font.pixelSize: Theme.fontSizeSm
                     color: Theme.textSecondary
-                    Layout.preferredWidth: 100
-                }
-                TextField {
-                    id: pathLogField
-                    Layout.fillWidth: true
-                    text: settingsModel ? settingsModel.pathLogDir : ""
-                    onTextEdited: if (settingsModel) settingsModel.pathLogDir = text
-                    onEditingFinished: if (settingsModel) settingsModel.pathLogDir = text
-                    placeholderText: settingsModel ? settingsModel.pathDefaultLogDir : ""
-                    font.pixelSize: Theme.fontSizeSm
                     background: Rectangle {
                         radius: Theme.radiusSm
                         color: Theme.backgroundSecondary
-                        border.color: pathLogField.activeFocus ? Theme.primary : "transparent"
-                    }
-                }
-                Button {
-                    text: "选择"
-                    font.pixelSize: Theme.fontSizeSm
-                    Layout.preferredWidth: 64
-                    Layout.preferredHeight: 32
-                    background: Rectangle {
-                        radius: Theme.radiusSm
-                        color: parent.pressed ? Theme.backgroundHover : Theme.backgroundSecondary
                         border.width: 1
                         border.color: Theme.divider
                     }
-                    contentItem: Text {
-                        text: parent.text
-                        font.pixelSize: Theme.fontSizeSm
-                        color: Theme.textPrimary
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
-                    }
-                    onClicked: {
-                        if (!settingsModel) return
-                        var p = settingsModel.browseDirectory("log")
-                        if (p) pathLogField.text = p
-                    }
                 }
-                Button {
-                    text: "默认"
-                    font.pixelSize: Theme.fontSizeSm
-                    Layout.preferredWidth: 64
-                    Layout.preferredHeight: 32
-                    background: Rectangle {
-                        radius: Theme.radiusSm
-                        color: parent.pressed ? Theme.backgroundHover : Theme.backgroundSecondary
-                        border.width: 1
-                        border.color: Theme.divider
-                    }
-                    contentItem: Text {
-                        text: parent.text
-                        font.pixelSize: Theme.fontSizeSm
-                        color: Theme.textPrimary
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
-                    }
-                    onClicked: {
-                        if (!settingsModel) return
-                        settingsModel.clearPathDir("log")
-                        pathLogField.text = ""
-                    }
-                }
-            }
 
-            // 音乐
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: Theme.spacingSm
-                Text {
-                    text: "音乐缓存"
-                    font.pixelSize: Theme.fontSizeSm
-                    color: Theme.textSecondary
-                    Layout.preferredWidth: 100
-                }
-                TextField {
-                    id: pathMusicField
-                    Layout.fillWidth: true
-                    text: settingsModel ? settingsModel.pathMusicCacheDir : ""
-                    onTextEdited: if (settingsModel) settingsModel.pathMusicCacheDir = text
-                    onEditingFinished: if (settingsModel) settingsModel.pathMusicCacheDir = text
-                    placeholderText: settingsModel ? settingsModel.pathDefaultMusicCacheDir : ""
-                    font.pixelSize: Theme.fontSizeSm
-                    background: Rectangle {
-                        radius: Theme.radiusSm
-                        color: Theme.backgroundSecondary
-                        border.color: pathMusicField.activeFocus ? Theme.primary : "transparent"
-                    }
-                }
                 Button {
-                    text: "选择"
+                    text: "打开目录"
                     font.pixelSize: Theme.fontSizeSm
-                    Layout.preferredWidth: 64
+                    Layout.preferredWidth: 84
                     Layout.preferredHeight: 32
                     background: Rectangle {
                         radius: Theme.radiusSm
@@ -648,188 +486,14 @@ ScrollView {
                         verticalAlignment: Text.AlignVCenter
                     }
                     onClicked: {
-                        if (!settingsModel) return
-                        var p = settingsModel.browseDirectory("music")
-                        if (p) pathMusicField.text = p
-                    }
-                }
-                Button {
-                    text: "默认"
-                    font.pixelSize: Theme.fontSizeSm
-                    Layout.preferredWidth: 64
-                    Layout.preferredHeight: 32
-                    background: Rectangle {
-                        radius: Theme.radiusSm
-                        color: parent.pressed ? Theme.backgroundHover : Theme.backgroundSecondary
-                        border.width: 1
-                        border.color: Theme.divider
-                    }
-                    contentItem: Text {
-                        text: parent.text
-                        font.pixelSize: Theme.fontSizeSm
-                        color: Theme.textPrimary
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
-                    }
-                    onClicked: {
-                        if (!settingsModel) return
-                        settingsModel.clearPathDir("music")
-                        pathMusicField.text = ""
-                    }
-                }
-            }
-
-            // 唤醒词
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: Theme.spacingSm
-                Text {
-                    text: "唤醒词目录"
-                    font.pixelSize: Theme.fontSizeSm
-                    color: Theme.textSecondary
-                    Layout.preferredWidth: 100
-                }
-                TextField {
-                    id: pathKeywordsField
-                    Layout.fillWidth: true
-                    text: settingsModel ? settingsModel.pathKeywordsDir : ""
-                    onTextEdited: if (settingsModel) settingsModel.pathKeywordsDir = text
-                    onEditingFinished: if (settingsModel) settingsModel.pathKeywordsDir = text
-                    placeholderText: settingsModel ? settingsModel.pathDefaultKeywordsDir : ""
-                    font.pixelSize: Theme.fontSizeSm
-                    background: Rectangle {
-                        radius: Theme.radiusSm
-                        color: Theme.backgroundSecondary
-                        border.color: pathKeywordsField.activeFocus ? Theme.primary : "transparent"
-                    }
-                }
-                Button {
-                    text: "选择"
-                    font.pixelSize: Theme.fontSizeSm
-                    Layout.preferredWidth: 64
-                    Layout.preferredHeight: 32
-                    background: Rectangle {
-                        radius: Theme.radiusSm
-                        color: parent.pressed ? Theme.backgroundHover : Theme.backgroundSecondary
-                        border.width: 1
-                        border.color: Theme.divider
-                    }
-                    contentItem: Text {
-                        text: parent.text
-                        font.pixelSize: Theme.fontSizeSm
-                        color: Theme.textPrimary
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
-                    }
-                    onClicked: {
-                        if (!settingsModel) return
-                        var p = settingsModel.browseDirectory("keywords")
-                        if (p) pathKeywordsField.text = p
-                    }
-                }
-                Button {
-                    text: "默认"
-                    font.pixelSize: Theme.fontSizeSm
-                    Layout.preferredWidth: 64
-                    Layout.preferredHeight: 32
-                    background: Rectangle {
-                        radius: Theme.radiusSm
-                        color: parent.pressed ? Theme.backgroundHover : Theme.backgroundSecondary
-                        border.width: 1
-                        border.color: Theme.divider
-                    }
-                    contentItem: Text {
-                        text: parent.text
-                        font.pixelSize: Theme.fontSizeSm
-                        color: Theme.textPrimary
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
-                    }
-                    onClicked: {
-                        if (!settingsModel) return
-                        settingsModel.clearPathDir("keywords")
-                        pathKeywordsField.text = ""
-                    }
-                }
-            }
-
-            // MCP 插件
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: Theme.spacingSm
-                Text {
-                    text: "MCP 插件目录"
-                    font.pixelSize: Theme.fontSizeSm
-                    color: Theme.textSecondary
-                    Layout.preferredWidth: 100
-                }
-                TextField {
-                    id: pathMcpField
-                    Layout.fillWidth: true
-                    text: settingsModel ? settingsModel.pathMcpPluginsDir : ""
-                    onTextEdited: if (settingsModel) settingsModel.pathMcpPluginsDir = text
-                    onEditingFinished: if (settingsModel) settingsModel.pathMcpPluginsDir = text
-                    placeholderText: settingsModel ? settingsModel.pathDefaultMcpPluginsDir : ""
-                    font.pixelSize: Theme.fontSizeSm
-                    background: Rectangle {
-                        radius: Theme.radiusSm
-                        color: Theme.backgroundSecondary
-                        border.color: pathMcpField.activeFocus ? Theme.primary : "transparent"
-                    }
-                }
-                Button {
-                    text: "选择"
-                    font.pixelSize: Theme.fontSizeSm
-                    Layout.preferredWidth: 64
-                    Layout.preferredHeight: 32
-                    background: Rectangle {
-                        radius: Theme.radiusSm
-                        color: parent.pressed ? Theme.backgroundHover : Theme.backgroundSecondary
-                        border.width: 1
-                        border.color: Theme.divider
-                    }
-                    contentItem: Text {
-                        text: parent.text
-                        font.pixelSize: Theme.fontSizeSm
-                        color: Theme.textPrimary
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
-                    }
-                    onClicked: {
-                        if (!settingsModel) return
-                        var p = settingsModel.browseDirectory("mcp")
-                        if (p) pathMcpField.text = p
-                    }
-                }
-                Button {
-                    text: "默认"
-                    font.pixelSize: Theme.fontSizeSm
-                    Layout.preferredWidth: 64
-                    Layout.preferredHeight: 32
-                    background: Rectangle {
-                        radius: Theme.radiusSm
-                        color: parent.pressed ? Theme.backgroundHover : Theme.backgroundSecondary
-                        border.width: 1
-                        border.color: Theme.divider
-                    }
-                    contentItem: Text {
-                        text: parent.text
-                        font.pixelSize: Theme.fontSizeSm
-                        color: Theme.textPrimary
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
-                    }
-                    onClicked: {
-                        if (!settingsModel) return
-                        settingsModel.clearPathDir("mcp")
-                        pathMcpField.text = ""
+                        if (settingsModel) settingsModel.openUserDataDir()
                     }
                 }
             }
 
             Text {
                 Layout.fillWidth: true
-                text: settingsModel ? settingsModel.pathHints : ""
+                text: "配置、日志、唤醒词与外挂插件均存放在此目录；如需整体迁移，可在启动前设置环境变量 XIAOZHI_DATA_DIR。"
                 font.pixelSize: Theme.fontSizeXs
                 color: Theme.textSecondary
                 wrapMode: Text.WordWrap

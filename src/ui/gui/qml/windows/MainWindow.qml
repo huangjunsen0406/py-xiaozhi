@@ -105,7 +105,7 @@ AppWindow {
 
                             Text {
                                 width: parent.width
-                                height: parent.height - (musicLineText.visible ? 22 : 0)
+                                height: parent.height - (mediaLineText.visible ? 22 : 0)
                                 text: (mainModel && mainModel.ttsText) ? mainModel.ttsText : "待命"
                                 font.pixelSize: Theme.fontSizeSm
                                 color: Theme.textSecondary
@@ -116,10 +116,10 @@ AppWindow {
                             }
 
                             Text {
-                                id: musicLineText
+                                id: mediaLineText
                                 width: parent.width
-                                visible: mainModel && mainModel.musicLine && mainModel.musicLine.length > 0
-                                text: mainModel ? mainModel.musicLine : ""
+                                visible: mainModel && mainModel.mediaLine && mainModel.mediaLine.length > 0
+                                text: mainModel ? mainModel.mediaLine : ""
                                 font.pixelSize: Theme.fontSizeXs
                                 color: Theme.textPlaceholder
                                 horizontalAlignment: Text.AlignHCenter

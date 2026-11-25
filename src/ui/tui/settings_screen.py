@@ -55,7 +55,7 @@ DISPLAY_SECTIONS = [
                 "AUDIO_DEVICES.opus_output_sample_rate",
                 "AUDIO_DEVICES.frame_duration",
                 "AEC_OPTIONS.ENABLED",
-                "AEC_OPTIONS.MUSIC_PARALLEL",
+                "AEC_OPTIONS.MEDIA_PARALLEL",
             )
         ],
     ),
@@ -80,18 +80,6 @@ DISPLAY_SECTIONS = [
                 "CAMERA.Local_VL_url",
                 "CAMERA.VLapi_key",
                 "CAMERA.models",
-            )
-        ],
-    ),
-    (
-        "音乐",
-        [
-            _FIELDS[path]
-            for path in (
-                "MUSIC.SEARCH_URL",
-                "MUSIC.URL_API",
-                "MUSIC.URL_API_KEY",
-                "MUSIC.DEFAULT_QUALITY",
             )
         ],
     ),

@@ -61,13 +61,13 @@ class UIPlugin(Plugin):
         for event, handler in (
             (Events.NETWORK_ERROR, self._on_network_error),
             (Events.SYSTEM_NOTICE, self._on_system_notice),
-            (Events.MUSIC_STATE_CHANGED, self._on_music_state_changed),
-            (Events.MUSIC_LYRICS_UPDATE, self._on_music_lyrics_update),
+            (Events.MEDIA_STATE_CHANGED, self._on_media_state_changed),
+            (Events.MEDIA_SUBTITLE_UPDATE, self._on_media_subtitle_update),
             (Events.NOTIFICATION_SUBTITLE, self._on_notification_subtitle),
         ):
             bus.on(event, handler)
             self._subscriptions.append((event, handler))
-        logger.info("UIPlugin 已订阅音乐/通知/网络/系统提示事件")
+        logger.info("UIPlugin 已订阅媒体/通知/网络/系统提示事件")
 
         if self._session:
             self._session.subscribe(bus)
@@ -144,11 +144,11 @@ class UIPlugin(Plugin):
         if self.viewport:
             pool.register("ui.viewport", self._close_viewport)
 
-    async def _on_music_state_changed(self, data) -> None:
-        self._presenter.show_music_state(data)
+    async def _on_media_state_changed(self, data) -> None:
+        self._presenter.show_media_state(data)
 
-    async def _on_music_lyrics_update(self, data) -> None:
-        self._presenter.show_music_lyrics(data)
+    async def _on_media_subtitle_update(self, data) -> None:
+        self._presenter.show_media_subtitle(data)
 
     async def _on_notification_subtitle(self, text: str = "") -> None:
         if text:

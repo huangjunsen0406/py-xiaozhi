@@ -9,14 +9,13 @@
 默认子目录：config/ cache/ logs/ keywords/ mcp_plugins/
 
 可覆盖（config 目录建议保持默认；其它可迁）：
-- 环境变量：XIAOZHI_DATA_DIR / XIAOZHI_CACHE_DIR / XIAOZHI_LOG_DIR /
-  XIAOZHI_MUSIC_CACHE_DIR / XIAOZHI_KEYWORDS_DIR
+- 环境变量：XIAOZHI_DATA_DIR / XIAOZHI_CACHE_DIR / XIAOZHI_LOG_DIR / XIAOZHI_KEYWORDS_DIR
 - 配置 PATHS.*（见 apply_path_overrides_from_config；改后可迁移旧目录）
 
 核心 API：
 - get_app_root() / get_resource_root() / get_app_name()
 - get_user_data_dir() / get_user_cache_dir() / get_user_log_dir()
-- get_music_cache_dir() / get_keywords_dir()
+- get_keywords_dir() / get_mcp_plugins_dir() / get_mcp_plugin_data_dir()
 - apply_path_overrides_from_config() / migrate_directory()
 """
 
@@ -37,20 +36,17 @@ from src.constants.system import SystemConstants
 ENV_DATA_DIR = "XIAOZHI_DATA_DIR"
 ENV_CACHE_DIR = "XIAOZHI_CACHE_DIR"
 ENV_LOG_DIR = "XIAOZHI_LOG_DIR"
-ENV_MUSIC_CACHE_DIR = "XIAOZHI_MUSIC_CACHE_DIR"
 ENV_KEYWORDS_DIR = "XIAOZHI_KEYWORDS_DIR"
 
 # 运行时覆盖（config 加载后 apply；env 优先于这些）
 _override_cache: Path | None = None
 _override_log: Path | None = None
-_override_music: Path | None = None
 _override_keywords: Path | None = None
 
 _PATH_SPECS: tuple[tuple[str, str, str, str], ...] = (
     # (kind, env_var, config_key, override_attr)
     ("cache", ENV_CACHE_DIR, "PATHS.CACHE_DIR", "_override_cache"),
     ("logs", ENV_LOG_DIR, "PATHS.LOG_DIR", "_override_log"),
-    ("music", ENV_MUSIC_CACHE_DIR, "PATHS.MUSIC_CACHE_DIR", "_override_music"),
     ("keywords", ENV_KEYWORDS_DIR, "PATHS.KEYWORDS_DIR", "_override_keywords"),
 )
 
@@ -144,15 +140,6 @@ def get_log_dir() -> Path:
     return get_user_log_dir()
 
 
-def get_music_cache_dir() -> Path:
-    """音乐缓存：XIAOZHI_MUSIC_CACHE_DIR > 覆盖 > {cache}/music."""
-    return _resolve_dir(
-        ENV_MUSIC_CACHE_DIR,
-        "_override_music",
-        lambda: get_user_cache_dir() / "music",
-    )
-
-
 def get_keywords_dir() -> Path:
     """唤醒词目录：XIAOZHI_KEYWORDS_DIR > 覆盖 > {data}/keywords."""
     return _resolve_dir(
@@ -160,6 +147,26 @@ def get_keywords_dir() -> Path:
         "_override_keywords",
         lambda: get_user_data_dir() / "keywords",
     )
+
+
+def get_mcp_plugins_dir(config=None) -> Path:
+    """外挂 MCP 插件代码目录：配置 MCP_PLUGINS.DIR > {data}/mcp_plugins."""
+    raw = config.get_config("MCP_PLUGINS.DIR", None) if config is not None else None
+    if raw and str(raw).strip():
+        path = Path(str(raw).strip()).expanduser().resolve()
+    else:
+        path = get_user_data_dir() / "mcp_plugins"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def get_mcp_plugin_data_dir(plugin_id: str) -> Path:
+    """单个外挂插件的隔离可写数据目录：{data}/mcp_plugins_data/<safe_plugin_id>."""
+    safe = "".join(c if c.isalnum() or c in ("-", "_", ".") else "_" for c in (plugin_id or "plugin"))
+    safe = safe.strip("._") or "plugin"
+    path = get_user_data_dir() / "mcp_plugins_data" / safe
+    path.mkdir(parents=True, exist_ok=True)
+    return path
 
 
 def clear_path_caches() -> None:
@@ -243,7 +250,6 @@ def _get_dir_by_kind(kind: str) -> Path:
     return {
         "cache": get_user_cache_dir,
         "logs": get_user_log_dir,
-        "music": get_music_cache_dir,
         "keywords": get_keywords_dir,
     }[kind]()
 
@@ -285,9 +291,6 @@ def apply_path_overrides_from_config(
     proposed: dict[str, Path] = {}
     proposed["cache"] = _candidate(ENV_CACHE_DIR, configured["cache"], data / "cache")
     proposed["logs"] = _candidate(ENV_LOG_DIR, configured["logs"], data / "logs")
-    proposed["music"] = _candidate(
-        ENV_MUSIC_CACHE_DIR, configured["music"], proposed["cache"] / "music"
-    )
     proposed["keywords"] = _candidate(
         ENV_KEYWORDS_DIR, configured["keywords"], data / "keywords"
     )
@@ -322,26 +325,11 @@ def apply_path_overrides_from_config(
 
     new_dirs = {kind: _get_dir_by_kind(kind) for kind, *_ in _PATH_SPECS}
 
-    # cache 迁移时：若旧 music 在旧 cache 下但新 music 独立，则跳过 cache/music 子树
-    cache_skip: set[str] = set()
-    try:
-        music_under_old_cache = (
-            old_dirs["music"].resolve() == (old_dirs["cache"] / "music").resolve()
-        )
-        music_stays_default = (
-            new_dirs["music"].resolve() == (new_dirs["cache"] / "music").resolve()
-        )
-        if music_under_old_cache and not music_stays_default:
-            cache_skip.add("music")
-    except OSError:
-        pass
-
     for kind, *_ in _PATH_SPECS:
         old_p, new_p = old_dirs[kind], new_dirs[kind]
         if old_p.resolve() == new_p.resolve():
             continue
-        skip_names = (cache_skip or None) if kind == "cache" else None
-        r = migrate_directory(old_p, new_p, copy=True, skip_dir_names=skip_names)
+        r = migrate_directory(old_p, new_p, copy=True)
         r["kind"] = kind
         migrations.append(r)
         _log_migration(kind, old_p, new_p, r)
@@ -369,7 +357,6 @@ def set_path_overrides(
     *,
     cache: Path | str | None | object = ...,
     log: Path | str | None | object = ...,
-    music: Path | str | None | object = ...,
     keywords: Path | str | None | object = ...,
 ) -> None:
     """测试或编程方式设置覆盖（env 仍优先）.
@@ -381,7 +368,6 @@ def set_path_overrides(
     updates = (
         ("_override_cache", cache),
         ("_override_log", log),
-        ("_override_music", music),
         ("_override_keywords", keywords),
     )
     for attr, value in updates:
@@ -393,7 +379,6 @@ def clear_path_overrides(
     *,
     cache: bool = False,
     log: bool = False,
-    music: bool = False,
     keywords: bool = False,
     all: bool = False,
 ) -> None:
@@ -401,7 +386,6 @@ def clear_path_overrides(
     flags = (
         ("_override_cache", cache),
         ("_override_log", log),
-        ("_override_music", music),
         ("_override_keywords", keywords),
     )
     for attr, should_clear in flags:

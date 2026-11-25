@@ -107,7 +107,7 @@ SETTING_SECTIONS: list[tuple[str, list[SettingField]]] = [
         "回声消除",
         [
             SettingField("AEC_OPTIONS.ENABLED", "启用 AEC", kind="bool", effect="hot"),
-            SettingField("AEC_OPTIONS.MUSIC_PARALLEL", "音乐并行播放", kind="bool"),
+            SettingField("AEC_OPTIONS.MEDIA_PARALLEL", "媒体并行播放", kind="bool"),
             SettingField(
                 "AEC_OPTIONS.FRAME_DELAY",
                 "帧延迟补偿",
@@ -152,20 +152,6 @@ SETTING_SECTIONS: list[tuple[str, list[SettingField]]] = [
             SettingField(
                 "SYSTEM_OPTIONS.NETWORK.MQTT_INFO.subscribe_topic",
                 "MQTT 订阅主题",
-            ),
-        ],
-    ),
-    (
-        "音乐",
-        [
-            SettingField("MUSIC.SEARCH_URL", "搜索 URL"),
-            SettingField("MUSIC.URL_API", "音乐 URL API"),
-            SettingField("MUSIC.URL_API_KEY", "音乐 API 密钥", kind="secret"),
-            SettingField(
-                "MUSIC.DEFAULT_QUALITY",
-                "默认音质",
-                kind="choice",
-                choices=("128k", "320k"),
             ),
         ],
     ),
@@ -297,41 +283,6 @@ SETTING_SECTIONS: list[tuple[str, list[SettingField]]] = [
                 choices=("ctrl", "alt", "shift", "cmd"),
             ),
             SettingField("SHORTCUTS.MODE_TOGGLE.key", "模式切换按键"),
-        ],
-    ),
-    (
-        "目录",
-        [
-            SettingField(
-                "PATHS.CACHE_DIR",
-                "缓存目录",
-                help="留空使用默认目录；下次启动迁移",
-                effect="restart",
-            ),
-            SettingField(
-                "PATHS.LOG_DIR",
-                "日志目录",
-                help="留空使用默认目录；下次启动迁移",
-                effect="restart",
-            ),
-            SettingField(
-                "PATHS.MUSIC_CACHE_DIR",
-                "音乐缓存目录",
-                help="留空使用默认目录；下次启动迁移",
-                effect="restart",
-            ),
-            SettingField(
-                "PATHS.KEYWORDS_DIR",
-                "唤醒词目录",
-                help="留空使用默认目录；下次启动迁移",
-                effect="restart",
-            ),
-            SettingField(
-                "MCP_PLUGINS.DIR",
-                "MCP 插件目录",
-                help="留空使用默认目录；下次启动生效",
-                effect="restart",
-            ),
         ],
     ),
 ]

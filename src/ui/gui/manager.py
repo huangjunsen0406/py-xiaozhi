@@ -119,8 +119,8 @@ class GuiViewManager(QObject):
     def set_chat_text(self, text: str) -> None:
         self._main_model.set_chat_text(text)
 
-    def set_music_line(self, text: str) -> None:
-        self._main_model.set_music_line(text)
+    def set_media_line(self, text: str) -> None:
+        self._main_model.set_media_line(text)
 
     def set_emotion(self, emotion: str) -> None:
         url = self._emotion_service.get_emotion_url(emotion)
