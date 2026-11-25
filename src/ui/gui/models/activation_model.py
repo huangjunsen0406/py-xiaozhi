@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """激活窗口 ViewModel."""
 
-from PySide6.QtCore import Property, Signal, Slot
+from PySide6.QtCore import Property, Signal
 
 from src.ui.gui.models.base_model import BaseModel
 
@@ -128,32 +128,3 @@ class ActivationModel(BaseModel):
             self.set_activation_status("需重新激活", "#FF7D00")  # warning color
         else:
             self.set_activation_status("已自动修复", "#00B42A")  # success color
-
-    def set_status_checking(self):
-        """设置为检查中状态."""
-        self.set_activation_status("检查中...", "#86909C")  # placeholder color
-        self.set_activating(True)
-
-    def reset(self):
-        """重置状态."""
-        self._serial_number = "--"
-        self._mac_address = "--"
-        self._activation_code = "------"
-        self._activation_status = "未激活"
-        self._status_color = "#F53F3F"
-        self._is_activated = False
-        self._is_activating = False
-        self.serialNumberChanged.emit()
-        self.macAddressChanged.emit()
-        self.activationCodeChanged.emit()
-        self.activationStatusChanged.emit()
-        self.statusColorChanged.emit()
-        self.isActivatedChanged.emit()
-        self.isActivatingChanged.emit()
-
-    # ========== QML Slots ==========
-
-    @Slot(result=str)
-    def getActivationCode(self) -> str:
-        """获取激活码（供 QML 调用）."""
-        return self._activation_code if self._activation_code != "------" else ""

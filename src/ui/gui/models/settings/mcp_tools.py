@@ -18,7 +18,7 @@ class SettingsMcpToolsMixin:
     def _set_mcpToolsDisabledJson(self, value: str) -> None:
         try:
             data = json.loads(value) if value else []
-        except Exception:
+        except json.JSONDecodeError:
             data = []
         self._set_value("MCP_TOOLS.DISABLED", normalize_disabled(data))
 
@@ -29,7 +29,7 @@ class SettingsMcpToolsMixin:
         return full_catalog_rows(
             runtime_names=list(self._runtime_tool_names()),
             extra_disabled=self._mcp_disabled_list(),
-            config=getattr(self, "_config_manager", None),
+            config=self._config_manager,
         )
 
     def _get_mcpToolsCatalogJson(self) -> str:

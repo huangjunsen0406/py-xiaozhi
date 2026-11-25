@@ -2,11 +2,8 @@
 
 from __future__ import annotations
 
-import asyncio
 from collections.abc import Callable
 from typing import TYPE_CHECKING
-
-from src.core.event_bus import Events
 
 if TYPE_CHECKING:
     from src.core.event_bus import EventBus
@@ -28,20 +25,13 @@ class SettingsServices:
 
     async def audio_devices(self, *, refresh: bool = False) -> dict:
         if refresh and self._event_bus is not None:
-            event = Events.AUDIO_DEVICES_REFRESH_REQUEST
-            subscribed = self._event_bus.has_handlers(event)
-            future = asyncio.get_running_loop().create_future()
-            try:
-                await self._event_bus.emit(event, future)
-                if future.done():
-                    return self._copy_devices(future.result())
-                if subscribed:
-                    raise RuntimeError("音频设备刷新处理器未返回设备列表")
-            finally:
-                if not future.done():
-                    future.cancel()
-                elif not future.cancelled():
-                    future.exception()
+            from src.ui.shared.settings_helpers import request_audio_devices_refresh
+
+            return self._copy_devices(
+                await request_audio_devices_refresh(
+                    self._event_bus, strict_if_subscribed=True
+                )
+            )
         from src.utils.audio_utils import list_audio_devices
 
         return self._copy_devices(list_audio_devices(include_virtual=True))

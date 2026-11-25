@@ -399,7 +399,7 @@ def parse_field_value(field: SettingField, text: str) -> Any:
         if field.maximum is not None and parsed > field.maximum:
             raise ValueError(f"{field.label} 不能大于 {field.maximum:g}")
         return parsed
-    if field.kind in {"str", "secret", "readonly"}:
+    if field.kind in {"str", "readonly"}:
         return value
     raise ValueError(f"未知字段类型: {field.kind}")
 
@@ -414,13 +414,9 @@ def preview_wake_word(text: str) -> tuple[str, str, str]:
 
 
 def _set_path(draft: dict, path: str, value: Any) -> None:
-    current = draft
-    *parents, final = path.split(".")
-    for part in parents:
-        if not isinstance(current.get(part), dict):
-            current[part] = {}
-        current = current[part]
-    current[final] = value
+    from src.ui.shared.settings_helpers import set_draft_value
+
+    set_draft_value(draft, path, value)
 
 
 def _validate_extras(disabled_tools, device_updates) -> dict[str, Any]:

@@ -101,16 +101,9 @@ class SettingsAudioDevicesMixin:
         self.statusMessage.emit("正在刷新音频设备（会短暂中断麦克风/播放）…")
 
         async def _refresh():
-            from src.core.event_bus import Events
-            from src.utils.audio_utils import list_audio_devices
+            from src.ui.shared.settings_helpers import request_audio_devices_refresh
 
-            loop = asyncio.get_running_loop()
-            future = loop.create_future()
-            await event_bus.emit(Events.AUDIO_DEVICES_REFRESH_REQUEST, future)
-            if future.done():
-                return future.result()
-            logger.warning("AudioPlugin 未完成设备刷新 Future，本地枚举兜底")
-            return await asyncio.to_thread(list_audio_devices, include_virtual=True)
+            return await request_audio_devices_refresh(event_bus)
 
         def _on_task_done(task):
             try:
@@ -138,89 +131,64 @@ class SettingsAudioDevicesMixin:
             coroutine.close()
             self._finish_audio_devices(generation, None, str(exc))
 
+    def _device_list(self, direction: str) -> list[dict]:
+        return self._input_devices if direction == "input" else self._output_devices
+
+    def _selected_device_index(self, direction: str) -> int:
+        from src.ui.shared.settings_helpers import match_audio_device
+
+        current_id = self._get_value(f"AUDIO_DEVICES.{direction}_device_id", -1)
+        current_name = self._get_value(f"AUDIO_DEVICES.{direction}_device_name", "")
+        idx, _ = match_audio_device(
+            self._device_list(direction),
+            current_name=current_name,
+            current_id=current_id,
+        )
+        return idx if idx >= 0 else 0
+
+    def _select_device(self, direction: str, index: int) -> None:
+        devices = self._device_list(direction)
+        if not (0 <= index < len(devices)):
+            return
+        device = devices[index]
+        max_channels = 1 if direction == "input" else 2
+        self._set_value(f"AUDIO_DEVICES.{direction}_device_id", device["index"])
+        self._set_value(f"AUDIO_DEVICES.{direction}_device_name", device["raw_name"])
+        self._set_value(
+            f"AUDIO_DEVICES.{direction}_sample_rate", device["sample_rate"]
+        )
+        self._set_value(
+            f"AUDIO_DEVICES.{direction}_channels",
+            min(device["channels"], max_channels),
+        )
+        label = "输入" if direction == "input" else "输出"
+        logger.info(f"选择{label}设备: {device['name']}")
+
+    def _device_info(self, direction: str) -> str:
+        devices = self._device_list(direction)
+        idx = self._selected_device_index(direction)
+        if 0 <= idx < len(devices):
+            d = devices[idx]
+            return f"采样率: {d['sample_rate']}Hz, 通道: {d['channels']}"
+        return "未选择设备"
+
     def _get_selectedInputIndex(self) -> int:
-        """获取当前选中的输入设备索引."""
-        current_id = self._get_value("AUDIO_DEVICES.input_device_id", -1)
-        current_name = self._get_value("AUDIO_DEVICES.input_device_name", "")
-
-        # 优先按设备名称匹配
-        if current_name:
-            for i, d in enumerate(self._input_devices):
-                if d["raw_name"] == current_name:
-                    return i
-
-        # 其次按设备ID匹配
-        for i, d in enumerate(self._input_devices):
-            if d["index"] == current_id:
-                return i
-        return 0
+        return self._selected_device_index("input")
 
     def _set_selectedInputIndex(self, index: int):
-        """设置选中的输入设备."""
-        if 0 <= index < len(self._input_devices):
-            device = self._input_devices[index]
-            self._set_value("AUDIO_DEVICES.input_device_id", device["index"])
-            self._set_value("AUDIO_DEVICES.input_device_name", device["raw_name"])
-            self._set_value("AUDIO_DEVICES.input_sample_rate", device["sample_rate"])
-            self._set_value("AUDIO_DEVICES.input_channels", min(device["channels"], 1))
-            logger.info(f"选择输入设备: {device['name']}")
+        self._select_device("input", index)
 
     def _get_selectedOutputIndex(self) -> int:
-        """获取当前选中的输出设备索引."""
-        current_id = self._get_value("AUDIO_DEVICES.output_device_id", -1)
-        current_name = self._get_value("AUDIO_DEVICES.output_device_name", "")
-
-        # 优先按设备名称匹配
-        if current_name:
-            for i, d in enumerate(self._output_devices):
-                if d["raw_name"] == current_name:
-                    return i
-
-        # 其次按设备ID匹配
-        for i, d in enumerate(self._output_devices):
-            if d["index"] == current_id:
-                return i
-        return 0
+        return self._selected_device_index("output")
 
     def _set_selectedOutputIndex(self, index: int):
-        """设置选中的输出设备."""
-        if 0 <= index < len(self._output_devices):
-            device = self._output_devices[index]
-            self._set_value("AUDIO_DEVICES.output_device_id", device["index"])
-            self._set_value("AUDIO_DEVICES.output_device_name", device["raw_name"])
-            self._set_value("AUDIO_DEVICES.output_sample_rate", device["sample_rate"])
-            self._set_value("AUDIO_DEVICES.output_channels", min(device["channels"], 2))
-            logger.info(f"选择输出设备: {device['name']}")
+        self._select_device("output", index)
 
-    # 设备信息显示
     def _get_inputDeviceInfo(self) -> str:
-        idx = self._get_selectedInputIndex()
-        if 0 <= idx < len(self._input_devices):
-            d = self._input_devices[idx]
-            return f"采样率: {d['sample_rate']}Hz, 通道: {d['channels']}"
-        return "未选择设备"
+        return self._device_info("input")
 
     def _get_outputDeviceInfo(self) -> str:
-        idx = self._get_selectedOutputIndex()
-        if 0 <= idx < len(self._output_devices):
-            d = self._output_devices[idx]
-            return f"采样率: {d['sample_rate']}Hz, 通道: {d['channels']}"
-        return "未选择设备"
-
-    # Opus 输出采样率
-    def _get_opusOutputSampleRate(self) -> int:
-        return self._get_value("AUDIO_DEVICES.opus_output_sample_rate", 24000)
-
-    def _set_opusOutputSampleRate(self, value: int):
-        self._set_value("AUDIO_DEVICES.opus_output_sample_rate", value)
-
-    # 音频帧长度
-    def _get_frameDuration(self) -> int:
-        return self._get_value("AUDIO_DEVICES.frame_duration", 20)
-
-    def _set_frameDuration(self, value: int):
-        if value in [20, 40, 60]:
-            self._set_value("AUDIO_DEVICES.frame_duration", value)
+        return self._device_info("output")
 
     # 音频测试
     @Slot()

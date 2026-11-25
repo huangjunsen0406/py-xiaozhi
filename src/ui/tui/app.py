@@ -8,6 +8,7 @@ from textual import on
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
+from textual.css.query import NoMatches
 from textual.reactive import reactive
 from textual.widgets import Footer, Header, Input, RichLog, Static
 
@@ -151,13 +152,13 @@ class XiaozhiTuiApp(App[None]):
             self.query_one("#music-line", Static).update(
                 f"音乐: {self.music_line or '—'}"
             )
-        except Exception:
+        except NoMatches:
             pass
 
     def write_log(self, message: str) -> None:
         try:
             self.query_one("#log-panel", RichLog).write(message)
-        except Exception:
+        except NoMatches:
             pass
 
     @on(Input.Submitted, "#cmd-input")
@@ -283,10 +284,7 @@ class XiaozhiTuiApp(App[None]):
 
         h = self._tui_log_handler
         if h is not None:
-            try:
-                logging.getLogger().removeHandler(h)
-            except Exception:
-                pass
+            logging.getLogger().removeHandler(h)
             h.close()
         for sink, mute in self._muted_console_handlers:
             sink.removeFilter(mute)

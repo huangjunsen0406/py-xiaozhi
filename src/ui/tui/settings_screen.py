@@ -155,8 +155,69 @@ class SettingsScreen(ModalScreen[bool]):
         self._catalog: list[dict] = []
         self._visible_tools: list[str] = []
         self._settings_closed = False
+        self._audio_pane_id = next(
+            (f"section-{i}" for i, (name, _) in enumerate(DISPLAY_SECTIONS) if name == "音频"),
+            None,
+        )
         self.changed_paths: set[str] = set()
         self.saved_message = ""
+
+    def _compose_field_row(self, field) -> ComposeResult:
+        with Horizontal(classes="field-row"):
+            yield Label(field.label, classes="field-label")
+            with Vertical(classes="field-value"):
+                yield self._field_widget(field)
+                if field.path in (
+                    "AUDIO_DEVICES.input_device_name",
+                    "AUDIO_DEVICES.output_device_name",
+                ):
+                    direction = "input" if "input_device" in field.path else "output"
+                    yield Static(
+                        "",
+                        id=f"device-info-{direction}",
+                        classes="runtime-info",
+                        markup=False,
+                    )
+
+    def _compose_section_body(self, name: str, fields) -> ComposeResult:
+        with VerticalScroll():
+            if name == "音频":
+                with Horizontal(classes="runtime-actions"):
+                    yield Button("刷新设备", id="devices-refresh")
+                yield Static(
+                    "刷新会短暂中断音频。",
+                    id="devices-status",
+                    classes="runtime-info",
+                )
+            for field in fields:
+                yield from self._compose_field_row(field)
+            if name == "唤醒":
+                yield Static(
+                    "保存时自动识别语言并生成关键词。",
+                    classes="runtime-info",
+                )
+                yield Button("转换预览", id="wake-preview")
+                yield Static(
+                    "",
+                    id="wake-preview-result",
+                    classes="runtime-info",
+                    markup=False,
+                )
+
+    def _compose_mcp_tab(self) -> ComposeResult:
+        with Vertical():
+            with Horizontal(classes="runtime-actions"):
+                yield Select(
+                    [("全部分组", "")],
+                    value="",
+                    allow_blank=False,
+                    id="mcp-group",
+                )
+                yield Button("全开", id="mcp-enable")
+                yield Button("全关", id="mcp-disable")
+                yield Button("刷新", id="mcp-refresh")
+            yield SelectionList(id="mcp-tools")
+            yield Static("", id="mcp-count", classes="runtime-info", markup=False)
 
     def compose(self) -> ComposeResult:
         with Vertical(id="settings-dialog"):
@@ -164,63 +225,9 @@ class SettingsScreen(ModalScreen[bool]):
             with TabbedContent(id="settings-content"):
                 for i, (name, fields) in enumerate(DISPLAY_SECTIONS):
                     with TabPane(name, id=f"section-{i}"):
-                        with VerticalScroll():
-                            if name == "音频":
-                                with Horizontal(classes="runtime-actions"):
-                                    yield Button("刷新设备", id="devices-refresh")
-                                yield Static(
-                                    "刷新会短暂中断音频。",
-                                    id="devices-status",
-                                    classes="runtime-info",
-                                )
-                            for field in fields:
-                                with Horizontal(classes="field-row"):
-                                    yield Label(field.label, classes="field-label")
-                                    with Vertical(classes="field-value"):
-                                        yield self._field_widget(field)
-                                        if field.path in (
-                                            "AUDIO_DEVICES.input_device_name",
-                                            "AUDIO_DEVICES.output_device_name",
-                                        ):
-                                            direction = (
-                                                "input"
-                                                if "input_device" in field.path
-                                                else "output"
-                                            )
-                                            yield Static(
-                                                "",
-                                                id=f"device-info-{direction}",
-                                                classes="runtime-info",
-                                                markup=False,
-                                            )
-                            if name == "唤醒":
-                                yield Static(
-                                    "保存时自动识别语言并生成关键词。",
-                                    classes="runtime-info",
-                                )
-                                yield Button("转换预览", id="wake-preview")
-                                yield Static(
-                                    "",
-                                    id="wake-preview-result",
-                                    classes="runtime-info",
-                                    markup=False,
-                                )
+                        yield from self._compose_section_body(name, fields)
                 with TabPane("工具", id="section-mcp"):
-                    with Vertical():
-                        with Horizontal(classes="runtime-actions"):
-                            yield Select(
-                                [("全部分组", "")],
-                                value="",
-                                allow_blank=False,
-                                id="mcp-group",
-                            )
-                            yield Button("全开", id="mcp-enable")
-                            yield Button("全关", id="mcp-disable")
-                            yield Button("刷新", id="mcp-refresh")
-                        yield SelectionList(id="mcp-tools")
-                        yield Static(
-                            "", id="mcp-count", classes="runtime-info", markup=False
-                        )
+                    yield from self._compose_mcp_tab()
             yield Static("", id="settings-status", markup=False)
             with Horizontal(id="settings-actions"):
                 yield Static("Ctrl+S 保存 · Esc 取消", id="settings-shortcuts")
@@ -272,7 +279,7 @@ class SettingsScreen(ModalScreen[bool]):
         if pane_id == "section-mcp":
             self._load_catalog()
         elif (
-            pane_id == "section-1"
+            pane_id == self._audio_pane_id
             and not self._devices_loaded
             and not self._refreshing_devices
         ):
@@ -315,12 +322,10 @@ class SettingsScreen(ModalScreen[bool]):
                 options = [("系统默认设备", -1)] + [
                     (d["name"], d["index"]) for d in devices[direction]
                 ]
-                match = (
-                    next((d for d in devices[direction] if d["raw_name"] == name), None)
-                    if name
-                    else next(
-                        (d for d in devices[direction] if d["index"] == device_id), None
-                    )
+                from src.ui.shared.settings_helpers import match_audio_device
+
+                _, match = match_audio_device(
+                    devices[direction], current_name=name, current_id=device_id
                 )
                 selected = match["index"] if match else -1
                 if match is None and (name or device_id >= 0):
@@ -553,7 +558,7 @@ class SettingsScreen(ModalScreen[bool]):
             return
         self.changed_paths = changed
         effects = {
-            getattr(field, "effect", "hot")
+            field.effect
             for _, fields in SETTING_SECTIONS
             for field in fields
             if field.path in changed

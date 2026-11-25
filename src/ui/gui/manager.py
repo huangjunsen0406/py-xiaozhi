@@ -80,12 +80,15 @@ class GuiViewManager(QObject):
     async def close(self):
         logger.info("GuiViewManager: 正在关闭...")
         self._running = False
+        self._event_bus.off(Events.UI_TOGGLE_WINDOW, self._on_toggle_window)
         if self._tray_service:
             self._tray_service.hide()
         try:
             self._host.shutdown()
         finally:
             self._settings.close()
+            if self._owns_tasks:
+                await self._tasks.cancel_all()
         logger.info("GuiViewManager: 已关闭")
 
     def _setup_tray(self) -> None:
@@ -143,17 +146,5 @@ class GuiViewManager(QObject):
         return self._settings.settings_model
 
     @Slot()
-    def toggle_mode(self):
-        self._tasks.spawn(
-            self._event_bus.emit(Events.UI_AUTO_TOGGLE), name="ui:auto_toggle"
-        )
-
-    @Slot()
     def toggle_window(self):
         self._host.toggle_root_visible()
-
-    def open_settings(self):
-        if not self._host.engine:
-            logger.warning("GuiViewManager: 引擎未初始化，无法打开设置")
-            return
-        self._settings.open_settings()

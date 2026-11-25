@@ -9,37 +9,7 @@ logger = get_logger()
 
 
 class SettingsWakeWordMixin:
-    # ========== 唤醒词设置 ==========
-
-    def _get_wakeWordEnabled(self) -> bool:
-        return self._get_value("WAKE_WORD_OPTIONS.USE_WAKE_WORD", False)
-
-    def _set_wakeWordEnabled(self, value: bool):
-        self._set_value("WAKE_WORD_OPTIONS.USE_WAKE_WORD", value)
-
-    def _get_modelPath(self) -> str:
-        return self._get_value("WAKE_WORD_OPTIONS.MODEL_PATH", "models")
-
-    def _set_modelPath(self, value: str):
-        self._set_value("WAKE_WORD_OPTIONS.MODEL_PATH", value)
-
-    def _get_numThreads(self) -> int:
-        return self._get_value("WAKE_WORD_OPTIONS.NUM_THREADS", 4)
-
-    def _set_numThreads(self, value: int):
-        self._set_value("WAKE_WORD_OPTIONS.NUM_THREADS", value)
-
-    def _get_keywordsScore(self) -> float:
-        return self._get_value("WAKE_WORD_OPTIONS.KEYWORDS_SCORE", 1.8)
-
-    def _set_keywordsScore(self, value: float):
-        self._set_value("WAKE_WORD_OPTIONS.KEYWORDS_SCORE", value)
-
-    def _get_keywordsThreshold(self) -> float:
-        return self._get_value("WAKE_WORD_OPTIONS.KEYWORDS_THRESHOLD", 0.2)
-
-    def _set_keywordsThreshold(self, value: float):
-        self._set_value("WAKE_WORD_OPTIONS.KEYWORDS_THRESHOLD", value)
+    # ========== 唤醒词预览与保存 ==========
 
     # 唤醒词文本
     def _load_wake_word(self, update_preview: bool = True):

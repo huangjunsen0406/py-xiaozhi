@@ -82,21 +82,7 @@ class TrayService(QObject):
             logger.error(f"系统托盘初始化失败: {e}", exc_info=True)
             return False
 
-    def update_tooltip(self, text: str):
-        """更新托盘提示."""
-        if self._tray:
-            self._tray.setToolTip(text)
-
-    def show_message(self, title: str, message: str):
-        """显示托盘通知."""
-        if self._tray:
-            self._tray.showMessage(title, message)
-
     def hide(self):
         """隐藏托盘."""
         if self._tray:
             self._tray.hide()
-
-    def is_available(self) -> bool:
-        """托盘是否可用."""
-        return self._tray is not None and self._tray.isVisible()

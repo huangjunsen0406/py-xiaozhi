@@ -42,7 +42,6 @@ class TuiViewManager:
         self._running = False
         self._loop: asyncio.AbstractEventLoop | None = None
         self._app: XiaozhiTuiApp | None = None
-        self._app_task: asyncio.Task | None = None
 
         self._auto_mode = False
         self._status = "待命"
