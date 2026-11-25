@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING
 
 from src.core.event_bus import EventBus, Events
 from src.core.settings import SettingsApplier
-from src.i18n import t
 from src.logging import get_logger
 from src.ui.shared.event_emitter import safe_emit
 from src.ui.tui.settings_services import SettingsServices
@@ -45,7 +44,7 @@ class TuiViewManager:
         self._app: XiaozhiTuiApp | None = None
 
         self._auto_mode = False
-        self._status = t("main.status.idle")
+        self._status = ""
         self._connected = False
         self._chat_text = ""
         self._media_line = ""

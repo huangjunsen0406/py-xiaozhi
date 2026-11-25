@@ -293,6 +293,45 @@ def test_tui_app_accepts_localized_reactive_state_before_mount():
     assert tui_app.status_text == "Sẵn sàng"
 
 
+@pytest.mark.asyncio
+async def test_tui_footer_bindings_and_idle_status_hot_retranslate():
+    """TUI 热切换语言后，Footer 快捷键标签和初始待命状态应同步更新."""
+    pytest.importorskip("textual")
+    from textual.widgets import Footer, Static
+
+    from src.ui.tui.app import XiaozhiTuiApp
+
+    set_language("zh_CN")
+    tui_app = XiaozhiTuiApp()
+    async with tui_app.run_test() as pilot:
+        await pilot.pause()
+
+        def footer_map() -> dict[str, str]:
+            footer = tui_app.query_one(Footer)
+            return {w.key: w.description for w in footer.query("FooterKey")}
+
+        assert footer_map()["ctrl+c"] == "退出"
+        assert footer_map()["f2"] == "设置"
+        assert footer_map()["f1"] == "帮助"
+        assert "待命" in str(tui_app.query_one("#status-line", Static).render())
+
+        set_language("en_US")
+        await pilot.pause()
+        await pilot.pause()
+        assert footer_map()["ctrl+c"] == "Quit"
+        assert footer_map()["f2"] == "Settings"
+        assert footer_map()["f1"] == "Help"
+        assert "Idle" in str(tui_app.query_one("#status-line", Static).render())
+
+        set_language("vi_VN")
+        await pilot.pause()
+        await pilot.pause()
+        assert footer_map()["ctrl+c"] == "Thoát"
+        assert footer_map()["f2"] == "Cài đặt"
+        assert footer_map()["f1"] == "Trợ giúp"
+        assert "Sẵn sàng" in str(tui_app.query_one("#status-line", Static).render())
+
+
 def test_tray_service_updates_qaction_texts_on_locale_change(monkeypatch):
     pytest.importorskip("PySide6")
     from PySide6.QtCore import QCoreApplication

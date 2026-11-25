@@ -6,7 +6,7 @@ from collections.abc import Callable
 
 from textual import on
 from textual.app import App, ComposeResult, ScreenStackError
-from textual.binding import Binding
+from textual.binding import Binding, BindingsMap
 from textual.containers import Horizontal, Vertical
 from textual.css.query import NoMatches
 from textual.reactive import reactive
@@ -140,15 +140,26 @@ class XiaozhiTuiApp(App[None]):
             except Exception:
                 pass
 
+    def _update_localized_bindings(self) -> None:
+        key_map = {k: list(v) for k, v in self._bindings.key_to_bindings.items()}
+        key_map["ctrl+c"] = [
+            Binding("ctrl+c", "quit_app", t("tui.binding.quit"), show=True, priority=True)
+        ]
+        key_map["f2"] = [
+            Binding("f2", "open_settings", t("tui.binding.settings"), show=True)
+        ]
+        key_map["f1"] = [
+            Binding("f1", "show_help", t("tui.binding.help"), show=True)
+        ]
+        self._bindings = BindingsMap.from_keys(key_map)
+        self.refresh_bindings()
+
     def _refresh_locale_widgets(self) -> None:
         try:
             self.query_one("#cmd-input", Input).placeholder = t(
                 "tui.input_placeholder"
             )
-            self._bindings.bind("ctrl+c", "quit_app", t("tui.binding.quit"), show=True, priority=True)
-            self._bindings.bind("f2", "open_settings", t("tui.binding.settings"), show=True)
-            self._bindings.bind("f1", "show_help", t("tui.binding.help"), show=True)
-            self.refresh_bindings()
+            self._update_localized_bindings()
         except Exception:
             pass
         self._refresh_status_widgets()

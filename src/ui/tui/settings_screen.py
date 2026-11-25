@@ -6,7 +6,7 @@ import asyncio
 
 from textual import on
 from textual.app import ComposeResult
-from textual.binding import Binding
+from textual.binding import Binding, BindingsMap
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.screen import ModalScreen
 from textual.widgets import (
@@ -128,6 +128,10 @@ class SettingsScreen(ModalScreen[bool]):
         services: SettingsServices | None = None,
     ):
         super().__init__()
+        key_map = {k: list(v) for k, v in self._bindings.key_to_bindings.items()}
+        key_map["escape"] = [Binding("escape", "cancel", t("common.cancel"))]
+        key_map["ctrl+s"] = [Binding("ctrl+s", "save", t("common.save"))]
+        self._bindings = BindingsMap.from_keys(key_map)
         self._config = config if config is not None else ConfigManager.from_dict()
         self._services = (
             services if services is not None else SettingsServices(self._config)
