@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING
 
 from src.constants.constants import AbortReason, DeviceState, ListeningMode
 from src.core.event_bus import Events
+from src.i18n import t
 
 if TYPE_CHECKING:
     from src.bootstrap.protocols import PluginCommands, PluginContext
@@ -70,15 +71,35 @@ class SessionActions:
         if state != DeviceState.LISTENING and self._manual_recording:
             self._manual_recording = False
             if not self._auto_mode:
-                self._ui.set_button_text("按住后说话")
+                self._ui.set_button_text(t("main.button.hold_to_talk"))
         if self._auto_mode:
             self._auto_session_active = state in (
                 DeviceState.LISTENING,
                 DeviceState.SPEAKING,
             )
             self._ui.set_button_text(
-                "停止对话" if self._auto_session_active else "开始对话"
+                t(
+                    "main.button.stop_chat"
+                    if self._auto_session_active
+                    else "main.button.start_chat"
+                )
             )
+
+    def refresh_locale(self) -> None:
+        """语言热切换时刷新主动作按钮文案."""
+        if self._auto_mode:
+            key = (
+                "main.button.stop_chat"
+                if self._auto_session_active
+                else "main.button.start_chat"
+            )
+        else:
+            key = (
+                "main.button.send"
+                if self._manual_recording
+                else "main.button.hold_to_talk"
+            )
+        self._ui.set_button_text(t(key))
 
     async def request_shutdown(self, _data=None) -> None:
         self._cmd.request_shutdown()
@@ -106,11 +127,11 @@ class SessionActions:
         if not self._manual_recording:
             if await self._cmd.start_listening(ListeningMode.MANUAL):
                 self._manual_recording = True
-                self._ui.set_button_text("发送")
+                self._ui.set_button_text(t("main.button.send"))
         else:
             await self._cmd.stop_listening()
             self._manual_recording = False
-            self._ui.set_button_text("按住后说话")
+            self._ui.set_button_text(t("main.button.hold_to_talk"))
 
     async def auto_toggle(self, _data=None) -> None:
         self._auto_mode = not self._auto_mode
@@ -126,10 +147,10 @@ class SessionActions:
         ):
             await self._cmd.stop_listening()
             self._auto_session_active = False
-            self._ui.set_button_text("开始对话")
+            self._ui.set_button_text(t("main.button.start_chat"))
         elif await self._cmd.start_auto_conversation():
             self._auto_session_active = True
-            self._ui.set_button_text("停止对话")
+            self._ui.set_button_text(t("main.button.stop_chat"))
 
     async def abort(self, _data=None) -> None:
         await self._cmd.abort_speaking(AbortReason.USER_INTERRUPTION)

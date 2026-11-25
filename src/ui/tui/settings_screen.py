@@ -21,6 +21,7 @@ from textual.widgets import (
     TabPane,
 )
 
+from src.i18n import get_i18n, t
 from src.mcp.tool_catalog import normalize_disabled
 from src.ui.tui.settings_data import (
     SETTING_SECTIONS,
@@ -35,10 +36,11 @@ from src.utils.config_manager import ConfigManager
 _FIELDS = {field.path: field for _, fields in SETTING_SECTIONS for field in fields}
 DISPLAY_SECTIONS = [
     (
-        "系统",
+        "system",
         [
             _FIELDS[path]
             for path in (
+                "SYSTEM_OPTIONS.LANGUAGE",
                 "SYSTEM_OPTIONS.NETWORK.OTA_VERSION_URL",
                 "SYSTEM_OPTIONS.NETWORK.WEBSOCKET_URL",
                 "SYSTEM_OPTIONS.NETWORK.WEBSOCKET_ACCESS_TOKEN",
@@ -46,7 +48,7 @@ DISPLAY_SECTIONS = [
         ],
     ),
     (
-        "音频",
+        "audio",
         [
             _FIELDS[path]
             for path in (
@@ -60,7 +62,7 @@ DISPLAY_SECTIONS = [
         ],
     ),
     (
-        "唤醒",
+        "wake",
         [
             _FIELDS[path]
             for path in (
@@ -70,7 +72,7 @@ DISPLAY_SECTIONS = [
         ],
     ),
     (
-        "摄像头",
+        "camera",
         [
             _FIELDS[path]
             for path in (
@@ -144,7 +146,7 @@ class SettingsScreen(ModalScreen[bool]):
         self._visible_tools: list[str] = []
         self._settings_closed = False
         self._audio_pane_id = next(
-            (f"section-{i}" for i, (name, _) in enumerate(DISPLAY_SECTIONS) if name == "音频"),
+            (f"section-{i}" for i, (name, _) in enumerate(DISPLAY_SECTIONS) if name == "audio"),
             None,
         )
         self.changed_paths: set[str] = set()
@@ -169,22 +171,22 @@ class SettingsScreen(ModalScreen[bool]):
 
     def _compose_section_body(self, name: str, fields) -> ComposeResult:
         with VerticalScroll():
-            if name == "音频":
+            if name == "audio":
                 with Horizontal(classes="runtime-actions"):
-                    yield Button("刷新设备", id="devices-refresh")
+                    yield Button(t("settings.audio.refresh_devices"), id="devices-refresh")
                 yield Static(
-                    "刷新会短暂中断音频。",
+                    t("tui.settings.devices_interrupt_hint"),
                     id="devices-status",
                     classes="runtime-info",
                 )
             for field in fields:
                 yield from self._compose_field_row(field)
-            if name == "唤醒":
+            if name == "wake":
                 yield Static(
-                    "保存时自动识别语言并生成关键词。",
+                    t("tui.settings.wake_auto_hint"),
                     classes="runtime-info",
                 )
-                yield Button("转换预览", id="wake-preview")
+                yield Button(t("settings.wake_word.preview"), id="wake-preview")
                 yield Static(
                     "",
                     id="wake-preview-result",
@@ -196,31 +198,31 @@ class SettingsScreen(ModalScreen[bool]):
         with Vertical():
             with Horizontal(classes="runtime-actions"):
                 yield Select(
-                    [("全部分组", "")],
+                    [(t("tui.settings.all_groups"), "")],
                     value="",
                     allow_blank=False,
                     id="mcp-group",
                 )
-                yield Button("全开", id="mcp-enable")
-                yield Button("全关", id="mcp-disable")
-                yield Button("刷新", id="mcp-refresh")
+                yield Button(t("common.enable_all"), id="mcp-enable")
+                yield Button(t("common.disable_all"), id="mcp-disable")
+                yield Button(t("common.refresh"), id="mcp-refresh")
             yield SelectionList(id="mcp-tools")
             yield Static("", id="mcp-count", classes="runtime-info", markup=False)
 
     def compose(self) -> ComposeResult:
         with Vertical(id="settings-dialog"):
-            yield Static("设置", id="settings-title")
+            yield Static(t("tui.settings.title"), id="settings-title")
             with TabbedContent(id="settings-content"):
                 for i, (name, fields) in enumerate(DISPLAY_SECTIONS):
-                    with TabPane(name, id=f"section-{i}"):
+                    with TabPane(t(f"tui.settings.tab.{name}"), id=f"section-{i}"):
                         yield from self._compose_section_body(name, fields)
-                with TabPane("工具", id="section-mcp"):
+                with TabPane(t("tui.settings.tab.tools"), id="section-mcp"):
                     yield from self._compose_mcp_tab()
             yield Static("", id="settings-status", markup=False)
             with Horizontal(id="settings-actions"):
-                yield Static("Ctrl+S 保存 · Esc 取消", id="settings-shortcuts")
-                yield Button("取消", id="btn-cancel")
-                yield Button("保存", id="btn-save", variant="primary")
+                yield Static(t("tui.settings.shortcuts_hint"), id="settings-shortcuts")
+                yield Button(t("common.cancel"), id="btn-cancel")
+                yield Button(t("common.save"), id="btn-save", variant="primary")
 
     def _field_widget(self, field):
         value = self._values.get(field.path, "")
@@ -238,21 +240,36 @@ class SettingsScreen(ModalScreen[bool]):
                 f"AUDIO_DEVICES.{direction}_device_id", -1
             )
             configured = bool(value) or isinstance(device_id, int) and device_id >= 0
-            options = [("系统默认设备", -1)]
+            options = [(t("tui.settings.system_default_device"), -1)]
             if configured:
-                options.append((f"已配置：{value or f'设备 ID {device_id}'}", -2))
+                disp = value or t("tui.settings.device_id_fallback", id=device_id)
+                options.append((t("tui.settings.configured_device", name=disp), -2))
             return Select(
                 options, value=-2 if configured else -1, allow_blank=False, **args
             )
         if field.kind == "bool":
             return Switch(value=value.lower() in ("true", "1", "yes"), **args)
         if field.kind == "choice":
-            options = [(choice, choice) for choice in field.choices]
+            if field.path == "SYSTEM_OPTIONS.LANGUAGE":
+                options = [
+                    (opt["label"], opt["value"])
+                    for opt in get_i18n().language_options()
+                ]
+            else:
+                options = [(choice, choice) for choice in field.choices]
             if value not in field.choices:
-                options.append((f"待修正：{value or '空值'}", value))
+                options.append(
+                    (
+                        t(
+                            "tui.settings.needs_fix",
+                            value=value or t("tui.settings.empty_value"),
+                        ),
+                        value,
+                    )
+                )
             return Select(options, value=value, allow_blank=False, **args)
         if field.kind == "readonly":
-            return Static(value or "自动识别", markup=False, **args)
+            return Static(value or t("tui.settings.auto_detect"), markup=False, **args)
         return Input(
             value=value, password=field.kind == "secret", placeholder=field.help, **args
         )
@@ -282,7 +299,9 @@ class SettingsScreen(ModalScreen[bool]):
         self._refreshing_devices = True
         self.query_one("#devices-refresh", Button).disabled = True
         self.query_one("#btn-save", Button).disabled = True
-        self.query_one("#devices-status", Static).update("正在读取音频设备…")
+        self.query_one("#devices-status", Static).update(
+            t("tui.settings.loading_devices")
+        )
         self.run_worker(
             self._load_devices(refresh, self._device_generation),
             group="settings-devices",
@@ -307,7 +326,7 @@ class SettingsScreen(ModalScreen[bool]):
             self._devices_loaded = True
             for direction in ("input", "output"):
                 name, device_id = selections[direction]
-                options = [("系统默认设备", -1)] + [
+                options = [(t("tui.settings.system_default_device"), -1)] + [
                     (d["name"], d["index"]) for d in devices[direction]
                 ]
                 from src.ui.shared.settings_helpers import match_audio_device
@@ -318,7 +337,8 @@ class SettingsScreen(ModalScreen[bool]):
                 selected = match["index"] if match else -1
                 if match is None and (name or device_id >= 0):
                     self._missing_devices[direction] = (name, device_id)
-                    options.append((f"未找到：{name or f'设备 ID {device_id}'}", -2))
+                    disp = name or t("tui.settings.device_id_fallback", id=device_id)
+                    options.append((t("tui.settings.missing_device", name=disp), -2))
                     selected = -2
                 widget = self.query_one(
                     "#" + field_id(f"AUDIO_DEVICES.{direction}_device_name"), Select
@@ -327,16 +347,20 @@ class SettingsScreen(ModalScreen[bool]):
                 widget.value = selected
                 self._device_info(direction)
             self.query_one("#devices-status", Static).update(
-                f"输入 {len(devices['input'])} 个 / 输出 {len(devices['output'])} 个；可选择系统默认设备。"
+                t(
+                    "tui.settings.devices_summary",
+                    inputs=len(devices["input"]),
+                    outputs=len(devices["output"]),
+                )
             )
         except asyncio.CancelledError:
             raise
         except Exception as exc:
             if generation == self._device_generation:
-                self._status(f"设备刷新失败：{exc}")
+                self._status(t("tui.settings.devices_refresh_failed", error=exc))
                 if not self._settings_closed and self.is_mounted:
                     self.query_one("#devices-status", Static).update(
-                        "刷新失败，已保留原设备列表；可重试。"
+                        t("tui.settings.devices_refresh_failed_hint")
                     )
         finally:
             if generation == self._device_generation:
@@ -378,11 +402,15 @@ class SettingsScreen(ModalScreen[bool]):
             (d for d in self._device_lists[direction] if d["index"] == device_id), None
         )
         text = (
-            f"采样率：{row['sample_rate']} Hz；通道：{row['channels']}"
+            t(
+                "tui.settings.device_info",
+                sample_rate=row["sample_rate"],
+                channels=row["channels"],
+            )
             if row
-            else "使用系统默认设备"
+            else t("tui.settings.device_using_default")
             if device_id == -1
-            else "设备当前不可用；保存会保留原配置"
+            else t("tui.settings.device_unavailable")
         )
         self.query_one(f"#device-info-{direction}", Static).update(text)
 
@@ -399,12 +427,15 @@ class SettingsScreen(ModalScreen[bool]):
             group = self.query_one("#mcp-group", Select)
             previous = group.value
             group.set_options(
-                [("全部分组", ""), *[(label, name) for name, label in groups.items()]]
+                [
+                    (t("tui.settings.all_groups"), ""),
+                    *[(label, name) for name, label in groups.items()],
+                ]
             )
             group.value = previous if previous in groups else ""
             self._show_tools()
         except Exception as exc:
-            self._status(f"读取工具目录失败：{exc}")
+            self._status(t("tui.settings.catalog_load_failed", error=exc))
 
     def _show_tools(self) -> None:
         group = self.query_one("#mcp-group", Select).value
@@ -424,7 +455,7 @@ class SettingsScreen(ModalScreen[bool]):
         )
         enabled = sum(row["name"] not in self._disabled_tools for row in rows)
         self.query_one("#mcp-count", Static).update(
-            f"当前分组 {enabled}/{len(rows)} 已启用"
+            t("tui.settings.group_enabled_count", enabled=enabled, total=len(rows))
         )
 
     @on(Select.Changed, "#mcp-group")
@@ -438,7 +469,11 @@ class SettingsScreen(ModalScreen[bool]):
         self._capture_tool_selection()
         enabled = len(self.query_one("#mcp-tools", SelectionList).selected)
         self.query_one("#mcp-count", Static).update(
-            f"当前分组 {enabled}/{len(self._visible_tools)} 已启用"
+            t(
+                "tui.settings.group_enabled_count",
+                enabled=enabled,
+                total=len(self._visible_tools),
+            )
         )
 
     @on(Button.Pressed, "#mcp-enable")
@@ -484,7 +519,7 @@ class SettingsScreen(ModalScreen[bool]):
         except asyncio.CancelledError:
             raise
         except Exception as exc:
-            self._status(f"唤醒词转换失败：{exc}")
+            self._status(t("tui.settings.wake_convert_failed", error=exc))
 
     def _collect_values(self) -> tuple[dict[str, str], dict]:
         values = {}
@@ -519,7 +554,7 @@ class SettingsScreen(ModalScreen[bool]):
         if self._settings_closed:
             return
         if self._refreshing_devices:
-            self._status("设备刷新中，请稍后保存")
+            self._status(t("tui.settings.wait_device_refresh"))
             return
         self._capture_tool_selection()
         values, device_updates = self._collect_values()
@@ -553,9 +588,9 @@ class SettingsScreen(ModalScreen[bool]):
         }
         notes = []
         if "restart" in effects:
-            notes.append("部分设置重启后生效")
+            notes.append(t("tui.settings.note_restart"))
         if "reconnect" in effects or "MCP_TOOLS.DISABLED" in changed:
-            notes.append("连接设置将重连更新")
+            notes.append(t("tui.settings.note_reconnect"))
         self.saved_message = message + ("；" + "；".join(notes) if notes else "")
         self._settings_closed = True
         self.dismiss(True)

@@ -4,6 +4,7 @@ import asyncio
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Optional
 
+from src.i18n import off_locale_changed, on_locale_changed
 from src.logging import get_logger
 from src.plugins.base import Plugin
 from src.plugins.ui_presenter import UiPresenter
@@ -72,6 +73,8 @@ class UIPlugin(Plugin):
         if self._session:
             self._session.subscribe(bus)
 
+        on_locale_changed(self._on_locale_changed)
+
         if self.viewport:
             self._viewport_task = self._cmd.spawn(
                 self._run_viewport(), name=f"ui:{self.mode}:start"
@@ -94,8 +97,14 @@ class UIPlugin(Plugin):
             if not self._stopping and self.mode != "gui":
                 self._cmd.request_shutdown()
 
+    def _on_locale_changed(self, _locale: str) -> None:
+        self._presenter.refresh_locale()
+        if self._session is not None:
+            self._session.refresh_locale()
+
     async def stop(self) -> None:
         self._stopping = True
+        off_locale_changed(self._on_locale_changed)
         self._presenter.bind(None)
         if self._session is not None:
             self._session.unsubscribe()

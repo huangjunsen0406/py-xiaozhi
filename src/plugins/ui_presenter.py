@@ -3,6 +3,7 @@
 from typing import TYPE_CHECKING, Optional
 
 from src.constants.constants import DeviceState
+from src.i18n import t
 from src.logging import get_logger
 
 if TYPE_CHECKING:
@@ -14,23 +15,26 @@ logger = get_logger()
 class UiPresenter:
     """写界面：对话、媒体、状态、表情、按钮等."""
 
-    STATE_TEXT_MAP = {
-        DeviceState.IDLE: "待命",
-        DeviceState.LISTENING: "聆听中...",
-        DeviceState.SPEAKING: "说话中...",
-        DeviceState.NOTIFYING: "通知播放中...",
+    STATE_TEXT_KEYS = {
+        DeviceState.IDLE: "main.status.idle",
+        DeviceState.LISTENING: "main.status.listening",
+        DeviceState.SPEAKING: "main.status.speaking",
+        DeviceState.NOTIFYING: "main.status.notifying",
     }
 
-    MEDIA_STATE_TEXT = {
-        "playing": "正在播放: {title}",
-        "paused": "已暂停: {title}",
+    MEDIA_STATE_KEYS = {
+        "playing": "main.media.playing",
+        "paused": "main.media.paused",
         "stopped": "",
-        "completed": "播放完成: {title}",
-        "error": "播放失败: {title}",
+        "completed": "main.media.completed",
+        "error": "main.media.error",
     }
 
     def __init__(self, viewport: Optional["ViewPort"] = None) -> None:
         self._vp = viewport
+        self._last_device_state = None
+        self._last_network_error = False
+        self._last_media_state = None
 
     def bind(self, viewport: Optional["ViewPort"]) -> None:
         self._vp = viewport
@@ -64,12 +68,15 @@ class UiPresenter:
             self._vp.set_auto_mode(auto_mode)
 
     def show_device_state(self, state) -> None:
-        if status_text := self.STATE_TEXT_MAP.get(state):
+        if key := self.STATE_TEXT_KEYS.get(state):
+            self._last_device_state = state
+            self._last_network_error = False
             self.set_emotion("neutral")
-            self.set_status(status_text, connected=True)
+            self.set_status(t(key), connected=True)
 
     def show_network_error(self) -> None:
-        self.set_status("未连接", connected=False)
+        self._last_network_error = True
+        self.set_status(t("main.status.disconnected"), connected=False)
 
     def show_media_state(self, data) -> None:
         try:
@@ -79,14 +86,29 @@ class UiPresenter:
                 logger.warning(f"收到非法的媒体状态数据: {type(data)}")
                 return
 
-            template = self.MEDIA_STATE_TEXT.get(data.state)
-            if template is None:
+            key = self.MEDIA_STATE_KEYS.get(data.state)
+            if key is None:
                 return
-            text = template.format(title=data.title) if template else ""
+            self._last_media_state = data
+            text = t(key, title=data.title) if key else ""
             self.set_media_line(text)
             logger.debug(f"UI 更新媒体状态: {data.state}")
         except Exception as e:
             logger.error(f"处理媒体状态变化失败: {e}", exc_info=True)
+
+    def refresh_locale(self) -> None:
+        """语言热切换后，将当前语义状态以新语言重推到界面."""
+        if not self._vp:
+            return
+        if self._last_network_error:
+            self.set_status(t("main.status.disconnected"), connected=False)
+        elif self._last_device_state is not None:
+            if key := self.STATE_TEXT_KEYS.get(self._last_device_state):
+                self.set_status(t(key), connected=True)
+        if self._last_media_state is not None:
+            key = self.MEDIA_STATE_KEYS.get(self._last_media_state.state)
+            if key:
+                self.set_media_line(t(key, title=self._last_media_state.title))
 
     def show_media_subtitle(self, data) -> None:
         try:

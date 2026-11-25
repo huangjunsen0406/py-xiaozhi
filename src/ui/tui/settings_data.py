@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from src.core.settings import requires_protocol_reconnect
+from src.i18n import LANGUAGE_CHOICES, t
 from src.logging import get_logger
 from src.utils.config_manager import ConfigManager
 
@@ -18,10 +19,10 @@ class SettingField:
     """控件元数据；UI 输入始终为字符串，effect 说明生效时机。"""
 
     path: str
-    label: str
+    label_key: str
     kind: str = "str"
     choices: tuple[str, ...] = ()
-    help: str = ""
+    help_key: str = ""
     minimum: float | None = None
     maximum: float | None = None
     effect: str = "hot"
@@ -30,159 +31,184 @@ class SettingField:
         if requires_protocol_reconnect(self.path):
             object.__setattr__(self, "effect", "reconnect")
 
+    @property
+    def label(self) -> str:
+        return t(self.label_key)
+
+    @property
+    def help(self) -> str:
+        return t(self.help_key) if self.help_key else ""
+
 
 SETTING_SECTIONS: list[tuple[str, list[SettingField]]] = [
     (
-        "系统",
+        "system",
         [
             SettingField(
+                "SYSTEM_OPTIONS.LANGUAGE",
+                "tui.field.language",
+                kind="choice",
+                choices=LANGUAGE_CHOICES,
+                help_key="tui.field.language_help",
+                effect="hot",
+            ),
+            SettingField(
                 "SYSTEM_OPTIONS.NETWORK.OTA_VERSION_URL",
-                "OTA URL",
-                help="OTA / 激活配置地址",
+                "tui.field.ota_url",
+                help_key="tui.field.ota_url_help",
             ),
             SettingField(
                 "SYSTEM_OPTIONS.NETWORK.WEBSOCKET_URL",
-                "WebSocket URL",
-                help="WebSocket 服务地址",
+                "tui.field.ws_url",
+                help_key="tui.field.ws_url_help",
             ),
             SettingField(
                 "SYSTEM_OPTIONS.DEVICE_ID",
-                "设备 ID",
-                help="Device-Id（通常为 MAC）",
+                "tui.field.device_id",
+                help_key="tui.field.device_id_help",
             ),
             SettingField(
                 "SYSTEM_OPTIONS.CLIENT_ID",
-                "客户端 ID",
-                help="Client-Id",
+                "tui.field.client_id",
+                help_key="tui.field.client_id_help",
             ),
             SettingField(
                 "SYSTEM_OPTIONS.NETWORK.WEBSOCKET_ACCESS_TOKEN",
-                "WebSocket 访问令牌",
+                "tui.field.ws_token",
                 kind="secret",
             ),
             SettingField(
                 "SYSTEM_OPTIONS.NETWORK.AUTHORIZATION_URL",
-                "授权 URL",
+                "tui.field.auth_url",
             ),
             SettingField(
                 "SYSTEM_OPTIONS.NETWORK.ACTIVATION_VERSION",
-                "激活版本",
+                "tui.field.activation_version",
                 kind="choice",
                 choices=("v1", "v2"),
             ),
         ],
     ),
     (
-        "音频",
+        "audio",
         [
             SettingField(
                 "AUDIO_DEVICES.input_device_name",
-                "输入设备名",
-                help="按名称匹配麦克风（热插拔后 ID 会变）",
+                "tui.field.input_device_name",
+                help_key="tui.field.input_device_name_help",
                 effect="hot",
             ),
             SettingField(
                 "AUDIO_DEVICES.output_device_name",
-                "输出设备名",
-                help="按名称匹配扬声器/耳机",
+                "tui.field.output_device_name",
+                help_key="tui.field.output_device_name_help",
                 effect="hot",
             ),
             SettingField(
                 "AUDIO_DEVICES.opus_output_sample_rate",
-                "Opus 输出采样率",
+                "tui.field.opus_rate",
                 kind="choice",
                 choices=("24000", "16000"),
-                help="官方 24000 / 第三方常 16000",
+                help_key="tui.field.opus_rate_help",
             ),
             SettingField(
                 "AUDIO_DEVICES.frame_duration",
-                "帧时长 ms",
+                "tui.field.frame_duration",
                 kind="choice",
                 choices=("20", "40", "60"),
-                help="20 低延迟 / 60 低 CPU",
+                help_key="tui.field.frame_duration_help",
             ),
         ],
     ),
     (
-        "回声消除",
+        "aec",
         [
-            SettingField("AEC_OPTIONS.ENABLED", "启用 AEC", kind="bool", effect="hot"),
-            SettingField("AEC_OPTIONS.MEDIA_PARALLEL", "媒体并行播放", kind="bool"),
+            SettingField(
+                "AEC_OPTIONS.ENABLED",
+                "tui.field.aec_enabled",
+                kind="bool",
+                effect="hot",
+            ),
+            SettingField(
+                "AEC_OPTIONS.MEDIA_PARALLEL",
+                "tui.field.aec_media_parallel",
+                kind="bool",
+            ),
             SettingField(
                 "AEC_OPTIONS.FRAME_DELAY",
-                "帧延迟补偿",
+                "tui.field.aec_frame_delay",
                 kind="int",
                 minimum=0,
                 maximum=20,
-                help="实际延迟 = 40ms + N × 帧长",
+                help_key="tui.field.aec_frame_delay_help",
                 effect="hot",
             ),
             SettingField(
                 "AEC_OPTIONS.ENABLE_PREPROCESS",
-                "启用音频预处理",
+                "tui.field.aec_preprocess",
                 kind="bool",
                 effect="hot",
             ),
         ],
     ),
     (
-        "MQTT（高级）",
+        "mqtt",
         [
             SettingField(
                 "SYSTEM_OPTIONS.NETWORK.MQTT_INFO.endpoint",
-                "MQTT 地址",
+                "tui.field.mqtt_endpoint",
             ),
             SettingField(
                 "SYSTEM_OPTIONS.NETWORK.MQTT_INFO.client_id",
-                "MQTT 客户端 ID",
+                "tui.field.mqtt_client_id",
             ),
             SettingField(
                 "SYSTEM_OPTIONS.NETWORK.MQTT_INFO.username",
-                "MQTT 用户名",
+                "tui.field.mqtt_username",
             ),
             SettingField(
                 "SYSTEM_OPTIONS.NETWORK.MQTT_INFO.password",
-                "MQTT 密码",
+                "tui.field.mqtt_password",
                 kind="secret",
             ),
             SettingField(
                 "SYSTEM_OPTIONS.NETWORK.MQTT_INFO.publish_topic",
-                "MQTT 发布主题",
+                "tui.field.mqtt_pub",
             ),
             SettingField(
                 "SYSTEM_OPTIONS.NETWORK.MQTT_INFO.subscribe_topic",
-                "MQTT 订阅主题",
+                "tui.field.mqtt_sub",
             ),
         ],
     ),
     (
-        "摄像头",
+        "camera",
         [
             SettingField(
                 "CAMERA.backend",
-                "采集后端",
+                "tui.field.camera_backend",
                 kind="choice",
                 choices=("auto", "opencv", "picamera2"),
-                help="auto 先 OpenCV，失败再试 Pi CSI",
+                help_key="tui.field.camera_backend_help",
                 effect="hot",
             ),
             SettingField(
                 "CAMERA.device",
-                "设备路径",
-                help="如 /dev/video0；非空优先于 index",
+                "tui.field.camera_device",
+                help_key="tui.field.camera_device_help",
                 effect="hot",
             ),
             SettingField(
                 "CAMERA.camera_index",
-                "设备 index",
+                "tui.field.camera_index",
                 kind="int",
                 minimum=0,
-                help="OpenCV 数字索引",
+                help_key="tui.field.camera_index_help",
                 effect="hot",
             ),
             SettingField(
                 "CAMERA.frame_width",
-                "宽度",
+                "tui.field.camera_width",
                 kind="int",
                 minimum=320,
                 maximum=1920,
@@ -190,44 +216,55 @@ SETTING_SECTIONS: list[tuple[str, list[SettingField]]] = [
             ),
             SettingField(
                 "CAMERA.frame_height",
-                "高度",
+                "tui.field.camera_height",
                 kind="int",
                 minimum=240,
                 maximum=1080,
                 effect="hot",
             ),
-            SettingField("CAMERA.Local_VL_url", "视觉模型 URL", effect="restart"),
             SettingField(
-                "CAMERA.VLapi_key", "视觉模型 API 密钥", kind="secret", effect="restart"
+                "CAMERA.Local_VL_url",
+                "tui.field.camera_vl_url",
+                effect="restart",
             ),
-            SettingField("CAMERA.models", "视觉模型", effect="restart"),
+            SettingField(
+                "CAMERA.VLapi_key",
+                "tui.field.camera_vl_key",
+                kind="secret",
+                effect="restart",
+            ),
+            SettingField(
+                "CAMERA.models",
+                "tui.field.camera_models",
+                effect="restart",
+            ),
         ],
     ),
     (
-        "唤醒词",
+        "wake",
         [
             SettingField(
                 "WAKE_WORD_OPTIONS.USE_WAKE_WORD",
-                "启用唤醒词",
+                "tui.field.wake_enabled",
                 kind="bool",
                 effect="hot",
             ),
             SettingField(
                 "WAKE_WORD_OPTIONS.WAKE_WORD",
-                "唤醒词",
-                help="如：你好小智；修改时自动识别语言并生成关键词",
+                "tui.field.wake_word",
+                help_key="tui.field.wake_word_help",
                 effect="hot",
             ),
             SettingField(
                 "WAKE_WORD_OPTIONS.WAKE_WORD_LANG",
-                "自动识别语言",
+                "tui.field.wake_lang",
                 kind="readonly",
-                help="由唤醒词自动识别",
+                help_key="tui.field.wake_lang_help",
                 effect="hot",
             ),
             SettingField(
                 "WAKE_WORD_OPTIONS.NUM_THREADS",
-                "唤醒词线程数",
+                "tui.field.wake_threads",
                 kind="int",
                 minimum=1,
                 maximum=16,
@@ -235,7 +272,7 @@ SETTING_SECTIONS: list[tuple[str, list[SettingField]]] = [
             ),
             SettingField(
                 "WAKE_WORD_OPTIONS.KEYWORDS_SCORE",
-                "关键词分数",
+                "tui.field.wake_score",
                 kind="float",
                 minimum=0.5,
                 maximum=3,
@@ -243,7 +280,7 @@ SETTING_SECTIONS: list[tuple[str, list[SettingField]]] = [
             ),
             SettingField(
                 "WAKE_WORD_OPTIONS.KEYWORDS_THRESHOLD",
-                "关键词阈值",
+                "tui.field.wake_threshold",
                 kind="float",
                 minimum=0,
                 maximum=1,
@@ -252,37 +289,43 @@ SETTING_SECTIONS: list[tuple[str, list[SettingField]]] = [
         ],
     ),
     (
-        "快捷键",
+        "shortcuts",
         [
-            SettingField("SHORTCUTS.ENABLED", "启用快捷键", kind="bool"),
+            SettingField(
+                "SHORTCUTS.ENABLED",
+                "tui.field.shortcuts_enabled",
+                kind="bool",
+            ),
             SettingField(
                 "SHORTCUTS.MANUAL_PRESS.modifier",
-                "手动模式修饰键",
+                "tui.field.shortcut_manual_mod",
                 kind="choice",
                 choices=("ctrl", "alt", "shift", "cmd"),
             ),
-            SettingField("SHORTCUTS.MANUAL_PRESS.key", "手动模式按键"),
+            SettingField(
+                "SHORTCUTS.MANUAL_PRESS.key", "tui.field.shortcut_manual_key"
+            ),
             SettingField(
                 "SHORTCUTS.AUTO_TOGGLE.modifier",
-                "自动模式修饰键",
+                "tui.field.shortcut_auto_mod",
                 kind="choice",
                 choices=("ctrl", "alt", "shift", "cmd"),
             ),
-            SettingField("SHORTCUTS.AUTO_TOGGLE.key", "自动模式按键"),
+            SettingField("SHORTCUTS.AUTO_TOGGLE.key", "tui.field.shortcut_auto_key"),
             SettingField(
                 "SHORTCUTS.ABORT.modifier",
-                "中断修饰键",
+                "tui.field.shortcut_abort_mod",
                 kind="choice",
                 choices=("ctrl", "alt", "shift", "cmd"),
             ),
-            SettingField("SHORTCUTS.ABORT.key", "中断按键"),
+            SettingField("SHORTCUTS.ABORT.key", "tui.field.shortcut_abort_key"),
             SettingField(
                 "SHORTCUTS.MODE_TOGGLE.modifier",
-                "模式切换修饰键",
+                "tui.field.shortcut_mode_mod",
                 kind="choice",
                 choices=("ctrl", "alt", "shift", "cmd"),
             ),
-            SettingField("SHORTCUTS.MODE_TOGGLE.key", "模式切换按键"),
+            SettingField("SHORTCUTS.MODE_TOGGLE.key", "tui.field.shortcut_mode_key"),
         ],
     ),
 ]
@@ -315,12 +358,14 @@ def load_setting_values(config: ConfigManager | None = None) -> dict[str, str]:
 def parse_field_value(field: SettingField, text: str) -> Any:
     """严格转换字段值；未知布尔值、choice 和非法数值抛出 ValueError。"""
     if not isinstance(text, str):
-        raise ValueError(f"{field.label} 必须是字符串输入")
+        raise ValueError(t("tui.validation.must_be_str", label=field.label))
     if field.kind == "secret":
         return text
     if field.path.startswith("SHORTCUTS.") and field.path.endswith(".key"):
         if len(text) != 1 or not text.strip():
-            raise ValueError(f"{field.label} 必须是单个非空字符")
+            raise ValueError(
+                t("tui.validation.must_be_single_char", label=field.label)
+            )
         return text.lower()
     value = text.strip()
     if field.kind == "bool":
@@ -329,11 +374,15 @@ def parse_field_value(field: SettingField, text: str) -> Any:
             return True
         if normalized in {"0", "false", "no", "off", "否"}:
             return False
-        raise ValueError(f"{field.label} 必须是 true 或 false")
+        raise ValueError(t("tui.validation.must_be_bool", label=field.label))
     if field.kind == "choice":
         if value not in field.choices:
             raise ValueError(
-                f"{field.label} 必须是以下选项之一: {', '.join(field.choices)}"
+                t(
+                    "tui.validation.must_be_choice",
+                    label=field.label,
+                    choices=", ".join(field.choices),
+                )
             )
         return int(value) if field.path in _NUMERIC_CHOICES else value
     if field.kind in {"int", "float"}:
@@ -341,24 +390,46 @@ def parse_field_value(field: SettingField, text: str) -> Any:
             parsed = int(value) if field.kind == "int" else float(value)
             finite = math.isfinite(parsed)
         except (ValueError, OverflowError) as exc:
-            expected = "整数" if field.kind == "int" else "有限数"
-            raise ValueError(f"{field.label} 必须是{expected}") from exc
+            expected = t(
+                "tui.validation.type_int"
+                if field.kind == "int"
+                else "tui.validation.type_float"
+            )
+            raise ValueError(
+                t(
+                    "tui.validation.must_be_number",
+                    label=field.label,
+                    expected=expected,
+                )
+            ) from exc
         if not finite:
-            raise ValueError(f"{field.label} 必须是有限数")
+            raise ValueError(t("tui.validation.must_be_finite", label=field.label))
         if field.minimum is not None and parsed < field.minimum:
-            raise ValueError(f"{field.label} 不能小于 {field.minimum:g}")
+            raise ValueError(
+                t(
+                    "tui.validation.min_value",
+                    label=field.label,
+                    min=f"{field.minimum:g}",
+                )
+            )
         if field.maximum is not None and parsed > field.maximum:
-            raise ValueError(f"{field.label} 不能大于 {field.maximum:g}")
+            raise ValueError(
+                t(
+                    "tui.validation.max_value",
+                    label=field.label,
+                    max=f"{field.maximum:g}",
+                )
+            )
         return parsed
     if field.kind in {"str", "readonly"}:
         return value
-    raise ValueError(f"未知字段类型: {field.kind}")
+    raise ValueError(t("tui.validation.unknown_kind", kind=field.kind))
 
 
 def preview_wake_word(text: str) -> tuple[str, str, str]:
     """返回既有 converter 的 (keyword_line, lang, model_path)，不写入文件。"""
     if not isinstance(text, str) or not text.strip():
-        raise ValueError("请输入唤醒词")
+        raise ValueError(t("settings.wake_word.enter_prompt"))
     from src.audio_processing.keyword_converters import convert_wake_word
 
     return convert_wake_word(text.strip())
@@ -376,21 +447,27 @@ def _validate_extras(disabled_tools, device_updates) -> dict[str, Any]:
         if not isinstance(disabled_tools, list) or any(
             not isinstance(name, str) or not name.strip() for name in disabled_tools
         ):
-            raise ValueError("MCP 禁用工具必须是非空字符串组成的列表")
+            raise ValueError(t("tui.validation.disabled_tools_invalid"))
         updates["MCP_TOOLS.DISABLED"] = list(
             dict.fromkeys(n.strip() for n in disabled_tools)
         )
     if device_updates is not None:
         if not isinstance(device_updates, dict):
-            raise ValueError("设备更新必须是路径字典")
+            raise ValueError(t("tui.validation.device_updates_dict"))
         for path, value in device_updates.items():
             if path not in _DEVICE_PATHS:
-                raise ValueError(f"不支持的设备配置键: {path}")
+                raise ValueError(
+                    t("tui.validation.unsupported_device_key", path=path)
+                )
             if path.endswith("_id"):
                 if value is not None and (type(value) is not int or value < -1):
-                    raise ValueError(f"设备 ID 必须是大于等于 -1 的整数或 null: {path}")
+                    raise ValueError(
+                        t("tui.validation.device_id_invalid", path=path)
+                    )
             elif value is not None and not isinstance(value, str):
-                raise ValueError(f"设备名称必须是字符串或 null: {path}")
+                raise ValueError(
+                    t("tui.validation.device_name_invalid", path=path)
+                )
             updates[path] = value
     return updates
 
@@ -410,7 +487,7 @@ def save_settings(
     cfg = config if config is not None else ConfigManager.from_dict()
     try:
         if not isinstance(values, dict):
-            raise ValueError("设置输入必须是路径字典")
+            raise ValueError(t("tui.validation.values_dict"))
         updates = _validate_extras(disabled_tools, device_updates)
         for _section, fields in SETTING_SECTIONS:
             for field in fields:
@@ -419,12 +496,12 @@ def save_settings(
                     # 设备选择器提供的成对 id/name 覆盖原有名称控件值。
                     updates.setdefault(field.path, parsed)
         if not updates:
-            return True, "无变更"
+            return True, t("tui.settings.no_changes")
 
         # get_config("") 契约返回深拷贝，未知配置保留且校验期间不修改运行时。
         draft = cfg.get_config("", {})
         if not isinstance(draft, dict):
-            raise ValueError("当前配置根节点必须是对象")
+            raise ValueError(t("tui.validation.root_object"))
         word_path = "WAKE_WORD_OPTIONS.WAKE_WORD"
         converted = None
         if word_path in updates and updates[word_path] != cfg.get_config(word_path, ""):
@@ -437,7 +514,7 @@ def save_settings(
                 or not isinstance(model_path, str)
                 or not model_path
             ):
-                raise ValueError("唤醒词转换结果无效")
+                raise ValueError(t("tui.validation.wake_convert_invalid"))
             updates["WAKE_WORD_OPTIONS.WAKE_WORD_LANG"] = lang
             updates["WAKE_WORD_OPTIONS.MODEL_PATH"] = model_path
 
@@ -455,7 +532,7 @@ def save_settings(
         if error is not None:
             return False, str(error)
         logger.info("TUI 已保存 %s 项配置", len(updates))
-        return True, f"已保存 {len(updates)} 项"
+        return True, t("tui.settings.saved_count", count=len(updates))
     except Exception as exc:
         logger.error("TUI 保存配置失败: %s", exc, exc_info=True)
-        return False, f"保存失败: {exc}"
+        return False, t("tui.settings.save_failed", error=exc)
