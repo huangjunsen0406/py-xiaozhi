@@ -124,6 +124,78 @@ export default defineConfig({
         ],
       },
     },
+    vi: {
+      label: "Tiếng Việt",
+      lang: "vi-VN",
+      link: "/vi/",
+      description:
+        "py-xiaozhi là client trợ lý giọng nói AI đa phương thức dựa trên Python, gọn nhẹ, đa nền tảng và dễ mở rộng.",
+      themeConfig: {
+        langMenuLabel: "Ngôn ngữ",
+        returnToTopLabel: "Lên đầu trang",
+        sidebarMenuLabel: "Mục lục",
+        darkModeSwitchLabel: "Giao diện",
+        lightModeSwitchTitle: "Chuyển sang chế độ sáng",
+        darkModeSwitchTitle: "Chuyển sang chế độ tối",
+        outline: {
+          label: "Trên trang này",
+        },
+        docFooter: {
+          prev: "Trang trước",
+          next: "Trang sau",
+        },
+        nav: [
+          { text: "Trang chủ", link: "/vi/" },
+          {
+            text: "Hướng dẫn",
+            items: [
+              { text: "Danh mục tài liệu", link: "/vi/guide/文档目录" },
+              { text: "Cài đặt phụ thuộc hệ thống", link: "/vi/guide/系统依赖安装" },
+              { text: "Hướng dẫn cấu hình", link: "/vi/guide/配置说明" },
+              { text: "Chế độ tương tác giọng nói", link: "/vi/guide/语音交互模式说明" },
+              { text: "Phím tắt", link: "/vi/guide/快捷键说明" },
+              { text: "Khử tiếng vọng (AEC)", link: "/vi/guide/回声消除" },
+              { text: "Đánh thức bằng giọng nói", link: "/vi/guide/语音唤醒" },
+              { text: "Quy trình kích hoạt thiết bị", link: "/vi/guide/设备激活流程" },
+              { text: "Hướng dẫn đóng gói", link: "/vi/guide/打包教程" },
+              { text: "Hướng dẫn phát triển", link: "/vi/guide/开发指南" },
+              { text: "Khắc phục sự cố", link: "/vi/guide/异常汇总" },
+            ],
+          },
+          { text: "Kiến trúc", link: "/vi/architecture/" },
+          { text: "Hệ sinh thái", link: "/vi/ecosystem/" },
+          {
+            text: "MCP",
+            items: [
+              { text: "Hướng dẫn MCP", link: "/vi/mcp/" },
+              { text: "Plugin mở rộng", link: "/vi/mcp/plugins" },
+              { text: "Camera", link: "/vi/mcp/camera" },
+              { text: "Home Assistant (HA)", link: "/vi/mcp/ha" },
+              { text: "Hệ thống (System)", link: "/vi/mcp/system" },
+            ],
+          },
+          { text: "Đội ngũ", link: "/vi/about/team" },
+          { text: "Đóng góp", link: "/vi/contributing" },
+          { text: "Tài trợ", link: "/vi/sponsors/" },
+        ],
+
+        sidebar: {
+          "/vi/about/": [],
+          "/vi/mcp/": [],
+          "/vi/sponsors/": [],
+          "/vi/contributing": [],
+          "/vi/architecture/": [],
+          "/vi/about/team": [],
+        },
+
+        socialLinks: [
+          {
+            icon: "github",
+            link: "https://github.com/huangjunsen0406/py-xiaozhi",
+          },
+        ],
+      },
+    },
   },
   vite: {
     plugins: [tailwindcss()],

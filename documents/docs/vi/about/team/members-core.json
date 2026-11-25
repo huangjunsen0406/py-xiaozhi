@@ -1,0 +1,104 @@
+[
+  {
+    "name": "Junsen Huang",
+    "title": "Người khởi xướng & Phát triển nòng cốt py-xiaozhi",
+    "company": "Công ty TNHH AI Lưới điện Phương Nam - Kỹ sư Frontend",
+    "location": "Trung Quốc",
+    "languages": ["Tiếng Trung"],
+    "projects": [
+      {
+        "label": "py-xiaozhi",
+        "url": "https://github.com/huangjunsen0406/py-xiaozhi"
+      },
+      {
+        "label": "UnifyPy",
+        "url": "https://github.com/huangjunsen0406/UnifyPy"
+      },
+      {
+        "label": "xiaozhi-esp32-server",
+        "url": "https://github.com/xinnan-tech/xiaozhi-esp32-server"
+      },
+      {
+        "label": "xiaozhi-mcphub",
+        "url": "https://github.com/huangjunsen0406/xiaozhi-mcphub"
+      }
+    ],
+    "socials": {
+      "github": "huangjunsen0406"
+    },
+    "website": {
+      "label": "https://junsen.online",
+      "url": "https://junsen.online"
+    }
+  },
+  {
+    "name": "ASLant",
+    "title": "Phát triển nòng cốt, Giao diện PyQt5, Tương thích nhúng",
+    "company": "Công ty Công nghệ Số Qingcheng Sơn Đông - Kỹ sư phần mềm nhúng",
+    "location": "Trung Quốc",
+    "languages": ["Tiếng Trung"],
+    "projects": [
+    ],
+    "socials": {
+      "github": "Y-ASLant"
+    },
+    "website": {
+      "label": "aslant.top",
+      "url": "https://aslant.top/"
+    }
+  },
+  {
+    "name": "fengzai6",
+    "title": "Nhà phát triển nòng cốt giai đoạn đầu",
+    "company": "Công ty Công nghệ Huading Trung Sơn - Kỹ sư Frontend",
+    "location": "Trung Quốc",
+    "languages": ["Tiếng Trung"],
+    "projects": [
+    ],
+    "socials": {
+      "github": "fengzai6"
+    }
+  },
+  {
+    "name": "Cal And Nong",
+    "title": "Người đóng góp tài liệu",
+    "company": "Tencent - Kỹ sư Frontend",
+    "location": "Trung Quốc",
+    "languages": ["Tiếng Trung"],
+    "projects": [
+    ],
+    "socials": {
+      "github": "calandnong"
+    }
+  },
+  {
+    "name": "vonweller",
+    "title": "Người đóng góp tính năng thị giác",
+    "projects": [],
+    "location": "Trung Quốc",
+    "languages": ["Tiếng Trung"],
+    "socials": {
+      "github": "vonweller"
+    }
+  },
+  {
+    "name": "gaochuang",
+    "company": "Nokia Communications - Kỹ sư phát triển nền tảng cao cấp",
+    "projects": [],
+    "location": "Trung Quốc",
+    "languages": ["Tiếng Trung"],
+    "socials": {
+      "github": "gaochuang"
+    }
+  },
+  {
+    "name": "wupengya",
+    "company": "Công ty TNHH AI Lưới điện Phương Nam - Kỹ sư Backend",
+    "projects": [],
+    "location": "Trung Quốc",
+    "languages": ["Tiếng Trung"],
+    "socials": {
+      "github": "wupengya"
+    }
+  }
+]
