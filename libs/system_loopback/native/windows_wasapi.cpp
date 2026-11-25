@@ -19,11 +19,13 @@
 #endif
 
 #include <windows.h>
+#include <initguid.h>
+#include <mmdeviceapi.h>
 #include <audioclient.h>
 #include <avrt.h>
+#include <propkeydef.h>
 #include <functiondiscoverykeys_devpkey.h>
 #include <ksmedia.h>
-#include <mmdeviceapi.h>
 
 #include <atomic>
 #include <condition_variable>
