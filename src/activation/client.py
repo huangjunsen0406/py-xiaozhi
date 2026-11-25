@@ -73,33 +73,42 @@ class ActivationHttpClient:
 
         async with aiohttp.ClientSession(timeout=timeout) as session:
             for attempt in range(max_retries):
-                try:
-                    logger.info(f"激活尝试 {attempt + 1}/{max_retries}")
-                    if attempt > 0 and on_retry_announce:
-                        try:
-                            on_retry_announce(code)
-                        except Exception as e:
-                            logger.warning(f"激活码播报失败: {e}", exc_info=True)
+                logger.info(f"激活尝试 {attempt + 1}/{max_retries}")
+                if attempt > 0 and on_retry_announce:
+                    try:
+                        on_retry_announce(code)
+                    except Exception as e:
+                        logger.warning(f"激活码播报失败: {e}", exc_info=True)
 
-                    async with session.post(
-                        activate_url, headers=headers, json=payload
-                    ) as response:
-                        logger.debug(f"激活响应: HTTP {response.status}")
-                        if response.status == 200:
-                            logger.info("设备激活成功!")
-                            self._identity.set_activation_status(True)
-                            return True
-                        if response.status == 202:
-                            logger.info("等待用户输入验证码...")
-                            await asyncio.sleep(retry_interval)
-                            continue
-                        logger.warning(f"服务器返回 {response.status}，继续重试")
-                        await asyncio.sleep(retry_interval)
-                except asyncio.CancelledError:
-                    raise
-                except Exception as e:
-                    logger.warning(f"激活请求失败: {e}，重试中...", exc_info=True)
-                    await asyncio.sleep(retry_interval)
+                if await self._poll_once(session, activate_url, headers, payload):
+                    return True
+                await asyncio.sleep(retry_interval)
 
         logger.error(f"激活失败，达到最大重试次数 ({max_retries})")
+        return False
+
+    async def _poll_once(
+        self,
+        session: aiohttp.ClientSession,
+        activate_url: str,
+        headers: dict,
+        payload: dict,
+    ) -> bool:
+        try:
+            async with session.post(
+                activate_url, headers=headers, json=payload
+            ) as response:
+                logger.debug(f"激活响应: HTTP {response.status}")
+                if response.status == 200:
+                    logger.info("设备激活成功!")
+                    self._identity.set_activation_status(True)
+                    return True
+                if response.status == 202:
+                    logger.info("等待用户输入验证码...")
+                else:
+                    logger.warning(f"服务器返回 {response.status}，继续重试")
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            logger.warning(f"激活请求失败: {e}，重试中...", exc_info=True)
         return False

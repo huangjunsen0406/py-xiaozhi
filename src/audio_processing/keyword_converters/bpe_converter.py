@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 """BPE converter for English wake words."""
 
-import re
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -46,18 +45,8 @@ class BpeConverter(KeywordConverter):
                     self._token_to_id[token] = token_id
 
     @property
-    def language(self) -> str:
-        return "en"
-
-    @property
     def model_path(self) -> str:
         return "models/en"
-
-    def can_convert(self, text: str) -> bool:
-        chinese_pattern = re.compile(r"[\u4e00-\u9fff]")
-        has_chinese = bool(chinese_pattern.search(text))
-        has_letters = bool(re.search(r"[a-zA-Z]", text))
-        return not has_chinese and has_letters
 
     def _greedy_tokenize(self, text: str) -> List[str]:
         tokens = []
@@ -68,8 +57,7 @@ class BpeConverter(KeywordConverter):
 
             max_len = min(20, len(text) - i)
             for length in range(max_len, 0, -1):
-                substr = text[i:i + length]
-
+                substr = text[i : i + length]
                 if substr in self._token_to_id:
                     tokens.append(substr)
                     i += length
@@ -77,11 +65,7 @@ class BpeConverter(KeywordConverter):
                     break
 
             if not matched:
-                char = text[i]
-                if char in self._token_to_id:
-                    tokens.append(char)
-                else:
-                    tokens.append("<unk>")
+                tokens.append("<unk>")
                 i += 1
 
         return tokens

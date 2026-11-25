@@ -118,6 +118,34 @@ async def start_app(
                 pass
 
 
+def _run_gui_loop(run_startup, install_signal, sigint_handler) -> int:
+    try:
+        import qasync
+        from PySide6.QtWidgets import QApplication
+    except ImportError as exc:
+        logger.error(
+            "GUI 模式需要 PySide6 + qasync。请安装: pip install 'py-xiaozhi[gui]' "
+            "或在源码目录执行 uv sync --extra gui。"
+            "无 GUI 时可安装 'py-xiaozhi[tui]' 或执行 uv sync --extra tui，"
+            "再用 --mode tui。原始错误: %s",
+            exc,
+        )
+        return 1
+    qt_app = QApplication.instance() or QApplication([sys.argv[0]])
+    qt_app.setQuitOnLastWindowClosed(False)
+    loop = qasync.QEventLoop(qt_app)
+    asyncio.set_event_loop(loop)
+    install_signal(signal.SIGINT, sigint_handler)
+    try:
+        with loop:
+            return loop.run_until_complete(run_startup())
+    except RuntimeError as exc:
+        if "Event loop stopped before Future completed" in str(exc):
+            logger.debug("事件循环已正常终止")
+            return 0
+        raise
+
+
 def _run(args: argparse.Namespace, config=None) -> int:
     """Choose an event loop and restore signal handlers after it exits."""
     previous_signals = {}
@@ -146,6 +174,20 @@ def _run(args: argparse.Namespace, config=None) -> int:
         elif startup_task is not None:
             startup_task.cancel()
 
+    def make_sigint_handler(*, force_exit_on_repeat: bool):
+        def _handler(*_):
+            nonlocal requested
+            if requested:
+                if force_exit_on_repeat:
+                    logger.warning("再次收到 SIGINT，强制退出")
+                    os._exit(130)
+                return
+            requested = True
+            logger.info("收到 SIGINT 信号，正在退出...")
+            request_shutdown()
+
+        return _handler
+
     def install_signal(sig, handler):
         previous_signals[sig] = signal.getsignal(sig)
         signal.signal(sig, handler)
@@ -157,41 +199,11 @@ def _run(args: argparse.Namespace, config=None) -> int:
             except (OSError, ValueError):
                 pass
         if args.mode == "gui":
-            try:
-                import qasync
-                from PySide6.QtWidgets import QApplication
-            except ImportError as exc:
-                logger.error(
-                    "GUI 模式需要 PySide6 + qasync。请安装: pip install 'py-xiaozhi[gui]' "
-                    "或在源码目录执行 uv sync --extra gui。"
-                    "无 GUI 时可安装 'py-xiaozhi[tui]' 或执行 uv sync --extra tui，"
-                    "再用 --mode tui。原始错误: %s",
-                    exc,
-                )
-                return 1
-            qt_app = QApplication.instance() or QApplication([sys.argv[0]])
-            qt_app.setQuitOnLastWindowClosed(False)
-            loop = qasync.QEventLoop(qt_app)
-            asyncio.set_event_loop(loop)
-            requested = False
-
-            def handle_sigint(*_):
-                nonlocal requested
-                if requested:
-                    return
-                requested = True
-                logger.info("收到 SIGINT 信号，正在退出...")
-                request_shutdown()
-
-            install_signal(signal.SIGINT, handle_sigint)
-            try:
-                with loop:
-                    return loop.run_until_complete(run_startup())
-            except RuntimeError as exc:
-                if "Event loop stopped before Future completed" in str(exc):
-                    logger.debug("事件循环已正常终止")
-                    return 0
-                raise
+            return _run_gui_loop(
+                run_startup,
+                install_signal,
+                make_sigint_handler(force_exit_on_repeat=False),
+            )
         if args.mode == "tui":
             try:
                 import textual  # noqa: F401
@@ -202,18 +214,7 @@ def _run(args: argparse.Namespace, config=None) -> int:
                     exc,
                 )
                 return 1
-        requested = False
-
-        def handle_sigint_terminal(*_):
-            nonlocal requested
-            if requested:
-                logger.warning("再次收到 SIGINT，强制退出")
-                os._exit(130)
-            requested = True
-            logger.info("收到 SIGINT 信号，正在退出...")
-            request_shutdown()
-
-        install_signal(signal.SIGINT, handle_sigint_terminal)
+        install_signal(signal.SIGINT, make_sigint_handler(force_exit_on_repeat=True))
         return asyncio.run(run_startup())
     finally:
         for sig, handler in previous_signals.items():

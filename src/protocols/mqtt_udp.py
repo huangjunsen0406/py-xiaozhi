@@ -166,6 +166,48 @@ class MqttUdpChannel:
             )
         return True
 
+    def _handle_packet(self, data: bytes, debug_counter: int) -> None:
+        if len(data) < 16:
+            logger.error(f"无效的音频数据包大小: {len(data)}")
+            return
+        # MQTT/UDP audio header: type, flags, uint16 payload length,
+        # ssrc, timestamp, uint32 sequence (network byte order).
+        # See xiaozhi-esp32/docs/mqtt-udp_zh.md, section 4.2.1.
+        if data[0] != 0x01:
+            logger.warning(f"无效的音频数据包类型: {data[0]:#04x}")
+            return
+        payload_len = int.from_bytes(data[2:4], "big")
+        if len(data) != 16 + payload_len:
+            logger.warning(
+                f"音频数据包长度不匹配: 声明 {payload_len}，"
+                f"实际 {len(data) - 16}"
+            )
+            return
+        sequence = int.from_bytes(data[12:16], "big")
+        if self._remote_sequence_received:
+            # Serial-number arithmetic permits uint32 wraparound and
+            # gaps, but rejects duplicates, late and ambiguous packets.
+            distance = (sequence - self.remote_sequence) & 0xFFFFFFFF
+            if not 0 < distance < 0x80000000:
+                return
+        if not self.aes_key:
+            return
+
+        decrypted = aes_ctr_decrypt(
+            bytes.fromhex(self.aes_key),
+            data[:16],
+            data[16:],
+        )
+        self.remote_sequence = sequence
+        self._remote_sequence_received = True
+
+        if debug_counter % 100 == 0:
+            logger.debug(
+                f"已解密音频数据包 #{debug_counter}, 大小: {len(decrypted)} 字节"
+            )
+        if self._on_incoming_audio:
+            self._dispatch_audio(decrypted)
+
     def _receive_loop(self) -> None:
         debug_counter = 0
         while self.running and self.socket:
@@ -173,54 +215,9 @@ class MqttUdpChannel:
                 data, _addr = self.socket.recvfrom(4096)
                 debug_counter += 1
                 try:
-                    if len(data) < 16:
-                        logger.error(f"无效的音频数据包大小: {len(data)}")
-                        continue
-                    # MQTT/UDP audio header: type, flags, uint16 payload length,
-                    # ssrc, timestamp, uint32 sequence (network byte order).
-                    # See xiaozhi-esp32/docs/mqtt-udp_zh.md, section 4.2.1.
-                    if data[0] != 0x01:
-                        logger.warning(f"无效的音频数据包类型: {data[0]:#04x}")
-                        continue
-                    payload_len = int.from_bytes(data[2:4], "big")
-                    if len(data) != 16 + payload_len:
-                        logger.warning(
-                            f"音频数据包长度不匹配: 声明 {payload_len}，"
-                            f"实际 {len(data) - 16}"
-                        )
-                        continue
-                    sequence = int.from_bytes(data[12:16], "big")
-                    if self._remote_sequence_received:
-                        # Serial-number arithmetic permits uint32 wraparound and
-                        # gaps, but rejects duplicates, late and ambiguous packets.
-                        distance = (sequence - self.remote_sequence) & 0xFFFFFFFF
-                        if not 0 < distance < 0x80000000:
-                            continue
-                    if not self.aes_key:
-                        continue
-
-                    received_nonce = data[:16]
-                    encrypted_audio = data[16:]
-                    decrypted = aes_ctr_decrypt(
-                        bytes.fromhex(self.aes_key),
-                        received_nonce,
-                        encrypted_audio,
-                    )
-                    self.remote_sequence = sequence
-                    self._remote_sequence_received = True
-
-                    if debug_counter % 100 == 0:
-                        logger.debug(
-                            f"已解密音频数据包 #{debug_counter}, "
-                            f"大小: {len(decrypted)} 字节"
-                        )
-
-                    if self._on_incoming_audio:
-                        self._dispatch_audio(decrypted)
-
+                    self._handle_packet(data, debug_counter)
                 except Exception as e:
                     logger.error(f"处理音频数据包错误: {e}", exc_info=True)
-                    continue
             except TimeoutError:
                 pass
             except Exception as e:

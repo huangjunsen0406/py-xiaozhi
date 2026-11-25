@@ -50,7 +50,6 @@ class ActivationService:
             "status_consistent": True,
         }
         self._activation_task: Optional[asyncio.Task] = None
-        self._is_activating = False
 
     @classmethod
     async def create(cls, config: ConfigManager | None = None) -> "ActivationService":
@@ -126,7 +125,6 @@ class ActivationService:
             return False
 
         try:
-            self._is_activating = True
             self._activation_task = asyncio.current_task()
             apply_code_side_effects(code, data.get("message"))
             return await self._http.activate(
@@ -138,20 +136,12 @@ class ActivationService:
             self.logger.info("激活流程被取消")
             return False
         finally:
-            self._is_activating = False
             self._activation_task = None
 
     def cancel_activation(self) -> None:
         if self._activation_task and not self._activation_task.done():
             self.logger.info("正在取消激活任务")
             self._activation_task.cancel()
-
-    def get_device_info(self) -> Dict:
-        efuse = self._identity.load_efuse_data()
-        return {
-            "serial_number": efuse.get("serial_number"),
-            "mac_address": efuse.get("mac_address"),
-        }
 
     def get_serial_number(self) -> Optional[str]:
         return self._identity.get_serial_number()
@@ -164,12 +154,6 @@ class ActivationService:
 
     def get_activation_data(self) -> Optional[Dict]:
         return self._activation_data
-
-    def is_activated(self) -> bool:
-        return self._identity.is_activated()
-
-    def is_activating(self) -> bool:
-        return self._is_activating
 
     def get_config_manager(self) -> ConfigManager:
         return self.config_manager

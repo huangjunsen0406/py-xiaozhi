@@ -109,17 +109,34 @@ def setup_logging(
         result.append(DuplicateFilter(suppress_seconds=3.0))
         return result
 
+    def _build_rotating_handler(
+        path: Path, level: int, formatter: logging.Formatter
+    ) -> TimeSizeRotatingFileHandler:
+        handler = TimeSizeRotatingFileHandler(
+            path,
+            when=config.rotation_when,
+            interval=config.rotation_interval,
+            max_bytes=config.max_bytes,
+            backup_count=config.backup_count,
+            compress=True,
+        )
+        handler.setLevel(level)
+        handler.setFormatter(formatter)
+        for f in _make_filters():
+            handler.addFilter(f)
+        return handler
+
     # 创建处理器列表
     handlers: list[logging.Handler] = []
+    log_level = getattr(logging, config.level, logging.INFO)
 
     # 控制台处理器
     if config.enable_console:
         console_handler = logging.StreamHandler(sys.stdout)
-        console_handler.setLevel(getattr(logging, config.level, logging.INFO))
+        console_handler.setLevel(log_level)
         console_handler.setFormatter(
             ColoredFormatter(
                 use_colors=True,
-                show_trace_id=True,
                 show_thread=True,
             )
         )
@@ -131,66 +148,35 @@ def setup_logging(
     log_file = None
     if config.enable_file and config.log_dir:
         log_file = config.log_dir / config.log_file
-
-        file_handler = TimeSizeRotatingFileHandler(
-            log_file,
-            when=config.rotation_when,
-            interval=config.rotation_interval,
-            max_bytes=config.max_bytes,
-            backup_count=config.backup_count,
-            compress=True,
-        )
-        file_handler.setLevel(getattr(logging, config.level, logging.INFO))
-        file_handler.setFormatter(
-            SimpleFormatter(
-                fmt="%(asctime)s | %(levelname)-8s | [%(trace_id)s] | %(name)s | %(message)s | %(threadName)s",
-                include_trace_id=True,
+        handlers.append(
+            _build_rotating_handler(
+                log_file,
+                log_level,
+                SimpleFormatter(
+                    fmt="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s | %(threadName)s"
+                ),
             )
         )
-        for f in _make_filters():
-            file_handler.addFilter(f)
-        handlers.append(file_handler)
 
     # 错误日志文件处理器
     if config.enable_error_file and config.log_dir:
         error_file = config.log_dir / config.error_log_file
-
-        error_handler = TimeSizeRotatingFileHandler(
-            error_file,
-            when=config.rotation_when,
-            interval=config.rotation_interval,
-            max_bytes=config.max_bytes,
-            backup_count=config.backup_count,
-            compress=True,
-        )
-        error_handler.setLevel(logging.ERROR)
-        error_handler.setFormatter(
-            SimpleFormatter(
-                fmt="%(asctime)s | %(levelname)-8s | [%(trace_id)s] | %(name)s | %(funcName)s:%(lineno)d | %(message)s",
-                include_trace_id=True,
+        handlers.append(
+            _build_rotating_handler(
+                error_file,
+                logging.ERROR,
+                SimpleFormatter(
+                    fmt="%(asctime)s | %(levelname)-8s | %(name)s | %(funcName)s:%(lineno)d | %(message)s"
+                ),
             )
         )
-        for f in _make_filters():
-            error_handler.addFilter(f)
-        handlers.append(error_handler)
 
     # JSON 文件处理器
     if config.enable_json_file and config.log_dir:
         json_file = config.log_dir / "app.json.log"
-
-        json_handler = TimeSizeRotatingFileHandler(
-            json_file,
-            when=config.rotation_when,
-            interval=config.rotation_interval,
-            max_bytes=config.max_bytes,
-            backup_count=config.backup_count,
-            compress=True,
+        handlers.append(
+            _build_rotating_handler(json_file, log_level, JsonFormatter())
         )
-        json_handler.setLevel(getattr(logging, config.level, logging.INFO))
-        json_handler.setFormatter(JsonFormatter())
-        for f in _make_filters():
-            json_handler.addFilter(f)
-        handlers.append(json_handler)
 
     # 使用异步处理器包装
     if config.enable_async and handlers:

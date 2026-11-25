@@ -117,29 +117,30 @@ class ConversationSession:
     async def _on_audio_codec_changed(self, audio: SessionAudio | None = None) -> None:
         self.set_audio(audio)
 
-    async def _on_audio_channel_closed(self, _=None) -> None:
-        self._reset_tts()
-        self.state.set_keep_listening(False)
-        await self._cancel_notification()
-        if self.audio:
-            await self.audio.clear_audio_queue()
-        await self.state.set_device_state(DeviceState.IDLE)
-
-    async def _on_network_error(self, error_message: str = None) -> None:
-        """网络错误：停止持续监听并复位设备状态到 IDLE."""
+    async def _reset_session_to_idle(self, *, catch_state_error: bool = False) -> None:
         self._reset_tts()
         self.state.set_keep_listening(False)
         await self._cancel_notification()
         if self.audio:
             await self.audio.clear_audio_queue()
         try:
-            if not self.state.is_idle():
-                await self.state.set_device_state(DeviceState.IDLE)
+            await self.state.set_device_state(DeviceState.IDLE)
         except Exception as e:
+            if not catch_state_error:
+                raise
             logger.error(f"网络错误后复位设备状态失败: {e}", exc_info=True)
 
+    async def _on_audio_channel_closed(self, _=None) -> None:
+        await self._reset_session_to_idle()
+
+    async def _on_network_error(self, error_message: str = None) -> None:
+        """网络错误：停止持续监听并复位设备状态到 IDLE."""
+        await self._reset_session_to_idle(catch_state_error=True)
+
     async def _on_incoming_json(self, json_data: dict) -> None:
-        if isinstance(json_data, dict) and json_data.get("type") == "tts":
+        if not isinstance(json_data, dict):
+            return
+        if json_data.get("type") == "tts":
             async with self._tts_message_lock:
                 # Starts remain ordered, including a slow AEC downgrade. Stop
                 # waits for prior starts, but releases the lock before drain so
@@ -151,7 +152,7 @@ class ConversationSession:
 
     async def _dispatch_message(self, json_data: dict) -> None:
         try:
-            msg_type = json_data.get("type") if isinstance(json_data, dict) else None
+            msg_type = json_data.get("type")
             logger.info(f"收到JSON消息: type={msg_type}")
 
             if msg_type == "tts":
@@ -161,9 +162,7 @@ class ConversationSession:
                 elif state == "stop":
                     if self._tts_stopping:
                         return
-                    expected_generation = self._tts_generation + int(
-                        self._tts_active and not self._tts_stopping
-                    )
+                    expected_generation = self._tts_generation + int(self._tts_active)
                     await self._handle_tts_stop()
                     if self._tts_generation != expected_generation:
                         return
@@ -234,17 +233,7 @@ class ConversationSession:
         else:
             await self.state.set_device_state(DeviceState.SPEAKING)
 
-    async def _handle_tts_stop(self) -> None:
-        if not self._tts_active or self._tts_stopping:
-            return
-        # Network EOF is not playback EOF. Keep half-duplex capture muted until
-        # both the Opus consumer and local/device output have drained. This
-        # handler deliberately runs outside _tts_message_lock so a new start
-        # or user abort can invalidate it immediately.
-        self._tts_stopping = True
-        self._advance_tts_generation()
-        generation = self._tts_generation
-
+    async def _drain_tts_playback(self, generation: int) -> bool:
         async def drain():
             wait_incoming = getattr(self.protocol, "wait_for_incoming_audio", None)
             if wait_incoming is not None:
@@ -263,8 +252,6 @@ class ConversationSession:
             )
             if playback in done:
                 await playback
-            if generation != self._tts_generation:
-                return
         finally:
             for task in (playback, changed):
                 if not task.done():
@@ -272,8 +259,31 @@ class ConversationSession:
             await asyncio.gather(playback, changed, return_exceptions=True)
             if generation == self._tts_generation:
                 self._tts_stopping = False
+        return generation == self._tts_generation
 
-        if generation != self._tts_generation:
+    async def _resume_half_duplex_listening(self, reason_label: str) -> bool:
+        if not self.protocol.is_audio_channel_opened():
+            return False
+        if self.state.listening_mode == ListeningMode.REALTIME:
+            return True
+        try:
+            return await self.protocol.send_start_listening(self.state.listening_mode)
+        except Exception as e:
+            logger.warning(f"{reason_label}重新 listen 失败: {e}", exc_info=True)
+            return False
+
+    async def _handle_tts_stop(self) -> None:
+        if not self._tts_active or self._tts_stopping:
+            return
+        # Network EOF is not playback EOF. Keep half-duplex capture muted until
+        # both the Opus consumer and local/device output have drained. This
+        # handler deliberately runs outside _tts_message_lock so a new start
+        # or user abort can invalidate it immediately.
+        self._tts_stopping = True
+        self._advance_tts_generation()
+        generation = self._tts_generation
+
+        if not await self._drain_tts_playback(generation):
             return
         self._tts_active = False
         self.audio_generation += 1
@@ -502,7 +512,7 @@ class ConversationSession:
         else:
             await self.start_auto_conversation()
 
-    async def abort_speaking(self, reason: str) -> None:
+    async def abort_speaking(self, reason=None) -> None:
         if self._listen_start_generation == self.audio_generation:
             # start_listening mutes capture with aborted=True while preparing;
             # a user cancellation here is not a duplicate speaking abort.
@@ -539,24 +549,17 @@ class ConversationSession:
             await self._fail_listening(generation)
             return
 
-        if self.state.keep_listening:
-            resumed = self.protocol.is_audio_channel_opened()
-            if self.state.listening_mode != ListeningMode.REALTIME and resumed:
-                try:
-                    resumed = await self.protocol.send_start_listening(
-                        self.state.listening_mode
-                    )
-                except Exception as e:
-                    resumed = False
-                    logger.warning(f"打断后重新 listen 失败: {e}", exc_info=True)
-            if generation != self.audio_generation:
-                return
-            if not resumed:
-                await self._fail_listening(generation)
-                return
-            await self.state.set_device_state(DeviceState.LISTENING)
-            if generation == self.audio_generation:
-                self.state.set_aborted(False)
-                logger.debug("打断后已恢复持续监听")
-        else:
+        if not self.state.keep_listening:
             await self.state.set_device_state(DeviceState.IDLE)
+            return
+
+        resumed = await self._resume_half_duplex_listening("打断后")
+        if generation != self.audio_generation:
+            return
+        if not resumed:
+            await self._fail_listening(generation)
+            return
+        await self.state.set_device_state(DeviceState.LISTENING)
+        if generation == self.audio_generation:
+            self.state.set_aborted(False)
+            logger.debug("打断后已恢复持续监听")

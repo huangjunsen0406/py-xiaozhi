@@ -18,7 +18,6 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
-import os
 import platform
 from pathlib import Path
 from typing import Dict, Optional, Tuple
@@ -98,7 +97,8 @@ class DeviceIdentity:
             return self._efuse_cache
         try:
             return self._load_efuse_data_from_file()
-        except Exception:
+        except (OSError, json.JSONDecodeError, TypeError) as exc:
+            logger.warning("读取 efuse 失败，使用默认未激活状态: %s", exc)
             return {"activation_status": False}
 
     def generate_fresh_fingerprint(self) -> Dict:
@@ -110,32 +110,37 @@ class DeviceIdentity:
             "machine_id": self._get_machine_id(),
         }
 
-    def _flat_efuse(
-        self,
-        *,
-        mac_address: Optional[str],
-        serial_number: str,
-        hmac_key: str,
-        activation_status: bool = False,
-    ) -> Dict:
-        return {
-            "mac_address": mac_address,
-            "serial_number": serial_number,
-            "hmac_key": hmac_key,
-            "activation_status": bool(activation_status),
-        }
-
     def _create_efuse_file(self, fingerprint: Dict, mac_address: Optional[str]):
         serial_number = self._generate_serial_number_from_fingerprint(fingerprint)
         hmac_key = self._generate_hmac_key_from_fingerprint(fingerprint)
-        efuse_data = self._flat_efuse(
-            mac_address=mac_address,
-            serial_number=serial_number,
-            hmac_key=hmac_key,
-            activation_status=False,
+        efuse_data = self._normalize_efuse_dict(
+            {
+                "mac_address": mac_address,
+                "serial_number": serial_number,
+                "hmac_key": hmac_key,
+                "activation_status": False,
+            }
         )
         self._save_efuse_data(efuse_data)
         logger.info(f"已创建efuse配置: 序列号={serial_number}")
+
+    def _fill_missing_efuse_fields(
+        self,
+        raw: Dict,
+        missing: list[str],
+        fingerprint: Dict,
+        mac_address: Optional[str],
+    ) -> None:
+        generators = {
+            "mac_address": lambda: mac_address,
+            "serial_number": lambda: self._generate_serial_number_from_fingerprint(
+                fingerprint
+            ),
+            "hmac_key": lambda: self._generate_hmac_key_from_fingerprint(fingerprint),
+            "activation_status": lambda: False,
+        }
+        for field in missing:
+            raw[field] = generators[field]()
 
     def _validate_efuse_file(self, fingerprint: Dict, mac_address: Optional[str]):
         try:
@@ -150,29 +155,15 @@ class DeviceIdentity:
             missing = [f for f in _EFUSE_KEYS if f not in raw]
             if missing:
                 logger.warning(f"efuse缺少字段: {missing}")
-                for field in missing:
-                    if field == "mac_address":
-                        raw[field] = mac_address
-                    elif field == "serial_number":
-                        raw[field] = self._generate_serial_number_from_fingerprint(
-                            fingerprint
-                        )
-                    elif field == "hmac_key":
-                        raw[field] = self._generate_hmac_key_from_fingerprint(
-                            fingerprint
-                        )
-                    elif field == "activation_status":
-                        raw[field] = False
+                self._fill_missing_efuse_fields(raw, missing, fingerprint, mac_address)
 
             flat = self._normalize_efuse_dict(raw)
-            if missing or had_extra:
-                if had_extra:
-                    logger.info(
-                        "efuse 已剥离非平铺字段（如 device_fingerprint）"
-                    )
-                self._save_efuse_data(flat)
-            else:
+            if not missing and not had_extra:
                 self._efuse_cache = flat
+                return
+            if had_extra:
+                logger.info("efuse 已剥离非平铺字段（如 device_fingerprint）")
+            self._save_efuse_data(flat)
         except Exception as e:
             logger.error(f"验证efuse失败: {e}，重新创建", exc_info=True)
             self._create_efuse_file(fingerprint, mac_address)
@@ -248,14 +239,13 @@ class DeviceIdentity:
         try:
             if not self._efuse_file:
                 raise RuntimeError("efuse 路径未初始化")
+            from src.utils.common_utils import atomic_write_text
+
             flat = self._normalize_efuse_dict(data)
-            self._efuse_file.parent.mkdir(parents=True, exist_ok=True)
-            tmp = self._efuse_file.with_suffix(".tmp")
-            tmp.write_text(
+            atomic_write_text(
+                self._efuse_file,
                 json.dumps(flat, indent=2, ensure_ascii=False) + "\n",
-                encoding="utf-8",
             )
-            os.replace(tmp, self._efuse_file)
             self._efuse_cache = flat
             return True
         except Exception as e:

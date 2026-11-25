@@ -172,10 +172,3 @@ def announce_activation_code(code: str, locale: str = "zh-CN") -> None:
     if _announcer is None:
         _announcer = ActivationAnnouncer(locale)
     _announcer.announce(code)
-
-
-def stop_announcement() -> None:
-    """停止验证码播报."""
-    global _announcer
-    if _announcer:
-        _announcer.stop()

@@ -56,11 +56,8 @@ class UiPresenter:
             self._vp.set_status(status, connected)
 
     def set_button_text(self, text: str) -> None:
-        if not self._vp:
-            return
-        setter = getattr(self._vp, "set_button_text", None)
-        if callable(setter):
-            setter(text)
+        if self._vp:
+            self._vp.set_button_text(text)
 
     def set_auto_mode(self, auto_mode: bool) -> None:
         if self._vp:

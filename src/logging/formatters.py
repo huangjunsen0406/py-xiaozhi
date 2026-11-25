@@ -14,10 +14,6 @@ from datetime import datetime, timezone
 from typing import Any, Optional, Union
 
 
-def _empty_context() -> dict[str, Any]:
-    return {}
-
-
 class ColoredFormatter(logging.Formatter):
     """
     彩色日志格式化器，用于控制台输出.
@@ -70,12 +66,10 @@ class ColoredFormatter(logging.Formatter):
         datefmt: Optional[str] = None,
         style: str = "%",
         use_colors: bool = True,
-        show_trace_id: bool = True,
         show_thread: bool = True,
     ) -> None:
         super().__init__(fmt, datefmt, style)
         self.use_colors = use_colors and self._supports_color()
-        self.show_trace_id = show_trace_id
         self.show_thread = show_thread
 
     def _supports_color(self) -> bool:
@@ -140,15 +134,6 @@ class ColoredFormatter(logging.Formatter):
 
         # 构建基础日志行
         parts = [timestamp_colored, level_colored, name_colored, message]
-
-        # 添加 Trace ID
-        if self.show_trace_id:
-            trace_id = getattr(record, "trace_id", None) or _empty_context().get(
-                "trace_id"
-            )
-            if trace_id and trace_id != "-":
-                trace_colored = self._colorize(f"[{trace_id[:8]}]", "MAGENTA")
-                parts.insert(3, trace_colored)
 
         # 添加线程名
         if self.show_thread:
@@ -230,19 +215,6 @@ class JsonFormatter(logging.Formatter):
             "function": record.funcName,
             "line": record.lineno,
         }
-
-        # 添加上下文信息
-        context = _empty_context()
-        if context:
-            log_data["context"] = context
-
-        # 直接从 record 获取上下文（如果存在）
-        for field in ("trace_id", "request_id", "user_id", "session_id"):
-            value = getattr(record, field, None)
-            if value and value != "-":
-                if "context" not in log_data:
-                    log_data["context"] = {}
-                log_data["context"][field] = value
 
         # 添加线程信息
         log_data["thread"] = {
@@ -348,23 +320,8 @@ class SimpleFormatter(logging.Formatter):
         self,
         fmt: Optional[str] = None,
         datefmt: Optional[str] = None,
-        include_trace_id: bool = True,
     ) -> None:
         super().__init__(
             fmt or self.DEFAULT_FORMAT,
             datefmt or self.DEFAULT_DATE_FORMAT,
         )
-        self.include_trace_id = include_trace_id
-
-    def format(self, record: logging.LogRecord) -> str:
-        """
-        格式化日志记录.
-        """
-        # 添加 trace_id
-        if self.include_trace_id:
-            trace_id = getattr(record, "trace_id", None) or _empty_context().get(
-                "trace_id", "-"
-            )
-            record.trace_id = trace_id
-
-        return super().format(record)

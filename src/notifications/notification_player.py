@@ -200,43 +200,61 @@ class NotificationPlayer:
         await decoder.stop()
         return None
 
+    async def _teardown_locked(
+        self,
+        *,
+        clear_queue: bool,
+        stop_decoder: bool = True,
+        cancel_consumer: bool = False,
+        fallback_codec: AudioCodec | None = None,
+    ) -> tuple[asyncio.Task | None, Callable | None]:
+        """在持有 self._lock 时统一重置通知播放状态并清理 codec/decoder."""
+        callback = self._finished_callback
+        decoder = self._decoder
+        consumer_task = self._consumer_task
+        codec = self._playback_codec or fallback_codec
+
+        self._active = False
+        self._active_generation = 0
+        self._playback_codec = None
+        self._decoder = None
+        self._consumer_task = None
+        self._queue = None
+        self._drained_event = None
+        self._finished_callback = None
+        self._subtitles = []
+
+        if (
+            cancel_consumer
+            and consumer_task is not None
+            and consumer_task is not asyncio.current_task()
+        ):
+            consumer_task.cancel()
+        if codec is not None:
+            codec.set_notification_playback_callbacks()
+            if clear_queue:
+                await codec.clear_notification_queue()
+        if stop_decoder and decoder is not None:
+            await decoder.stop()
+
+        return consumer_task, callback
+
     async def stop(self) -> None:
         """取消当前通知并立即清空其 PCM 余量。"""
         async with self._lock:
             if not self._active and self._consumer_task is None:
                 return
             self._generation += 1
-            self._active = False
-            self._active_generation = 0
-            decoder = self._decoder
-            consumer_task = self._consumer_task
-            codec = self._playback_codec
-            self._playback_codec = None
-            self._decoder = None
-            self._consumer_task = None
-            self._queue = None
-            self._drained_event = None
-            self._finished_callback = None
-            self._subtitles = []
-
             # 清理期间仍持有锁，新通知不能复用尚未清完的 codec。
-            if (
-                consumer_task is not None
-                and consumer_task is not asyncio.current_task()
-            ):
-                consumer_task.cancel()
-            if codec is not None:
-                codec.set_notification_playback_callbacks()
-                await codec.clear_notification_queue()
-            if decoder is not None:
-                await decoder.stop()
+            consumer_task, _ = await self._teardown_locked(
+                clear_queue=True, cancel_consumer=True
+            )
 
         if (
             consumer_task is not None
             and not consumer_task.done()
             and consumer_task is not asyncio.current_task()
         ):
-            consumer_task.cancel()
             try:
                 await consumer_task
             except asyncio.CancelledError:
@@ -250,16 +268,9 @@ class NotificationPlayer:
         async with self._lock:
             if self._active_generation != generation:
                 return
-            self._active = False
-            self._active_generation = 0
-            self._decoder = None
-            self._queue = None
-            self._drained_event = None
-            self._finished_callback = None
-            self._subtitles = []
-            self._playback_codec = None
-            codec.set_notification_playback_callbacks()
-            await codec.clear_notification_queue()
+            await self._teardown_locked(
+                clear_queue=True, stop_decoder=False, fallback_codec=codec
+            )
 
     async def _consume(
         self,
@@ -285,7 +296,7 @@ class NotificationPlayer:
                     if not self._saw_audio or not decoder.completed_successfully:
                         logger.warning(
                             "通知音频为空或解码失败: %s",
-                            getattr(decoder, "error", None) or "无有效音频",
+                            decoder.error or "无有效音频",
                         )
                         break
                     drained_event = self._drained_event
@@ -362,25 +373,7 @@ class NotificationPlayer:
         async with self._lock:
             if not self._is_current(generation):
                 return
-            callback = self._finished_callback
-            codec = self._playback_codec
-            self._playback_codec = None
-            decoder = self._decoder
-            self._active = False
-            self._active_generation = 0
-            self._decoder = None
-            self._consumer_task = None
-            self._queue = None
-            self._drained_event = None
-            self._finished_callback = None
-            self._subtitles = []
-
-            if codec is not None:
-                codec.set_notification_playback_callbacks()
-                if not success:
-                    await codec.clear_notification_queue()
-            if decoder is not None:
-                await decoder.stop()
+            _, callback = await self._teardown_locked(clear_queue=not success)
         if callback is not None:
             try:
                 await callback(generation, success)

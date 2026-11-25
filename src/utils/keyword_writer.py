@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import json
 import os
-import tempfile
 import threading
 from collections.abc import Callable
 from pathlib import Path
 
+from src.utils.common_utils import atomic_write_bytes
 from src.utils.config_manager import ConfigManager
 
 _keyword_lock = threading.RLock()
@@ -16,18 +16,7 @@ _keyword_lock = threading.RLock()
 
 def _atomic_write(target: Path, content: bytes) -> None:
     """Only replace the target after the complete contents reach the temporary file."""
-    target.parent.mkdir(parents=True, exist_ok=True)
-    fd, temporary = tempfile.mkstemp(prefix=f".{target.name}.", dir=target.parent)
-    temporary_path = Path(temporary)
-    try:
-        with os.fdopen(fd, "wb") as stream:
-            stream.write(content)
-            stream.flush()
-            os.fsync(stream.fileno())
-        os.replace(temporary_path, target)
-    finally:
-        # mkstemp supplied this exact absolute sibling of the intended target.
-        temporary_path.unlink(missing_ok=True)
+    atomic_write_bytes(target, content, suffix="", replace=os.replace)
 
 
 def commit_with_keywords(

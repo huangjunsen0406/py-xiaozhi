@@ -41,15 +41,12 @@ class Events:
     # payload: 可选 asyncio.Future，完成时 set_result(list|dict|None)
     AUDIO_DEVICES_REFRESH_REQUEST = "audio_devices_refresh_request"
 
-    # 应用生命周期
-    APP_SHUTDOWN = "app_shutdown"
     # 系统级提示（降级模式横幅等，payload: str）
     SYSTEM_NOTICE = "system_notice"
 
     # 音乐播放器事件
     MUSIC_STATE_CHANGED = "music_state_changed"  # 播放状态变化
     MUSIC_LYRICS_UPDATE = "music_lyrics_update"  # 歌词更新
-    MUSIC_PROGRESS_UPDATE = "music_progress_update"  # 进度更新
 
     # 服务端单向通知字幕（payload: str）
     NOTIFICATION_SUBTITLE = "notification_subtitle"
@@ -67,7 +64,6 @@ class Events:
     UI_ABORT_REQUEST = "ui_abort_request"  # 打断
     UI_SEND_TEXT = "ui_send_text"  # 发文本
     UI_QUIT_REQUEST = "ui_quit_request"  # 退出
-    UI_OPEN_SETTINGS = "ui_open_settings"  # 打开设置
     UI_TOGGLE_WINDOW = "ui_toggle_window"  # 显隐主窗口（GUI）
 
     # 配置变更事件
@@ -164,19 +160,8 @@ class EventBus:
 
         logger.debug(f"EventBus: 触发事件 {event}, {len(handlers)} 个处理器")
 
-        # 并行执行所有处理器
-        tasks = []
-        for handler in handlers:
-            try:
-                tasks.append(self._safe_call(handler, data))
-            except Exception as e:
-                logger.error(
-                    f"EventBus: 创建任务失败 {handler.__name__}: {e}",
-                    exc_info=True,
-                )
-
-        if tasks:
-            await asyncio.gather(*tasks, return_exceptions=True)
+        # 并行执行所有处理器（常规异常由 _safe_call 隔离并记录）
+        await asyncio.gather(*(self._safe_call(handler, data) for handler in handlers))
 
     async def emit_sequential(self, event: str, data: Any = None) -> None:
         """顺序触发事件.

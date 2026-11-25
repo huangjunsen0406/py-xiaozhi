@@ -2,7 +2,6 @@ import copy
 import json
 import os
 import shutil
-import tempfile
 import threading
 import uuid
 from datetime import datetime, timezone
@@ -177,7 +176,6 @@ class ConfigManager:
         },
         "LOGGING": {
             "LEVEL": "INFO",  # DEBUG, INFO, WARNING, ERROR, CRITICAL
-            "FORMAT_TYPE": "colored",  # colored, json, simple
             "ENABLE_CONSOLE": True,
             "ENABLE_FILE": True,
             "ENABLE_ERROR_FILE": True,
@@ -407,31 +405,18 @@ class ConfigManager:
 
     def _save_config(self, config: dict) -> bool:
         """原子写入配置文件；内存配置只更新当前实例。"""
-        if getattr(self, "_memory_only", False):
+        if self._memory_only:
             return True
-        tmp_file = None
         try:
-            self.config_dir.mkdir(parents=True, exist_ok=True)
-            fd, temporary = tempfile.mkstemp(
-                prefix=f".{self.config_file.name}.", suffix=".tmp", dir=self.config_dir
-            )
-            tmp_file = Path(temporary)
-            with os.fdopen(fd, "w", encoding="utf-8") as stream:
-                json.dump(config, stream, indent=2, ensure_ascii=False)
-                stream.flush()
-                os.fsync(stream.fileno())
-            os.replace(tmp_file, self.config_file)
+            from src.utils.common_utils import atomic_write_text
+
+            payload = json.dumps(config, indent=2, ensure_ascii=False)
+            atomic_write_text(self.config_file, payload, replace=os.replace)
             logger.debug(f"配置已保存到: {self.config_file}")
             return True
         except Exception as e:
             logger.error(f"配置保存错误: {e}", exc_info=True)
             return False
-        finally:
-            if tmp_file is not None:
-                try:
-                    tmp_file.unlink(missing_ok=True)
-                except OSError:
-                    logger.warning("清理配置临时文件失败: %s", tmp_file, exc_info=True)
 
     @staticmethod
     def _merge_configs(default: dict, custom: dict) -> dict:
@@ -510,7 +495,7 @@ class ConfigManager:
         文件配置先原子写盘，再加载运行时配置；加载失败时仅恢复运行时，
         保留已经写入的磁盘内容。提交不会应用 PATHS 覆盖或迁移目录。
         """
-        memory_only = getattr(self, "_memory_only", False)
+        memory_only = self._memory_only
         try:
             candidate = copy.deepcopy(draft)
             previous = None if memory_only else copy.deepcopy(self._config)
@@ -540,11 +525,6 @@ class ConfigManager:
         return "配置已写入，但运行时加载失败，请重试或重启应用"
 
     @_synchronized
-    def save_config(self) -> bool:
-        """将当前内存配置落盘."""
-        return self._save_config(self._config)
-
-    @_synchronized
     def reload_config(
         self, *, apply_paths: bool = True, strict: bool = False
     ) -> bool:
@@ -554,7 +534,7 @@ class ConfigManager:
         strict: 读取失败时不备份或覆盖为默认配置。
         PATHS 目录迁移仅在 initialize_config 时执行。
         """
-        if getattr(self, "_memory_only", False):
+        if self._memory_only:
             return True
         try:
             self._config = self._load_config(strict=strict)

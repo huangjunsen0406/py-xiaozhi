@@ -1,4 +1,3 @@
-import asyncio
 import os
 import re
 import sys
@@ -68,11 +67,6 @@ class ALSAErrorSuppressor:
                 pass
 
         return False  # 不抑制异常
-
-
-def suppress_alsa_errors():
-    """返回 ALSA 错误抑制器上下文管理器."""
-    return ALSAErrorSuppressor()
 
 
 # 可选：屏蔽常见虚拟/聚合设备（默认不选它们）
@@ -153,35 +147,6 @@ def downmix_to_mono(
         y = x.mean(axis=1, dtype=x.dtype)
 
     return y[:, None] if keepdims else y
-
-
-def safe_queue_put(
-    queue: asyncio.Queue, item: Any, replace_oldest: bool = True
-) -> bool:
-    """安全地将项目放入队列，队列满时可选择丢弃最旧数据.
-
-    Args:
-        queue: asyncio.Queue 对象
-        item: 要入队的数据
-        replace_oldest: True=队列满时丢弃最旧数据并放入新数据, False=直接丢弃新数据
-
-    Returns:
-        True=成功入队, False=队列满且未入队
-    """
-    try:
-        queue.put_nowait(item)
-        return True
-    except asyncio.QueueFull:
-        if replace_oldest:
-            try:
-                queue.get_nowait()  # 丢弃最旧的
-                queue.put_nowait(item)  # 放入新数据
-                return True
-            except asyncio.QueueEmpty:
-                # 理论上不会发生,但保险起见
-                queue.put_nowait(item)
-                return True
-        return False
 
 
 def upmix_mono_to_channels(mono_data: np.ndarray, num_channels: int) -> np.ndarray:
@@ -319,6 +284,19 @@ def list_audio_devices(
     return {"input": inputs, "output": outputs}
 
 
+def _pack_device_info(
+    device: dict[str, Any], idx: int, key_channels: str
+) -> dict[str, Any]:
+    sr = device.get("default_samplerate")
+    sample_rate = int(sr) if isinstance(sr, (int, float)) and sr > 0 else 48000
+    return {
+        "index": int(device.get("index", idx)),
+        "name": device.get("name", "Unknown"),
+        "sample_rate": sample_rate,
+        "channels": int(device.get(key_channels, 0) or 0),
+    }
+
+
 def find_device_by_name(
     kind: str, device_name: str, *, include_virtual: bool = False
 ) -> dict[str, Any] | None:
@@ -347,13 +325,7 @@ def find_device_by_name(
         if not _valid(devices, i, kind, include_virtual):
             continue
         if d.get("name", "").casefold().strip() == search_name:
-            sr = d.get("default_samplerate", None)
-            return {
-                "index": int(d.get("index", i)),
-                "name": d.get("name", "Unknown"),
-                "sample_rate": int(sr) if isinstance(sr, (int, float)) else None,
-                "channels": int(d.get(key_channels, 0)),
-            }
+            return _pack_device_info(d, i, key_channels)
 
     # 2. 模糊匹配（包含关系）
     for i, d in enumerate(devices):
@@ -361,13 +333,7 @@ def find_device_by_name(
             continue
         device_full_name = d.get("name", "").casefold()
         if search_name in device_full_name or device_full_name in search_name:
-            sr = d.get("default_samplerate", None)
-            return {
-                "index": int(d.get("index", i)),
-                "name": d.get("name", "Unknown"),
-                "sample_rate": int(sr) if isinstance(sr, (int, float)) else None,
-                "channels": int(d.get(key_channels, 0)),
-            }
+            return _pack_device_info(d, i, key_channels)
 
     return None
 
@@ -406,13 +372,7 @@ def select_audio_device(
             d = base
             if not include_virtual and _is_virtual(d.get("name", "")):
                 return None
-        sr = d.get("default_samplerate", None)
-        return {
-            "index": int(d.get("index", idx)),
-            "name": d.get("name", "Unknown"),
-            "sample_rate": int(sr) if isinstance(sr, (int, float)) else None,
-            "channels": int(d.get(key_channels, 0)),
-        }
+        return _pack_device_info(d, idx, key_channels)
 
     # 1. sounddevice 系统默认（最可靠）
     try:

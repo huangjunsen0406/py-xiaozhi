@@ -179,19 +179,97 @@ class MusicDecoder:
             await MusicDecoder._terminate_process(process)
             raise
 
+    async def _verify_ffmpeg(self, ffmpeg: str) -> bool:
+        try:
+            result = await self._spawn_process(
+                ffmpeg,
+                "-version",
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                **_SUBPROCESS_KW,
+            )
+            self._probe_process = result
+            if self._stopped:
+                await self._terminate_process(result)
+                self._probe_process = None
+                return False
+            await result.wait()
+            self._probe_process = None
+            if self._stopped:
+                return False
+            if result.returncode not in (0, None):
+                logger.error(
+                    f"FFmpeg 无法启动（退出码 {result.returncode}）: {ffmpeg}。"
+                    "安装包应内置可移植二进制；若仍失败请反馈版本与平台。"
+                    "源码运行请执行 ./scripts/bundle_ffmpeg.sh 或安装系统 ffmpeg"
+                )
+                return False
+            return True
+        except FileNotFoundError:
+            logger.error(
+                "FFmpeg 不可用：未找到内置 libs/ffmpeg/<plat>/<arch>/ffmpeg，"
+                f"且系统 PATH 中也没有。尝试路径: {ffmpeg}。"
+                "安装包用户无需单独安装系统 FFmpeg；若使用安装包仍失败，"
+                "请重新下载完整安装包。源码运行请安装 ffmpeg 或执行 "
+                "./scripts/bundle_ffmpeg.sh"
+            )
+            return False
+        except OSError as e:
+            logger.error(
+                f"FFmpeg 启动失败（可能缺少动态库）: {ffmpeg}: {e}",
+                exc_info=True,
+            )
+            return False
+
+    def _build_decode_cmd(
+        self,
+        ffmpeg: str,
+        source: AudioSource,
+        start_position: float,
+        headers: Mapping[str, str] | None,
+        *,
+        http: bool,
+    ) -> list[str]:
+        cmd = [ffmpeg]
+        if http:
+            cmd.extend(
+                [
+                    "-reconnect",
+                    "1",
+                    "-reconnect_streamed",
+                    "1",
+                    "-reconnect_delay_max",
+                    "5",
+                ]
+            )
+            cmd.extend(_ffmpeg_header_args(headers))
+        if start_position > 0.1:
+            cmd.extend(["-ss", f"{start_position:.3f}"])
+        cmd.extend(
+            [
+                "-i",
+                str(source),
+                "-f",
+                "s16le",
+                "-ar",
+                str(self.sample_rate),
+                "-ac",
+                str(self.channels),
+                "-loglevel",
+                "error",
+                "-",
+            ]
+        )
+        return cmd
+
     async def start_decode(
         self,
         source: AudioSource,
         output_queue: asyncio.Queue,
         start_position: float = 0.0,
         headers: Mapping[str, str] | None = None,
-        cache_path: Path | None = None,
     ) -> bool:
-        """开始解码。source 为本地路径或 http(s)。
-
-        cache_path 已废弃忽略：缓存由后台按网速 copy，不跟播放进度绑。
-        """
-        _ = cache_path
+        """开始解码。source 为本地路径或 http(s)."""
         http = is_http_url(source)
         if not http:
             path = Path(source)
@@ -206,80 +284,12 @@ class MusicDecoder:
 
         try:
             ffmpeg = get_ffmpeg_path()
-            try:
-                result = await self._spawn_process(
-                    ffmpeg,
-                    "-version",
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                    **_SUBPROCESS_KW,
-                )
-                self._probe_process = result
-                if self._stopped:
-                    await self._terminate_process(result)
-                    self._probe_process = None
-                    return False
-                await result.wait()
-                self._probe_process = None
-                if self._stopped:
-                    return False
-                if result.returncode not in (0, None):
-                    logger.error(
-                        f"FFmpeg 无法启动（退出码 {result.returncode}）: {ffmpeg}。"
-                        "安装包应内置可移植二进制；若仍失败请反馈版本与平台。"
-                        "源码运行请执行 ./scripts/bundle_ffmpeg.sh 或安装系统 ffmpeg"
-                    )
-                    return False
-            except FileNotFoundError:
-                logger.error(
-                    "FFmpeg 不可用：未找到内置 libs/ffmpeg/<plat>/<arch>/ffmpeg，"
-                    f"且系统 PATH 中也没有。尝试路径: {ffmpeg}。"
-                    "安装包用户无需单独安装系统 FFmpeg；若使用安装包仍失败，"
-                    "请重新下载完整安装包。源码运行请安装 ffmpeg 或执行 "
-                    "./scripts/bundle_ffmpeg.sh"
-                )
-                return False
-            except OSError as e:
-                logger.error(
-                    f"FFmpeg 启动失败（可能缺少动态库）: {ffmpeg}: {e}",
-                    exc_info=True,
-                )
+            if not await self._verify_ffmpeg(ffmpeg):
                 return False
 
-            cmd = [ffmpeg]
-
-            if http:
-                cmd.extend(
-                    [
-                        "-reconnect",
-                        "1",
-                        "-reconnect_streamed",
-                        "1",
-                        "-reconnect_delay_max",
-                        "5",
-                    ]
-                )
-                cmd.extend(_ffmpeg_header_args(headers))
-
-            if start_position > 0.1:
-                cmd.extend(["-ss", f"{start_position:.3f}"])
-
-            cmd.extend(
-                [
-                    "-i",
-                    str(source),
-                    "-f",
-                    "s16le",
-                    "-ar",
-                    str(self.sample_rate),
-                    "-ac",
-                    str(self.channels),
-                    "-loglevel",
-                    "error",
-                    "-",
-                ]
+            cmd = self._build_decode_cmd(
+                ffmpeg, source, start_position, headers, http=http
             )
-
             self._process = await self._spawn_process(
                 *cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, **_SUBPROCESS_KW
             )
@@ -385,10 +395,3 @@ class MusicDecoder:
             and self._decode_task is not None
             and not self._decode_task.done()
         )
-
-    async def wait_completion(self):
-        if self._decode_task and not self._decode_task.done():
-            try:
-                await self._decode_task
-            except Exception as e:
-                logger.error(f"等待解码完成失败: {e}", exc_info=True)

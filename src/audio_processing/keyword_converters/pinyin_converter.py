@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-import re
 from typing import List
 
 from .base import KeywordConverter
@@ -34,16 +33,8 @@ class PinyinConverter(KeywordConverter):
                 )
 
     @property
-    def language(self) -> str:
-        return "zh"
-
-    @property
     def model_path(self) -> str:
         return "models/zh"
-
-    def can_convert(self, text: str) -> bool:
-        chinese_pattern = re.compile(r"[\u4e00-\u9fff]")
-        return bool(chinese_pattern.search(text))
 
     def _split_pinyin(self, pinyin: str) -> List[str]:
         if not pinyin:

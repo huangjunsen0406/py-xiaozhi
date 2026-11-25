@@ -4,7 +4,6 @@
 """
 
 import asyncio
-import time
 from collections.abc import Callable
 
 from src.logging import get_logger
@@ -32,7 +31,6 @@ class PynputShortcutBackend(ShortcutBackend):
         super().__init__(loop)
         self._listener = None
         self._pressed_keys: set[str] = set()
-        self._last_activity_time = 0.0
         self._health_check_task = None
         self._check_interval = 10.0  # 健康检查间隔（秒）
 
@@ -58,7 +56,6 @@ class PynputShortcutBackend(ShortcutBackend):
             )
             self._listener.start()
             self._running = True
-            self._last_activity_time = time.time()
 
             # 启动健康检查
             self._start_health_check()
@@ -114,7 +111,6 @@ class PynputShortcutBackend(ShortcutBackend):
         if not self._running:
             return
 
-        self._last_activity_time = time.time()
         key_name = self._get_key_name(key)
         if not key_name:
             return
@@ -127,7 +123,6 @@ class PynputShortcutBackend(ShortcutBackend):
         if not self._running:
             return
 
-        self._last_activity_time = time.time()
         key_name = self._get_key_name(key)
         if not key_name:
             return
@@ -146,8 +141,6 @@ class PynputShortcutBackend(ShortcutBackend):
                     return "alt"
                 if name in ("shift_l", "shift_r"):
                     return "shift"
-                if name == "cmd":
-                    return "cmd"
                 if name == "esc":
                     return "escape"
                 if name == "enter":
@@ -169,35 +162,25 @@ class PynputShortcutBackend(ShortcutBackend):
         if not self._shortcuts:
             return
 
-        # 检查修饰键状态
-        ctrl = any(k in self._pressed_keys for k in ("ctrl", "control"))
-        alt = any(k in self._pressed_keys for k in ("alt", "option"))
-        shift = "shift" in self._pressed_keys
-        cmd = "cmd" in self._pressed_keys
+        modifiers = {
+            "ctrl": "ctrl" in self._pressed_keys,
+            "alt": "alt" in self._pressed_keys,
+            "shift": "shift" in self._pressed_keys,
+            "cmd": "cmd" in self._pressed_keys,
+        }
 
         for name, config in self._shortcuts.items():
-            if self._match_shortcut(config, ctrl, alt, shift, cmd):
+            if self._match_shortcut(config, modifiers):
                 logger.debug(f"触发快捷键: {name}")
                 self._run_callback(name)
 
     def _match_shortcut(
-        self, config: ShortcutConfig, ctrl: bool, alt: bool, shift: bool, cmd: bool
+        self, config: ShortcutConfig, modifiers: dict[str, bool]
     ) -> bool:
         """检查是否匹配快捷键配置."""
-        modifier = config.modifier.lower()
-
-        # 检查修饰键
-        if modifier == "ctrl" and not ctrl:
+        if not modifiers.get(config.modifier.lower(), False):
             return False
-        if modifier == "alt" and not alt:
-            return False
-        if modifier == "shift" and not shift:
-            return False
-        if modifier == "cmd" and not cmd:
-            return False
-
-        # 检查主键
-        return config.key.lower() in {k.lower() for k in self._pressed_keys}
+        return config.key.lower() in self._pressed_keys
 
     def _start_health_check(self) -> None:
         """启动健康检查任务."""

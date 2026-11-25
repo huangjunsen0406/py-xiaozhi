@@ -86,6 +86,7 @@ class AecEngine:
         self._far_buffer = np.empty(0, dtype=np.float32)
         self._far_resampler = None
         self._far_dropped = 0
+        self._far_error_logged = False
 
         # 复用的 ctypes 帧缓冲（10ms int16）
         self._near_in = (ctypes.c_short * self._frame)()
@@ -208,8 +209,11 @@ class AecEngine:
             while len(self._far_pending) > _FAR_PENDING_MAX_BLOCKS:
                 self._far_pending.popleft()
                 self._far_dropped += 1
-        except Exception:
-            pass  # 输出路径绝不抛
+        except Exception as exc:
+            self._far_dropped += 1
+            if not self._far_error_logged:
+                self._far_error_logged = True
+                logger.warning("AEC feed_far 异常（后续同类错误静默计数）: %s", exc)
 
     def _drain_far_locked(self) -> None:
         """采集线程（已持锁）：重采样 far 队列并喂给 ProcessReverseStream."""
@@ -237,9 +241,6 @@ class AecEngine:
             )
             if ret != 0:
                 raise RuntimeError(f"process_reverse_stream 返回 {ret}")
-
-    def set_delay_ms(self, delay_ms: int) -> None:
-        self._delay_ms = int(delay_ms)
 
     def close(self) -> None:
         """释放 APM 资源；须在音频流停止后调用."""

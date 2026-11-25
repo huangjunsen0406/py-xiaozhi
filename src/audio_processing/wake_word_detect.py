@@ -239,21 +239,47 @@ class WakeWordDetector:
     def on_detected(self, callback: Callable):
         self.on_detected_callback = callback
 
+    def _enqueue_drop_oldest(self, item) -> None:
+        queue = self._audio_queue
+        if queue is None:
+            return
+        try:
+            queue.put_nowait(item)
+        except asyncio.QueueFull:
+            try:
+                queue.get_nowait()
+                queue.put_nowait(item)
+            except (asyncio.QueueEmpty, asyncio.QueueFull):
+                pass
+
+    def _drain_audio_queue(self) -> None:
+        queue = self._audio_queue
+        if queue is None:
+            return
+        while True:
+            try:
+                queue.get_nowait()
+            except asyncio.QueueEmpty:
+                break
+
+    async def _invoke_callback(self, callback, *args, label: str) -> None:
+        if callback is None:
+            return
+        try:
+            if asyncio.iscoroutinefunction(callback):
+                await callback(*args)
+            else:
+                callback(*args)
+        except Exception as exc:
+            logger.error("%s失败: %s", label, exc, exc_info=True)
+
     def on_audio_data(self, audio_data: np.ndarray):
         if not self.enabled or not self._running or self._paused:
             return
-
         if self._audio_queue is None:
             return
-
         try:
-            self._audio_queue.put_nowait(audio_data.copy())
-        except asyncio.QueueFull:
-            try:
-                self._audio_queue.get_nowait()
-                self._audio_queue.put_nowait(audio_data.copy())
-            except (asyncio.QueueEmpty, asyncio.QueueFull):
-                pass
+            self._enqueue_drop_oldest(audio_data.copy())
         except Exception as e:
             logger.debug(f"音频数据入队失败: {type(e).__name__}: {e}")
 
@@ -308,12 +334,7 @@ class WakeWordDetector:
         self._detach_audio()
         task = self._detection_task
         try:
-            if self._audio_queue is not None:
-                try:
-                    self._audio_queue.put_nowait(_STOP_SENTINEL)
-                except asyncio.QueueFull:
-                    self._audio_queue.get_nowait()
-                    self._audio_queue.put_nowait(_STOP_SENTINEL)
+            self._enqueue_drop_oldest(_STOP_SENTINEL)
             # The loop also cleans itself after fatal inference errors. Keep a
             # local task reference because its finally clears the public slot.
             if task is not None and task is not asyncio.current_task():
@@ -353,14 +374,6 @@ class WakeWordDetector:
         self.enabled = False
         logger.info("唤醒词检测器已关闭")
 
-    def pause(self):
-        """Pause detection (keeps model loaded)."""
-        self._paused = True
-
-    def resume(self):
-        """Resume detection."""
-        self._paused = False
-
     async def _detection_loop(self):
         error_count = 0
         max_errors = 5
@@ -387,16 +400,7 @@ class WakeWordDetector:
                     if error_count >= max_errors:
                         self.enabled = False
                         self._running = False
-                    if self.on_error is not None:
-                        try:
-                            if asyncio.iscoroutinefunction(self.on_error):
-                                await self.on_error(exc)
-                            else:
-                                self.on_error(exc)
-                        except Exception as callback_error:
-                            logger.error(
-                                "错误回调失败: %s", callback_error, exc_info=True
-                            )
+                    await self._invoke_callback(self.on_error, exc, label="错误回调")
                     if error_count >= max_errors:
                         logger.critical("达到最大错误次数，停止检测")
                         break
@@ -448,22 +452,12 @@ class WakeWordDetector:
         # 短暂暂停检测，让打断流程完成，避免旧音频触发重复检测
         self._paused = True
         try:
-            if self.on_detected_callback:
-                try:
-                    if asyncio.iscoroutinefunction(self.on_detected_callback):
-                        await self.on_detected_callback(result, result)
-                    else:
-                        self.on_detected_callback(result, result)
-                except Exception as e:
-                    logger.error(f"唤醒词回调执行失败: {e}", exc_info=True)
+            await self._invoke_callback(
+                self.on_detected_callback, result, result, label="唤醒词回调执行"
+            )
         finally:
             if not self._stopping:
                 # 延迟后恢复检测（等待 abort + clear_audio_queue 完成）
                 await asyncio.sleep(0.3)
-                if self._audio_queue is not None:
-                    while True:
-                        try:
-                            self._audio_queue.get_nowait()
-                        except asyncio.QueueEmpty:
-                            break
+                self._drain_audio_queue()
             self._paused = False
