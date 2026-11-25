@@ -60,10 +60,6 @@ class ProtocolManager:
         self._audio_consumer_running = False
         self._accepting_incoming_audio = True
 
-    def set_task_manager(self, task_manager: "TaskManager") -> None:
-        """注入 TaskManager（容器初始化后可再绑定）."""
-        self._task_manager = task_manager
-
     @property
     def protocol(self) -> Optional["Protocol"]:
         return self._protocol
@@ -107,12 +103,13 @@ class ProtocolManager:
         self._protocol.on_audio_channel_opened(self._on_audio_channel_opened)
         self._protocol.on_audio_channel_closed(self._on_audio_channel_closed)
 
-    def _spawn(self, coro: Coroutine[Any, Any, Any], name: str) -> None:
+    def _spawn(
+        self, coro: Coroutine[Any, Any, Any], name: str
+    ) -> Optional[asyncio.Task]:
         """接管原生协程，优先交给 TaskManager；否则本地创建任务并记录异常."""
         if self._task_manager is not None:
             # spawn 接管协程，包括拒绝或创建失败时的关闭。
-            self._task_manager.spawn(coro, name=name)
-            return
+            return self._task_manager.spawn(coro, name=name)
 
         try:
             task = asyncio.create_task(coro, name=name)
@@ -125,10 +122,12 @@ class ProtocolManager:
                     logger.error(f"任务 {name} 异常结束: {exc}", exc_info=exc)
 
             task.add_done_callback(_on_done)
+            return task
         except Exception as e:
             logger.error(f"创建任务失败 {name}: {e}", exc_info=True)
             if asyncio.iscoroutine(coro):
                 coro.close()
+            return None
 
     def _ensure_audio_consumer(self) -> None:
         """确保入站音频 consumer 在运行（幂等）."""
@@ -140,29 +139,16 @@ class ProtocolManager:
             return
 
         self._audio_consumer_running = True
-        if self._task_manager is not None:
-            self._audio_consumer_task = self._task_manager.spawn(
-                self._audio_consumer_loop(), name="protocol:audio_consumer"
-            )
-        else:
-            self._audio_consumer_task = asyncio.create_task(
-                self._audio_consumer_loop(), name="protocol:audio_consumer"
-            )
-
+        self._audio_consumer_task = self._spawn(
+            self._audio_consumer_loop(), name="protocol:audio_consumer"
+        )
         if self._audio_consumer_task is None:
             self._audio_consumer_running = False
             return
 
-        def _on_done(t: asyncio.Task) -> None:
+        def _on_done(_t: asyncio.Task) -> None:
             self._audio_consumer_running = False
             self._audio_consumer_task = None
-            if t.cancelled():
-                return
-            # TaskManager.spawn 已记录异常；本地 create_task 时补日志
-            if self._task_manager is None:
-                exc = t.exception()
-                if exc:
-                    logger.error(f"音频 consumer 异常结束: {exc}", exc_info=exc)
 
         self._audio_consumer_task.add_done_callback(_on_done)
 
@@ -182,12 +168,15 @@ class ProtocolManager:
             finally:
                 self._audio_queue.task_done()
 
-    def discard_incoming_audio(self) -> None:
-        """Cancel queued/late downlink until the next TTS start control frame."""
-        self._accepting_incoming_audio = False
+    def _drain_audio_queue(self) -> None:
         while not self._audio_queue.empty():
             self._audio_queue.get_nowait()
             self._audio_queue.task_done()
+
+    def discard_incoming_audio(self) -> None:
+        """Cancel queued/late downlink until the next TTS start control frame."""
+        self._accepting_incoming_audio = False
+        self._drain_audio_queue()
 
     async def wait_for_incoming_audio(self) -> None:
         """Wait for already received Opus frames to reach the playback FIFO."""
@@ -222,9 +211,7 @@ class ProtocolManager:
             await asyncio.gather(task, return_exceptions=True)
         self._audio_consumer_task = None
         self._audio_consumer_running = False
-        while not self._audio_queue.empty():
-            self._audio_queue.get_nowait()
-            self._audio_queue.task_done()
+        self._drain_audio_queue()
 
     async def _on_network_error(self, error_message: str = None) -> None:
         self.discard_incoming_audio()
@@ -328,28 +315,29 @@ class ProtocolManager:
             logger.error(f"启动协议控制链路失败: {e}", exc_info=True)
             return False
 
-    async def disconnect(self) -> None:
-        """结束当前音频会话，但允许协议复用其控制连接."""
+    async def _close_transport(self, *, permanent: bool) -> None:
+        if permanent:
+            self._shutdown = True
         self._open_generation += 1
         self.discard_incoming_audio()
         if self._protocol:
             try:
-                await self._protocol.close_audio_channel()
+                if permanent:
+                    await self._protocol.shutdown()
+                else:
+                    await self._protocol.close_audio_channel()
             except Exception as e:
-                logger.error(f"关闭协议失败: {e}", exc_info=True)
+                label = "彻底关闭协议失败" if permanent else "关闭协议失败"
+                logger.error(f"{label}: {e}", exc_info=True)
         await self._stop_audio_consumer()
+
+    async def disconnect(self) -> None:
+        """结束当前音频会话，但允许协议复用其控制连接."""
+        await self._close_transport(permanent=False)
 
     async def shutdown(self) -> None:
         """彻底关闭协议及其后台资源（应用退出路径）."""
-        self._shutdown = True
-        self._open_generation += 1
-        self.discard_incoming_audio()
-        if self._protocol:
-            try:
-                await self._protocol.shutdown()
-            except Exception as e:
-                logger.error(f"彻底关闭协议失败: {e}", exc_info=True)
-        await self._stop_audio_consumer()
+        await self._close_transport(permanent=True)
 
     async def send_audio(self, data: bytes) -> bool:
         protocol = self._protocol

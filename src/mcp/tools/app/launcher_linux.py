@@ -74,18 +74,7 @@ def launch_application(app_name: str) -> bool:
         except (OSError, subprocess.SubprocessError):
             logger.debug(f"[LinuxLauncher] which启动失败: {app_name}")
 
-        # 方法3: 使用xdg-open（适用于桌面环境）
-        try:
-            subprocess.Popen(
-                ["xdg-open", app_name],
-                start_new_session=True,
-            )
-            logger.info(f"[LinuxLauncher] 使用xdg-open启动成功: {app_name}")
-            return True
-        except (OSError, subprocess.SubprocessError):
-            logger.debug(f"[LinuxLauncher] xdg-open启动失败: {app_name}")
-
-        # 方法4: 尝试常见的应用程序路径
+        # 方法3: 尝试常见的应用程序路径
         common_paths = [
             f"/usr/bin/{app_name}",
             f"/usr/local/bin/{app_name}",
@@ -104,7 +93,7 @@ def launch_application(app_name: str) -> bool:
                 )
                 return True
 
-        # 方法5: 尝试.desktop文件启动
+        # 方法4: 尝试.desktop文件启动
         desktop_dirs = [
             "/usr/share/applications",
             "/usr/local/share/applications",
@@ -120,6 +109,17 @@ def launch_application(app_name: str) -> bool:
                 )
                 logger.info(f"[LinuxLauncher] 通过desktop文件启动成功: {app_name}")
                 return True
+
+        # 方法5: 兜底使用 xdg-open（仅当目标路径/URI存在或其它策略均失败时）
+        try:
+            subprocess.Popen(
+                ["xdg-open", app_name],
+                start_new_session=True,
+            )
+            logger.info(f"[LinuxLauncher] 使用xdg-open启动成功: {app_name}")
+            return True
+        except (OSError, subprocess.SubprocessError):
+            logger.debug(f"[LinuxLauncher] xdg-open启动失败: {app_name}")
 
         logger.warning(f"[LinuxLauncher] 所有Linux启动方法都失败了: {app_name}")
         return False

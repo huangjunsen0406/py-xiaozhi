@@ -17,11 +17,10 @@ def apply_code_side_effects(code: str, message: Optional[str] = None) -> None:
     logger.info(f"激活提示: {msg}")
     logger.info(f"验证码: {code}")
 
-    text = f".请登录到控制面板添加设备，输入验证码：{' '.join(code)}..."
     try:
-        from src.utils.common_utils import handle_verification_code
+        from src.utils.common_utils import copy_to_clipboard
 
-        handle_verification_code(text)
+        copy_to_clipboard(code)
     except Exception as e:
         logger.debug(f"复制验证码失败: {e}")
 

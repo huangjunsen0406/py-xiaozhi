@@ -9,14 +9,13 @@
 默认子目录：config/ cache/ logs/ keywords/ mcp_plugins/
 
 可覆盖（config 目录建议保持默认；其它可迁）：
-- 环境变量：XIAOZHI_DATA_DIR / XIAOZHI_CACHE_DIR / XIAOZHI_LOG_DIR /
-  XIAOZHI_MUSIC_CACHE_DIR / XIAOZHI_KEYWORDS_DIR
+- 环境变量：XIAOZHI_DATA_DIR / XIAOZHI_CACHE_DIR / XIAOZHI_LOG_DIR / XIAOZHI_KEYWORDS_DIR
 - 配置 PATHS.*（见 apply_path_overrides_from_config；改后可迁移旧目录）
 
 核心 API：
 - get_app_root() / get_resource_root() / get_app_name()
 - get_user_data_dir() / get_user_cache_dir() / get_user_log_dir()
-- get_music_cache_dir() / get_keywords_dir()
+- get_keywords_dir() / get_mcp_plugins_dir() / get_mcp_plugin_data_dir()
 - apply_path_overrides_from_config() / migrate_directory()
 """
 
@@ -37,14 +36,19 @@ from src.constants.system import SystemConstants
 ENV_DATA_DIR = "XIAOZHI_DATA_DIR"
 ENV_CACHE_DIR = "XIAOZHI_CACHE_DIR"
 ENV_LOG_DIR = "XIAOZHI_LOG_DIR"
-ENV_MUSIC_CACHE_DIR = "XIAOZHI_MUSIC_CACHE_DIR"
 ENV_KEYWORDS_DIR = "XIAOZHI_KEYWORDS_DIR"
 
 # 运行时覆盖（config 加载后 apply；env 优先于这些）
 _override_cache: Path | None = None
 _override_log: Path | None = None
-_override_music: Path | None = None
 _override_keywords: Path | None = None
+
+_PATH_SPECS: tuple[tuple[str, str, str, str], ...] = (
+    # (kind, env_var, config_key, override_attr)
+    ("cache", ENV_CACHE_DIR, "PATHS.CACHE_DIR", "_override_cache"),
+    ("logs", ENV_LOG_DIR, "PATHS.LOG_DIR", "_override_log"),
+    ("keywords", ENV_KEYWORDS_DIR, "PATHS.KEYWORDS_DIR", "_override_keywords"),
+)
 
 
 def _env_path(name: str) -> Path | None:
@@ -52,6 +56,24 @@ def _env_path(name: str) -> Path | None:
     if not raw:
         return None
     return Path(raw).expanduser().resolve()
+
+
+def _resolve_dir(env_name: str, override_attr: str, default_factory) -> Path:
+    env = _env_path(env_name)
+    if env is not None:
+        p = env
+    elif (override := globals()[override_attr]) is not None:
+        p = override
+    else:
+        p = default_factory()
+    p.mkdir(parents=True, exist_ok=True)
+    return p
+
+
+def _normalize_override(v) -> Path | None:
+    if v is None or str(v).strip() == "":
+        return None
+    return Path(v).expanduser().resolve()
 
 
 @lru_cache(maxsize=1)
@@ -101,28 +123,16 @@ def get_user_data_dir() -> Path:
 
 def get_user_cache_dir() -> Path:
     """缓存目录：XIAOZHI_CACHE_DIR > 运行时覆盖 > {data}/cache."""
-    env = _env_path(ENV_CACHE_DIR)
-    if env is not None:
-        p = env
-    elif _override_cache is not None:
-        p = _override_cache
-    else:
-        p = get_user_data_dir() / "cache"
-    p.mkdir(parents=True, exist_ok=True)
-    return p
+    return _resolve_dir(
+        ENV_CACHE_DIR, "_override_cache", lambda: get_user_data_dir() / "cache"
+    )
 
 
 def get_user_log_dir() -> Path:
     """日志目录：XIAOZHI_LOG_DIR > 运行时覆盖 > {data}/logs."""
-    env = _env_path(ENV_LOG_DIR)
-    if env is not None:
-        p = env
-    elif _override_log is not None:
-        p = _override_log
-    else:
-        p = get_user_data_dir() / "logs"
-    p.mkdir(parents=True, exist_ok=True)
-    return p
+    return _resolve_dir(
+        ENV_LOG_DIR, "_override_log", lambda: get_user_data_dir() / "logs"
+    )
 
 
 def get_log_dir() -> Path:
@@ -130,30 +140,33 @@ def get_log_dir() -> Path:
     return get_user_log_dir()
 
 
-def get_music_cache_dir() -> Path:
-    """音乐缓存：XIAOZHI_MUSIC_CACHE_DIR > 覆盖 > {cache}/music."""
-    env = _env_path(ENV_MUSIC_CACHE_DIR)
-    if env is not None:
-        p = env
-    elif _override_music is not None:
-        p = _override_music
-    else:
-        p = get_user_cache_dir() / "music"
-    p.mkdir(parents=True, exist_ok=True)
-    return p
-
-
 def get_keywords_dir() -> Path:
     """唤醒词目录：XIAOZHI_KEYWORDS_DIR > 覆盖 > {data}/keywords."""
-    env = _env_path(ENV_KEYWORDS_DIR)
-    if env is not None:
-        p = env
-    elif _override_keywords is not None:
-        p = _override_keywords
+    return _resolve_dir(
+        ENV_KEYWORDS_DIR,
+        "_override_keywords",
+        lambda: get_user_data_dir() / "keywords",
+    )
+
+
+def get_mcp_plugins_dir(config=None) -> Path:
+    """外挂 MCP 插件代码目录：配置 MCP_PLUGINS.DIR > {data}/mcp_plugins."""
+    raw = config.get_config("MCP_PLUGINS.DIR", None) if config is not None else None
+    if raw and str(raw).strip():
+        path = Path(str(raw).strip()).expanduser().resolve()
     else:
-        p = get_user_data_dir() / "keywords"
-    p.mkdir(parents=True, exist_ok=True)
-    return p
+        path = get_user_data_dir() / "mcp_plugins"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def get_mcp_plugin_data_dir(plugin_id: str) -> Path:
+    """单个外挂插件的隔离可写数据目录：{data}/mcp_plugins_data/<safe_plugin_id>."""
+    safe = "".join(c if c.isalnum() or c in ("-", "_", ".") else "_" for c in (plugin_id or "plugin"))
+    safe = safe.strip("._") or "plugin"
+    path = get_user_data_dir() / "mcp_plugins_data" / safe
+    path.mkdir(parents=True, exist_ok=True)
+    return path
 
 
 def clear_path_caches() -> None:
@@ -233,6 +246,14 @@ def migrate_directory(
     return result
 
 
+def _get_dir_by_kind(kind: str) -> Path:
+    return {
+        "cache": get_user_cache_dir,
+        "logs": get_user_log_dir,
+        "keywords": get_keywords_dir,
+    }[kind]()
+
+
 def apply_path_overrides_from_config(
     config,
     *,
@@ -245,8 +266,6 @@ def apply_path_overrides_from_config(
     Returns:
         迁移结果列表（便于 UI/日志）
     """
-    global _override_cache, _override_log, _override_music, _override_keywords
-
     migrations: list[dict] = []
 
     def _cfg(key: str) -> str | None:
@@ -258,45 +277,35 @@ def apply_path_overrides_from_config(
             return None
         return str(v).strip()
 
-    # 当前有效路径（应用覆盖前）作为迁移源
-    old_cache = get_user_cache_dir()
-    old_log = get_user_log_dir()
-    old_music = get_music_cache_dir()
-    old_kw = get_keywords_dir()
-
-    cache_s = _cfg("PATHS.CACHE_DIR")
-    log_s = _cfg("PATHS.LOG_DIR")
-    music_s = _cfg("PATHS.MUSIC_CACHE_DIR")
-    kw_s = _cfg("PATHS.KEYWORDS_DIR")
+    old_dirs = {kind: _get_dir_by_kind(kind) for kind, *_ in _PATH_SPECS}
+    configured = {kind: _cfg(cfg_key) for kind, _, cfg_key, _ in _PATH_SPECS}
 
     # 先解析并校验所有候选路径，不能先激活/创建目标再发现迁移重叠。
-    def _candidate(env_name: str, configured: str | None, default: Path) -> Path:
+    def _candidate(env_name: str, cfg_val: str | None, default: Path) -> Path:
         env = _env_path(env_name)
         if env is not None:
             return env
-        return (
-            Path(configured).expanduser().resolve() if configured else default.resolve()
-        )
+        return Path(cfg_val).expanduser().resolve() if cfg_val else default.resolve()
 
     data = get_user_data_dir()
-    proposed_cache = _candidate(ENV_CACHE_DIR, cache_s, data / "cache")
-    proposed_log = _candidate(ENV_LOG_DIR, log_s, data / "logs")
-    proposed_music = _candidate(ENV_MUSIC_CACHE_DIR, music_s, proposed_cache / "music")
-    proposed_kw = _candidate(ENV_KEYWORDS_DIR, kw_s, data / "keywords")
+    proposed: dict[str, Path] = {}
+    proposed["cache"] = _candidate(ENV_CACHE_DIR, configured["cache"], data / "cache")
+    proposed["logs"] = _candidate(ENV_LOG_DIR, configured["logs"], data / "logs")
+    proposed["keywords"] = _candidate(
+        ENV_KEYWORDS_DIR, configured["keywords"], data / "keywords"
+    )
+
     if migrate:
-        for kind, old, new in (
-            ("cache", old_cache, proposed_cache),
-            ("logs", old_log, proposed_log),
-            ("music", old_music, proposed_music),
-            ("keywords", old_kw, proposed_kw),
-        ):
-            if _migration_paths_overlap(old.resolve(), new):
+        for kind, *_ in _PATH_SPECS:
+            old_resolved = old_dirs[kind].resolve()
+            new_path = proposed[kind]
+            if _migration_paths_overlap(old_resolved, new_path):
                 migrations.append(
                     {
                         "kind": kind,
                         "ok": False,
-                        "src": str(old.resolve()),
-                        "dst": str(new),
+                        "src": str(old_resolved),
+                        "dst": str(new_path),
                         "files_copied": 0,
                         "error": "source and destination directories overlap",
                     }
@@ -307,63 +316,23 @@ def apply_path_overrides_from_config(
             return migrations
 
     # 仅当 env 未设时应用 config 覆盖
-    if _env_path(ENV_CACHE_DIR) is None:
-        _override_cache = Path(cache_s).expanduser().resolve() if cache_s else None
-    if _env_path(ENV_LOG_DIR) is None:
-        _override_log = Path(log_s).expanduser().resolve() if log_s else None
-    if _env_path(ENV_MUSIC_CACHE_DIR) is None:
-        _override_music = Path(music_s).expanduser().resolve() if music_s else None
-    if _env_path(ENV_KEYWORDS_DIR) is None:
-        _override_keywords = Path(kw_s).expanduser().resolve() if kw_s else None
+    for kind, env_var, _, override_attr in _PATH_SPECS:
+        if _env_path(env_var) is None:
+            globals()[override_attr] = _normalize_override(configured[kind])
 
     if not migrate:
         return migrations
 
-    new_cache = get_user_cache_dir()
-    new_log = get_user_log_dir()
-    new_music = get_music_cache_dir()
-    new_kw = get_keywords_dir()
+    new_dirs = {kind: _get_dir_by_kind(kind) for kind, *_ in _PATH_SPECS}
 
-    # cache 迁移时：若 music 已单独指到其它目录（或即将单独迁），跳过 cache/music 子树
-    cache_skip: set[str] = set()
-    try:
-        music_under_old_cache = old_music.resolve() == (old_cache / "music").resolve()
-        music_stays_default_under_new = (
-            new_music.resolve() == (new_cache / "music").resolve()
-        )
-        # 旧 music 在 cache 下，但新 music 不是「新 cache/music」→ 由 music 项单独迁，cache 勿再拷
-        if music_under_old_cache and not music_stays_default_under_new:
-            cache_skip.add("music")
-        # 即使 music 仍默认挂 cache：若 old→new cache 会先拷 music，再 music 对 同内容
-        # 一般 ok；仅当 music 路径显式独立时跳过
-    except Exception:
-        pass
-
-    if old_cache.resolve() != new_cache.resolve():
-        r = migrate_directory(
-            old_cache, new_cache, copy=True, skip_dir_names=cache_skip or None
-        )
-        r["kind"] = "cache"
+    for kind, *_ in _PATH_SPECS:
+        old_p, new_p = old_dirs[kind], new_dirs[kind]
+        if old_p.resolve() == new_p.resolve():
+            continue
+        r = migrate_directory(old_p, new_p, copy=True)
+        r["kind"] = kind
         migrations.append(r)
-        _log_migration("cache", old_cache, new_cache, r)
-
-    if old_log.resolve() != new_log.resolve():
-        r = migrate_directory(old_log, new_log, copy=True)
-        r["kind"] = "logs"
-        migrations.append(r)
-        _log_migration("logs", old_log, new_log, r)
-
-    if old_music.resolve() != new_music.resolve():
-        r = migrate_directory(old_music, new_music, copy=True)
-        r["kind"] = "music"
-        migrations.append(r)
-        _log_migration("music", old_music, new_music, r)
-
-    if old_kw.resolve() != new_kw.resolve():
-        r = migrate_directory(old_kw, new_kw, copy=True)
-        r["kind"] = "keywords"
-        migrations.append(r)
-        _log_migration("keywords", old_kw, new_kw, r)
+        _log_migration(kind, old_p, new_p, r)
 
     return migrations
 
@@ -388,7 +357,6 @@ def set_path_overrides(
     *,
     cache: Path | str | None | object = ...,
     log: Path | str | None | object = ...,
-    music: Path | str | None | object = ...,
     keywords: Path | str | None | object = ...,
 ) -> None:
     """测试或编程方式设置覆盖（env 仍优先）.
@@ -397,41 +365,32 @@ def set_path_overrides(
     - 传路径字符串/Path：设置覆盖
     - 显式传 None：清除该覆盖（恢复默认/仅 env）
     """
-    global _override_cache, _override_log, _override_music, _override_keywords
-
-    def _p(v):
-        if v is None or str(v).strip() == "":
-            return None
-        return Path(v).expanduser().resolve()
-
-    if cache is not ...:
-        _override_cache = _p(cache)
-    if log is not ...:
-        _override_log = _p(log)
-    if music is not ...:
-        _override_music = _p(music)
-    if keywords is not ...:
-        _override_keywords = _p(keywords)
+    updates = (
+        ("_override_cache", cache),
+        ("_override_log", log),
+        ("_override_keywords", keywords),
+    )
+    for attr, value in updates:
+        if value is not ...:
+            globals()[attr] = _normalize_override(value)
 
 
 def clear_path_overrides(
     *,
     cache: bool = False,
     log: bool = False,
-    music: bool = False,
     keywords: bool = False,
     all: bool = False,
 ) -> None:
     """清除运行时路径覆盖（测试或恢复默认）."""
-    global _override_cache, _override_log, _override_music, _override_keywords
-    if all or cache:
-        _override_cache = None
-    if all or log:
-        _override_log = None
-    if all or music:
-        _override_music = None
-    if all or keywords:
-        _override_keywords = None
+    flags = (
+        ("_override_cache", cache),
+        ("_override_log", log),
+        ("_override_keywords", keywords),
+    )
+    for attr, should_clear in flags:
+        if all or should_clear:
+            globals()[attr] = None
 
 
 @lru_cache(maxsize=1)
@@ -524,44 +483,26 @@ def get_lib_path(lib_name: str) -> Path | None:
     return None
 
 
-def get_lib_dir(lib_name: str) -> Path | None:
-    """
-    获取动态库所在目录.
-    """
-    lib_path = get_lib_path(lib_name)
-    return lib_path.parent if lib_path else None
-
-
-def get_ffmpeg_path() -> str:
-    """获取 ffmpeg 可执行文件路径.
-
-    搜索顺序：内置 libs/ffmpeg/ → 系统 PATH
-    """
-    import shutil
-
-    plat_dir, arch = get_platform_info()
-    ext = ".exe" if sys.platform == "win32" else ""
-    bundled = get_resource_root() / "libs" / "ffmpeg" / plat_dir / arch / f"ffmpeg{ext}"
-    if bundled.exists():
-        return str(bundled)
-    return shutil.which("ffmpeg") or "ffmpeg"
-
-
-def get_ffprobe_path() -> str:
-    """获取 ffprobe 可执行文件路径.
-
-    搜索顺序：内置 libs/ffmpeg/ → 系统 PATH
-    """
-    import shutil
-
+def _get_bundled_binary(name: str) -> str:
+    """获取内置 ffmpeg/ffprobe 可执行文件路径，不存在时回退系统 PATH."""
     plat_dir, arch = get_platform_info()
     ext = ".exe" if sys.platform == "win32" else ""
     bundled = (
-        get_resource_root() / "libs" / "ffmpeg" / plat_dir / arch / f"ffprobe{ext}"
+        get_resource_root() / "libs" / "ffmpeg" / plat_dir / arch / f"{name}{ext}"
     )
     if bundled.exists():
         return str(bundled)
-    return shutil.which("ffprobe") or "ffprobe"
+    return shutil.which(name) or name
+
+
+def get_ffmpeg_path() -> str:
+    """获取 ffmpeg 可执行文件路径（搜索顺序：内置 libs/ffmpeg/ → 系统 PATH）."""
+    return _get_bundled_binary("ffmpeg")
+
+
+def get_ffprobe_path() -> str:
+    """获取 ffprobe 可执行文件路径（搜索顺序：内置 libs/ffmpeg/ → 系统 PATH）."""
+    return _get_bundled_binary("ffprobe")
 
 
 def get_models_dir() -> Path:

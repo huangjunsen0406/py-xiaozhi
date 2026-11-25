@@ -4,9 +4,9 @@
 -----------------
 1. **内置工具**放在 ``src/mcp/tools/<pkg>/register.py``，用 ``McpTool("name", ...)``
    或 ``McpTool(name="name", ...)`` 注册；目录由扫描这些文件得到，**不写死名单/中文标题**。
-2. **分组 id / 组标题** = 包目录名 ``<pkg>``（如 ``music``、``weather``、``camera``），
+2. **分组 id / 组标题** = 包目录名 ``<pkg>``（如 ``media``、``weather``、``camera``），
    与磁盘 ``tools/<pkg>`` 一致，设置页直接显示包名。
-3. **工具展示名** = name 最后一段（``music_player.pause`` → ``pause``）。
+3. **工具展示名** = name 最后一段（``media.pause`` → ``pause``）。
 4. **外挂**：manifest.tools / 源码 ``name=`` 启发式；组标题 = plugin id
    （若 manifest 有 ``name`` 字段则用该字段，属插件自描述而非宿主写死）。
 5. **禁用**配置：``MCP_TOOLS.DISABLED``（tool 全名列表）。
@@ -21,6 +21,10 @@ import re
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
+
+from src.logging import get_logger
+
+logger = get_logger()
 
 # ---------------------------------------------------------------------------
 # 正则：扫描注册源码
@@ -84,7 +88,8 @@ def _extract_mcp_tool_names(text: str) -> list[str]:
 def _scan_register_file(path: Path, pkg: str) -> list[dict[str, str]]:
     try:
         text = path.read_text(encoding="utf-8")
-    except Exception:
+    except OSError as exc:
+        logger.debug("读取内置工具注册文件失败 %s: %s", path, exc)
         return []
 
     rows: list[dict[str, str]] = []
@@ -162,7 +167,8 @@ def _plugins_dir_from_config(config=None) -> Path | None:
         from src.utils.resource_finder import get_user_data_dir
 
         return get_user_data_dir() / "mcp_plugins"
-    except Exception:
+    except Exception as exc:
+        logger.debug("解析默认 MCP 插件目录失败: %s", exc)
         return None
 
 
@@ -217,7 +223,8 @@ def _tools_from_plugin_sources(
     for pf in py_files[:20]:
         try:
             text = pf.read_text(encoding="utf-8", errors="ignore")
-        except Exception:
+        except OSError as exc:
+            logger.debug("读取插件源码失败 %s: %s", pf, exc)
             continue
         # 优先 McpTool(...) 形式
         for name in _extract_mcp_tool_names(text):
@@ -253,7 +260,8 @@ def discover_plugin_catalog_rows(config=None) -> list[dict[str, str]]:
     seen: set[str] = set()
     try:
         children = sorted(root.iterdir(), key=lambda p: p.name.lower())
-    except Exception:
+    except OSError as exc:
+        logger.debug("遍历 MCP 插件目录失败 %s: %s", root, exc)
         return []
 
     for child in children:
@@ -270,7 +278,8 @@ def discover_plugin_catalog_rows(config=None) -> list[dict[str, str]]:
                     manifest = json.loads(mf.read_text(encoding="utf-8"))
                     plugin_id = str(manifest.get("id") or plugin_id)
                     display = str(manifest.get("name") or plugin_id)
-                except Exception:
+                except (OSError, json.JSONDecodeError, ValueError) as exc:
+                    logger.debug("解析插件 manifest 失败 %s: %s", mf, exc)
                     manifest = {}
             found = _tools_from_manifest(manifest, plugin_id)
             if not found:

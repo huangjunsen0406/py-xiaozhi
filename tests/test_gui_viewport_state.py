@@ -33,7 +33,7 @@ async def test_gui_viewport_keeps_qml_models_and_signal_updates(monkeypatch):
     model = view.main_model
     seen = []
     model.ttsTextChanged.connect(lambda: seen.append(("chat", model.ttsText)))
-    model.musicLineChanged.connect(lambda: seen.append(("music", model.musicLine)))
+    model.mediaLineChanged.connect(lambda: seen.append(("media", model.mediaLine)))
     model.emotionUrlChanged.connect(lambda: seen.append(("emotion", model.emotionUrl)))
     model.connectedChanged.connect(lambda: seen.append(("connected", model.connected)))
     model.autoModeChanged.connect(lambda: seen.append(("auto", model.autoMode)))
@@ -46,17 +46,17 @@ async def test_gui_viewport_keeps_qml_models_and_signal_updates(monkeypatch):
         assert model.emotionUrl == "test://neutral"
         assert view.is_running
         view.set_chat_text("hello")
-        view.set_music_line("lyrics")
+        view.set_media_line("lyrics")
         view.set_emotion("happy")
         view.set_status("connected", True)
         view.set_auto_mode(True)
         view.set_button_text("stop")
-        assert model.ttsText == "hello" and model.musicLine == "lyrics"
+        assert model.ttsText == "hello" and model.mediaLine == "lyrics"
         assert model.emotionUrl == "test://happy"
         assert model.statusText == "connected" and model.connected
         assert model.autoMode and model.buttonText == "stop"
         assert ("chat", "hello") in seen
-        assert ("music", "lyrics") in seen
+        assert ("media", "lyrics") in seen
         assert ("emotion", "test://happy") in seen
         assert ("connected", True) in seen
         assert ("auto", True) in seen

@@ -22,7 +22,7 @@ const architectureFeatures = [
   },
   {
     title: '多界面',
-    description: 'GUI / CLI / GPIO 同一套 ViewPort',
+    description: 'GUI / TUI / GPIO 同一套 ViewPort',
     icon: ShareIcon
   },
   {
@@ -31,8 +31,8 @@ const architectureFeatures = [
     icon: ArrowsRightLeftIcon
   },
   {
-    title: '插件化',
-    description: '音频、MCP、UI、快捷键、唤醒词可插拔',
+    title: '插件与外挂生态',
+    description: '内置插件解耦；支持外部 MCP 插件热导入与隔离运行',
     icon: PuzzlePieceIcon
   },
   {

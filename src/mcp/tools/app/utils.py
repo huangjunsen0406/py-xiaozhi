@@ -3,6 +3,7 @@
 提供统一的应用程序匹配、查找、缓存和名称清理功能。
 """
 
+import json
 import platform
 import re
 import time
@@ -93,49 +94,6 @@ class AppMatcher:
         "iterm": ["iterm", "iterm2"],
     }
 
-    # 进程分组映射（用于关闭时分组）
-    PROCESS_GROUPS = {
-        "chrome": "chrome",
-        "googlechrome": "chrome",
-        "firefox": "firefox",
-        "edge": "edge",
-        "msedge": "edge",
-        "safari": "safari",
-        "qq": "qq",
-        "qqnt": "qq",
-        "tencentqq": "qq",
-        "qqmusic": "qqmusic",
-        "QQMUSIC": "QQMUSIC",
-        "QQ音乐": "QQ音乐",
-        "wechat": "wechat",
-        "weixin": "wechat",
-        "dingtalk": "dingtalk",
-        "钉钉": "dingtalk",
-        "feishu": "feishu",
-        "飞书": "feishu",
-        "lark": "feishu",
-        "vscode": "vscode",
-        "code": "vscode",
-        "cursor": "cursor",
-        "pycharm": "pycharm",
-        "pycharm64": "pycharm",
-        "typora": "typora",
-        "calculatorapp": "calculator",
-        "calc": "calculator",
-        "calculator": "calculator",
-        "tencent meeting": "tencent_meeting",
-        "腾讯会议": "tencent_meeting",
-        "voovmeeting": "tencent_meeting",
-        "wps": "wps",
-        "word": "word",
-        "excel": "excel",
-        "powerpoint": "powerpoint",
-        "finder": "finder",
-        "terminal": "terminal",
-        "iterm": "iterm",
-        "iterm2": "iterm",
-    }
-
     @classmethod
     def normalize_name(cls, name: str) -> str:
         """
@@ -154,24 +112,6 @@ class AppMatcher:
         name = " ".join(name.split())
 
         return name.strip()
-
-    @classmethod
-    def get_process_group(cls, process_name: str) -> str:
-        """
-        获取进程所属的分组.
-        """
-        normalized = cls.normalize_name(process_name)
-
-        # 检查直接映射
-        if normalized in cls.PROCESS_GROUPS:
-            return cls.PROCESS_GROUPS[normalized]
-
-        # 检查包含关系
-        for key, group in cls.PROCESS_GROUPS.items():
-            if key in normalized or normalized in key:
-                return group
-
-        return normalized
 
     @classmethod
     def match_application(cls, target_name: str, app_info: dict[str, Any]) -> int:
@@ -298,28 +238,21 @@ async def get_cached_applications(force_refresh: bool = False) -> list[dict[str,
 
     # 重新扫描应用程序
     try:
-        import json
+        import asyncio
 
-        from .scanner import scan_installed_applications
+        scanner = get_system_scanner()
+        if not scanner:
+            logger.warning("[AppUtils] 不支持的操作系统，无法刷新应用程序缓存")
+            return _cached_applications or []
 
         logger.info("[AppUtils] 刷新应用程序缓存")
-        result_json = await scan_installed_applications(
-            {"force_refresh": force_refresh}
+        apps = await asyncio.to_thread(scanner.scan_installed_applications)
+        _cached_applications = apps
+        _cache_timestamp = current_time
+        logger.info(
+            f"[AppUtils] 应用程序缓存已刷新，找到 {len(_cached_applications)} 个应用"
         )
-        result = json.loads(result_json)
-
-        if result.get("success", False):
-            _cached_applications = result.get("applications", [])
-            _cache_timestamp = current_time
-            logger.info(
-                f"[AppUtils] 应用程序缓存已刷新，找到 {len(_cached_applications)} 个应用"
-            )
-            return _cached_applications
-        else:
-            logger.warning(
-                f"[AppUtils] 应用程序扫描失败: {result.get('message', '未知错误')}"
-            )
-            return _cached_applications or []
+        return _cached_applications
 
     except Exception as e:
         logger.error(f"[AppUtils] 刷新应用程序缓存失败: {e}", exc_info=True)
@@ -377,15 +310,6 @@ async def find_best_matching_app(
         return None
 
 
-def clear_app_cache():
-    """清空应用程序缓存."""
-    global _cached_applications, _cache_timestamp
-
-    _cached_applications = None
-    _cache_timestamp = 0
-    logger.info("[AppUtils] 应用程序缓存已清空")
-
-
 def get_system_scanner():
     """根据当前系统获取对应的扫描器模块."""
     system = platform.system()
@@ -407,18 +331,39 @@ def get_system_scanner():
         return None
 
 
-def get_cache_info() -> dict[str, Any]:
-    """
-    获取缓存信息.
-    """
+# MQTT 网关对单条 MCP 响应通常有 ~8KB 上限；预留 JSON-RPC/content 封装与转义余量
+_MAX_MCP_APP_LIST_WIRE_BYTES = 5500
 
-    current_time = time.time()
-    cache_age = current_time - _cache_timestamp if _cache_timestamp > 0 else -1
 
-    return {
-        "cached": _cached_applications is not None,
-        "count": len(_cached_applications) if _cached_applications else 0,
-        "age_seconds": int(cache_age) if cache_age >= 0 else None,
-        "valid": cache_age >= 0 and cache_age < _cache_duration,
-        "cache_duration": _cache_duration,
-    }
+def dump_app_list_result(
+    items: list[dict[str, Any]],
+    *,
+    total_count: int,
+    message: str,
+    max_wire_bytes: int = _MAX_MCP_APP_LIST_WIRE_BYTES,
+) -> str:
+    """将应用列表序列化为紧凑 JSON，并按外层 JSON 传输体积截断以适配 MQTT 载荷上限."""
+    kept: list[dict[str, Any]] = []
+    truncated = False
+
+    def _serialize(apps: list[dict[str, Any]], is_truncated: bool) -> str:
+        payload: dict[str, Any] = {
+            "success": True,
+            "total_count": total_count,
+            "applications": apps,
+            "message": message,
+        }
+        if is_truncated:
+            payload["truncated"] = True
+            payload["returned_count"] = len(apps)
+        return json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+
+    for item in items:
+        candidate = _serialize(kept + [item], is_truncated=True)
+        # McpServer._reply_result 使用默认 ensure_ascii=True 封装 content.text，按实际线缆长度估算
+        if len(json.dumps(candidate).encode("utf-8")) > max_wire_bytes:
+            truncated = True
+            break
+        kept.append(item)
+
+    return _serialize(kept, is_truncated=truncated)

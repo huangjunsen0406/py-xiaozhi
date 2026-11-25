@@ -12,14 +12,12 @@ def isolated_paths(tmp_path, monkeypatch):
     for name in (
         rf.ENV_CACHE_DIR,
         rf.ENV_LOG_DIR,
-        rf.ENV_MUSIC_CACHE_DIR,
         rf.ENV_KEYWORDS_DIR,
     ):
         monkeypatch.delenv(name, raising=False)
     for name in (
         "_override_cache",
         "_override_log",
-        "_override_music",
         "_override_keywords",
     ):
         monkeypatch.setattr(rf, name, None)
@@ -91,7 +89,6 @@ def test_missing_source_overlap_does_not_create_directories(tmp_path):
     [
         ("CACHE_DIR", rf.get_user_cache_dir, "cache"),
         ("LOG_DIR", rf.get_user_log_dir, "logs"),
-        ("MUSIC_CACHE_DIR", rf.get_music_cache_dir, "music"),
         ("KEYWORDS_DIR", rf.get_keywords_dir, "keywords"),
     ],
 )

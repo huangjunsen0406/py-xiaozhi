@@ -12,6 +12,28 @@ from .screenshot_camera import ScreenshotCamera
 
 logger = get_logger()
 
+_MAIN_DISPLAY_ALIASES = frozenset({"main", "主屏", "主显示器", "笔记本", "内屏"})
+_SECONDARY_DISPLAY_ALIASES = frozenset(
+    {"secondary", "副屏", "副显示器", "外接", "外屏", "第二屏"}
+)
+
+
+def _normalize_display_id(raw) -> str | int | None:
+    if not isinstance(raw, str):
+        return raw or None
+    text = raw.strip().lower()
+    if not text:
+        return None
+    if text in _MAIN_DISPLAY_ALIASES:
+        return "main"
+    if text in _SECONDARY_DISPLAY_ALIASES:
+        return "secondary"
+    try:
+        return int(text)
+    except ValueError:
+        logger.warning(f"Invalid display parameter: {text}, using default")
+        return None
+
 
 def create_screenshot_camera() -> ScreenshotCamera:
     """创建桌面截图实现."""
@@ -28,24 +50,7 @@ def register_screenshot_tools(
     """
     camera = create_screenshot_camera()
     capture_lock = _get_capture_lock(camera)
-    if photo_camera is not None and hasattr(photo_camera, "get_explain_url"):
-        # 与拍照共用 vision 配置（若已配置）
-        try:
-            url = getattr(photo_camera, "explain_url", None) or getattr(
-                photo_camera, "_explain_url", None
-            )
-            token = getattr(photo_camera, "explain_token", None) or getattr(
-                photo_camera, "_explain_token", None
-            )
-            if url and hasattr(camera, "set_explain_url"):
-                camera.set_explain_url(url)
-            if token and hasattr(camera, "set_explain_token"):
-                camera.set_explain_token(token)
-        except Exception as e:
-            logger.debug(f"同步 vision 配置到截图摄像头失败: {e}", exc_info=True)
-
-    # analyze 若需要 fallback 到 photo camera 的 explain 设置，挂引用
-    camera._photo_camera_ref = photo_camera  # type: ignore[attr-defined]
+    camera.set_photo_camera(photo_camera)
 
     async def take_screenshot(arguments: dict) -> str:
         logger.info(
@@ -53,31 +58,7 @@ def register_screenshot_tools(
         )
 
         question = arguments.get("question", "")
-        display_id = arguments.get("display", None)
-        if isinstance(display_id, str):
-            display_id = display_id.strip().lower() or None
-
-        if display_id:
-            if isinstance(display_id, str):
-                if display_id.lower() in ["main", "主屏", "主显示器", "笔记本", "内屏"]:
-                    display_id = "main"
-                elif display_id.lower() in [
-                    "secondary",
-                    "副屏",
-                    "副显示器",
-                    "外接",
-                    "外屏",
-                    "第二屏",
-                ]:
-                    display_id = "secondary"
-                else:
-                    try:
-                        display_id = int(display_id)
-                    except ValueError:
-                        logger.warning(
-                            f"Invalid display parameter: {display_id}, using default"
-                        )
-                        display_id = None
+        display_id = _normalize_display_id(arguments.get("display", None))
 
         logger.info(
             f"Taking screenshot with question: {question}, display: {display_id}"
@@ -115,6 +96,7 @@ def register_screenshot_tools(
                 ]
             ),
             take_screenshot,
+            requires_vision=True,
         )
     )
     logger.info("已注册 take_screenshot（无全局单例）")

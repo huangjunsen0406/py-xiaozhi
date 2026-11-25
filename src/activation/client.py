@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Callable, Optional
 
 import aiohttp
 
+from src.constants.system import SystemConstants
 from src.logging import get_logger
 
 if TYPE_CHECKING:
@@ -61,45 +62,67 @@ class ActivationHttpClient:
         activate_url = f"{ota_url.rstrip('/')}/activate"
         headers = {
             "Activation-Version": "2",
+            "Serial-Number": serial_number,
             "Device-Id": self._config.get_config("SYSTEM_OPTIONS.DEVICE_ID"),
             "Client-Id": self._config.get_config("SYSTEM_OPTIONS.CLIENT_ID"),
+            "User-Agent": (
+                f"{SystemConstants.BOARD_TYPE}/"
+                f"{SystemConstants.APP_NAME}-{SystemConstants.APP_VERSION}"
+            ),
+            "Accept-Language": "zh-CN",
             "Content-Type": "application/json",
         }
         logger.info(f"激活URL: {activate_url}")
 
         max_retries = 60
-        retry_interval = 5
+        pending_interval = 3
+        error_interval = 5
         timeout = aiohttp.ClientTimeout(total=10)
 
         async with aiohttp.ClientSession(timeout=timeout) as session:
             for attempt in range(max_retries):
-                try:
-                    logger.info(f"激活尝试 {attempt + 1}/{max_retries}")
-                    if attempt > 0 and on_retry_announce:
+                logger.info(f"激活尝试 {attempt + 1}/{max_retries}")
+                status = await self._poll_once(session, activate_url, headers, payload)
+                if status == "activated":
+                    return True
+                if status == "pending":
+                    if on_retry_announce:
                         try:
                             on_retry_announce(code)
                         except Exception as e:
                             logger.warning(f"激活码播报失败: {e}", exc_info=True)
-
-                    async with session.post(
-                        activate_url, headers=headers, json=payload
-                    ) as response:
-                        logger.debug(f"激活响应: HTTP {response.status}")
-                        if response.status == 200:
-                            logger.info("设备激活成功!")
-                            self._identity.set_activation_status(True)
-                            return True
-                        if response.status == 202:
-                            logger.info("等待用户输入验证码...")
-                            await asyncio.sleep(retry_interval)
-                            continue
-                        logger.warning(f"服务器返回 {response.status}，继续重试")
-                        await asyncio.sleep(retry_interval)
-                except asyncio.CancelledError:
-                    raise
-                except Exception as e:
-                    logger.warning(f"激活请求失败: {e}，重试中...", exc_info=True)
-                    await asyncio.sleep(retry_interval)
+                    await asyncio.sleep(pending_interval)
+                else:
+                    await asyncio.sleep(error_interval)
 
         logger.error(f"激活失败，达到最大重试次数 ({max_retries})")
         return False
+
+    async def _poll_once(
+        self,
+        session: aiohttp.ClientSession,
+        activate_url: str,
+        headers: dict,
+        payload: dict,
+    ) -> str:
+        try:
+            async with session.post(
+                activate_url, headers=headers, json=payload
+            ) as response:
+                logger.debug(f"激活响应: HTTP {response.status}")
+                if response.status == 200:
+                    logger.info("设备激活成功!")
+                    self._identity.set_activation_status(True)
+                    return "activated"
+                if response.status == 202:
+                    logger.info("等待用户输入验证码...")
+                    return "pending"
+                body = (await response.text())[:200]
+                logger.warning(
+                    "服务器返回 HTTP %s，继续重试: %s", response.status, body
+                )
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            logger.warning(f"激活请求失败: {e}，重试中...", exc_info=True)
+        return "error"

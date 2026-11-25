@@ -2,7 +2,6 @@ import copy
 import json
 import os
 import shutil
-import tempfile
 import threading
 import uuid
 from datetime import datetime, timezone
@@ -27,7 +26,7 @@ def initialize_config() -> "ConfigManager":
     global _current
     if _current is None:
         _current = ConfigManager()
-        # 应用 PATHS 覆盖并迁移 cache/logs/music/keywords（config 目录不迁）
+        # 应用 PATHS 覆盖并迁移 cache/logs/keywords（config 目录不迁）
         try:
             from src.utils.resource_finder import apply_path_overrides_from_config
 
@@ -79,6 +78,7 @@ class ConfigManager:
         "SYSTEM_OPTIONS": {
             "CLIENT_ID": None,
             "DEVICE_ID": None,
+            "LANGUAGE": "auto",  # auto | zh_CN | en_US | vi_VN
             "WINDOW_SIZE_MODE": "default",
             "NETWORK": {
                 "OTA_VERSION_URL": "https://api.tenclass.net/xiaozhi/ota/",
@@ -130,21 +130,18 @@ class ConfigManager:
         },
         "AEC_OPTIONS": {
             "ENABLED": False,
-            # AEC 在位时 TTS 不暂停音乐，混音闪避并行播放（引擎旁路则自动回退暂停）
-            "MUSIC_PARALLEL": True,
+            # AEC 在位时 TTS 不暂停背景媒体，由混音器自动闪避并行播放（旁路则自动回退暂停）
+            "MEDIA_PARALLEL": True,
             # 延迟补偿（协议帧数），实际 delay_ms = 40 + N * 帧长
             "FRAME_DELAY": 3,
             # 噪声抑制/高通预处理
             "ENABLE_PREPROCESS": True,
         },
         # 可写目录覆盖（config 仍固定在用户数据/config；null=默认）
-        # 环境变量优先：XIAOZHI_CACHE_DIR / XIAOZHI_LOG_DIR /
-        # XIAOZHI_MUSIC_CACHE_DIR / XIAOZHI_KEYWORDS_DIR / XIAOZHI_DATA_DIR
-        # 更改 CACHE/LOG/MUSIC/KEYWORDS 后启动时会从旧目录复制到新目录（不删旧）
+        # 环境变量优先：XIAOZHI_DATA_DIR / XIAOZHI_CACHE_DIR / XIAOZHI_LOG_DIR / XIAOZHI_KEYWORDS_DIR
         "PATHS": {
             "CACHE_DIR": None,
             "LOG_DIR": None,
-            "MUSIC_CACHE_DIR": None,
             "KEYWORDS_DIR": None,
         },
         # 外挂 MCP 插件（用户目录 mcp_plugins，自带 lib/）
@@ -153,7 +150,7 @@ class ConfigManager:
             "DIR": None,  # null = {用户数据}/mcp_plugins
             "ENABLED_IDS": [],  # 空 = 按插件 enabled_by_default
             "DISABLED_IDS": [],
-            "ALLOW_HOST_GET": ["config_readonly", "logger"],
+            "ALLOW_HOST_GET": ["config_readonly", "logger", "data_dir"],
             # 严格校验（默认关，避免示例包无 platforms/abi 时无法加载）
             "ENFORCE_PREFIX": False,
             "REQUIRE_PYTHON_ABI": False,
@@ -161,7 +158,7 @@ class ConfigManager:
         },
         # MCP 工具暴露（黑名单：不出现在 tools/list，call 亦拒绝）
         "MCP_TOOLS": {
-            "DISABLED": [],  # 如 ["music_player.stop", "self.application.launch"]
+            "DISABLED": [],  # 如 ["media.stop", "self.application.launch"]
         },
         "AUDIO_DEVICES": {
             "input_device_id": None,
@@ -177,7 +174,6 @@ class ConfigManager:
         },
         "LOGGING": {
             "LEVEL": "INFO",  # DEBUG, INFO, WARNING, ERROR, CRITICAL
-            "FORMAT_TYPE": "colored",  # colored, json, simple
             "ENABLE_CONSOLE": True,
             "ENABLE_FILE": True,
             "ENABLE_ERROR_FILE": True,
@@ -194,15 +190,6 @@ class ConfigManager:
                 "paho": "WARNING",
                 "PIL": "WARNING",
             },
-        },
-        # 音乐 API（空字符串=运行时用内置默认 URL）
-        "MUSIC": {
-            "SEARCH_URL": "",
-            "URL_API": "",
-            "URL_API_KEY": "",
-            "LYRICS_URL": "",
-            "DEFAULT_PLATFORM": "kw",
-            "DEFAULT_QUALITY": "320k",
         },
     }
 
@@ -407,31 +394,18 @@ class ConfigManager:
 
     def _save_config(self, config: dict) -> bool:
         """原子写入配置文件；内存配置只更新当前实例。"""
-        if getattr(self, "_memory_only", False):
+        if self._memory_only:
             return True
-        tmp_file = None
         try:
-            self.config_dir.mkdir(parents=True, exist_ok=True)
-            fd, temporary = tempfile.mkstemp(
-                prefix=f".{self.config_file.name}.", suffix=".tmp", dir=self.config_dir
-            )
-            tmp_file = Path(temporary)
-            with os.fdopen(fd, "w", encoding="utf-8") as stream:
-                json.dump(config, stream, indent=2, ensure_ascii=False)
-                stream.flush()
-                os.fsync(stream.fileno())
-            os.replace(tmp_file, self.config_file)
+            from src.utils.common_utils import atomic_write_text
+
+            payload = json.dumps(config, indent=2, ensure_ascii=False)
+            atomic_write_text(self.config_file, payload, replace=os.replace)
             logger.debug(f"配置已保存到: {self.config_file}")
             return True
         except Exception as e:
             logger.error(f"配置保存错误: {e}", exc_info=True)
             return False
-        finally:
-            if tmp_file is not None:
-                try:
-                    tmp_file.unlink(missing_ok=True)
-                except OSError:
-                    logger.warning("清理配置临时文件失败: %s", tmp_file, exc_info=True)
 
     @staticmethod
     def _merge_configs(default: dict, custom: dict) -> dict:
@@ -510,13 +484,15 @@ class ConfigManager:
         文件配置先原子写盘，再加载运行时配置；加载失败时仅恢复运行时，
         保留已经写入的磁盘内容。提交不会应用 PATHS 覆盖或迁移目录。
         """
-        memory_only = getattr(self, "_memory_only", False)
+        from src.i18n import t
+
+        memory_only = self._memory_only
         try:
             candidate = copy.deepcopy(draft)
             previous = None if memory_only else copy.deepcopy(self._config)
         except Exception as e:
             logger.error("配置草稿复制失败: %s", e, exc_info=True)
-            return f"配置草稿复制失败: {e}"
+            return t("settings.draft_copy_failed", error=e)
 
         if memory_only:
             self._config = candidate
@@ -524,10 +500,10 @@ class ConfigManager:
 
         try:
             if not self._save_config(candidate):
-                return "保存配置失败，请检查文件权限和磁盘空间"
+                return t("settings.save_disk_failed")
         except Exception as e:
             logger.error("保存配置失败: %s", e, exc_info=True)
-            return f"保存配置失败: {e}"
+            return t("settings.save_failed", error=e)
 
         try:
             if self.reload_config(apply_paths=False, strict=True):
@@ -535,14 +511,9 @@ class ConfigManager:
         except Exception as e:
             logger.error("草稿写入后运行时加载失败: %s", e, exc_info=True)
             self._config = previous
-            return f"配置已写入，但运行时加载失败: {e}"
+            return t("settings.reload_failed", error=e)
         self._config = previous
-        return "配置已写入，但运行时加载失败，请重试或重启应用"
-
-    @_synchronized
-    def save_config(self) -> bool:
-        """将当前内存配置落盘."""
-        return self._save_config(self._config)
+        return t("settings.reload_failed_retry")
 
     @_synchronized
     def reload_config(
@@ -554,7 +525,7 @@ class ConfigManager:
         strict: 读取失败时不备份或覆盖为默认配置。
         PATHS 目录迁移仅在 initialize_config 时执行。
         """
-        if getattr(self, "_memory_only", False):
+        if self._memory_only:
             return True
         try:
             self._config = self._load_config(strict=strict)

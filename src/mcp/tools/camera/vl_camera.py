@@ -37,12 +37,6 @@ class VLCamera(BaseCamera):
         self.model = config.get_config("CAMERA.models", "glm-4v-plus")
         logger.info(f"VL Camera initialized with model: {self.model}")
 
-    def capture(self) -> bool:
-        """
-        捕获图像（OpenCV/V4L2 或 picamera2，见 capture_backend）.
-        """
-        return self.capture_frame()
-
     def analyze(self, question: str, image_data: bytes | None = None) -> str:
         try:
             buf = image_data if image_data is not None else self.jpeg_data["buf"]

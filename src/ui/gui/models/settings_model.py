@@ -1,7 +1,7 @@
 """设置窗口 ViewModel.
 
-按功能拆成 settings/ 下多个 mixin，本文件组合并声明 QML Property。
-对外 仍为 SettingsModel，QML context 名 settingsModel 不变。
+配置直映属性通过元数据工厂声明，有状态域（音频/摄像头设备、唤醒词、MCP 工具、目录浏览）
+由 settings/ 下对应 mixin 提供。对外仍为 SettingsModel，QML context 名 settingsModel 不变。
 """
 
 import threading
@@ -10,31 +10,69 @@ from typing import Any
 
 from PySide6.QtCore import Property, Qt, Signal, Slot
 
+from src.i18n import (
+    LANGUAGE_CHOICES,
+    apply_language_from_config,
+    set_language,
+    t,
+)
 from src.logging import get_logger
 from src.ui.gui.models.base_model import BaseModel
 from src.ui.gui.models.settings.audio_devices import SettingsAudioDevicesMixin
 from src.ui.gui.models.settings.camera_devices import SettingsCameraDevicesMixin
-from src.ui.gui.models.settings.camera_options import SettingsCameraOptionsMixin
 from src.ui.gui.models.settings.mcp_tools import SettingsMcpToolsMixin
-from src.ui.gui.models.settings.shortcuts import SettingsShortcutsMixin
 from src.ui.gui.models.settings.system_options import SettingsSystemOptionsMixin
 from src.ui.gui.models.settings.wake_word import SettingsWakeWordMixin
+from src.ui.shared.settings_helpers import get_draft_value, set_draft_value
 from src.utils.config_manager import ConfigManager
 
 logger = get_logger()
+
+
+def _config_property(
+    prop_type: type,
+    path: str,
+    default: Any,
+    *,
+    notify: Signal,
+    strip: bool = False,
+    coerce_int: bool = False,
+    allowed: tuple[Any, ...] | None = None,
+) -> Property:
+    """声明直接映射草稿配置路径的 Qt Property，消除机械 getter/setter 样板."""
+
+    def _get(self):
+        value = self._get_value(path, default)
+        if strip:
+            return value or ""
+        if coerce_int:
+            try:
+                return int(value)
+            except (TypeError, ValueError):
+                return default
+        return value
+
+    def _set(self, value) -> None:
+        if strip:
+            value = value.strip() if value else ""
+        elif coerce_int:
+            value = int(value)
+        if allowed is not None and value not in allowed:
+            return
+        self._set_value(path, value)
+
+    return Property(prop_type, _get, _set, notify=notify)
 
 
 class SettingsModel(
     SettingsSystemOptionsMixin,
     SettingsMcpToolsMixin,
     SettingsWakeWordMixin,
-    SettingsCameraOptionsMixin,
     SettingsAudioDevicesMixin,
-    SettingsShortcutsMixin,
     SettingsCameraDevicesMixin,
     BaseModel,
 ):
-    """设置窗口数据模型（组合 mixin）."""
+    """设置窗口数据模型."""
 
     settingsChanged = Signal()
     devicesChanged = Signal()
@@ -86,6 +124,7 @@ class SettingsModel(
         self._wake_word: str = ""
         self._wake_word_lang: str = "zh"
         self._wake_word_preview: str = ""
+        self._language_previewed: bool = False
 
         # 启动仅读配置；音频/摄像头/唤醒词预览延后到打开设置时再处理
         self._load_config()
@@ -138,20 +177,17 @@ class SettingsModel(
                     f"设置页后台任务失败 ({name or target}): {e}", exc_info=True
                 )
                 try:
-                    self.statusMessage.emit(f"[错误] {e}")
-                except Exception:
+                    self.statusMessage.emit(t("common.error_with_msg", error=e))
+                except RuntimeError:
                     pass
                 if test_kind is not None:
                     try:
                         self.testComplete.emit(test_kind, False)
-                    except Exception:
+                    except RuntimeError:
                         pass
             finally:
                 if clear_flags is not None:
-                    try:
-                        self._schedule_ui(clear_flags)
-                    except Exception:
-                        pass
+                    self._schedule_ui(clear_flags)
 
         thread = threading.Thread(
             target=_entry, name=name or "settings:worker", daemon=True
@@ -166,24 +202,11 @@ class SettingsModel(
 
     def _get_value(self, path: str, default: Any = None) -> Any:
         """获取配置值，支持点号分隔的路径."""
-        keys = path.split(".")
-        value = self._config
-        for key in keys:
-            if isinstance(value, dict) and key in value:
-                value = value[key]
-            else:
-                return default
-        return value
+        return get_draft_value(self._config, path, default)
 
     def _set_value(self, path: str, value: Any):
         """设置配置值，支持点号分隔的路径."""
-        keys = path.split(".")
-        config = self._config
-        for key in keys[:-1]:
-            if not isinstance(config.get(key), dict):
-                config[key] = {}
-            config = config[key]
-        config[keys[-1]] = value
+        set_draft_value(self._config, path, value)
         self.settingsChanged.emit()
 
     @Slot(result=bool)
@@ -196,18 +219,22 @@ class SettingsModel(
             if error is not None:
                 self.set_error(error)
                 return False
+            self._language_previewed = False
             logger.info("设置已保存并加载到运行时配置")
-            self.statusMessage.emit("配置已保存")
+            self.statusMessage.emit(t("settings.saved"))
             self.configSaved.emit()
             return True
         except Exception as e:
             logger.error(f"保存配置失败: {e}", exc_info=True)
-            self.set_error(f"保存配置失败: {e}")
+            self.set_error(t("settings.save_failed", error=e))
             return False
 
     @Slot()
     def discard(self):
         """丢弃草稿并恢复当前运行时快照，不枚举设备或加载模型."""
+        if self._language_previewed:
+            self._language_previewed = False
+            apply_language_from_config(self._config_manager)
         self._load_config()
         self._load_wake_word(update_preview=False)
         self.set_error("")
@@ -222,175 +249,50 @@ class SettingsModel(
         self._load_audio_devices(force=True)
         self._load_cameras(force=True)
         self._load_wake_word()
-        self.settingsChanged.emit()
         self.wakeWordChanged.emit()
         logger.info("设置已重新加载")
 
-    # ========== QML Properties（实现见各 mixin）==========
-    clientId = Property(str, SettingsSystemOptionsMixin._get_clientId, SettingsSystemOptionsMixin._set_clientId, notify=settingsChanged)
-    deviceId = Property(str, SettingsSystemOptionsMixin._get_deviceId, SettingsSystemOptionsMixin._set_deviceId, notify=settingsChanged)
-    otaUrl = Property(str, SettingsSystemOptionsMixin._get_otaUrl, SettingsSystemOptionsMixin._set_otaUrl, notify=settingsChanged)
-    websocketUrl = Property(
-        str, SettingsSystemOptionsMixin._get_websocketUrl, SettingsSystemOptionsMixin._set_websocketUrl, notify=settingsChanged
-    )
-    websocketToken = Property(
-        str, SettingsSystemOptionsMixin._get_websocketToken, SettingsSystemOptionsMixin._set_websocketToken, notify=settingsChanged
-    )
-    authorizationUrl = Property(
-        str, SettingsSystemOptionsMixin._get_authorizationUrl, SettingsSystemOptionsMixin._set_authorizationUrl, notify=settingsChanged
-    )
-    activationVersion = Property(
-        str, SettingsSystemOptionsMixin._get_activationVersion, SettingsSystemOptionsMixin._set_activationVersion, notify=settingsChanged
-    )
-    windowSizeMode = Property(
-        str, SettingsSystemOptionsMixin._get_windowSizeMode, SettingsSystemOptionsMixin._set_windowSizeMode, notify=settingsChanged
-    )
-    musicSearchUrl = Property(
-        str, SettingsSystemOptionsMixin._get_musicSearchUrl, SettingsSystemOptionsMixin._set_musicSearchUrl, notify=settingsChanged
-    )
-    musicUrlApi = Property(
-        str, SettingsSystemOptionsMixin._get_musicUrlApi, SettingsSystemOptionsMixin._set_musicUrlApi, notify=settingsChanged
-    )
-    musicUrlApiKey = Property(
-        str, SettingsSystemOptionsMixin._get_musicUrlApiKey, SettingsSystemOptionsMixin._set_musicUrlApiKey, notify=settingsChanged
-    )
-    musicDefaultQuality = Property(
-        str, SettingsSystemOptionsMixin._get_musicDefaultQuality, SettingsSystemOptionsMixin._set_musicDefaultQuality, notify=settingsChanged
-    )
-    mqttEndpoint = Property(
-        str, SettingsSystemOptionsMixin._get_mqttEndpoint, SettingsSystemOptionsMixin._set_mqttEndpoint, notify=settingsChanged
-    )
-    mqttClientId = Property(
-        str, SettingsSystemOptionsMixin._get_mqttClientId, SettingsSystemOptionsMixin._set_mqttClientId, notify=settingsChanged
-    )
-    mqttUsername = Property(
-        str, SettingsSystemOptionsMixin._get_mqttUsername, SettingsSystemOptionsMixin._set_mqttUsername, notify=settingsChanged
-    )
-    mqttPassword = Property(
-        str, SettingsSystemOptionsMixin._get_mqttPassword, SettingsSystemOptionsMixin._set_mqttPassword, notify=settingsChanged
-    )
-    mqttPublishTopic = Property(
-        str, SettingsSystemOptionsMixin._get_mqttPublishTopic, SettingsSystemOptionsMixin._set_mqttPublishTopic, notify=settingsChanged
-    )
-    mqttSubscribeTopic = Property(
-        str, SettingsSystemOptionsMixin._get_mqttSubscribeTopic, SettingsSystemOptionsMixin._set_mqttSubscribeTopic, notify=settingsChanged
-    )
-    aecEnabled = Property(
-        bool, SettingsSystemOptionsMixin._get_aecEnabled, SettingsSystemOptionsMixin._set_aecEnabled, notify=settingsChanged
-    )
-    aecMusicParallel = Property(
-        bool, SettingsSystemOptionsMixin._get_aecMusicParallel, SettingsSystemOptionsMixin._set_aecMusicParallel, notify=settingsChanged
-    )
-    aecFrameDelay = Property(
-        int, SettingsSystemOptionsMixin._get_aecFrameDelay, SettingsSystemOptionsMixin._set_aecFrameDelay, notify=settingsChanged
-    )
-    aecEnablePreprocess = Property(
-        bool, SettingsSystemOptionsMixin._get_aecEnablePreprocess, SettingsSystemOptionsMixin._set_aecEnablePreprocess, notify=settingsChanged
-    )
-    pathCacheDir = Property(
-        str,
-        SettingsSystemOptionsMixin._get_pathCacheDir,
-        SettingsSystemOptionsMixin._set_pathCacheDir,
-        notify=settingsChanged,
-    )
-    pathLogDir = Property(
-        str,
-        SettingsSystemOptionsMixin._get_pathLogDir,
-        SettingsSystemOptionsMixin._set_pathLogDir,
-        notify=settingsChanged,
-    )
-    pathMusicCacheDir = Property(
-        str,
-        SettingsSystemOptionsMixin._get_pathMusicCacheDir,
-        SettingsSystemOptionsMixin._set_pathMusicCacheDir,
-        notify=settingsChanged,
-    )
-    pathKeywordsDir = Property(
-        str,
-        SettingsSystemOptionsMixin._get_pathKeywordsDir,
-        SettingsSystemOptionsMixin._set_pathKeywordsDir,
-        notify=settingsChanged,
-    )
-    pathMcpPluginsDir = Property(
-        str,
-        SettingsSystemOptionsMixin._get_pathMcpPluginsDir,
-        SettingsSystemOptionsMixin._set_pathMcpPluginsDir,
-        notify=settingsChanged,
-    )
-    pathDefaultCacheDir = Property(
-        str, SettingsSystemOptionsMixin._get_pathDefaultCacheDir, notify=settingsChanged
-    )
-    pathDefaultLogDir = Property(
-        str, SettingsSystemOptionsMixin._get_pathDefaultLogDir, notify=settingsChanged
-    )
-    pathDefaultMusicCacheDir = Property(
-        str,
-        SettingsSystemOptionsMixin._get_pathDefaultMusicCacheDir,
-        notify=settingsChanged,
-    )
-    pathDefaultKeywordsDir = Property(
-        str,
-        SettingsSystemOptionsMixin._get_pathDefaultKeywordsDir,
-        notify=settingsChanged,
-    )
-    pathDefaultMcpPluginsDir = Property(
-        str,
-        SettingsSystemOptionsMixin._get_pathDefaultMcpPluginsDir,
-        notify=settingsChanged,
-    )
-    pathHints = Property(
-        str, SettingsSystemOptionsMixin._get_pathHints, notify=settingsChanged
+    # ========== QML Properties（元数据直映）==========
+    clientId = _config_property(str, "SYSTEM_OPTIONS.CLIENT_ID", "", notify=settingsChanged)
+    deviceId = _config_property(str, "SYSTEM_OPTIONS.DEVICE_ID", "", notify=settingsChanged)
+
+    def _get_language(self) -> str:
+        val = str(self._get_value("SYSTEM_OPTIONS.LANGUAGE", "auto") or "auto")
+        return val if val in LANGUAGE_CHOICES else "auto"
+
+    def _set_language(self, value: str) -> None:
+        val = str(value or "auto").strip()
+        if val not in LANGUAGE_CHOICES:
+            return
+        self._set_value("SYSTEM_OPTIONS.LANGUAGE", val)
+        self._language_previewed = True
+        set_language(val)
+
+    language = Property(str, _get_language, _set_language, notify=settingsChanged)
+    otaUrl = _config_property(str, "SYSTEM_OPTIONS.NETWORK.OTA_VERSION_URL", "", notify=settingsChanged)
+    websocketUrl = _config_property(str, "SYSTEM_OPTIONS.NETWORK.WEBSOCKET_URL", "", notify=settingsChanged)
+    websocketToken = _config_property(str, "SYSTEM_OPTIONS.NETWORK.WEBSOCKET_ACCESS_TOKEN", "", notify=settingsChanged)
+    authorizationUrl = _config_property(str, "SYSTEM_OPTIONS.NETWORK.AUTHORIZATION_URL", "", notify=settingsChanged)
+    activationVersion = _config_property(str, "SYSTEM_OPTIONS.NETWORK.ACTIVATION_VERSION", "v1", notify=settingsChanged)
+    windowSizeMode = _config_property(str, "SYSTEM_OPTIONS.WINDOW_SIZE_MODE", "default", notify=settingsChanged)
+    mqttEndpoint = _config_property(str, "SYSTEM_OPTIONS.NETWORK.MQTT_INFO.endpoint", "", notify=settingsChanged)
+    mqttClientId = _config_property(str, "SYSTEM_OPTIONS.NETWORK.MQTT_INFO.client_id", "", notify=settingsChanged)
+    mqttUsername = _config_property(str, "SYSTEM_OPTIONS.NETWORK.MQTT_INFO.username", "", notify=settingsChanged)
+    mqttPassword = _config_property(str, "SYSTEM_OPTIONS.NETWORK.MQTT_INFO.password", "", notify=settingsChanged)
+    mqttPublishTopic = _config_property(str, "SYSTEM_OPTIONS.NETWORK.MQTT_INFO.publish_topic", "", notify=settingsChanged)
+    mqttSubscribeTopic = _config_property(str, "SYSTEM_OPTIONS.NETWORK.MQTT_INFO.subscribe_topic", "", notify=settingsChanged)
+    aecEnabled = _config_property(bool, "AEC_OPTIONS.ENABLED", False, notify=settingsChanged)
+    aecMediaParallel = _config_property(bool, "AEC_OPTIONS.MEDIA_PARALLEL", True, notify=settingsChanged)
+    aecFrameDelay = _config_property(int, "AEC_OPTIONS.FRAME_DELAY", 3, notify=settingsChanged, coerce_int=True)
+    aecEnablePreprocess = _config_property(bool, "AEC_OPTIONS.ENABLE_PREPROCESS", True, notify=settingsChanged)
+
+    userDataDir = Property(
+        str, SettingsSystemOptionsMixin._get_userDataDir, notify=settingsChanged
     )
 
-    @Slot(str, result=str)
-    def browseDirectory(self, which: str) -> str:
-        """打开系统目录选择框。which: cache|log|music|keywords|mcp.
-
-        返回选中的路径；取消返回空串（QML 勿写回）。
-        """
-        which = (which or "").strip().lower()
-        getters = {
-            "cache": self._get_pathCacheDir,
-            "log": self._get_pathLogDir,
-            "music": self._get_pathMusicCacheDir,
-            "keywords": self._get_pathKeywordsDir,
-            "mcp": self._get_pathMcpPluginsDir,
-        }
-        setters = {
-            "cache": self._set_pathCacheDir,
-            "log": self._set_pathLogDir,
-            "music": self._set_pathMusicCacheDir,
-            "keywords": self._set_pathKeywordsDir,
-            "mcp": self._set_pathMcpPluginsDir,
-        }
-        titles = {
-            "cache": "选择缓存目录",
-            "log": "选择日志目录",
-            "music": "选择音乐缓存目录",
-            "keywords": "选择唤醒词目录",
-            "mcp": "选择 MCP 插件目录",
-        }
-        if which not in getters:
-            return ""
-        current = getters[which]()
-        path = self._browse_directory(titles[which], current, which)
-        if path:
-            setters[which](path)
-        return path
-
-    @Slot(str)
-    def clearPathDir(self, which: str) -> None:
-        """清空某项自定义路径（恢复默认）."""
-        which = (which or "").strip().lower()
-        setters = {
-            "cache": self._set_pathCacheDir,
-            "log": self._set_pathLogDir,
-            "music": self._set_pathMusicCacheDir,
-            "keywords": self._set_pathKeywordsDir,
-            "mcp": self._set_pathMcpPluginsDir,
-        }
-        if which in setters:
-            setters[which]("")
+    @Slot(result=bool)
+    def openUserDataDir(self) -> bool:
+        return self._open_user_data_dir()
 
     mcpToolsCatalogJson = Property(
         str, SettingsMcpToolsMixin._get_mcpToolsCatalogJson, notify=settingsChanged
@@ -401,6 +303,18 @@ class SettingsModel(
         SettingsMcpToolsMixin._set_mcpToolsDisabledJson,
         notify=settingsChanged,
     )
+    mcpAllowMediaPlayer = Property(
+        bool,
+        SettingsMcpToolsMixin._get_mcpAllowMediaPlayer,
+        SettingsMcpToolsMixin._set_mcpAllowMediaPlayer,
+        notify=settingsChanged,
+    )
+    mcpPluginsDir = Property(
+        str, SettingsMcpToolsMixin._get_mcpPluginsDir, notify=settingsChanged
+    )
+    mcpInstalledPluginsJson = Property(
+        str, SettingsMcpToolsMixin._get_mcpInstalledPluginsJson, notify=settingsChanged
+    )
 
     @Slot(str, bool)
     def setMcpToolEnabled(self, name: str, enabled: bool) -> None:
@@ -410,30 +324,42 @@ class SettingsModel(
     def setMcpToolGroupEnabled(self, group: str, enabled: bool) -> None:
         self._set_mcpToolGroupEnabled(group, enabled)
 
-    wakeWordEnabled = Property(
-        bool, SettingsWakeWordMixin._get_wakeWordEnabled, SettingsWakeWordMixin._set_wakeWordEnabled, notify=settingsChanged
-    )
-    modelPath = Property(str, SettingsWakeWordMixin._get_modelPath, SettingsWakeWordMixin._set_modelPath, notify=settingsChanged)
-    numThreads = Property(int, SettingsWakeWordMixin._get_numThreads, SettingsWakeWordMixin._set_numThreads, notify=settingsChanged)
-    keywordsScore = Property(
-        float, SettingsWakeWordMixin._get_keywordsScore, SettingsWakeWordMixin._set_keywordsScore, notify=settingsChanged
-    )
-    keywordsThreshold = Property(
-        float, SettingsWakeWordMixin._get_keywordsThreshold, SettingsWakeWordMixin._set_keywordsThreshold, notify=settingsChanged
-    )
+    @Slot(result=bool)
+    def importMcpPluginZip(self) -> bool:
+        return self._import_mcp_plugin_zip()
+
+    @Slot(result=bool)
+    def importMcpPluginDir(self) -> bool:
+        return self._import_mcp_plugin_dir()
+
+    @Slot(str, result=bool)
+    def uninstallMcpPlugin(self, plugin_id: str) -> bool:
+        return self._uninstall_mcp_plugin(plugin_id)
+
+    @Slot(result=bool)
+    def openMcpPluginsDir(self) -> bool:
+        return self._open_mcp_plugins_dir()
+
+    @Slot()
+    def refreshMcpPlugins(self) -> None:
+        self._trigger_runtime_plugin_reload()
+
+    wakeWordEnabled = _config_property(bool, "WAKE_WORD_OPTIONS.USE_WAKE_WORD", False, notify=settingsChanged)
+    modelPath = _config_property(str, "WAKE_WORD_OPTIONS.MODEL_PATH", "models", notify=settingsChanged)
+    numThreads = _config_property(int, "WAKE_WORD_OPTIONS.NUM_THREADS", 4, notify=settingsChanged)
+    keywordsScore = _config_property(float, "WAKE_WORD_OPTIONS.KEYWORDS_SCORE", 1.8, notify=settingsChanged)
+    keywordsThreshold = _config_property(float, "WAKE_WORD_OPTIONS.KEYWORDS_THRESHOLD", 0.2, notify=settingsChanged)
     wakeWord = Property(str, SettingsWakeWordMixin._get_wakeWord, SettingsWakeWordMixin._set_wakeWord, notify=wakeWordChanged)
     wakeWordLang = Property(str, SettingsWakeWordMixin._get_wakeWordLang, notify=wakeWordChanged)
     wakeWordPreview = Property(str, SettingsWakeWordMixin._get_wakeWordPreview, notify=wakeWordChanged)
-    cameraIndex = Property(
-        int, SettingsCameraOptionsMixin._get_cameraIndex, SettingsCameraOptionsMixin._set_cameraIndex, notify=settingsChanged
-    )
-    frameWidth = Property(int, SettingsCameraOptionsMixin._get_frameWidth, SettingsCameraOptionsMixin._set_frameWidth, notify=settingsChanged)
-    frameHeight = Property(
-        int, SettingsCameraOptionsMixin._get_frameHeight, SettingsCameraOptionsMixin._set_frameHeight, notify=settingsChanged
-    )
-    vlApiUrl = Property(str, SettingsCameraOptionsMixin._get_vlApiUrl, SettingsCameraOptionsMixin._set_vlApiUrl, notify=settingsChanged)
-    vlApiKey = Property(str, SettingsCameraOptionsMixin._get_vlApiKey, SettingsCameraOptionsMixin._set_vlApiKey, notify=settingsChanged)
-    vlModels = Property(str, SettingsCameraOptionsMixin._get_vlModels, SettingsCameraOptionsMixin._set_vlModels, notify=settingsChanged)
+
+    cameraIndex = _config_property(int, "CAMERA.camera_index", 0, notify=settingsChanged)
+    frameWidth = _config_property(int, "CAMERA.frame_width", 640, notify=settingsChanged)
+    frameHeight = _config_property(int, "CAMERA.frame_height", 480, notify=settingsChanged)
+    vlApiUrl = _config_property(str, "CAMERA.Local_VL_url", "", notify=settingsChanged)
+    vlApiKey = _config_property(str, "CAMERA.VLapi_key", "", notify=settingsChanged)
+    vlModels = _config_property(str, "CAMERA.models", "glm-4v-plus", notify=settingsChanged)
+
     selectedInputIndex = Property(
         int, SettingsAudioDevicesMixin._get_selectedInputIndex, SettingsAudioDevicesMixin._set_selectedInputIndex, notify=settingsChanged
     )
@@ -442,63 +368,20 @@ class SettingsModel(
     )
     inputDeviceInfo = Property(str, SettingsAudioDevicesMixin._get_inputDeviceInfo, notify=settingsChanged)
     outputDeviceInfo = Property(str, SettingsAudioDevicesMixin._get_outputDeviceInfo, notify=settingsChanged)
-    opusOutputSampleRate = Property(
-        int,
-        SettingsAudioDevicesMixin._get_opusOutputSampleRate,
-        SettingsAudioDevicesMixin._set_opusOutputSampleRate,
-        notify=settingsChanged,
-    )
-    frameDuration = Property(
-        int, SettingsAudioDevicesMixin._get_frameDuration, SettingsAudioDevicesMixin._set_frameDuration, notify=settingsChanged
-    )
-    shortcutsEnabled = Property(
-        bool, SettingsShortcutsMixin._get_shortcutsEnabled, SettingsShortcutsMixin._set_shortcutsEnabled, notify=settingsChanged
-    )
-    shortcutManualModifier = Property(
-        str,
-        SettingsShortcutsMixin._get_shortcutManualModifier,
-        SettingsShortcutsMixin._set_shortcutManualModifier,
-        notify=settingsChanged,
-    )
-    shortcutManualKey = Property(
-        str, SettingsShortcutsMixin._get_shortcutManualKey, SettingsShortcutsMixin._set_shortcutManualKey, notify=settingsChanged
-    )
-    shortcutAutoModifier = Property(
-        str,
-        SettingsShortcutsMixin._get_shortcutAutoModifier,
-        SettingsShortcutsMixin._set_shortcutAutoModifier,
-        notify=settingsChanged,
-    )
-    shortcutAutoKey = Property(
-        str, SettingsShortcutsMixin._get_shortcutAutoKey, SettingsShortcutsMixin._set_shortcutAutoKey, notify=settingsChanged
-    )
-    shortcutAbortModifier = Property(
-        str,
-        SettingsShortcutsMixin._get_shortcutAbortModifier,
-        SettingsShortcutsMixin._set_shortcutAbortModifier,
-        notify=settingsChanged,
-    )
-    shortcutAbortKey = Property(
-        str, SettingsShortcutsMixin._get_shortcutAbortKey, SettingsShortcutsMixin._set_shortcutAbortKey, notify=settingsChanged
-    )
-    shortcutModeModifier = Property(
-        str,
-        SettingsShortcutsMixin._get_shortcutModeModifier,
-        SettingsShortcutsMixin._set_shortcutModeModifier,
-        notify=settingsChanged,
-    )
-    shortcutModeKey = Property(
-        str, SettingsShortcutsMixin._get_shortcutModeKey, SettingsShortcutsMixin._set_shortcutModeKey, notify=settingsChanged
-    )
-    shortcutWindowModifier = Property(
-        str,
-        SettingsShortcutsMixin._get_shortcutWindowModifier,
-        SettingsShortcutsMixin._set_shortcutWindowModifier,
-        notify=settingsChanged,
-    )
-    shortcutWindowKey = Property(
-        str, SettingsShortcutsMixin._get_shortcutWindowKey, SettingsShortcutsMixin._set_shortcutWindowKey, notify=settingsChanged
-    )
+    opusOutputSampleRate = _config_property(int, "AUDIO_DEVICES.opus_output_sample_rate", 24000, notify=settingsChanged)
+    frameDuration = _config_property(int, "AUDIO_DEVICES.frame_duration", 20, notify=settingsChanged, allowed=(20, 40, 60))
+
+    shortcutsEnabled = _config_property(bool, "SHORTCUTS.ENABLED", True, notify=settingsChanged)
+    shortcutManualModifier = _config_property(str, "SHORTCUTS.MANUAL_PRESS.modifier", "ctrl", notify=settingsChanged)
+    shortcutManualKey = _config_property(str, "SHORTCUTS.MANUAL_PRESS.key", "j", notify=settingsChanged)
+    shortcutAutoModifier = _config_property(str, "SHORTCUTS.AUTO_TOGGLE.modifier", "ctrl", notify=settingsChanged)
+    shortcutAutoKey = _config_property(str, "SHORTCUTS.AUTO_TOGGLE.key", "k", notify=settingsChanged)
+    shortcutAbortModifier = _config_property(str, "SHORTCUTS.ABORT.modifier", "ctrl", notify=settingsChanged)
+    shortcutAbortKey = _config_property(str, "SHORTCUTS.ABORT.key", "q", notify=settingsChanged)
+    shortcutModeModifier = _config_property(str, "SHORTCUTS.MODE_TOGGLE.modifier", "ctrl", notify=settingsChanged)
+    shortcutModeKey = _config_property(str, "SHORTCUTS.MODE_TOGGLE.key", "m", notify=settingsChanged)
+    shortcutWindowModifier = _config_property(str, "SHORTCUTS.WINDOW_TOGGLE.modifier", "ctrl", notify=settingsChanged)
+    shortcutWindowKey = _config_property(str, "SHORTCUTS.WINDOW_TOGGLE.key", "w", notify=settingsChanged)
     selectedCameraIndex = Property(
         int, SettingsCameraDevicesMixin._get_selectedCameraIndex, SettingsCameraDevicesMixin._set_selectedCameraIndex, notify=settingsChanged
     )

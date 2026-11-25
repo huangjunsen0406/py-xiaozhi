@@ -26,12 +26,12 @@ async def test_music_owner_stops_once_and_detaches_even_on_failure(stop_fails):
 
     container = ServiceContainer()
     player = Player()
-    container.music_player = player
+    container.media_player = player
     register_cleanup_resources(container)
     await container.shutdown()
     assert player.stop_calls == 1
     assert player.detached
-    assert container.music_player is None
+    assert container.media_player is None
     assert not container.resource_pool._resources
     await container.shutdown()
     assert player.stop_calls == 1

@@ -24,11 +24,10 @@ import {
   SignalIcon,
   ArrowPathIcon,
   ArrowsUpDownIcon,
-  MusicalNoteIcon as MusicIcon,
   CommandLineIcon
 } from '@heroicons/vue/24/solid';
 
-// 技术栈
+// Technology stack
 const techStack = [
   {
     name: 'Python',
@@ -37,73 +36,78 @@ const techStack = [
   },
   {
     name: 'AsyncIO',
-    description: '异步编程框架',
+    description: 'Async runtime',
     icon: ArrowPathIcon
   },
   {
-    name: 'PySide6',
-    description: 'Qt6 GUI框架',
+    name: 'PySide6 / QML',
+    description: 'Qt6 declarative GUI',
     icon: WindowIcon
   },
   {
-    name: 'QML/QtQuick',
-    description: '声明式UI',
-    icon: WindowIcon
+    name: 'Textual',
+    description: 'Full-screen TUI',
+    icon: CommandLineIcon
   },
   {
     name: 'qasync',
-    description: 'Qt异步集成',
+    description: 'Qt asyncio bridge',
     icon: ArrowsUpDownIcon
   },
   {
     name: 'uv',
-    description: '包管理器',
+    description: 'Package manager',
     icon: CommandLineIcon
   },
   {
+    name: 'WebRTC APM',
+    description: 'Built-in 3-OS AEC',
+    icon: AudioIcon
+  },
+  {
     name: 'Sherpa-ONNX',
-    description: '唤醒词检测',
+    description: 'Offline wake word',
     icon: DocumentIcon
   },
   {
     name: 'OpusLib',
-    description: '音频编解码',
+    description: 'Voice codec',
     icon: AudioIcon
   },
   {
+    name: 'FFmpeg',
+    description: 'Generic media decode',
+    icon: SignalIcon
+  },
+  {
     name: 'SoXR',
-    description: '高质量重采样',
+    description: 'High-quality resampling',
     icon: SignalIcon
   },
   {
     name: 'SoundDevice',
-    description: '音频设备管理',
+    description: 'Audio device I/O',
     icon: AudioIcon
   },
   {
     name: 'WebSockets',
-    description: '实时通信协议',
+    description: 'Realtime protocol',
     icon: PuzzlePieceIcon
   },
   {
     name: 'MQTT',
-    description: 'IoT消息传输',
+    description: 'Lightweight transport',
     icon: SignalIcon
   },
   {
     name: 'MCP Protocol',
-    description: '模型上下文协议',
+    description: 'Model Context Protocol',
     icon: PuzzlePieceIcon
   },
   {
     name: 'EventBus',
-    description: '事件驱动架构',
+    description: 'Event-driven bus',
     icon: ArrowPathIcon
-  },
-  {
-    name: 'Quartz',
-    description: 'macOS快捷键',
-    icon: CommandLineIcon
   }
 ];
 

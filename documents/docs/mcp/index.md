@@ -5,9 +5,10 @@ This document explains how to develop **built-in** MCP tools for py-xiaozhi. For
 ## How It Works
 
 1. `McpPlugin.setup` creates runtime objects (e.g. camera) and calls `register_camera_tools` / `register_screenshot_tools`
-2. `McpServer.add_common_tools()` **explicitly** calls each package’s `register_*_tools(add_tool, …)`
-3. Each `register_*` holds dependencies in a closure (e.g. `MusicPlayer`, `VolumeController`), builds `McpTool` instances, and calls `add_tool`
-4. Tools are exposed over JSON-RPC 2.0
+2. `McpServer.register_builtin_tools()` **explicitly** calls each built-in package's `register_*_tools(add_tool, …)`
+3. Each `register_*` holds dependencies in a closure (e.g. `MediaPlayer`, `VolumeController`), builds `McpTool` instances, and calls `add_tool`
+4. `McpServer.reload_external_plugins(media_player=...)` loads external plugins and conditionally registers the host transport controls (`media.*`) when `media_player` is authorized and external plugins are active
+5. Tools are exposed over JSON-RPC 2.0
 
 **Built-in tools do not use a global `@mcp_tool` decorator or filesystem auto-discovery.** To add a package: implement `register_*_tools` and wire it once in `add_common_tools` (or `McpPlugin`).
 
@@ -219,7 +220,7 @@ Prefer **`str`** (or bool/int). Use `json.dumps(..., ensure_ascii=False)` for st
 | Apps | `app/` | `register.py` | `register_app_tools` | [system.md](system.md) |
 | Camera | `camera/` | `register.py` | `register_camera_tools` (McpPlugin) | [camera.md](camera.md) |
 | Screenshot | `screenshot/` | `register.py` | `register_screenshot_tools` (McpPlugin) | — |
-| Music | `music/` | `register.py` | `register_music_tools` (injected MusicPlayer) | [music.md](music.md) |
+| Media controls | `media/` | `register.py` | `register_media_tools` (conditional when external playback is enabled) | [plugins.md](plugins.md) |
 | Weather | `weather/` | `register.py` + `service.py` | `register_weather_tools` (mock for now) | — |
 
 User-directory **external** plugins (vendored deps, install-and-run) are documented in [External Plugins](./plugins.md). They coexist with built-in `register_*` and do not bring back decorator discovery.

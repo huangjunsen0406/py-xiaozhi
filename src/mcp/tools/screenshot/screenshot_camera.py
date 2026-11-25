@@ -7,25 +7,35 @@ import json
 import sys
 
 from src.logging import get_logger
-from src.mcp.tools.camera.base_camera import BaseCamera
 
 logger = get_logger()
 
 
-class ScreenshotCamera(BaseCamera):
-    """
-    桌面截图摄像头实现.
-    """
+class ScreenshotCamera:
+    """桌面截图实现（不依赖摄像头采集基类）."""
 
-    def __init__(self):
-        """
-        初始化截图摄像头.
-        """
-        super().__init__()
+    def __init__(self, photo_camera=None):
+        """初始化截图实现；photo_camera 可选，用于复用 vision URL/token."""
+        self.jpeg_data: dict[str, bytes | int] = {"buf": b"", "len": 0}
+        self._photo_camera = photo_camera
+        self._pil_available = False
+        self._subprocess_available = False
+        self._win32_available = False
         logger.info("Initializing ScreenshotCamera")
 
         # 导入依赖库
         self._import_dependencies()
+
+    def set_photo_camera(self, photo_camera) -> None:
+        """设置拍照摄像头引用，以便分析截图时复用 vision URL/token."""
+        self._photo_camera = photo_camera
+
+    def get_jpeg_data(self) -> dict[str, bytes | int]:
+        return self.jpeg_data
+
+    def set_jpeg_data(self, data_bytes: bytes) -> None:
+        self.jpeg_data["buf"] = data_bytes
+        self.jpeg_data["len"] = len(data_bytes)
 
     def _import_dependencies(self):
         """
@@ -113,40 +123,28 @@ class ScreenshotCamera(BaseCamera):
             logger.error(f"Error capturing screenshot: {e}", exc_info=True)
             return False
 
-    def _capture_with_pil(self) -> bytes:
-        """使用PIL ImageGrab截图.
+    @staticmethod
+    def _pil_image_to_jpeg(image, quality: int = 85) -> bytes:
+        from PIL import Image
 
-        Returns:
-            JPEG格式的图片字节数据
-        """
+        if image.mode == "RGBA":
+            background = Image.new("RGB", image.size, (255, 255, 255))
+            background.paste(image, mask=image.split()[3])
+            image = background
+        elif image.mode not in ("RGB", "L"):
+            image = image.convert("RGB")
+        byte_io = io.BytesIO()
+        image.save(byte_io, format="JPEG", quality=quality)
+        return byte_io.getvalue()
+
+    def _capture_with_pil(self) -> bytes:
+        """使用PIL ImageGrab截图."""
         try:
             import PIL.ImageGrab
 
             logger.debug("Capturing screenshot with PIL ImageGrab...")
-
-            # 截取所有屏幕（包括多显示器）
             screenshot = PIL.ImageGrab.grab(all_screens=True)
-
-            # 如果图片包含透明度通道(RGBA)，转换为RGB
-            if screenshot.mode == "RGBA":
-                # 创建白色背景
-                from PIL import Image
-
-                background = Image.new("RGB", screenshot.size, (255, 255, 255))
-                background.paste(
-                    screenshot, mask=screenshot.split()[3]
-                )  # 使用alpha通道作为mask
-                screenshot = background
-            elif screenshot.mode not in ["RGB", "L"]:
-                # 确保图片格式兼容JPEG
-                screenshot = screenshot.convert("RGB")
-
-            # 转换为JPEG格式的字节数据
-            byte_io = io.BytesIO()
-            screenshot.save(byte_io, format="JPEG", quality=85)
-
-            return byte_io.getvalue()
-
+            return self._pil_image_to_jpeg(screenshot)
         except Exception as e:
             logger.error(f"PIL screenshot capture failed: {e}", exc_info=True)
             return None
@@ -161,24 +159,18 @@ class ScreenshotCamera(BaseCamera):
             JPEG格式的图片字节数据
         """
         try:
-            from PIL import Image
-
             logger.debug(
                 f"Capturing screenshot with macOS screencapture command, display_id: {display_id}"
             )
 
             # 根据display_id决定截图策略
             if display_id is None:
-                # 截取所有显示器并合成
                 screenshot = self._capture_all_displays_macos()
             elif display_id == "main" or display_id == 1:
-                # 截取主显示器
                 screenshot = self._capture_single_display_macos(1)
             elif display_id == "secondary" or display_id == 2:
-                # 截取副显示器
                 screenshot = self._capture_single_display_macos(2)
             elif isinstance(display_id, int) and display_id > 0:
-                # 截取指定显示器
                 screenshot = self._capture_single_display_macos(display_id)
             else:
                 logger.error(f"Invalid display_id: {display_id}")
@@ -188,20 +180,7 @@ class ScreenshotCamera(BaseCamera):
                 logger.error("Failed to create composite screenshot")
                 return None
 
-            # 转换为JPEG
-            if screenshot.mode == "RGBA":
-                # 创建白色背景
-                background = Image.new("RGB", screenshot.size, (255, 255, 255))
-                background.paste(screenshot, mask=screenshot.split()[3])
-                screenshot = background
-            elif screenshot.mode not in ["RGB", "L"]:
-                screenshot = screenshot.convert("RGB")
-
-            # 保存为JPEG字节数据
-            byte_io = io.BytesIO()
-            screenshot.save(byte_io, format="JPEG", quality=85)
-
-            return byte_io.getvalue()
+            return self._pil_image_to_jpeg(screenshot)
 
         except Exception as e:
             logger.error(f"macOS screenshot capture failed: {e}", exc_info=True)
@@ -287,62 +266,93 @@ class ScreenshotCamera(BaseCamera):
             screen_offset = (virtual_left, virtual_top)
 
             # 创建设备上下文
+            gdi32 = ctypes.windll.gdi32
             hdc = user32.GetDC(None)
-            hcdc = ctypes.windll.gdi32.CreateCompatibleDC(hdc)
-            hbmp = ctypes.windll.gdi32.CreateCompatibleBitmap(
-                hdc, screensize[0], screensize[1]
-            )
-            ctypes.windll.gdi32.SelectObject(hcdc, hbmp)
+            hcdc = None
+            hbmp = None
+            try:
+                hcdc = gdi32.CreateCompatibleDC(hdc)
+                hbmp = gdi32.CreateCompatibleBitmap(
+                    hdc, screensize[0], screensize[1]
+                )
+                gdi32.SelectObject(hcdc, hbmp)
 
-            # 复制虚拟屏幕到位图（包括所有显示器）
-            ctypes.windll.gdi32.BitBlt(
-                hcdc,
-                0,
-                0,
-                screensize[0],
-                screensize[1],
-                hdc,
-                screen_offset[0],
-                screen_offset[1],
-                0x00CC0020,
-            )
+                # 复制虚拟屏幕到位图（包括所有显示器）
+                gdi32.BitBlt(
+                    hcdc,
+                    0,
+                    0,
+                    screensize[0],
+                    screensize[1],
+                    hdc,
+                    screen_offset[0],
+                    screen_offset[1],
+                    0x00CC0020,
+                )
 
-            # 获取位图数据
-            bmpinfo = ctypes.wintypes.BITMAPINFO()
-            bmpinfo.bmiHeader.biSize = ctypes.sizeof(ctypes.wintypes.BITMAPINFOHEADER)
-            bmpinfo.bmiHeader.biWidth = screensize[0]
-            bmpinfo.bmiHeader.biHeight = -screensize[1]  # 负值表示从上到下
-            bmpinfo.bmiHeader.biPlanes = 1
-            bmpinfo.bmiHeader.biBitCount = 32
-            bmpinfo.bmiHeader.biCompression = 0
+                # 获取位图数据
+                bmpinfo = ctypes.wintypes.BITMAPINFO()
+                bmpinfo.bmiHeader.biSize = ctypes.sizeof(
+                    ctypes.wintypes.BITMAPINFOHEADER
+                )
+                bmpinfo.bmiHeader.biWidth = screensize[0]
+                bmpinfo.bmiHeader.biHeight = -screensize[1]  # 负值表示从上到下
+                bmpinfo.bmiHeader.biPlanes = 1
+                bmpinfo.bmiHeader.biBitCount = 32
+                bmpinfo.bmiHeader.biCompression = 0
 
-            # 分配缓冲区
-            buffer_size = screensize[0] * screensize[1] * 4
-            buffer = ctypes.create_string_buffer(buffer_size)
+                # 分配缓冲区
+                buffer_size = screensize[0] * screensize[1] * 4
+                buffer = ctypes.create_string_buffer(buffer_size)
 
-            # 获取像素数据
-            ctypes.windll.gdi32.GetDIBits(
-                hcdc, hbmp, 0, screensize[1], buffer, ctypes.byref(bmpinfo), 0
-            )
+                # 获取像素数据
+                gdi32.GetDIBits(
+                    hcdc, hbmp, 0, screensize[1], buffer, ctypes.byref(bmpinfo), 0
+                )
+            finally:
+                if hbmp:
+                    gdi32.DeleteObject(hbmp)
+                if hcdc:
+                    gdi32.DeleteDC(hcdc)
+                if hdc:
+                    user32.ReleaseDC(None, hdc)
 
-            # 清理资源
-            ctypes.windll.gdi32.DeleteObject(hbmp)
-            ctypes.windll.gdi32.DeleteDC(hcdc)
-            user32.ReleaseDC(None, hdc)
-
-            # 转换为PIL Image
+            # 转换为PIL Image 并编码 JPEG
             image = Image.frombuffer("RGBA", screensize, buffer, "raw", "BGRA", 0, 1)
-            image = image.convert("RGB")
-
-            # 转换为JPEG字节数据
-            byte_io = io.BytesIO()
-            image.save(byte_io, format="JPEG", quality=85)
-
-            return byte_io.getvalue()
+            return self._pil_image_to_jpeg(image.convert("RGB"))
 
         except Exception as e:
             logger.error(f"Windows screenshot capture failed: {e}", exc_info=True)
             return None
+
+    @staticmethod
+    def _run_linux_screenshot_cmd(cmd_base: list[str]) -> bytes | None:
+        import os
+        import subprocess
+        import tempfile
+
+        try:
+            with tempfile.TemporaryDirectory(
+                prefix="xiaozhi-screenshot-"
+            ) as directory:
+                temp_path = os.path.join(directory, "capture.jpg")
+                result = subprocess.run(
+                    cmd_base + [temp_path],
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                )
+                if result.returncode != 0 or not os.path.exists(temp_path):
+                    return None
+                with open(temp_path, "rb") as image_file:
+                    return image_file.read()
+        except subprocess.TimeoutExpired:
+            logger.warning(f"Screenshot command timed out: {' '.join(cmd_base)}")
+        except FileNotFoundError:
+            logger.debug(f"Screenshot tool not found: {' '.join(cmd_base)}")
+        except Exception as e:
+            logger.debug(f"Screenshot command failed {' '.join(cmd_base)}: {e}")
+        return None
 
     def _capture_linux(self, display_id=None) -> bytes:
         """使用Linux系统命令截图.
@@ -353,58 +363,26 @@ class ScreenshotCamera(BaseCamera):
         Returns:
             JPEG格式的图片字节数据
         """
-        try:
-            import os
-            import subprocess
-            import tempfile
-
-            logger.debug(
-                f"Capturing screenshot with Linux screenshot commands, display_id: {display_id}"
-            )
-
-            # 尝试不同的Linux截图工具
-            screenshot_commands = [
-                ["gnome-screenshot", "-f"],  # GNOME
-                ["scrot"],  # scrot
-                ["import", "-window", "root"],  # ImageMagick
-            ]
-
-            for cmd_base in screenshot_commands:
-                try:
-                    with tempfile.TemporaryDirectory(
-                        prefix="xiaozhi-screenshot-"
-                    ) as directory:
-                        temp_path = os.path.join(directory, "capture.jpg")
-                        result = subprocess.run(
-                            cmd_base + [temp_path],
-                            capture_output=True,
-                            text=True,
-                            timeout=10,
-                        )
-                        if result.returncode == 0 and os.path.exists(temp_path):
-                            with open(temp_path, "rb") as image_file:
-                                return image_file.read()
-                except subprocess.TimeoutExpired:
-                    logger.warning(
-                        f"Screenshot command timed out: {' '.join(cmd_base)}"
-                    )
-                except FileNotFoundError:
-                    logger.debug(f"Screenshot tool not found: {' '.join(cmd_base)}")
-                except Exception as e:
-                    logger.debug(f"Screenshot command failed {' '.join(cmd_base)}: {e}")
-
-            return None
-
-        except Exception as e:
-            logger.error(f"Linux screenshot capture failed: {e}", exc_info=True)
-            return None
+        logger.debug(
+            f"Capturing screenshot with Linux screenshot commands, display_id: {display_id}"
+        )
+        screenshot_commands = (
+            ["gnome-screenshot", "-f"],  # GNOME
+            ["scrot"],  # scrot
+            ["import", "-window", "root"],  # ImageMagick
+        )
+        for cmd_base in screenshot_commands:
+            data = self._run_linux_screenshot_cmd(cmd_base)
+            if data is not None:
+                return data
+        return None
 
     def analyze(self, question: str, image_data: bytes | None = None) -> str:
         try:
             logger.info(f"Analyzing screenshot with question: {question}")
 
             # 优先使用注册时注入的拍照摄像头（共用 vision URL/token）
-            camera_instance = getattr(self, "_photo_camera_ref", None)
+            camera_instance = getattr(self, "_photo_camera", None)
             buf = image_data if image_data is not None else self.jpeg_data["buf"]
             if camera_instance is not None:
                 return camera_instance.analyze(question, image_data=buf)

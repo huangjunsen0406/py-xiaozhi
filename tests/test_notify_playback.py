@@ -197,7 +197,7 @@ async def test_notification_player_waits_for_audio_drain_and_emits_subtitle(
         NotificationSubtitle,
     )
 
-    monkeypatch.setattr(module, "MusicDecoder", _FakeDecoder)
+    monkeypatch.setattr(module, "AudioDecoder", _FakeDecoder)
     bus = EventBus()
     codec = _FakeCodec()
     player = NotificationPlayer()
@@ -268,7 +268,7 @@ async def test_stale_underrun_drain_does_not_finish_newly_queued_audio(monkeypat
                 self.drained_callback()
                 await asyncio.sleep(0)
 
-    monkeypatch.setattr(module, "MusicDecoder", Decoder)
+    monkeypatch.setattr(module, "AudioDecoder", Decoder)
     player = module.NotificationPlayer()
     codec = Codec()
     await player._on_audio_codec_changed(codec)
@@ -306,7 +306,7 @@ async def test_decode_failure_after_partial_audio_is_not_reported_as_success(
     class Decoder(_FakeDecoder):
         completed_successfully = False
 
-    monkeypatch.setattr(module, "MusicDecoder", Decoder)
+    monkeypatch.setattr(module, "AudioDecoder", Decoder)
     player = module.NotificationPlayer()
     codec = _FakeCodec()
     await player._on_audio_codec_changed(codec)
@@ -346,7 +346,7 @@ async def test_decoder_start_failure_restores_idle_and_cleans_resources(
         async def start_decode(self, _url, _queue):
             raise failure
 
-    monkeypatch.setattr(module, "MusicDecoder", Decoder)
+    monkeypatch.setattr(module, "AudioDecoder", Decoder)
     player = module.NotificationPlayer()
     codec = _FakeCodec()
     await player._on_audio_codec_changed(codec)
@@ -373,7 +373,7 @@ async def test_removing_audio_codec_finishes_notification_and_restores_idle(
     from src.bootstrap.session import ConversationSession
     from src.notifications import notification_player as module
 
-    monkeypatch.setattr(module, "MusicDecoder", _FakeDecoder)
+    monkeypatch.setattr(module, "AudioDecoder", _FakeDecoder)
     bus = EventBus()
     player = module.NotificationPlayer()
     player.set_event_bus(bus)
@@ -404,7 +404,7 @@ async def test_device_reload_cancels_notification_before_reset(
     from src.plugins.audio import AudioPlugin
     from src.utils import audio_utils
 
-    monkeypatch.setattr(module, "MusicDecoder", _FakeDecoder)
+    monkeypatch.setattr(module, "AudioDecoder", _FakeDecoder)
     bus = EventBus()
     player = module.NotificationPlayer()
     player.set_event_bus(bus)

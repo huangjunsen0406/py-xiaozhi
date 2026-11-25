@@ -82,6 +82,16 @@ class GPIOInput:
         """当前配置的引脚列表."""
         return self._pins.copy()
 
+    def _make_press_handler(self, idx: int) -> Callable[[], None]:
+        def handler() -> None:
+            with self._lock:
+                cb = self._callbacks.get(idx, {}).get("pressed")
+            if cb:
+                logger.debug(f"KEY{idx + 1} (GPIO{self._pins[idx]}) pressed")
+                cb()
+
+        return handler
+
     def setup(
         self,
         on_key1_pressed: Optional[Callable] = None,
@@ -108,30 +118,15 @@ class GPIOInput:
 
         try:
             for i, pin in enumerate(self._pins):
-                # 创建按钮实例（Active Low，内部上拉）
                 button = self._Button(pin, pull_up=True, bounce_time=self._bounce_time)
                 self._buttons.append(button)
 
-                # 保存回调
+                pressed_cb = callbacks[i] if i < len(callbacks) else None
                 with self._lock:
-                    self._callbacks[i] = {
-                        "pressed": callbacks[i] if i < len(callbacks) else None,
-                    }
+                    self._callbacks[i] = {"pressed": pressed_cb}
 
-                # 设置按下回调
-                if i < len(callbacks) and callbacks[i]:
-                    # 使用闭包捕获索引
-                    def make_handler(idx: int):
-                        def handler():
-                            with self._lock:
-                                cb = self._callbacks.get(idx, {}).get("pressed")
-                            if cb:
-                                logger.debug(f"KEY{idx + 1} (GPIO{self._pins[idx]}) pressed")
-                                cb()
-
-                        return handler
-
-                    button.when_pressed = make_handler(i)
+                if pressed_cb:
+                    button.when_pressed = self._make_press_handler(i)
 
                 logger.debug(f"KEY{i + 1} -> GPIO{pin} 已配置")
 

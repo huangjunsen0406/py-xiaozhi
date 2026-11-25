@@ -161,3 +161,38 @@ async def test_plugin_failure_is_visible_and_config_event_restarts_inference(
     finally:
         await plugin.stop()
         await plugin._shutdown_detector()
+
+
+@pytest.mark.asyncio
+async def test_cross_thread_audio_wakeup_without_polling():
+    """Audio callback thread safely wakes event-driven loop with zero busy polling."""
+    import threading
+
+    detector = module.WakeWordDetector()
+    detector.enabled = True
+    spotter = Spotter(None)
+    detector._keyword_spotter = spotter
+    codec = Codec()
+    await detector.start(codec)
+    try:
+        # Idle detector should wait on _data_event rather than spinning.
+        await asyncio.sleep(0.03)
+        assert spotter.decode_count == 0
+
+        # Push frames from a non-event-loop worker thread (simulating PortAudio).
+        def producer():
+            for _ in range(3):
+                detector.on_audio_data(np.ones(320, dtype=np.float32))
+
+        t = threading.Thread(target=producer)
+        t.start()
+        t.join(timeout=1.0)
+
+        deadline = asyncio.get_running_loop().time() + 1.0
+        while spotter.decode_count < 3 and asyncio.get_running_loop().time() < deadline:
+            await asyncio.sleep(0.01)
+        assert spotter.decode_count == 3
+    finally:
+        await detector.shutdown()
+        assert detector._audio_queue is None
+        assert detector._data_event is None

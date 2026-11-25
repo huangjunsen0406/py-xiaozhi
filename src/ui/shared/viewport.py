@@ -27,8 +27,8 @@ class ViewPort(Protocol):
         """对话内容（TTS / STT）."""
         ...
 
-    def set_music_line(self, text: str) -> None:
-        """音乐状态或歌词."""
+    def set_media_line(self, text: str) -> None:
+        """媒体播放状态或副标题."""
         ...
 
     def set_button_text(self, text: str) -> None:

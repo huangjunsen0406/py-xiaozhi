@@ -217,6 +217,19 @@ class AsyncHandler(QueueHandler):
         self._listener.start()
         atexit.register(self.close)
 
+    def _close_sinks(self) -> Exception | None:
+        failure: Exception | None = None
+        for handler in self._listener.handlers:
+            try:
+                try:
+                    handler.flush()
+                finally:
+                    handler.close()
+            except Exception as exc:
+                if failure is None:
+                    failure = exc
+        return failure
+
     def close(self) -> None:
         """停止生产、排空并等待 worker，最后关闭拥有的 sinks；可重复调用。"""
         with self._close_lock:
@@ -229,17 +242,8 @@ class AsyncHandler(QueueHandler):
             finally:
                 self.release()
             self._listener.stop()
-            failure = None
             try:
-                for handler in self._listener.handlers:
-                    try:
-                        try:
-                            handler.flush()
-                        finally:
-                            handler.close()
-                    except Exception as exc:
-                        if failure is None:
-                            failure = exc
+                failure = self._close_sinks()
             finally:
                 atexit.unregister(self.close)
                 super().close()

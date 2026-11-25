@@ -36,6 +36,59 @@ def _log(msg: str) -> None:
     sys.stderr.flush()
 
 
+class _RemoteMediaPlayerProxy:
+    """子进程内代理宿主 media_player 能力（与 MediaPlayerFacade API 100% 一致）."""
+
+    def __init__(self, rpc_call: Callable[[str, str, dict[str, Any]], Any]) -> None:
+        self._rpc_call = rpc_call
+
+    async def play_url(
+        self,
+        url: str,
+        *,
+        title: str = "",
+        start_position: float = 0.0,
+        headers: dict[str, str] | None = None,
+    ) -> dict[str, Any]:
+        return self._rpc_call(
+            "media_player",
+            "play_url",
+            {
+                "url": url,
+                "title": title,
+                "start_position": start_position,
+                "headers": headers,
+            },
+        )
+
+    async def pause(self) -> dict[str, Any]:
+        return self._rpc_call("media_player", "pause", {})
+
+    async def resume(self) -> dict[str, Any]:
+        return self._rpc_call("media_player", "resume", {})
+
+    async def stop(self) -> dict[str, Any]:
+        return self._rpc_call("media_player", "stop", {})
+
+    async def seek(
+        self,
+        *,
+        position: float | None = None,
+        percent: float | None = None,
+    ) -> dict[str, Any]:
+        return self._rpc_call(
+            "media_player",
+            "seek",
+            {"position": position, "percent": percent},
+        )
+
+    async def get_status(self) -> dict[str, Any]:
+        return self._rpc_call("media_player", "get_status", {})
+
+    async def set_subtitle(self, text: str) -> dict[str, Any]:
+        return self._rpc_call("media_player", "set_subtitle", {"text": text})
+
+
 class _WorkerHost:
     """子进程内给 register(host) 用的最小 Host（与 McpHost 表面兼容）."""
 
@@ -45,10 +98,14 @@ class _WorkerHost:
         plugin_id: str,
         capabilities: dict[str, Any],
         allow_get: Sequence[str],
+        remote_caps: Sequence[str] = (),
+        rpc_call: Callable[[str, str, dict[str, Any]], Any] | None = None,
     ) -> None:
         self._plugin_id = plugin_id
         self._capabilities = dict(capabilities or {})
         self._allow_get = frozenset(allow_get or [])
+        self._remote_caps = frozenset(remote_caps or [])
+        self._rpc_call = rpc_call
         self._tools: list[dict[str, Any]] = []
         self._callbacks: dict[str, Callable] = {}
 
@@ -67,6 +124,19 @@ class _WorkerHost:
             import logging
 
             return logging.getLogger(f"mcp_plugin.{self._plugin_id}")
+        if name == "media_player":
+            if "media_player" in self._remote_caps and self._rpc_call is not None:
+                return _RemoteMediaPlayerProxy(self._rpc_call)
+            return None
+        if name == "data_dir":
+            if "data_dir" in self._capabilities and self._capabilities["data_dir"]:
+                return Path(str(self._capabilities["data_dir"]))
+            if "data_dir" in self._remote_caps and self._rpc_call is not None:
+                resolved = self._rpc_call("data_dir", "get", {})
+                if resolved:
+                    self._capabilities["data_dir"] = str(resolved)
+                    return Path(str(resolved))
+            return None
         value = self._capabilities.get(name)
         if name == "config_readonly" and value is not None:
             from src.mcp.plugins.host import ReadOnlyConfig
@@ -168,13 +238,13 @@ def _setup_sys_path(plugin_root: Path, platform_tag: str) -> None:
 
 
 def _read_msg() -> dict[str, Any] | None:
-    line = sys.stdin.readline()
-    if not line:
-        return None
-    line = line.strip()
-    if not line:
-        return _read_msg()
-    return json.loads(line)
+    while True:
+        line = sys.stdin.readline()
+        if not line:
+            return None
+        line = line.strip()
+        if line:
+            return json.loads(line)
 
 
 def _write_msg(obj: dict[str, Any]) -> None:
@@ -222,6 +292,30 @@ def main() -> int:
     host: _WorkerHost | None = None
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
+    host_call_seq = 0
+
+    def _host_rpc(cap: str, action: str, kwargs: dict[str, Any]) -> Any:
+        nonlocal host_call_seq
+        host_call_seq += 1
+        call_id = host_call_seq
+        _write_msg(
+            {
+                "id": call_id,
+                "method": "host_call",
+                "params": {"cap": cap, "action": action, "kwargs": kwargs},
+            }
+        )
+        reply = _read_msg()
+        if reply is None:
+            raise RuntimeError("宿主连接已断开")
+        if reply.get("type") != "host_response" or reply.get("id") != call_id:
+            raise RuntimeError(f"宿主响应异常: {reply!r}")
+        if reply.get("error"):
+            err = reply["error"]
+            raise RuntimeError(
+                err.get("message") if isinstance(err, dict) else str(err)
+            )
+        return reply.get("result")
 
     while True:
         try:
@@ -242,8 +336,11 @@ def main() -> int:
                 plugin_id = str(params.get("plugin_id") or plugin_root.name)
                 entry = str(params.get("entry") or "plugin:register")
                 platform_tag = str(params.get("platform_tag") or "")
-                allow_get = params.get("allow_get", ["config_readonly", "logger"])
+                allow_get = params.get(
+                    "allow_get", ["config_readonly", "logger", "data_dir"]
+                )
                 capabilities = params.get("capabilities") or {}
+                remote_caps = params.get("remote_caps") or []
                 # 宿主工程根（含 src/）供 import src.mcp.*
                 app_root = params.get("app_root")
                 if app_root and app_root not in sys.path:
@@ -259,6 +356,8 @@ def main() -> int:
                     plugin_id=plugin_id,
                     capabilities=capabilities,
                     allow_get=allow_get,
+                    remote_caps=remote_caps,
+                    rpc_call=_host_rpc,
                 )
                 register_fn(host)
                 _write_msg({"id": req_id, "result": {"tools": host.export_tools()}})

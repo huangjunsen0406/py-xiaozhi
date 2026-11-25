@@ -26,9 +26,6 @@ class PluginContextAdapter:
     def is_speaking(self) -> bool:
         return self._container.session.is_speaking()
 
-    def is_idle(self) -> bool:
-        return self._container.state.is_idle()
-
     def is_audio_channel_opened(self) -> bool:
         return self._container.protocol.is_audio_channel_opened()
 
@@ -73,7 +70,7 @@ class PluginCommandsAdapter:
     async def stop_listening(self) -> None:
         await self._container.session.stop_listening()
 
-    async def abort_speaking(self, reason: str) -> None:
+    async def abort_speaking(self, reason: Any = None) -> None:
         await self._container.session.abort_speaking(reason)
 
     async def sync_audio_state(self) -> bool:

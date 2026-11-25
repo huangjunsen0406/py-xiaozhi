@@ -23,7 +23,6 @@ class LoggingConfig:
     """日志配置数据类."""
 
     level: str = "INFO"
-    format_type: str = "colored"  # colored, json, simple
 
     log_dir: Path | None = None
     log_file: str = "app.log"
@@ -117,7 +116,6 @@ def load_logging_config(app_config: Any | None = None) -> LoggingConfig:
             logging_cfg = app_config.get_config("LOGGING", {}) or {}
             if logging_cfg:
                 config.level = logging_cfg.get("LEVEL", config.level)
-                config.format_type = logging_cfg.get("FORMAT_TYPE", config.format_type)
                 config.enable_console = logging_cfg.get(
                     "ENABLE_CONSOLE", config.enable_console
                 )
@@ -151,7 +149,6 @@ def load_logging_config(app_config: Any | None = None) -> LoggingConfig:
     env_level = os.environ.get("LOG_LEVEL")
     if env_level:
         config.level = env_level.upper()
-    config.format_type = os.environ.get("LOG_FORMAT", config.format_type)
 
     if env == Environment.PRODUCTION:
         config.enable_json_file = True

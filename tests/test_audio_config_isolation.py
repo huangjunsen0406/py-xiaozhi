@@ -6,10 +6,10 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 
 from src.audio_codecs.audio_codec import AudioCodec
-from src.audio_codecs.music_decoder import MusicDecoder
+from src.audio_codecs.audio_decoder import AudioDecoder
 from src.audio_processing.wake_word_detect import WakeWordDetector
 from src.constants.constants import AudioConfig
-from src.mcp.tools.music.music_player import MusicPlayer
+from src.media.media_player import MediaPlayer
 from src.notifications.notification_player import NotificationPlayer
 from src.utils.audio_device import AudioDeviceManager, DeviceConfig
 from src.utils.config_manager import ConfigManager
@@ -43,21 +43,19 @@ def test_default_components_do_not_read_process_config_or_create_user_paths(
     monkeypatch,
 ):
     import src.utils.config_manager as config_module
-    import src.mcp.tools.music.cache as cache_module
 
     def forbidden(*args, **kwargs):
         raise AssertionError("process configuration or user directory accessed")
 
     monkeypatch.setattr(config_module, "get_config", forbidden)
     monkeypatch.setattr(ConfigManager, "_init_config_paths", forbidden)
-    monkeypatch.setattr(cache_module, "get_music_cache_dir", forbidden)
     codec = AudioCodec()
     detector = WakeWordDetector()
-    music = MusicPlayer()
+    media = MediaPlayer()
     notify = NotificationPlayer()
     assert codec.config.config_file is None
     assert detector.config.config_file is None
-    assert music.config["DEFAULT_BR"] == "320k"
+    assert media._config.config_file is None
     assert notify.audio_config is not codec.audio_config
 
 
@@ -114,24 +112,17 @@ def test_device_frames_use_injected_audio_format(monkeypatch):
     assert manager.config.config_file is None
 
 
-def test_music_settings_and_decoders_follow_their_own_runtime():
-    first = MusicPlayer(
-        ConfigManager.from_dict({"MUSIC": {"DEFAULT_QUALITY": "128k"}})
-    )
-    second = MusicPlayer(
-        ConfigManager.from_dict({"MUSIC": {"DEFAULT_QUALITY": "320k"}})
-    )
-    assert first.config["DEFAULT_BR"] == "128k"
-    assert second.config["DEFAULT_BR"] == "320k"
-    first._engine.audio_codec = SimpleNamespace(
+def test_media_decoders_follow_bound_codec_runtime():
+    player = MediaPlayer(ConfigManager.from_dict())
+    player._codec = SimpleNamespace(
         audio_config=AudioConfig(OUTPUT_SAMPLE_RATE=16000, FRAME_DURATION=40)
     )
-    decoder = first._engine._make_decoder()
+    decoder = player._make_decoder()
     assert (decoder.sample_rate, decoder.frame_duration) == (16000, 40)
-    first._engine.audio_codec = SimpleNamespace(
+    player._codec = SimpleNamespace(
         audio_config=AudioConfig(OUTPUT_SAMPLE_RATE=48000, FRAME_DURATION=60)
     )
-    resumed = first._engine._make_decoder()
+    resumed = player._make_decoder()
     assert (resumed.sample_rate, resumed.frame_duration) == (48000, 60)
     assert decoder.sample_rate == 16000
 
@@ -150,7 +141,7 @@ async def test_disabled_wake_detector_uses_injected_configuration(monkeypatch):
 
 def test_decoder_rejects_invalid_frame_duration():
     with pytest.raises(ValueError, match="frame_duration"):
-        MusicDecoder(frame_duration=0)
+        AudioDecoder(frame_duration=0)
 
 
 @pytest.mark.asyncio
@@ -163,7 +154,7 @@ async def test_notification_uses_bound_codec_format_and_snapshots_progress_rate(
         start_decode=AsyncMock(return_value=True), stop=AsyncMock()
     )
     factory = Mock(return_value=decoder)
-    monkeypatch.setattr(notification_module, "MusicDecoder", factory)
+    monkeypatch.setattr(notification_module, "AudioDecoder", factory)
     player = NotificationPlayer(AudioConfig(OUTPUT_SAMPLE_RATE=24000))
     player._codec = SimpleNamespace(
         audio_config=AudioConfig(OUTPUT_SAMPLE_RATE=16000, FRAME_DURATION=40),
@@ -176,16 +167,3 @@ async def test_notification_uses_bound_codec_format_and_snapshots_progress_rate(
     player._codec.audio_config.OUTPUT_SAMPLE_RATE = 48000
     assert player._playback_sample_rate == 16000
     await player.stop()
-
-
-def test_music_cache_resolves_default_path_only_on_first_use(monkeypatch, tmp_path):
-    import src.mcp.tools.music.cache as cache_module
-
-    resolve = Mock(return_value=tmp_path / "cache")
-    monkeypatch.setattr(cache_module, "get_music_cache_dir", resolve)
-    player = MusicPlayer(ConfigManager.from_dict())
-    resolve.assert_not_called()
-    player.prepare_for_io()
-    resolve.assert_called_once_with()
-    assert player.cache_dir == tmp_path / "cache"
-    assert player.temp_cache_dir.is_dir()

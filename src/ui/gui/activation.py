@@ -10,6 +10,7 @@ from PySide6.QtGui import QGuiApplication
 from PySide6.QtQml import QQmlApplicationEngine
 
 from src.logging import get_logger
+from src.ui.gui.i18n_bridge import I18nBridge
 from src.ui.gui.models import ActivationModel
 from src.ui.shared.activation import BaseActivation
 
@@ -47,6 +48,7 @@ class GuiActivation(QObject):
         self._flow = _ActivationFlow(self, activation_service, init_result)
         self._engine: QQmlApplicationEngine | None = None
         self._model = ActivationModel()
+        self._i18n_bridge = I18nBridge()
         self._completion_future: asyncio.Future | None = None
         self._loop: asyncio.AbstractEventLoop | None = None
         self._activation_task: asyncio.Task | None = None
@@ -88,6 +90,7 @@ class GuiActivation(QObject):
         ctx = self._engine.rootContext()
         ctx.setContextProperty("activationModel", self._model)
         ctx.setContextProperty("activationController", self)
+        ctx.setContextProperty("i18n", self._i18n_bridge)
 
         qml_dir = Path(__file__).parent / "qml"
         self._engine.addImportPath(str(qml_dir))
@@ -184,6 +187,8 @@ class GuiActivation(QObject):
         self.cancelActivation()
 
     def _cleanup(self) -> None:
+        self._i18n_bridge.close()
+        self._model.close()
         if self._engine:
             self._engine.deleteLater()
             self._engine = None

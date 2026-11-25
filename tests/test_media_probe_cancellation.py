@@ -6,7 +6,7 @@ import sys
 
 import pytest
 
-from src.audio_codecs import music_decoder as module
+from src.audio_codecs import audio_decoder as module
 
 
 @pytest.mark.asyncio
@@ -35,7 +35,7 @@ async def test_duration_cancellation_reaps_child_and_propagates(monkeypatch, sta
 
     monkeypatch.setattr(module.asyncio, "create_subprocess_exec", spawn)
     monkeypatch.setattr(module, "get_ffprobe_path", lambda: "local-probe-substitute")
-    task = asyncio.create_task(module.MusicDecoder.get_duration("local-input.ogg"))
+    task = asyncio.create_task(module.AudioDecoder.get_duration("local-input.ogg"))
     try:
         await asyncio.wait_for(ready.wait(), 3)
         task.cancel()
@@ -73,7 +73,7 @@ async def test_cancelled_duration_probe_kills_child_that_ignores_terminate(monke
         return child
 
     monkeypatch.setattr(module.asyncio, "create_subprocess_exec", spawn)
-    task = asyncio.create_task(module.MusicDecoder.get_duration("local-input.ogg"))
+    task = asyncio.create_task(module.AudioDecoder.get_duration("local-input.ogg"))
     try:
         await asyncio.wait_for(ready.wait(), 3)
         task.cancel()
@@ -101,5 +101,5 @@ async def test_duration_probe_preserves_normal_success(monkeypatch):
         return child
 
     monkeypatch.setattr(module.asyncio, "create_subprocess_exec", spawn)
-    assert await module.MusicDecoder.get_duration("local-input.ogg") == 12.5
+    assert await module.AudioDecoder.get_duration("local-input.ogg") == 12.5
     assert all(child.returncode == 0 for child in processes)

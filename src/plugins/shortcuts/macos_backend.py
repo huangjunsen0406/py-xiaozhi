@@ -71,10 +71,6 @@ class MacOSShortcutBackend(ShortcutBackend):
         super().__init__(loop)
         self._tap = None
         self._run_loop_source = None
-        self._hotkey_ids: dict[str, int] = {}  # name -> hotkey_id
-        self._registered_hotkeys: dict[int, str] = {}  # hotkey_id -> name
-        self._next_hotkey_id = 1
-        self._monitor_thread = None
         self._pressed_modifiers = 0
         self._check_interval = 5.0  # 健康检查间隔（秒）
         self._health_check_task = None
@@ -214,12 +210,6 @@ class MacOSShortcutBackend(ShortcutBackend):
 
         self._shortcuts[name] = config
         self._callbacks[name] = callback
-
-        hotkey_id = self._next_hotkey_id
-        self._next_hotkey_id += 1
-        self._hotkey_ids[name] = hotkey_id
-        self._registered_hotkeys[hotkey_id] = name
-
         logger.info(f"已注册快捷键: {name} -> {config.modifier}+{config.key}")
         return True
 
@@ -230,13 +220,6 @@ class MacOSShortcutBackend(ShortcutBackend):
 
         del self._shortcuts[name]
         del self._callbacks[name]
-
-        if name in self._hotkey_ids:
-            hotkey_id = self._hotkey_ids[name]
-            del self._hotkey_ids[name]
-            if hotkey_id in self._registered_hotkeys:
-                del self._registered_hotkeys[hotkey_id]
-
         logger.info(f"已注销快捷键: {name}")
         return True
 
@@ -248,6 +231,24 @@ class MacOSShortcutBackend(ShortcutBackend):
             )
         elif self._loop:
             self._health_check_task = self._loop.create_task(self._health_check_loop())
+
+    def _ensure_tap_enabled(self) -> tuple[bool, bool]:
+        """检查 tap 是否可用；若被系统禁用则尝试重新启用。
+
+        Returns:
+            (is_healthy, was_reenabled)
+        """
+        try:
+            if Quartz.CGEventTapIsEnabled(self._tap):
+                return True, False
+        except Exception:
+            return False, False
+        try:
+            Quartz.CGEventTapEnable(self._tap, True)
+            return bool(Quartz.CGEventTapIsEnabled(self._tap)), True
+        except Exception as e:
+            logger.debug(f"CGEventTapEnable 异常: {e}")
+            return False, False
 
     async def _health_check_loop(self):
         """健康检查：禁用则尝试 re-enable；失败只 warning，避免重建风暴挡退出."""
@@ -262,31 +263,17 @@ class MacOSShortcutBackend(ShortcutBackend):
 
             if not self._running:
                 break
-
             if not self._tap:
                 continue
 
-            try:
-                if Quartz.CGEventTapIsEnabled(self._tap):
-                    consecutive_fail = 0
-                    continue
-            except Exception:
-                # tap 已失效
-                consecutive_fail += 1
-            else:
-                # 仅 re-enable，不 stop/start 整棵树（重建会和 CFRunLoop/信号打架）
-                try:
-                    Quartz.CGEventTapEnable(self._tap, True)
-                    if Quartz.CGEventTapIsEnabled(self._tap):
-                        if consecutive_fail > 0:
-                            logger.info("Event Tap 重新启用成功")
-                        consecutive_fail = 0
-                        continue
-                except Exception as e:
-                    logger.debug(f"CGEventTapEnable 异常: {e}")
+            healthy, reenabled = self._ensure_tap_enabled()
+            if healthy:
+                if reenabled and consecutive_fail > 0:
+                    logger.info("Event Tap 重新启用成功")
+                consecutive_fail = 0
+                continue
 
-                consecutive_fail += 1
-
+            consecutive_fail += 1
             if consecutive_fail <= max_warn_streak:
                 logger.warning(
                     "Event Tap 仍不可用（%s 次）。"

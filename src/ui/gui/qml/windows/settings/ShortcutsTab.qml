@@ -15,7 +15,7 @@ ScrollView {
 
         // 页面标题
         Text {
-            text: "快捷键设置"
+            text: i18n.s["settings.shortcuts.title"]
             font.pixelSize: Theme.fontSizeXl
             font.weight: Font.DemiBold
             color: Theme.textPrimary
@@ -27,7 +27,7 @@ ScrollView {
             spacing: Theme.spacingMd
 
             Text {
-                text: "基本设置"
+                text: i18n.s["settings.shortcuts.basic"]
                 font.pixelSize: Theme.fontSizeMd
                 font.weight: Font.Medium
                 color: Theme.textSecondary
@@ -38,7 +38,7 @@ ScrollView {
                 spacing: Theme.spacingMd
 
                 Text {
-                    text: "启用全局快捷键"
+                    text: i18n.s["settings.shortcuts.enable_global"]
                     font.pixelSize: Theme.fontSizeSm
                     color: Theme.textSecondary
                 }
@@ -67,7 +67,7 @@ ScrollView {
             enabled: settingsModel ? settingsModel.shortcutsEnabled : false
 
             Text {
-                text: "快捷键配置"
+                text: i18n.s["settings.shortcuts.section"]
                 font.pixelSize: Theme.fontSizeMd
                 font.weight: Font.Medium
                 color: Theme.textSecondary
@@ -79,10 +79,11 @@ ScrollView {
                 spacing: Theme.spacingMd
 
                 Text {
-                    text: "按住说话"
+                    text: i18n.s["settings.shortcuts.manual"]
                     font.pixelSize: Theme.fontSizeSm
                     color: Theme.textPrimary
-                    Layout.preferredWidth: 80
+                    Layout.preferredWidth: 110
+                    wrapMode: Text.WordWrap
                 }
 
                 XComboBox {
@@ -121,9 +122,10 @@ ScrollView {
 
                 Text {
                     Layout.fillWidth: true
-                    text: "长按录音"
+                    text: i18n.s["settings.shortcuts.manual_desc"]
                     font.pixelSize: Theme.fontSizeSm
                     color: Theme.textPlaceholder
+                    wrapMode: Text.WordWrap
                 }
             }
 
@@ -135,10 +137,11 @@ ScrollView {
                 spacing: Theme.spacingMd
 
                 Text {
-                    text: "自动对话"
+                    text: i18n.s["settings.shortcuts.auto"]
                     font.pixelSize: Theme.fontSizeSm
                     color: Theme.textPrimary
-                    Layout.preferredWidth: 80
+                    Layout.preferredWidth: 110
+                    wrapMode: Text.WordWrap
                 }
 
                 XComboBox {
@@ -177,9 +180,10 @@ ScrollView {
 
                 Text {
                     Layout.fillWidth: true
-                    text: "开启/关闭自动对话"
+                    text: i18n.s["settings.shortcuts.auto_desc"]
                     font.pixelSize: Theme.fontSizeSm
                     color: Theme.textPlaceholder
+                    wrapMode: Text.WordWrap
                 }
             }
 
@@ -191,10 +195,11 @@ ScrollView {
                 spacing: Theme.spacingMd
 
                 Text {
-                    text: "中断对话"
+                    text: i18n.s["settings.shortcuts.abort"]
                     font.pixelSize: Theme.fontSizeSm
                     color: Theme.textPrimary
-                    Layout.preferredWidth: 80
+                    Layout.preferredWidth: 110
+                    wrapMode: Text.WordWrap
                 }
 
                 XComboBox {
@@ -233,9 +238,10 @@ ScrollView {
 
                 Text {
                     Layout.fillWidth: true
-                    text: "立即停止当前对话"
+                    text: i18n.s["settings.shortcuts.abort_desc"]
                     font.pixelSize: Theme.fontSizeSm
                     color: Theme.textPlaceholder
+                    wrapMode: Text.WordWrap
                 }
             }
 
@@ -247,10 +253,11 @@ ScrollView {
                 spacing: Theme.spacingMd
 
                 Text {
-                    text: "切换模式"
+                    text: i18n.s["settings.shortcuts.mode"]
                     font.pixelSize: Theme.fontSizeSm
                     color: Theme.textPrimary
-                    Layout.preferredWidth: 80
+                    Layout.preferredWidth: 110
+                    wrapMode: Text.WordWrap
                 }
 
                 XComboBox {
@@ -289,9 +296,10 @@ ScrollView {
 
                 Text {
                     Layout.fillWidth: true
-                    text: "手动/自动模式切换"
+                    text: i18n.s["settings.shortcuts.mode_desc"]
                     font.pixelSize: Theme.fontSizeSm
                     color: Theme.textPlaceholder
+                    wrapMode: Text.WordWrap
                 }
             }
 
@@ -303,10 +311,11 @@ ScrollView {
                 spacing: Theme.spacingMd
 
                 Text {
-                    text: "显示/隐藏"
+                    text: i18n.s["settings.shortcuts.window"]
                     font.pixelSize: Theme.fontSizeSm
                     color: Theme.textPrimary
-                    Layout.preferredWidth: 80
+                    Layout.preferredWidth: 110
+                    wrapMode: Text.WordWrap
                 }
 
                 XComboBox {
@@ -345,9 +354,10 @@ ScrollView {
 
                 Text {
                     Layout.fillWidth: true
-                    text: "切换主窗口可见性"
+                    text: i18n.s["settings.shortcuts.window_desc"]
                     font.pixelSize: Theme.fontSizeSm
                     color: Theme.textPlaceholder
+                    wrapMode: Text.WordWrap
                 }
             }
         }
@@ -362,7 +372,7 @@ ScrollView {
         // 提示信息
         Text {
             Layout.fillWidth: true
-            text: "快捷键在全局范围内有效，请确保不与系统或其他应用的快捷键冲突。"
+            text: i18n.s["settings.shortcuts.hint"]
             font.pixelSize: Theme.fontSizeSm
             color: Theme.textPlaceholder
             wrapMode: Text.WordWrap

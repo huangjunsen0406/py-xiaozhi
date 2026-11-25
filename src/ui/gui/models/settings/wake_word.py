@@ -3,43 +3,14 @@
 from PySide6.QtCore import Slot
 
 from src.audio_processing.keyword_converters import convert_wake_word
+from src.i18n import t
 from src.logging import get_logger
 
 logger = get_logger()
 
 
 class SettingsWakeWordMixin:
-    # ========== 唤醒词设置 ==========
-
-    def _get_wakeWordEnabled(self) -> bool:
-        return self._get_value("WAKE_WORD_OPTIONS.USE_WAKE_WORD", False)
-
-    def _set_wakeWordEnabled(self, value: bool):
-        self._set_value("WAKE_WORD_OPTIONS.USE_WAKE_WORD", value)
-
-    def _get_modelPath(self) -> str:
-        return self._get_value("WAKE_WORD_OPTIONS.MODEL_PATH", "models")
-
-    def _set_modelPath(self, value: str):
-        self._set_value("WAKE_WORD_OPTIONS.MODEL_PATH", value)
-
-    def _get_numThreads(self) -> int:
-        return self._get_value("WAKE_WORD_OPTIONS.NUM_THREADS", 4)
-
-    def _set_numThreads(self, value: int):
-        self._set_value("WAKE_WORD_OPTIONS.NUM_THREADS", value)
-
-    def _get_keywordsScore(self) -> float:
-        return self._get_value("WAKE_WORD_OPTIONS.KEYWORDS_SCORE", 1.8)
-
-    def _set_keywordsScore(self, value: float):
-        self._set_value("WAKE_WORD_OPTIONS.KEYWORDS_SCORE", value)
-
-    def _get_keywordsThreshold(self) -> float:
-        return self._get_value("WAKE_WORD_OPTIONS.KEYWORDS_THRESHOLD", 0.2)
-
-    def _set_keywordsThreshold(self, value: float):
-        self._set_value("WAKE_WORD_OPTIONS.KEYWORDS_THRESHOLD", value)
+    # ========== 唤醒词预览与保存 ==========
 
     # 唤醒词文本
     def _load_wake_word(self, update_preview: bool = True):
@@ -67,7 +38,7 @@ class SettingsWakeWordMixin:
             self._wake_word_lang = lang
         except Exception as e:
             logger.error(f"转换唤醒词失败: {e}", exc_info=True)
-            self._wake_word_preview = f"转换失败: {e}"
+            self._wake_word_preview = t("settings.wake_word.convert_failed", error=e)
 
     def _get_wakeWord(self) -> str:
         return self._wake_word
@@ -92,7 +63,7 @@ class SettingsWakeWordMixin:
             是否保存成功
         """
         if not self._wake_word:
-            self.set_error("请输入唤醒词")
+            self.set_error(t("settings.wake_word.enter_prompt"))
             return False
 
         try:
@@ -117,11 +88,11 @@ class SettingsWakeWordMixin:
                 self.set_error(error)
                 return False
             logger.info("唤醒词已保存: %s", self._wake_word)
-            self.statusMessage.emit(f"唤醒词已保存 ({lang.upper()})")
+            self.statusMessage.emit(t("settings.wake_word.saved", lang=lang.upper()))
             return True
 
         except Exception as e:
             logger.error(f"保存唤醒词失败: {e}", exc_info=True)
-            self.set_error(f"保存唤醒词失败: {e}")
+            self.set_error(t("settings.wake_word.save_failed", error=e))
             return False
 

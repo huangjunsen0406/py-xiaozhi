@@ -50,7 +50,6 @@ class ActivationService:
             "status_consistent": True,
         }
         self._activation_task: Optional[asyncio.Task] = None
-        self._is_activating = False
 
     @classmethod
     async def create(cls, config: ConfigManager | None = None) -> "ActivationService":
@@ -126,32 +125,36 @@ class ActivationService:
             return False
 
         try:
-            self._is_activating = True
             self._activation_task = asyncio.current_task()
             apply_code_side_effects(code, data.get("message"))
-            return await self._http.activate(
+            activated = await self._http.activate(
                 challenge,
                 code,
                 on_retry_announce=announce_code,
             )
+            if activated:
+                await self._refresh_ota_after_activation()
+            return activated
         except asyncio.CancelledError:
             self.logger.info("激活流程被取消")
             return False
         finally:
-            self._is_activating = False
             self._activation_task = None
+
+    async def _refresh_ota_after_activation(self) -> None:
+        """激活 200 后按 OTA 规范补拉一次配置，刷新绑定后的 MQTT/WebSocket 凭据."""
+        try:
+            await self._ota.fetch_ota_config()
+            self._activation_data = self._ota.activation_data
+            self._activation_status["server_activated"] = self._ota.server_activated
+            self.logger.info("激活后已刷新 OTA 网络配置")
+        except Exception as exc:
+            self.logger.warning("激活后刷新 OTA 配置失败（沿用已有配置）: %s", exc)
 
     def cancel_activation(self) -> None:
         if self._activation_task and not self._activation_task.done():
             self.logger.info("正在取消激活任务")
             self._activation_task.cancel()
-
-    def get_device_info(self) -> Dict:
-        efuse = self._identity.load_efuse_data()
-        return {
-            "serial_number": efuse.get("serial_number"),
-            "mac_address": efuse.get("mac_address"),
-        }
 
     def get_serial_number(self) -> Optional[str]:
         return self._identity.get_serial_number()
@@ -164,12 +167,6 @@ class ActivationService:
 
     def get_activation_data(self) -> Optional[Dict]:
         return self._activation_data
-
-    def is_activated(self) -> bool:
-        return self._identity.is_activated()
-
-    def is_activating(self) -> bool:
-        return self._is_activating
 
     def get_config_manager(self) -> ConfigManager:
         return self.config_manager

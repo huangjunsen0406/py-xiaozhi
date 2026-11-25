@@ -8,6 +8,7 @@
 
 import logging
 import re
+import time
 
 
 class SensitiveDataFilter(logging.Filter):
@@ -127,10 +128,7 @@ class SensitiveDataFilter(logging.Filter):
         # 正则模式脱敏
         if self.enable_regex:
             for pattern, replacement in self.REGEX_PATTERNS:
-                if callable(replacement):
-                    result = pattern.sub(replacement, result)
-                else:
-                    result = pattern.sub(replacement, result)
+                result = pattern.sub(replacement, result)
 
         return result
 
@@ -153,8 +151,6 @@ class DuplicateFilter(logging.Filter):
         """
         过滤重复的日志消息.
         """
-        import time
-
         now = time.time()
         key = f"{record.name}:{record.levelno}:{record.getMessage()}"
 

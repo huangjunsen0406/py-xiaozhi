@@ -5,13 +5,15 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from textual import on
-from textual.app import App, ComposeResult
-from textual.binding import Binding
+from textual.app import App, ComposeResult, ScreenStackError
+from textual.binding import Binding, BindingsMap
 from textual.containers import Horizontal, Vertical
+from textual.css.query import NoMatches
 from textual.reactive import reactive
 from textual.widgets import Footer, Header, Input, RichLog, Static
 
 from src.constants.system import SystemConstants
+from src.i18n import off_locale_changed, on_locale_changed, t
 from src.logging import get_logger
 from src.ui.tui.settings_screen import SettingsScreen
 from src.ui.tui.settings_services import SettingsServices
@@ -62,11 +64,11 @@ class XiaozhiTuiApp(App[None]):
         Binding("f1", "show_help", "帮助", show=True),
     ]
 
-    status_text: reactive[str] = reactive("待命")
+    status_text: reactive[str] = reactive("")
     connected: reactive[bool] = reactive(False)
     auto_mode: reactive[bool] = reactive(False)
     chat_text: reactive[str] = reactive("")
-    music_line: reactive[str] = reactive("")
+    media_line: reactive[str] = reactive("")
     emotion: reactive[str] = reactive("neutral")
 
     def __init__(
@@ -93,16 +95,24 @@ class XiaozhiTuiApp(App[None]):
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
         with Vertical(id="status-panel"):
-            yield Static("状态: 待命", id="status-line")
-            yield Static("连接: 未连接 | 模式: 手动 | 表情: neutral", id="meta-line")
-            yield Static("对话: —", id="chat-line")
-            yield Static("音乐: —", id="music-line")
+            yield Static(
+                t("tui.status_line", status=t("main.status.idle")), id="status-line"
+            )
+            yield Static(
+                t(
+                    "tui.meta_line",
+                    conn=t("main.status.disconnected"),
+                    mode=t("tui.mode.manual"),
+                    emotion="neutral",
+                ),
+                id="meta-line",
+            )
+            yield Static(t("tui.chat_line", text="—"), id="chat-line")
+            yield Static(t("tui.media_line", text="—"), id="media-line")
         yield RichLog(id="log-panel", highlight=True, markup=True, max_lines=500)
         with Horizontal(id="input-row"):
             yield Input(
-                placeholder=(
-                    "输入文本发送 | r 对话 | x 打断 | s 设置 | q 退出 | h 帮助"
-                ),
+                placeholder=t("tui.input_placeholder"),
                 id="cmd-input",
             )
         yield Footer()
@@ -110,14 +120,49 @@ class XiaozhiTuiApp(App[None]):
     def on_mount(self) -> None:
         self.query_one("#cmd-input", Input).focus()
         self._install_log_handler()
-        self._refresh_status_widgets()
+        on_locale_changed(self._on_locale_changed)
+        self._refresh_locale_widgets()
         self.write_log(
             f"[bold cyan]{SystemConstants.APP_DISPLAY_NAME} TUI[/]  "
-            "F2 设置 · F1 帮助 · Ctrl+C 退出"
+            f"{t('tui.banner_hints')}"
         )
 
     def on_unmount(self) -> None:
+        off_locale_changed(self._on_locale_changed)
         self.uninstall_log_handler()
+
+    def _on_locale_changed(self, _locale: str) -> None:
+        try:
+            self.call_from_thread(self._refresh_locale_widgets)
+        except Exception:
+            try:
+                self._refresh_locale_widgets()
+            except Exception:
+                pass
+
+    def _update_localized_bindings(self) -> None:
+        key_map = {k: list(v) for k, v in self._bindings.key_to_bindings.items()}
+        key_map["ctrl+c"] = [
+            Binding("ctrl+c", "quit_app", t("tui.binding.quit"), show=True, priority=True)
+        ]
+        key_map["f2"] = [
+            Binding("f2", "open_settings", t("tui.binding.settings"), show=True)
+        ]
+        key_map["f1"] = [
+            Binding("f1", "show_help", t("tui.binding.help"), show=True)
+        ]
+        self._bindings = BindingsMap.from_keys(key_map)
+        self.refresh_bindings()
+
+    def _refresh_locale_widgets(self) -> None:
+        try:
+            self.query_one("#cmd-input", Input).placeholder = t(
+                "tui.input_placeholder"
+            )
+            self._update_localized_bindings()
+        except Exception:
+            pass
+        self._refresh_status_widgets()
 
     def watch_status_text(self, _value: str) -> None:
         self._refresh_status_widgets()
@@ -131,33 +176,37 @@ class XiaozhiTuiApp(App[None]):
     def watch_chat_text(self, _value: str) -> None:
         self._refresh_status_widgets()
 
-    def watch_music_line(self, _value: str) -> None:
+    def watch_media_line(self, _value: str) -> None:
         self._refresh_status_widgets()
 
     def watch_emotion(self, _value: str) -> None:
         self._refresh_status_widgets()
 
     def _refresh_status_widgets(self) -> None:
+        if not self.is_mounted:
+            return
         try:
-            conn = "已连接" if self.connected else "未连接"
-            mode = "自动" if self.auto_mode else "手动"
-            self.query_one("#status-line", Static).update(f"状态: {self.status_text}")
+            conn = t("main.status.connected" if self.connected else "main.status.disconnected")
+            mode = t("tui.mode.auto" if self.auto_mode else "tui.mode.manual")
+            self.query_one("#status-line", Static).update(
+                t("tui.status_line", status=self.status_text or t("main.status.idle"))
+            )
             self.query_one("#meta-line", Static).update(
-                f"连接: {conn} | 模式: {mode} | 表情: {self.emotion}"
+                t("tui.meta_line", conn=conn, mode=mode, emotion=self.emotion)
             )
             self.query_one("#chat-line", Static).update(
-                f"对话: {self.chat_text or '—'}"
+                t("tui.chat_line", text=self.chat_text or "—")
             )
-            self.query_one("#music-line", Static).update(
-                f"音乐: {self.music_line or '—'}"
+            self.query_one("#media-line", Static).update(
+                t("tui.media_line", text=self.media_line or "—")
             )
-        except Exception:
+        except (NoMatches, ScreenStackError):
             pass
 
     def write_log(self, message: str) -> None:
         try:
             self.query_one("#log-panel", RichLog).write(message)
-        except Exception:
+        except NoMatches:
             pass
 
     @on(Input.Submitted, "#cmd-input")
@@ -191,13 +240,7 @@ class XiaozhiTuiApp(App[None]):
 
     def action_show_help(self) -> None:
         self.write_log(
-            "[bold cyan]帮助[/]\n"
-            "  文本 → 发送给助手\n"
-            "  r → 开始/停止对话\n"
-            "  x → 打断\n"
-            "  s / F2 → 设置\n"
-            "  q / Ctrl+C → 退出\n"
-            "  h / F1 → 帮助"
+            f"[bold cyan]{t('tui.help.title')}[/]\n{t('tui.help.body')}"
         )
 
     def action_open_settings(self) -> None:
@@ -215,7 +258,7 @@ class XiaozhiTuiApp(App[None]):
                         self._on_settings_saved()
                     except Exception as e:
                         logger.error(f"设置保存回调失败: {e}", exc_info=True)
-                        self.write_log("[red]配置已保存，运行时应用失败，请重启应用[/]")
+                        self.write_log(f"[red]{t('tui.settings_apply_failed')}[/]")
 
         self.push_screen(screen, _done)
 
@@ -283,10 +326,7 @@ class XiaozhiTuiApp(App[None]):
 
         h = self._tui_log_handler
         if h is not None:
-            try:
-                logging.getLogger().removeHandler(h)
-            except Exception:
-                pass
+            logging.getLogger().removeHandler(h)
             h.close()
         for sink, mute in self._muted_console_handlers:
             sink.removeFilter(mute)

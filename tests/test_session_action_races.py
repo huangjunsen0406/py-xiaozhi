@@ -278,12 +278,12 @@ async def test_old_start_completion_does_not_hide_a_new_pending_abort():
 
 
 def test_decode_error_is_presented_as_failure(caplog):
-    from src.mcp.tools.music.events import MusicStateData
+    from src.media.events import MediaStateData
     from src.plugins.ui_presenter import UiPresenter
 
-    viewport = SimpleNamespace(set_music_line=Mock())
-    UiPresenter(viewport).show_music_state(
-        MusicStateData(state="error", song="track", position=0, duration=1)
+    viewport = SimpleNamespace(set_media_line=Mock())
+    UiPresenter(viewport).show_media_state(
+        MediaStateData(state="error", title="track", position=0, duration=1)
     )
-    viewport.set_music_line.assert_called_once_with("播放失败: track")
+    viewport.set_media_line.assert_called_once_with("播放失败: track")
     assert not [record for record in caplog.records if record.levelno >= 40]

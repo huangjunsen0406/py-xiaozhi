@@ -21,14 +21,14 @@ features:
     details: Supports voice input and recognition for intelligent human-computer interaction with natural conversation flow. Built with async architecture for real-time audio processing and low-latency responses.
   - title: Vision Multimodal
     details: Supports image recognition and processing for multimodal interaction, understanding image content. Integrates OpenCV camera processing for real-time visual analysis.
-  - title: MCP Tool Server
-    details: Modular tool system based on JSON-RPC 2.0 protocol, with built-in music playback, Bazi fortune-telling, and more. Dynamically extensible tool plugins.
-  - title: IoT Device Integration
-    details: Designed with Thing abstraction pattern, supports smart home device control including lights, volume, temperature sensors. Integrates Home Assistant platform for easy expansion.
-  - title: High-Performance Audio
-    details: Real-time audio transmission based on Opus codec, intelligent resampling, 5ms audio frame interval processing for low-latency, high-quality audio experience.
-  - title: Cross-Platform
-    details: Compatible with Windows 10+, macOS 10.15+, and Linux. Supports GUI and CLI dual modes, adapts to platform-specific audio devices and system interfaces.
+  - title: MCP Tool & Plugin Ecosystem
+    details: Modular JSON-RPC 2.0 tool server with built-in system volume/app, camera, screenshot, and weather tools; import external ZIP/folder plugins right from Settings with optional subprocess isolation.
+  - title: Decoupled Media Playback Foundation
+    details: Source-agnostic MediaPlayer over AudioMixer and FFmpeg AudioDecoder with automatic TTS audio focus and ducking—external audio plugins just pass URLs or local files.
+  - title: Low-Latency Audio & Built-in AEC
+    details: Real-time Opus voice pipeline with SoXR resampling and built-in cross-platform WebRTC APM echo cancellation for full-duplex conversation and barge-in.
+  - title: Cross-Platform Multi-UI
+    details: Compatible with Windows 10+, macOS 10.15+, and Linux (including Raspberry Pi), with a unified ViewPort powering GUI (PySide6/QML), TUI (Textual), and GPIO interfaces.
 ---
 
 <style>

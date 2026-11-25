@@ -155,6 +155,7 @@ class McpTool:
     description: str
     properties: PropertyList
     callback: Callable[[Dict[str, Any]], ReturnValue]
+    requires_vision: bool = False
 
     def to_json(self) -> Dict[str, Any]:
         """
@@ -170,34 +171,37 @@ class McpTool:
             },
         }
 
-    async def call(self, arguments: Dict[str, Any]) -> str:
-        """
-        调用工具.
-        """
+    async def invoke_parsed(self, parsed_args: Dict[str, Any]) -> tuple[str, bool]:
+        """使用已校验的参数执行回调，返回 (text, is_error)."""
         try:
-            # 解析参数
-            parsed_args = self.properties.parse_arguments(arguments)
-
-            # 调用回调函数
             if asyncio.iscoroutinefunction(self.callback):
                 result = await self.callback(parsed_args)
             else:
                 result = self.callback(parsed_args)
 
-            # 格式化返回值
             if isinstance(result, bool):
                 text = "true" if result else "false"
             elif isinstance(result, int):
                 text = str(result)
             else:
                 text = str(result)
+            return text, False
+        except Exception as e:
+            logger.error(f"Error calling tool {self.name}: {e}", exc_info=True)
+            return str(e), True
 
-            return json.dumps(
-                {"content": [{"type": "text", "text": text}], "isError": False}
-            )
-
+    async def call(self, arguments: Dict[str, Any]) -> str:
+        """
+        调用工具.
+        """
+        try:
+            parsed_args = self.properties.parse_arguments(arguments)
         except Exception as e:
             logger.error(f"Error calling tool {self.name}: {e}", exc_info=True)
             return json.dumps(
                 {"content": [{"type": "text", "text": str(e)}], "isError": True}
             )
+        text, is_error = await self.invoke_parsed(parsed_args)
+        return json.dumps(
+            {"content": [{"type": "text", "text": text}], "isError": is_error}
+        )

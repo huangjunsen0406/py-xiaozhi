@@ -27,7 +27,7 @@ Rectangle {
 
                 Text {
                     width: parent.width
-                    text: mainModel.ttsText || "等待对话..."
+                    text: mainModel.ttsText || i18n.s["main.chat.waiting"]
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.fontSizeMd
                     color: mainModel.ttsText ? Theme.textPrimary : Theme.textPlaceholder
@@ -37,18 +37,18 @@ Rectangle {
             }
         }
 
-        // 音乐 / 歌词
+        // 媒体状态 / 副标题
         Rectangle {
             Layout.fillWidth: true
-            Layout.preferredHeight: mainModel.musicLine ? 48 : 0
-            visible: mainModel.musicLine && mainModel.musicLine.length > 0
+            Layout.preferredHeight: mainModel.mediaLine ? 48 : 0
+            visible: mainModel.mediaLine && mainModel.mediaLine.length > 0
             radius: Theme.radiusMd
             color: Theme.backgroundSecondary
 
             Text {
                 anchors.fill: parent
                 anchors.margins: Theme.spacingSm
-                text: mainModel.musicLine || ""
+                text: mainModel.mediaLine || ""
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeSm
                 color: Theme.textPlaceholder

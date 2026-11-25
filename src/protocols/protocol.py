@@ -7,6 +7,15 @@ from src.logging import get_logger
 logger = get_logger()
 
 
+def build_client_protocol_features() -> dict[str, bool]:
+    """当前客户端实际支持的协议能力（OTA protocol.features 与 hello features 同源）."""
+    return {
+        "mcp": True,
+        "mcp_20260728": True,
+        "udp_probe": True,
+    }
+
+
 class Protocol:
     def __init__(self):
         self.session_id = ""
@@ -21,6 +30,8 @@ class Protocol:
         self._on_reconnecting = None
 
         # 连接状态与自动重连（公共，从子类上移）
+        self.connected = False
+        self._shutdown = False
         self._is_closing = False
         self._reconnect_attempts = 0
         self._max_reconnect_attempts = 5  # 默认重连5次
@@ -189,6 +200,37 @@ class Protocol:
         }
 
         return await self.send_text(json.dumps(message))
+
+    @staticmethod
+    def _build_hello_message(*, version: int, transport: str, audio_config) -> dict:
+        """构造客户端 hello 握手消息（WSS / MQTT-UDP 共用结构）."""
+        return {
+            "type": "hello",
+            "version": version,
+            "features": build_client_protocol_features(),
+            "transport": transport,
+            "audio_params": {
+                "format": "opus",
+                "sample_rate": audio_config.INPUT_SAMPLE_RATE,
+                "channels": audio_config.CHANNELS,
+                "frame_duration": audio_config.FRAME_DURATION,
+            },
+        }
+
+    @staticmethod
+    async def _cancel_task(
+        task: asyncio.Task | None, *, label: str = "后台任务"
+    ) -> None:
+        """取消并等待外部异步任务退出；任务自身调用时跳过."""
+        if task is None or task.done() or task is asyncio.current_task():
+            return
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+        except Exception as exc:
+            logger.debug("等待%s取消时异常: %s", label, exc)
 
     # ============ 连接状态检查（模板方法，子类实现） ============
 
@@ -392,13 +434,7 @@ class Protocol:
         """取消外部监控任务；监控自身结束时只清除引用。"""
         task = self._connection_monitor_task
         self._connection_monitor_task = None
-        if task is None or task.done() or task is asyncio.current_task():
-            return
-        task.cancel()
-        try:
-            await task
-        except asyncio.CancelledError:
-            pass
+        await self._cancel_task(task, label="连接监控任务")
 
     def get_connection_info(self) -> dict:
         """获取连接信息（基类实现，子类可扩展）.

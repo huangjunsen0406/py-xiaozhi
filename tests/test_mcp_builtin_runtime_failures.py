@@ -495,3 +495,65 @@ async def test_desktop_unavailable_or_timed_out_helper_fails(monkeypatch, error)
     assert (
         text(await app_tools()["launch"].call({"app_name": "AuditPlayer"})) == "false"
     )
+
+
+def test_macos_user_application_filter_excludes_plugins_frameworks_and_resources(
+    monkeypatch,
+):
+    monkeypatch.setattr(process_manager.sys, "platform", "darwin")
+    assert process_manager._is_user_application(
+        "WeChat", "/Applications/WeChat.app/Contents/MacOS/WeChat"
+    )
+    assert process_manager._is_user_application(
+        "Terminal", "/System/Applications/Utilities/Terminal.app/Contents/MacOS/Terminal"
+    )
+    assert not process_manager._is_user_application(
+        "CalendarWidgetExtension",
+        "/System/Applications/Calendar.app/Contents/PlugIns/CalendarWidgetExtension.appex/Contents/MacOS/CalendarWidgetExtension",
+    )
+    assert not process_manager._is_user_application(
+        "crashpad_handler",
+        "/Applications/WeChat.app/Contents/Frameworks/crashpad_handler",
+    )
+    assert not process_manager._is_user_application(
+        "language_server",
+        "/Applications/Antigravity.app/Contents/Resources/bin/language_server",
+    )
+
+
+@pytest.mark.asyncio
+async def test_list_running_deduplicates_and_stays_within_mqtt_payload_budget(
+    monkeypatch,
+):
+    fake_apps = [
+        {
+            "pid": 100 + i,
+            "name": "Apifox" if i < 3 else f"测试应用{i}",
+            "display_name": "Apifox" if i < 3 else f"测试应用{i}",
+            "exe": (
+                "/Applications/Apifox.app/Contents/MacOS/Apifox"
+                if i < 3
+                else f"/Applications/App{i}.app/Contents/MacOS/App{i}"
+            ),
+            "command": f"/Applications/App{i}.app/Contents/MacOS/App{i} " + ("--flag " * 80),
+            "type": "application",
+        }
+        for i in range(180)
+    ]
+    monkeypatch.setattr(
+        "src.mcp.tools.app.killer._list_apps", lambda filter_name="": fake_apps
+    )
+
+    raw_mcp_result = await app_tools()["list_running"].call({})
+    # 模拟 McpServer._reply_result 的最终 JSON-RPC 线缆体积
+    wire = json.dumps(
+        {"jsonrpc": "2.0", "id": 3, "result": json.loads(raw_mcp_result)}
+    ).encode("utf-8")
+    assert len(wire) < 7000
+
+    payload = json.loads(text(raw_mcp_result))
+    assert payload["success"] is True
+    assert payload["total_count"] == 178  # 3 个重复 Apifox 已去重为 1 个
+    assert payload["truncated"] is True
+    assert payload["returned_count"] == len(payload["applications"])
+    assert all(set(item.keys()) == {"pid", "name"} for item in payload["applications"])

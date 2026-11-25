@@ -24,7 +24,6 @@ import {
   SignalIcon,
   ArrowPathIcon,
   ArrowsUpDownIcon,
-  MusicalNoteIcon as MusicIcon,
   CommandLineIcon
 } from '@heroicons/vue/24/solid';
 
@@ -41,18 +40,18 @@ const techStack = [
     icon: ArrowPathIcon
   },
   {
-    name: 'PySide6',
-    description: 'Qt6 GUI框架',
+    name: 'PySide6 / QML',
+    description: 'Qt6 声明式 GUI',
     icon: WindowIcon
   },
   {
-    name: 'QML/QtQuick',
-    description: '声明式UI',
-    icon: WindowIcon
+    name: 'Textual',
+    description: '全屏终端 TUI',
+    icon: CommandLineIcon
   },
   {
     name: 'qasync',
-    description: 'Qt异步集成',
+    description: 'Qt 异步集成',
     icon: ArrowsUpDownIcon
   },
   {
@@ -61,14 +60,24 @@ const techStack = [
     icon: CommandLineIcon
   },
   {
+    name: 'WebRTC APM',
+    description: '三端内置回声消除',
+    icon: AudioIcon
+  },
+  {
     name: 'Sherpa-ONNX',
-    description: '唤醒词检测',
+    description: '离线唤醒词检测',
     icon: DocumentIcon
   },
   {
     name: 'OpusLib',
-    description: '音频编解码',
+    description: '语音编解码',
     icon: AudioIcon
+  },
+  {
+    name: 'FFmpeg',
+    description: '通用媒体流解码',
+    icon: SignalIcon
   },
   {
     name: 'SoXR',
@@ -77,7 +86,7 @@ const techStack = [
   },
   {
     name: 'SoundDevice',
-    description: '音频设备管理',
+    description: '音频设备 I/O',
     icon: AudioIcon
   },
   {
@@ -87,7 +96,7 @@ const techStack = [
   },
   {
     name: 'MQTT',
-    description: 'IoT消息传输',
+    description: '轻量消息传输',
     icon: SignalIcon
   },
   {
@@ -99,11 +108,6 @@ const techStack = [
     name: 'EventBus',
     description: '事件驱动架构',
     icon: ArrowPathIcon
-  },
-  {
-    name: 'Quartz',
-    description: 'macOS快捷键',
-    icon: CommandLineIcon
   }
 ];
 

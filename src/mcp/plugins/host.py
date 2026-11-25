@@ -12,12 +12,13 @@ from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
 from src.logging import get_logger
+from src.mcp.plugins.media_facade import PluginLifecycle
 from src.mcp.tooling import McpTool, Property, PropertyList, PropertyType
 
 logger = get_logger()
 
-# 默认允许的 host.get 名称（music_player 等需配置显式加入）
-DEFAULT_ALLOW_GET = frozenset({"config_readonly", "logger"})
+# 默认允许的 host.get 名称（media_player 等需配置显式加入）
+DEFAULT_ALLOW_GET = frozenset({"config_readonly", "logger", "data_dir"})
 
 
 def config_readonly_snapshot(config: Any) -> dict[str, Any]:
@@ -52,7 +53,7 @@ def config_readonly_snapshot(config: Any) -> dict[str, Any]:
         *parents, key = path.split(".")
         for part in parents:
             target = target.setdefault(part, {})
-        target[key] = deepcopy(value)
+        target[key] = value
     return snapshot
 
 
@@ -69,7 +70,7 @@ class ReadOnlyConfig(Mapping):
 
     def __init__(self, config: Any) -> None:
         self._snapshot = config_readonly_snapshot(config)
-        self._data = _freeze(deepcopy(self._snapshot))
+        self._data = _freeze(self._snapshot)
 
     def __getitem__(self, key):
         return self._data[key]
@@ -97,17 +98,24 @@ class McpHost:
         add_tool: Callable[[McpTool], None],
         *,
         capabilities: dict[str, Any] | None = None,
+        capability_factories: dict[str, Callable[[str, PluginLifecycle], Any]] | None = None,
         allow_get: Sequence[str] | None = None,
         plugin_id: str | None = None,
+        lifecycle: PluginLifecycle | None = None,
     ) -> None:
         self._add_tool = add_tool
         self._capabilities = dict(capabilities or {})
+        self._capability_factories = dict(capability_factories or {})
+        self._resolved_caps: dict[str, Any] = {}
         if "config_readonly" in self._capabilities:
             self._capabilities["config_readonly"] = ReadOnlyConfig(
                 self._capabilities["config_readonly"]
             )
-        self._allow_get = frozenset(allow_get) if allow_get is not None else DEFAULT_ALLOW_GET
+        self._allow_get = (
+            frozenset(allow_get) if allow_get is not None else DEFAULT_ALLOW_GET
+        )
         self._plugin_id = plugin_id or "unknown"
+        self._lifecycle = lifecycle or PluginLifecycle(self._plugin_id)
         self._registered_names: list[str] = []
         self._registration_open = True
 
@@ -116,18 +124,12 @@ class McpHost:
         return self._plugin_id
 
     @property
+    def lifecycle(self) -> PluginLifecycle:
+        return self._lifecycle
+
+    @property
     def registered_tool_names(self) -> list[str]:
         return list(self._registered_names)
-
-    def bind_plugin(self, plugin_id: str) -> "McpHost":
-        """返回绑定到指定 plugin_id 的视图（共享 add_tool / capabilities）."""
-        child = McpHost(
-            self._add_tool,
-            capabilities=self._capabilities,
-            allow_get=self._allow_get,
-            plugin_id=plugin_id,
-        )
-        return child
 
     def add_tool(self, tool: McpTool) -> None:
         """注册工具；记录名称供卸载/诊断."""
@@ -137,15 +139,14 @@ class McpHost:
             raise ValueError(f"Tool name conflict: {tool.name}")
         self._add_tool(tool)
         self._registered_names.append(tool.name)
-        logger.info(
-            "[MCP插件:%s] 注册工具: %s", self._plugin_id, tool.name
-        )
+        logger.info("[MCP插件:%s] 注册工具: %s", self._plugin_id, tool.name)
 
     def close_registration(self) -> None:
         self._registration_open = False
 
     def get(self, name: str) -> Any:
         """按白名单返回宿主能力；未授权或未提供则 None."""
+        self._lifecycle.assert_active()
         if name not in self._allow_get:
             logger.warning(
                 "[MCP插件:%s] host.get(%r) 不在白名单 %s",
@@ -156,6 +157,20 @@ class McpHost:
             return None
         if name == "logger":
             return get_logger()
+        if name == "data_dir":
+            if "data_dir" not in self._resolved_caps:
+                from src.utils.resource_finder import get_mcp_plugin_data_dir
+
+                self._resolved_caps["data_dir"] = get_mcp_plugin_data_dir(
+                    self._plugin_id
+                )
+            return self._resolved_caps["data_dir"]
+        if name in self._capability_factories:
+            if name not in self._resolved_caps:
+                self._resolved_caps[name] = self._capability_factories[name](
+                    self._plugin_id, self._lifecycle
+                )
+            return self._resolved_caps[name]
         return self._capabilities.get(name)
 
     def tool(
@@ -190,27 +205,28 @@ def _to_property_list(
     return PropertyList(converted)
 
 
-def _dict_to_property(data: dict[str, Any]) -> Property:
-    """支持简化 dict：{name, type: str|int|bool|string|integer|boolean, ...}."""
-    name = data["name"]
+_PROPERTY_TYPE_MAP = {
+    "str": PropertyType.STRING,
+    "string": PropertyType.STRING,
+    "int": PropertyType.INTEGER,
+    "integer": PropertyType.INTEGER,
+    "bool": PropertyType.BOOLEAN,
+    "boolean": PropertyType.BOOLEAN,
+}
+
+
+def property_from_dict(data: dict[str, Any], *, strict: bool = True) -> Property:
+    """将简化 dict 反序列化为 Property：{name, type: str|int|bool|..., ...}."""
+    name = str(data["name"])
     raw_type = data.get("type", "string")
-    type_map = {
-        "str": PropertyType.STRING,
-        "string": PropertyType.STRING,
-        "int": PropertyType.INTEGER,
-        "integer": PropertyType.INTEGER,
-        "bool": PropertyType.BOOLEAN,
-        "boolean": PropertyType.BOOLEAN,
-        PropertyType.STRING: PropertyType.STRING,
-        PropertyType.INTEGER: PropertyType.INTEGER,
-        PropertyType.BOOLEAN: PropertyType.BOOLEAN,
-    }
     if isinstance(raw_type, PropertyType):
         ptype = raw_type
     else:
-        ptype = type_map.get(str(raw_type).lower())
+        ptype = _PROPERTY_TYPE_MAP.get(str(raw_type).lower())
         if ptype is None:
-            raise ValueError(f"未知属性类型: {raw_type}")
+            if strict:
+                raise ValueError(f"未知属性类型: {raw_type}")
+            ptype = PropertyType.STRING
     return Property(
         name,
         ptype,
@@ -218,3 +234,7 @@ def _dict_to_property(data: dict[str, Any]) -> Property:
         min_value=data.get("min", data.get("min_value")),
         max_value=data.get("max", data.get("max_value")),
     )
+
+
+def _dict_to_property(data: dict[str, Any]) -> Property:
+    return property_from_dict(data, strict=True)

@@ -7,6 +7,7 @@ from PySide6.QtCore import QObject, Slot
 from src.core.event_bus import EventBus, Events
 from src.core.task_manager import TaskManager
 from src.logging import get_logger
+from src.ui.gui.i18n_bridge import I18nBridge
 from src.ui.gui.models import MainModel
 from src.ui.gui.qml_host import QmlAppHost
 from src.ui.gui.services import EmotionService, TrayService
@@ -42,6 +43,7 @@ class GuiViewManager(QObject):
             self._tasks.initialize()
 
         self._bridge = EventBridge(event_bus, task_manager=self._tasks)
+        self._i18n_bridge = I18nBridge()
         self._host = QmlAppHost()
         self._main_model = MainModel()
         self._emotion_service = EmotionService()
@@ -68,6 +70,7 @@ class GuiViewManager(QObject):
                 "mainModel": self._main_model,
                 "settingsModel": self._settings.ensure_model(),
                 "emotionService": self._emotion_service,
+                "i18n": self._i18n_bridge,
             }
         )
         self._host.load_main()
@@ -80,12 +83,17 @@ class GuiViewManager(QObject):
     async def close(self):
         logger.info("GuiViewManager: 正在关闭...")
         self._running = False
+        self._event_bus.off(Events.UI_TOGGLE_WINDOW, self._on_toggle_window)
         if self._tray_service:
             self._tray_service.hide()
         try:
             self._host.shutdown()
         finally:
+            self._i18n_bridge.close()
+            self._main_model.close()
             self._settings.close()
+            if self._owns_tasks:
+                await self._tasks.cancel_all()
         logger.info("GuiViewManager: 已关闭")
 
     def _setup_tray(self) -> None:
@@ -116,8 +124,8 @@ class GuiViewManager(QObject):
     def set_chat_text(self, text: str) -> None:
         self._main_model.set_chat_text(text)
 
-    def set_music_line(self, text: str) -> None:
-        self._main_model.set_music_line(text)
+    def set_media_line(self, text: str) -> None:
+        self._main_model.set_media_line(text)
 
     def set_emotion(self, emotion: str) -> None:
         url = self._emotion_service.get_emotion_url(emotion)
@@ -143,17 +151,5 @@ class GuiViewManager(QObject):
         return self._settings.settings_model
 
     @Slot()
-    def toggle_mode(self):
-        self._tasks.spawn(
-            self._event_bus.emit(Events.UI_AUTO_TOGGLE), name="ui:auto_toggle"
-        )
-
-    @Slot()
     def toggle_window(self):
         self._host.toggle_root_visible()
-
-    def open_settings(self):
-        if not self._host.engine:
-            logger.warning("GuiViewManager: 引擎未初始化，无法打开设置")
-            return
-        self._settings.open_settings()

@@ -26,7 +26,6 @@ class WebsocketProtocol(Protocol):
             else AudioConfig.from_config(self.config)
         )
         self.websocket = None
-        self.connected = False
         self.hello_received = None  # 初始化时先设为 None
         # 消息处理任务引用，便于在关闭时取消
         self._message_task = None
@@ -34,7 +33,6 @@ class WebsocketProtocol(Protocol):
         self._close_handled = False
         self._last_close = None
         self._open_generation = 0
-        self._shutdown = False
         self._load_connection_config()
 
     def _load_connection_config(self) -> None:
@@ -49,11 +47,43 @@ class WebsocketProtocol(Protocol):
         client_id = self.config.get_config("SYSTEM_OPTIONS.CLIENT_ID")
 
         self.HEADERS = {
-            "Authorization": f"Bearer {access_token}",
             "Protocol-Version": "1",
             "Device-Id": device_id,  # 获取设备MAC地址
             "Client-Id": client_id,
         }
+        if access_token:
+            token_str = str(access_token).strip()
+            if token_str:
+                self.HEADERS["Authorization"] = (
+                    token_str if " " in token_str else f"Bearer {token_str}"
+                )
+        else:
+            self.HEADERS["Authorization"] = f"Bearer {access_token}"
+
+    async def _open_websocket(self, current_ssl_context):
+        """建立 WebSocket 连接，兼容新旧版 websockets 参数名."""
+        common_kwargs = {
+            "ssl": current_ssl_context,
+            "ping_interval": 20,
+            "ping_timeout": 20,
+            "close_timeout": 10,
+            "open_timeout": 5,
+            "max_size": 10 * 1024 * 1024,
+            "compression": None,
+        }
+        try:
+            return await websockets.connect(
+                uri=self.WEBSOCKET_URL,
+                additional_headers=self.HEADERS,
+                proxy=None,
+                **common_kwargs,
+            )
+        except TypeError:
+            return await websockets.connect(
+                self.WEBSOCKET_URL,
+                extra_headers=self.HEADERS,
+                **common_kwargs,
+            )
 
     async def connect(self) -> bool:
         """
@@ -71,39 +101,10 @@ class WebsocketProtocol(Protocol):
             # 在连接时创建 Event，确保在正确的事件循环中
             self.hello_received = asyncio.Event()
 
-            # 判断是否应该使用 SSL
-            current_ssl_context = None
-            if self.WEBSOCKET_URL.startswith("wss://"):
-                current_ssl_context = ssl_context
-
-            # 建立WebSocket连接 (兼容不同Python版本的写法)
-            try:
-                # 新的写法 (在Python 3.11+版本中)
-                websocket = await websockets.connect(
-                    uri=self.WEBSOCKET_URL,
-                    ssl=current_ssl_context,
-                    additional_headers=self.HEADERS,
-                    ping_interval=20,
-                    ping_timeout=20,
-                    close_timeout=10,
-                    open_timeout=5,
-                    max_size=10 * 1024 * 1024,
-                    compression=None,
-                    proxy=None,
-                )
-            except TypeError:
-                # 旧的写法 (在较早的Python版本中)
-                websocket = await websockets.connect(
-                    self.WEBSOCKET_URL,
-                    ssl=current_ssl_context,
-                    extra_headers=self.HEADERS,
-                    ping_interval=20,
-                    ping_timeout=20,
-                    close_timeout=10,
-                    open_timeout=5,
-                    max_size=10 * 1024 * 1024,
-                    compression=None,
-                )
+            current_ssl_context = (
+                ssl_context if self.WEBSOCKET_URL.startswith("wss://") else None
+            )
+            websocket = await self._open_websocket(current_ssl_context)
 
             if generation != self._open_generation or self._shutdown:
                 await websocket.close()
@@ -117,44 +118,14 @@ class WebsocketProtocol(Protocol):
             self._start_connection_monitor()
 
             # 发送客户端hello消息
-            hello_message = {
-                "type": "hello",
-                "version": 1,
-                "features": {
-                    "mcp": True,
-                },
-                "transport": "websocket",
-                "audio_params": {
-                    "format": "opus",
-                    "sample_rate": self.audio_config.INPUT_SAMPLE_RATE,
-                    "channels": self.audio_config.CHANNELS,
-                    "frame_duration": self.audio_config.FRAME_DURATION,
-                },
-            }
+            hello_message = self._build_hello_message(
+                version=1, transport="websocket", audio_config=self.audio_config
+            )
             await self.send_text(json.dumps(hello_message))
 
             # 等待服务器hello响应
             try:
                 await asyncio.wait_for(self.hello_received.wait(), timeout=10.0)
-                if (
-                    generation != self._open_generation
-                    or self._shutdown
-                    or self._close_handled
-                    or not self._is_connected()
-                ):
-                    logger.warning("收到 hello 后 WebSocket 已关闭")
-                    if generation == self._open_generation:
-                        await self.close_audio_channel()
-                    return False
-                self.connected = True
-                self._reconnect_attempts = 0  # 重置重连计数
-                logger.info("已连接到WebSocket服务器")
-
-                # 通知连接状态变化
-                if self._on_connection_state_changed:
-                    self._on_connection_state_changed(True, "连接成功")
-
-                return True
             except asyncio.TimeoutError:
                 if generation != self._open_generation:
                     return False
@@ -163,6 +134,26 @@ class WebsocketProtocol(Protocol):
                 if self._on_network_error:
                     await self._on_network_error("等待响应超时")
                 return False
+
+            if (
+                generation != self._open_generation
+                or self._shutdown
+                or self._close_handled
+                or not self._is_connected()
+            ):
+                logger.warning("收到 hello 后 WebSocket 已关闭")
+                if generation == self._open_generation:
+                    await self.close_audio_channel()
+                return False
+
+            self.connected = True
+            self._reconnect_attempts = 0  # 重置重连计数
+            logger.info("已连接到WebSocket服务器")
+
+            if self._on_connection_state_changed:
+                self._on_connection_state_changed(True, "连接成功")
+
+            return True
 
         except asyncio.CancelledError:
             # wait_for cancels this coroutine on the manager's deadline. Release
@@ -182,11 +173,6 @@ class WebsocketProtocol(Protocol):
 
     # ============ 模板方法实现 ============
 
-    @property
-    def _monitor_interval(self) -> float:
-        """WSS 连接监控检查间隔（秒）."""
-        return 5.0
-
     def _is_connected(self) -> bool:
         """检查 WebSocket 连接是否存活."""
         if not self.websocket:
@@ -201,16 +187,10 @@ class WebsocketProtocol(Protocol):
         """
         task = self._message_task
         self._message_task = None
-        if task and not task.done() and task is not asyncio.current_task():
-            task.cancel()
-            try:
-                await task
-            except asyncio.CancelledError:
-                pass
-            except Exception as e:
-                logger.debug(f"等待消息任务取消时异常: {e}")
+        await self._cancel_task(task, label="消息任务")
 
         # Drop the owned reference before awaiting close.
+        self.session_id = ""
         websocket = self.websocket
         self.websocket = None
         if websocket and websocket.close_code is None:
@@ -273,6 +253,23 @@ class WebsocketProtocol(Protocol):
         )
         return info
 
+    async def _dispatch_message(self, message) -> None:
+        if isinstance(message, bytes):
+            if self._on_incoming_audio:
+                self._on_incoming_audio(message)
+            return
+        if not isinstance(message, str):
+            return
+        try:
+            data = json.loads(message)
+        except json.JSONDecodeError as e:
+            logger.error(f"无效的JSON消息: {message}, 错误: {e}", exc_info=True)
+            return
+        if data.get("type") == "hello":
+            await self._handle_server_hello(data)
+        elif self._on_incoming_json:
+            self._on_incoming_json(data)
+
     async def _message_handler(self):
         """
         处理接收到的WebSocket消息.
@@ -282,30 +279,11 @@ class WebsocketProtocol(Protocol):
             async for message in websocket:
                 if self._is_closing:
                     break
-
                 try:
-                    if isinstance(message, str):
-                        try:
-                            data = json.loads(message)
-                            msg_type = data.get("type")
-                            if msg_type == "hello":
-                                # 处理服务器 hello 消息
-                                await self._handle_server_hello(data)
-                            else:
-                                if self._on_incoming_json:
-                                    self._on_incoming_json(data)
-                        except json.JSONDecodeError as e:
-                            logger.error(
-                                f"无效的JSON消息: {message}, 错误: {e}", exc_info=True
-                            )
-                    elif isinstance(message, bytes):
-                        # 二进制消息，可能是音频
-                        if self._on_incoming_audio:
-                            self._on_incoming_audio(message)
+                    await self._dispatch_message(message)
                 except Exception as e:
                     # 处理单个消息的错误，但继续处理其他消息
                     logger.error(f"处理消息时出错: {e}", exc_info=True)
-                    continue
 
         except asyncio.CancelledError:
             logger.debug("消息处理任务被取消")
@@ -436,6 +414,10 @@ class WebsocketProtocol(Protocol):
             if not transport or transport != "websocket":
                 logger.error(f"不支持的传输方式: {transport}")
                 return
+
+            session_id = data.get("session_id")
+            if isinstance(session_id, str):
+                self.session_id = session_id
 
             # 设置 hello 接收事件
             self.hello_received.set()

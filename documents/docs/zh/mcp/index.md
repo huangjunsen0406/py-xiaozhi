@@ -5,9 +5,10 @@
 ## 工作原理
 
 1. `McpPlugin.setup` 创建摄像头等运行时对象，并调用 `register_camera_tools` / `register_screenshot_tools`
-2. `McpServer.add_common_tools()` **显式**调用各包的 `register_*_tools(add_tool, …)`
-3. 每个 `register_*` 用闭包持有依赖（如 `MusicPlayer`、`VolumeController`），构造 `McpTool` 并 `add_tool`
-4. 工具通过 JSON-RPC 2.0 对外暴露
+2. `McpServer.register_builtin_tools()` **显式**调用各内置包的 `register_*_tools(add_tool, …)`
+3. 每个 `register_*` 用闭包持有依赖（如 `MediaPlayer`、`VolumeController`），构造 `McpTool` 并 `add_tool`
+4. `McpServer.reload_external_plugins(media_player=...)` 加载外挂插件，并在授权 `media_player` 且存在活跃外挂时按条件注册宿主通用播控工具（`media.*`）
+5. 工具通过 JSON-RPC 2.0 对外暴露
 
 **内置工具不使用 `@mcp_tool` 全局装饰器，也不做目录自动发现。** 新增工具包时：实现 `register_*_tools`，并在 `add_common_tools`（或 `McpPlugin`）中挂上一次。
 
@@ -207,7 +208,7 @@ McpTool(
 | 规则 | 说明 |
 |------|------|
 | 入口 | 包导出 `register_*_tools(add_tool, ...)`，实现放在 **`register.py`** |
-| 包结构 | `__init__.py`（re-export）+ `register.py`（注册）+ 业务模块（如 `music_player.py` / `service.py`） |
+| 包结构 | `__init__.py`（re-export）+ `register.py`（注册）+ 业务模块（如 `service.py`） |
 | 挂载 | 在 `add_common_tools` 或 `McpPlugin.setup` 中**显式**调用一次 |
 | 依赖 | 有状态对象用参数注入闭包；禁止模块级全局 `get_instance` |
 | 命名 | 工具名 `self.module.action` 或业务约定名，全局唯一 |
@@ -224,7 +225,7 @@ McpTool(
 | 应用 | `app/` | `register.py` | `register_app_tools` | [system.md](system.md) |
 | 相机 | `camera/` | `register.py` | `register_camera_tools`（McpPlugin） | [camera.md](camera.md) |
 | 截图 | `screenshot/` | `register.py` | `register_screenshot_tools`（McpPlugin） | — |
-| 音乐 | `music/` | `register.py` | `register_music_tools`（注入 MusicPlayer） | [music.md](music.md) |
+| 媒体播控 | `media/` | `register.py` | `register_media_tools`（条件注册：授权外挂播放且有外挂时启用） | [plugins.md](plugins.md) |
 | 天气 | `weather/` | `register.py` + `service.py` | `register_weather_tools`（当前 mock） | — |
 
 用户目录下的**外挂**插件（自带依赖、安装即用）见 [MCP 外挂扩展](./plugins.md)；与内置 `register_*` 并存，不恢复全局装饰器发现。

@@ -1,6 +1,7 @@
 """非 Qt 视图共用的线程安全事件提交。"""
 
 import asyncio
+import concurrent.futures
 from typing import TYPE_CHECKING, Any
 
 from src.logging import get_logger
@@ -53,7 +54,7 @@ def safe_emit(
         def _done(result):
             try:
                 exc = result.exception()
-            except Exception:
+            except concurrent.futures.CancelledError:
                 # Future 取消属于正常退出，不作为事件失败记录。
                 return
             if exc is not None:

@@ -61,13 +61,3 @@ class EmotionService(QObject):
             if file_path.exists():
                 return file_path
         return None
-
-    def clear_cache(self):
-        """清空缓存."""
-        self._cache.clear()
-
-    def preload(self, names: list[str]):
-        """预加载表情."""
-        for name in names:
-            self.get_emotion_url(name)
-        logger.debug(f"已预加载 {len(names)} 个表情")

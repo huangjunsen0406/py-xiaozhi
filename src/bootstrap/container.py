@@ -42,7 +42,7 @@ class ServiceContainer:
         self.plugins = PluginManager()
         self.resource_pool = ResourcePool()
         self.mcp_server = None
-        self.music_player = None
+        self.media_player = None
         self.notification_player = None
         self.session = ConversationSession(
             state=self.state,

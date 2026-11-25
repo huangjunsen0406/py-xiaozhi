@@ -1,7 +1,7 @@
 """音频插件.
 
 负责音频采集、编码、播放和发送。
-AudioCodec 经 Events.AUDIO_CODEC_CHANGED 发布，不直连 MusicPlayer。
+AudioCodec 经 Events.AUDIO_CODEC_CHANGED 发布，不依赖任何上层媒体或 MCP 模块。
 """
 
 import asyncio
@@ -11,6 +11,7 @@ import time
 from collections import deque
 from typing import TYPE_CHECKING
 
+from src.core.event_bus import Events
 from src.logging import get_logger
 from src.plugins.base import Plugin
 
@@ -29,7 +30,6 @@ class AudioPlugin(Plugin):
     def __init__(self) -> None:
         super().__init__()
         self.codec: AudioCodec | None = None
-        self._in_silence_period = False
         self._silence_until = 0.0
         self._uplink = deque(maxlen=25)
         self._uplink_lock = threading.Lock()
@@ -60,13 +60,11 @@ class AudioPlugin(Plugin):
                 lambda: self._accepting and self._should_send_microphone_audio()
             )
 
-            from src.core.event_bus import Events
-
             ctx.event_bus.on(Events.CONFIG_CHANGED, self._on_config_changed)
             ctx.event_bus.on(
                 Events.AUDIO_DEVICES_REFRESH_REQUEST, self._on_devices_refresh_request
             )
-            # codec 在 start() 再发布：MusicPlayer 在 McpPlugin.setup 中订阅 EventBus
+            # codec 在 start() 再发布，确保其他订阅者已在 setup() 阶段注册完成
 
         except Exception as e:
             logger.error(f"音频插件初始化失败: {e}", exc_info=True)
@@ -99,14 +97,12 @@ class AudioPlugin(Plugin):
         await super().stop()
 
     async def _publish_audio_codec(self, codec) -> None:
-        """向订阅者（如 MusicPlayer）发布 AudioCodec 实例或 None."""
+        """向订阅者发布 AudioCodec 实例或 None."""
         if not self._ctx or not self._ctx.event_bus:
             logger.warning(
                 "无法发布 AUDIO_CODEC_CHANGED：PluginContext / EventBus 未就绪"
             )
             return
-        from src.core.event_bus import Events
-
         try:
             await self._ctx.event_bus.emit(Events.AUDIO_CODEC_CHANGED, codec)
         except Exception as e:
@@ -122,6 +118,13 @@ class AudioPlugin(Plugin):
             },
         }
 
+    async def _reload_and_republish_codec(self, *, reenumerate: bool) -> bool:
+        ok = await self.codec.reload_devices(reenumerate=reenumerate)
+        if ok:
+            self._audio_settings_snapshot = self._audio_settings()
+            await self._publish_audio_codec(self.codec)
+        return ok
+
     async def _on_config_changed(self, data=None):
         """仅音频相关设置变化时重建设备和处理管线。"""
         if self.codec and not self.failed:
@@ -131,9 +134,7 @@ class AudioPlugin(Plugin):
             # 失败或取消后仍需重试，包括用户将设置改回原值的情况。
             self._audio_settings_snapshot = None
             await self._publish_audio_codec(None)
-            if await self.codec.reload_devices(reenumerate=True):
-                self._audio_settings_snapshot = self._audio_settings()
-                await self._publish_audio_codec(self.codec)
+            await self._reload_and_republish_codec(reenumerate=True)
 
     async def _on_devices_refresh_request(self, data=None):
         """设置页请求刷新设备列表：停流 → 重枚举 → 再开流.
@@ -159,12 +160,8 @@ class AudioPlugin(Plugin):
                 refresh_portaudio_devices(reinitialize=True)
                 result = list_audio_devices(include_virtual=True)
                 # 按当前配置重新打开流（名称匹配可能已指向新 index）
-                ok = await self.codec.reload_devices(reenumerate=False)
-                if not ok:
+                if not await self._reload_and_republish_codec(reenumerate=False):
                     logger.error("AudioPlugin: 设备刷新后重新打开音频流失败")
-                else:
-                    self._audio_settings_snapshot = self._audio_settings()
-                    await self._publish_audio_codec(self.codec)
             else:
                 # 无 codec（禁用音频）时仍尽量枚举，供设置页展示
                 refresh_portaudio_devices(reinitialize=True)
@@ -191,41 +188,6 @@ class AudioPlugin(Plugin):
         if state == DeviceState.LISTENING:
             self._silence_until = time.monotonic() + 0.2
 
-    async def on_incoming_json(self, message) -> None:
-        """
-        处理 TTS 事件.
-        """
-        if not isinstance(message, dict):
-            return
-
-        try:
-            if message.get("type") == "tts":
-                state = message.get("state")
-                if state == "start":
-                    if self._music_parallel_enabled():
-                        logger.debug("TTS 开始（并行模式）：音乐继续播放，混音闪避")
-                    else:
-                        await self._pause_music_for_tts()
-                elif state == "stop":
-                    # 并行模式也发恢复：兜底「TTS 期间起播的歌被置为 tts 暂停」
-                    await self._resume_music_after_tts()
-        except Exception as e:
-            logger.error(f"处理 TTS 事件失败: {e}", exc_info=True)
-
-    def _music_parallel_enabled(self) -> bool:
-        """并行播放判定：AEC 引擎在位且配置允许时，TTS 不暂停音乐.
-
-        引擎旁路（库缺失/连续失败自禁）时自动回退为暂停策略，
-        避免无回声消除的裸并行污染识别。
-        """
-        try:
-            config = self._ctx.get_config()
-            if not bool(config.get_config("AEC_OPTIONS.MUSIC_PARALLEL", True)):
-                return False
-            return bool(self.codec and not self.failed and self.codec.aec_active)
-        except Exception:
-            return False
-
     async def on_incoming_audio(self, data: bytes) -> None:
         """
         接收并播放音频数据.
@@ -236,33 +198,6 @@ class AudioPlugin(Plugin):
             except Exception as e:
                 logger.debug(f"写入音频数据失败: {e}")
 
-    async def _pause_music_for_tts(self):
-        """TTS 开始时暂停音乐（TTS/音乐分队列混音，互不丢帧；音乐余量自然淡出）."""
-        try:
-            from src.core.event_bus import Events
-            from src.mcp.tools.music.events import MusicControlRequest
-
-            logger.info("TTS 开始，发送音乐暂停请求")
-            await self._ctx.event_bus.emit(
-                Events.MUSIC_PAUSE_REQUEST, MusicControlRequest(source="tts")
-            )
-        except Exception as e:
-            logger.warning(f"发送音乐暂停请求失败: {e}", exc_info=True)
-
-    async def _resume_music_after_tts(self):
-        """TTS 结束后恢复音乐（并行模式下仅兜底，多数时候无实际暂停）."""
-        try:
-            from src.core.event_bus import Events
-            from src.mcp.tools.music.events import MusicControlRequest
-
-            log = logger.debug if self._music_parallel_enabled() else logger.info
-            log("TTS 播放完成，发送音乐恢复请求")
-            await self._ctx.event_bus.emit(
-                Events.MUSIC_RESUME_REQUEST, MusicControlRequest(source="tts")
-            )
-        except Exception as e:
-            logger.error(f"发送音乐恢复请求失败: {e}", exc_info=True)
-
     def register_resources(self, pool) -> None:
         codec = self.codec
         # failed 只阻止使用，已构造资源仍必须登记清理。
@@ -272,11 +207,7 @@ class AudioPlugin(Plugin):
                 """音频编解码器完整清理：先通知订阅者清 codec，再 close."""
                 import gc
 
-                try:
-                    # Music 收到 None 会自行 stop；完整 detach 由 mcp/容器负责
-                    await self._publish_audio_codec(None)
-                except Exception as e:
-                    logger.debug(f"发布 codec 清除失败: {e}", exc_info=True)
+                await self._publish_audio_codec(None)
                 gc.collect()
                 await codec.close()
 
@@ -338,11 +269,7 @@ class AudioPlugin(Plugin):
         判断是否应该发送麦克风音频.
         """
         try:
-            if (
-                self.failed
-                or self._in_silence_period
-                or time.monotonic() < self._silence_until
-            ):
+            if self.failed or time.monotonic() < self._silence_until:
                 return False
             return self._ctx.should_capture_audio()
         except Exception as e:

@@ -32,8 +32,6 @@ dependencies = [
     "psutil>=5.9.0",
     "py-machineid>=0.6.0",
     "platformdirs>=4.0.0",
-    # 音乐/媒体
-    "mutagen>=1.47.0",
     # 中文处理
     "pypinyin>=0.51.0",
     # 剪贴板
@@ -60,7 +58,10 @@ dependencies = [
 # GUI 模式额外依赖
 # 使用 `uv sync --extra gui` 或 `pip install '.[gui]'` 启用
 gui = [
-    "PySide6>=6.6.0",
+    # PySide6 6.12.x on Python 3.10/3.11 hits PYSIDE-3509
+    # (Fatal Python error: none_dealloc: deallocating None).
+    "PySide6>=6.6.0,<6.12; python_version < '3.12'",
+    "PySide6>=6.6.0; python_version >= '3.12'",
     "qasync>=0.27.1",
 ]
 

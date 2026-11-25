@@ -34,16 +34,6 @@ class DeviceState(str, Enum):
     NOTIFYING = "notifying"
 
 
-class EventType:
-    """
-    事件类型.
-    """
-
-    SCHEDULE_EVENT = "schedule_event"
-    AUDIO_INPUT_READY_EVENT = "audio_input_ready_event"
-    AUDIO_OUTPUT_READY_EVENT = "audio_output_ready_event"
-
-
 def get_frame_duration(config=None) -> int:
     """Resolve frame duration from the supplied configuration only."""
     configured = (

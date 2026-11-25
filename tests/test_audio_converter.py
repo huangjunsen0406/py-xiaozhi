@@ -7,6 +7,7 @@ import pytest
 
 from src.audio_codecs.audio_codec import AudioCodec
 from src.audio_codecs.audio_converter import AudioConverter
+from src.audio_codecs.mixer import MixPullResult
 
 RATE = 24000
 CHUNK = RATE // 50  # 20ms 混音块
@@ -64,7 +65,7 @@ def test_output_callback_fills_available_audio(duration_ms, channels, partial):
     codec = AudioCodec()
     codec._closed = True  # No streams/native codecs are opened by this test.
     codec.converter = converter
-    codec._pull_mixed = lambda n: chunks.popleft() if chunks else None
+    codec.mixer.pull = lambda n, **kw: MixPullResult(chunks.popleft() if chunks else None)
     output = np.full((frames, channels), np.nan, dtype=np.float32)
 
     AudioCodec._output_callback(codec, output, frames, None, None)
@@ -83,7 +84,7 @@ def test_output_callback_consumes_remainder_when_queue_exhausted():
     codec = AudioCodec()
     codec._closed = True  # No streams/native codecs are opened by this test.
     codec.converter = converter
-    codec._pull_mixed = lambda n: chunks.popleft() if chunks else None
+    codec.mixer.pull = lambda n, **kw: MixPullResult(chunks.popleft() if chunks else None)
     frames = 3 * CHUNK // 4
     outputs = []
     for _ in range(3):

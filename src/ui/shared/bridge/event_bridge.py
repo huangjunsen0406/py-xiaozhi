@@ -20,8 +20,6 @@ class EventBridge(QObject):
     # ========== Python → QML 信号 ==========
 
     # 窗口控制
-    showWindow = Signal()
-    hideWindow = Signal()
     showSettingsWindow = Signal()  # 控制器完成草稿重载后通知 QML 显示
     openSettingsRequested = Signal()  # QML 请求，和显示信号分开避免递归
 

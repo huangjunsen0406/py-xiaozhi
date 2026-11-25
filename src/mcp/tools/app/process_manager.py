@@ -23,14 +23,6 @@ _HELPER_SUFFIXES = (
     "_crashpad_handler",
 )
 
-# macOS 系统路径前缀，这些路径下的进程都是系统守护进程
-_MACOS_SYSTEM_PREFIXES = (
-    "/usr/libexec/",
-    "/usr/sbin/",
-    "/System/Library/",
-    "/Library/Apple/",
-)
-
 # Windows 系统进程名（小写，不含 .exe）
 _WINDOWS_SYSTEM_NAMES: set[str] = {
     "dwm",
@@ -69,23 +61,12 @@ def _is_user_application(name: str, exe: str) -> bool:
         return False
 
     if sys.platform == "darwin":
-        # macOS: 只保留 /Applications/ 下的 .app 主进程
+        # macOS: 只保留 /Applications/ 下 .app/Contents/MacOS/ 主进程，
+        # 排除 PlugIns/*.appex 小组件、Frameworks/ 和 Resources/ 下的辅助进程
         if "/Applications/" in exe and ".app/" in exe:
-            # 排除 .app 内部的子 .app（如 Framework/Helpers/）
             app_path = exe[: exe.index(".app/") + 5]
             remaining = exe[len(app_path) :]
-            if ".app/" in remaining:
-                return False
-            return True
-        # 非 /Applications 但也不是系统路径的（如 ~/Library/Application Support 下的工具）
-        if any(exe_lower.startswith(p) for p in _MACOS_SYSTEM_PREFIXES):
-            return False
-        # /Library/Application Support 下的用户工具（如安全软件、VPN）
-        if "/Library/Application Support/" in exe and ".app" not in exe:
-            return False
-        # 其他已知系统进程路径
-        if exe_lower.startswith("/system/") or exe_lower.startswith("/library/"):
-            return False
+            return remaining.startswith("Contents/MacOS/") and ".app/" not in remaining
         return False
 
     elif sys.platform == "win32":
