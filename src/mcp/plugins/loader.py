@@ -149,11 +149,7 @@ class PluginLoader:
             self._record(path.name, path, error="manifest 须为对象")
             return
         plugin_id = str(manifest.get("id") or path.name)
-        try:
-            self._validate_and_import_package(path, manifest, plugin_id)
-        except Exception as e:
-            logger.error("[MCP插件] 加载失败 %s: %s", plugin_id, e, exc_info=True)
-            self._record(plugin_id, path, error=str(e))
+        self._run_package_load(path, manifest, plugin_id)
 
     def _load_package_dir_without_manifest(self, path: Path) -> None:
         plugin_id = path.name
@@ -163,6 +159,11 @@ class PluginLoader:
             "runtime": "python-inprocess",
             "enabled_by_default": True,
         }
+        self._run_package_load(path, manifest, plugin_id)
+
+    def _run_package_load(
+        self, path: Path, manifest: dict[str, Any], plugin_id: str
+    ) -> None:
         try:
             self._validate_and_import_package(path, manifest, plugin_id)
         except Exception as e:
@@ -191,12 +192,7 @@ class PluginLoader:
             raise RuntimeError("manifest 缺少 platforms（已开启强制校验）")
         if platforms is not None:
             plat_set = set(platforms)
-            aliases = {self._platform}
-            if "x86_64" in self._platform:
-                aliases.add(self._platform.replace("x86_64", "amd64"))
-            if "amd64" in self._platform:
-                aliases.add(self._platform.replace("amd64", "x86_64"))
-            if not aliases & plat_set:
+            if not set(_platform_aliases(self._platform)) & plat_set:
                 raise RuntimeError(
                     f"平台不匹配: host={self._platform}, plugin={platforms}"
                 )
@@ -245,26 +241,8 @@ class PluginLoader:
         module_part, attr_part = entry.split(":", 1)
         staged: list[McpTool] = []
         host = self._staging_host(plugin_id, staged)
-        extra_paths: list[Path] = [path]
-        lib = path / "lib"
-        if lib.is_dir():
-            extra_paths.append(lib)
-        native = path / "native" / self._platform
-        if not native.is_dir():
-            alt = path / "native" / self._platform.replace("x86_64", "amd64")
-            if alt.is_dir():
-                native = alt
-            else:
-                alt2 = path / "native" / self._platform.replace("amd64", "x86_64")
-                if alt2.is_dir():
-                    native = alt2
-        if native.is_dir():
-            extra_paths.append(native)
+        _setup_plugin_sys_path(path, self._platform)
         try:
-            for p in reversed(extra_paths):
-                sp = str(p.resolve())
-                if sp not in sys.path:
-                    sys.path.insert(0, sp)
             unique_name = f"mcp_plugin_{_safe_mod_name(plugin_id)}_{module_part}"
             mod = _import_plugin_module(path, module_part, unique_name)
             register_fn = getattr(mod, attr_part, None)
@@ -272,20 +250,17 @@ class PluginLoader:
                 raise RuntimeError(
                     f"入口 {entry} 不可调用（模块 {module_part} 无属性 {attr_part}）"
                 )
-            try:
-                register_fn(host)
-            finally:
-                host.close_registration()
-            names = self._commit_tools(plugin_id, staged, prefix=prefix)
-            self._record(
-                plugin_id, path, tool_names=names, runtime="python-inprocess"
-            )
-            logger.info(
-                "[MCP插件] 已加载 %s (%d 工具, inprocess) from %s",
-                plugin_id, len(names), path,
-            )
+            register_fn(host)
         finally:
             host.close_registration()
+        names = self._commit_tools(plugin_id, staged, prefix=prefix)
+        self._record(
+            plugin_id, path, tool_names=names, runtime="python-inprocess"
+        )
+        logger.info(
+            "[MCP插件] 已加载 %s (%d 工具, inprocess) from %s",
+            plugin_id, len(names), path,
+        )
 
     def _load_subprocess_package(
         self, path: Path, plugin_id: str, *, entry: str, prefix: Any, manifest: dict[str, Any]
@@ -310,12 +285,7 @@ class PluginLoader:
         )
         try:
             session.start_and_bootstrap()
-            register_subprocess_plugin_tools(
-                staged.append,
-                session=session,
-                enforce_prefix=self.enforce_prefix,
-                prefix=str(prefix) if prefix else None,
-            )
+            register_subprocess_plugin_tools(staged.append, session=session)
             names = self._commit_tools(
                 plugin_id, staged, prefix=prefix, session=session
             )
@@ -365,7 +335,6 @@ class PluginLoader:
                 "[MCP插件] 单文件加载失败 %s: %s", plugin_id, e, exc_info=True
             )
             self._record(plugin_id, path, error=str(e))
-        finally:
             host.close_registration()
 
     def _check_plugin_id(self, plugin_id: str) -> None:
@@ -418,9 +387,33 @@ def _safe_mod_name(plugin_id: str) -> str:
     return "".join(c if c.isalnum() else "_" for c in plugin_id)
 
 
+def _platform_aliases(platform_tag: str) -> tuple[str, ...]:
+    aliases = [platform_tag]
+    if "x86_64" in platform_tag:
+        aliases.append(platform_tag.replace("x86_64", "amd64"))
+    if "amd64" in platform_tag:
+        aliases.append(platform_tag.replace("amd64", "x86_64"))
+    return tuple(aliases)
+
+
+def _setup_plugin_sys_path(plugin_root: Path, platform_tag: str) -> None:
+    extra_paths: list[Path] = [plugin_root]
+    lib = plugin_root / "lib"
+    if lib.is_dir():
+        extra_paths.append(lib)
+    for tag in _platform_aliases(platform_tag):
+        native = plugin_root / "native" / tag
+        if native.is_dir():
+            extra_paths.append(native)
+            break
+    for p in reversed(extra_paths):
+        sp = str(p.resolve())
+        if sp not in sys.path:
+            sys.path.insert(0, sp)
+
+
 def _import_plugin_module(plugin_root: Path, module_part: str, unique_name: str):
     py_file = plugin_root / f"{module_part.replace('.', '/')}.py"
-    pkg_init = plugin_root / module_part.split(".")[0] / "__init__.py"
     if py_file.is_file():
         spec = importlib.util.spec_from_file_location(unique_name, py_file)
         if spec is None or spec.loader is None:
@@ -430,8 +423,6 @@ def _import_plugin_module(plugin_root: Path, module_part: str, unique_name: str)
         sys.modules[module_part] = mod
         spec.loader.exec_module(mod)
         return mod
-    if (plugin_root / module_part).is_dir() and pkg_init.is_file():
-        return importlib.import_module(module_part)
     return importlib.import_module(module_part)
 
 

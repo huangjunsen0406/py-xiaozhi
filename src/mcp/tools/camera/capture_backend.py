@@ -52,6 +52,16 @@ class CameraDeviceInfo:
     path: str | None = None
 
 
+def _read_int(cfg, key: str, default: int) -> int:
+    raw = cfg.get_config(key, default)
+    if raw is None or raw == "":
+        return default
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return default
+
+
 def load_capture_config(config=None) -> CaptureConfig:
     """从注入配置读取 CAMERA 参数；默认配置不访问磁盘或进程状态。"""
     cfg = config if config is not None else ConfigManager.from_dict()
@@ -62,23 +72,10 @@ def load_capture_config(config=None) -> CaptureConfig:
         raw_backend = "auto"
 
     device = str(cfg.get_config("CAMERA.device", "") or "").strip()
-    try:
-        index = int(cfg.get_config("CAMERA.camera_index", 0) or 0)
-    except (TypeError, ValueError):
-        index = 0
-    try:
-        width = int(cfg.get_config("CAMERA.frame_width", 640) or 640)
-    except (TypeError, ValueError):
-        width = 640
-    try:
-        height = int(cfg.get_config("CAMERA.frame_height", 480) or 480)
-    except (TypeError, ValueError):
-        height = 480
-    try:
-        warm = int(cfg.get_config("CAMERA.warm_up_frames", 5) or 5)
-    except (TypeError, ValueError):
-        warm = 5
-    warm = max(0, min(warm, 30))
+    index = _read_int(cfg, "CAMERA.camera_index", 0)
+    width = _read_int(cfg, "CAMERA.frame_width", 640)
+    height = _read_int(cfg, "CAMERA.frame_height", 480)
+    warm = max(0, min(_read_int(cfg, "CAMERA.warm_up_frames", 5), 30))
 
     return CaptureConfig(
         camera_index=max(0, index),
@@ -356,6 +353,45 @@ def _list_v4l2_paths() -> list[str]:
     return paths
 
 
+def _safe_release_capture(cap) -> None:
+    try:
+        cap.release()
+    except Exception:
+        pass
+
+
+def _probe_v4l2_device(path: str) -> bool:
+    cap = None
+    try:
+        cap = _open_capture(path)
+        if not cap.isOpened():
+            return False
+        for _ in range(2):
+            ret, frame = cap.read()
+            if ret and frame is not None and getattr(frame, "size", 0) > 0:
+                return True
+        return False
+    except Exception as e:
+        logger.debug(f"探测 {path} 失败: {e}")
+        return False
+    finally:
+        if cap is not None:
+            _safe_release_capture(cap)
+
+
+def _probe_opencv_index(index: int) -> bool:
+    cap = None
+    try:
+        cap = _open_capture(index)
+        return bool(cap.isOpened())
+    except Exception as e:
+        logger.debug(f"探测 index={index} 失败: {e}")
+        return False
+    finally:
+        if cap is not None:
+            _safe_release_capture(cap)
+
+
 def list_camera_devices(
     max_index: int = 5,
     consecutive_fail_limit: int = 2,
@@ -367,92 +403,39 @@ def list_camera_devices(
 
     # 1) Linux：/dev/video* 优先列出（便于 Pi 选对节点）
     for path in _list_v4l2_paths():
-        try:
-            cap = _open_capture(path)
-            opened = bool(cap.isOpened())
-            if opened:
-                # 尝试读一帧判断是否为真正 capture 节点
-                ok = False
-                try:
-                    for _ in range(2):
-                        ret, frame = cap.read()
-                        if ret and frame is not None and getattr(frame, "size", 0) > 0:
-                            ok = True
-                            break
-                except Exception:
-                    ok = False
-                cap.release()
-                if ok:
-                    key = path
-                    if key not in seen:
-                        devices.append(
-                            CameraDeviceInfo(
-                                key=key,
-                                name=f"V4L2 {path}",
-                                kind="v4l2",
-                                path=path,
-                            )
-                        )
-                        seen.add(key)
-            else:
-                try:
-                    cap.release()
-                except Exception:
-                    pass
-        except Exception as e:
-            logger.debug(f"探测 {path} 失败: {e}")
+        if path in seen or not _probe_v4l2_device(path):
+            continue
+        devices.append(
+            CameraDeviceInfo(key=path, name=f"V4L2 {path}", kind="v4l2", path=path)
+        )
+        seen.add(path)
 
     # 2) OpenCV 数字 index（全平台）
     consecutive_fail = 0
     for i in range(max(0, max_index) + 1):
-        try:
-            cap = _open_capture(i)
-            opened = bool(cap.isOpened())
-            if opened:
-                key = str(i)
-                # 若已通过 /dev/video{i} 列出则跳过重复
-                path_alias = f"/dev/video{i}"
-                if key not in seen and path_alias not in seen:
-                    devices.append(
-                        CameraDeviceInfo(
-                            key=key,
-                            name=f"摄像头 {i}",
-                            kind="opencv",
-                            index=i,
-                        )
+        if _probe_opencv_index(i):
+            key = str(i)
+            if key not in seen and f"/dev/video{i}" not in seen:
+                devices.append(
+                    CameraDeviceInfo(
+                        key=key, name=f"摄像头 {i}", kind="opencv", index=i
                     )
-                    seen.add(key)
-                try:
-                    cap.release()
-                except Exception:
-                    pass
-                consecutive_fail = 0
-            else:
-                consecutive_fail += 1
-                try:
-                    cap.release()
-                except Exception:
-                    pass
-                if consecutive_fail >= consecutive_fail_limit:
-                    break
-        except Exception as e:
-            consecutive_fail += 1
-            logger.debug(f"探测 index={i} 失败: {e}")
-            if consecutive_fail >= consecutive_fail_limit:
-                break
+                )
+                seen.add(key)
+            consecutive_fail = 0
+            continue
+        consecutive_fail += 1
+        if consecutive_fail >= consecutive_fail_limit:
+            break
 
     # 3) 树莓派 CSI
-    if _picamera2_available():
-        key = "picamera2"
-        if key not in seen:
-            devices.append(
-                CameraDeviceInfo(
-                    key=key,
-                    name="树莓派 CSI (picamera2)",
-                    kind="picamera2",
-                )
+    if _picamera2_available() and "picamera2" not in seen:
+        devices.append(
+            CameraDeviceInfo(
+                key="picamera2", name="树莓派 CSI (picamera2)", kind="picamera2"
             )
-            seen.add(key)
+        )
+        seen.add("picamera2")
 
     logger.info(f"摄像头枚举完成: {len(devices)} 个 {[d.name for d in devices]}")
     return devices

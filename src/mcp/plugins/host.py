@@ -52,7 +52,7 @@ def config_readonly_snapshot(config: Any) -> dict[str, Any]:
         *parents, key = path.split(".")
         for part in parents:
             target = target.setdefault(part, {})
-        target[key] = deepcopy(value)
+        target[key] = value
     return snapshot
 
 
@@ -69,7 +69,7 @@ class ReadOnlyConfig(Mapping):
 
     def __init__(self, config: Any) -> None:
         self._snapshot = config_readonly_snapshot(config)
-        self._data = _freeze(deepcopy(self._snapshot))
+        self._data = _freeze(self._snapshot)
 
     def __getitem__(self, key):
         return self._data[key]
@@ -118,16 +118,6 @@ class McpHost:
     @property
     def registered_tool_names(self) -> list[str]:
         return list(self._registered_names)
-
-    def bind_plugin(self, plugin_id: str) -> "McpHost":
-        """返回绑定到指定 plugin_id 的视图（共享 add_tool / capabilities）."""
-        child = McpHost(
-            self._add_tool,
-            capabilities=self._capabilities,
-            allow_get=self._allow_get,
-            plugin_id=plugin_id,
-        )
-        return child
 
     def add_tool(self, tool: McpTool) -> None:
         """注册工具；记录名称供卸载/诊断."""
@@ -190,27 +180,28 @@ def _to_property_list(
     return PropertyList(converted)
 
 
-def _dict_to_property(data: dict[str, Any]) -> Property:
-    """支持简化 dict：{name, type: str|int|bool|string|integer|boolean, ...}."""
-    name = data["name"]
+_PROPERTY_TYPE_MAP = {
+    "str": PropertyType.STRING,
+    "string": PropertyType.STRING,
+    "int": PropertyType.INTEGER,
+    "integer": PropertyType.INTEGER,
+    "bool": PropertyType.BOOLEAN,
+    "boolean": PropertyType.BOOLEAN,
+}
+
+
+def property_from_dict(data: dict[str, Any], *, strict: bool = True) -> Property:
+    """将简化 dict 反序列化为 Property：{name, type: str|int|bool|..., ...}."""
+    name = str(data["name"])
     raw_type = data.get("type", "string")
-    type_map = {
-        "str": PropertyType.STRING,
-        "string": PropertyType.STRING,
-        "int": PropertyType.INTEGER,
-        "integer": PropertyType.INTEGER,
-        "bool": PropertyType.BOOLEAN,
-        "boolean": PropertyType.BOOLEAN,
-        PropertyType.STRING: PropertyType.STRING,
-        PropertyType.INTEGER: PropertyType.INTEGER,
-        PropertyType.BOOLEAN: PropertyType.BOOLEAN,
-    }
     if isinstance(raw_type, PropertyType):
         ptype = raw_type
     else:
-        ptype = type_map.get(str(raw_type).lower())
+        ptype = _PROPERTY_TYPE_MAP.get(str(raw_type).lower())
         if ptype is None:
-            raise ValueError(f"未知属性类型: {raw_type}")
+            if strict:
+                raise ValueError(f"未知属性类型: {raw_type}")
+            ptype = PropertyType.STRING
     return Property(
         name,
         ptype,
@@ -218,3 +209,7 @@ def _dict_to_property(data: dict[str, Any]) -> Property:
         min_value=data.get("min", data.get("min_value")),
         max_value=data.get("max", data.get("max_value")),
     )
+
+
+def _dict_to_property(data: dict[str, Any]) -> Property:
+    return property_from_dict(data, strict=True)

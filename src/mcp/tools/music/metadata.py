@@ -4,6 +4,8 @@ from pathlib import Path
 
 from src.logging import get_logger
 
+from .state import format_duration
+
 logger = get_logger()
 
 try:
@@ -66,9 +68,7 @@ class MusicMetadata:
     def format_duration(self) -> str:
         if self.duration is None:
             return "未知"
-        minutes = int(self.duration) // 60
-        seconds = int(self.duration) % 60
-        return f"{minutes:02d}:{seconds:02d}"
+        return format_duration(self.duration)
 
     def display_name(self) -> str:
         title = self.title or "未知标题"

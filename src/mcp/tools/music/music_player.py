@@ -11,13 +11,12 @@ from .bus import MusicEventBridge
 from .cache import MusicCache
 from .config import load_music_config
 from .download import MusicDownloader
-from .events import MusicEventPublisher
 from .lifecycle import await_cleanup
 from .local_library import LocalLibrary
 from .lyrics import fetch_kuwo_lyrics
 from .online_search import search_song
-from .playback import PlaybackDeps, PlaybackEngine
-from .state import PlaybackRequest, PlaybackState
+from .playback import PlaybackEngine
+from .state import PlaybackRequest, PlaybackState, format_duration
 
 logger = get_logger()
 
@@ -33,16 +32,13 @@ class MusicPlayer:
         self._cache = MusicCache()
         self._downloader = MusicDownloader(self._cache)
         self._library = LocalLibrary(self._cache)
-        self._events = MusicEventPublisher()
-        self._engine = PlaybackEngine(
-            PlaybackDeps(
-                cache=self._cache,
-                downloader=self._downloader,
-                library=self._library,
-                events=self._events,
-            )
-        )
         self._bus = MusicEventBridge(self)
+        self._engine = PlaybackEngine(
+            cache=self._cache,
+            downloader=self._downloader,
+            library=self._library,
+            events=self._bus,
+        )
         # Input lookups can finish out of order, or after stop/detach.
         self._request_generation = 0
 
@@ -54,7 +50,7 @@ class MusicPlayer:
         return self._engine.is_speaking()
 
     def format_time(self, seconds: float) -> str:
-        return self._format_time(seconds)
+        return format_duration(seconds)
 
     async def tick_lyrics(self) -> None:
         await self._engine.tick_lyrics()
@@ -112,7 +108,6 @@ class MusicPlayer:
 
     def set_event_bus(self, event_bus, plugin_ctx=None) -> None:
         self._bus.set_event_bus(event_bus)
-        self._events.event_bus = event_bus
         self._engine.set_speaking_provider(
             plugin_ctx.is_speaking if plugin_ctx is not None else None
         )
@@ -130,7 +125,6 @@ class MusicPlayer:
             finally:
                 self._engine.set_speaking_provider(None)
                 self._bus.detach()
-                self._events.event_bus = None
 
         await await_cleanup(asyncio.create_task(close()))
 
@@ -172,7 +166,7 @@ class MusicPlayer:
             "status": "success",
             "message": f"正在播放: {state.song}",
             "song": state.song,
-            "duration": self._format_time(state.duration),
+            "duration": format_duration(state.duration),
             "total_seconds": state.duration,
         }
 
@@ -243,7 +237,7 @@ class MusicPlayer:
         return {
             "status": "success",
             "message": f"获取到 {len(lyrics)} 行歌词",
-            "lyrics": [f"[{self._format_time(t)}] {text}" for t, text in lyrics],
+            "lyrics": [f"[{format_duration(t)}] {text}" for t, text in lyrics],
         }
 
     async def get_status(self) -> dict:
@@ -266,17 +260,13 @@ class MusicPlayer:
                 f"暂停来源: {state.pause_source or '无'} (tts=说话时临时暂停)\n"
                 f"总时长秒: {int(state.duration)}\n"
                 f"当前位置秒: {int(position)}\n"
-                f"播放时长: {self._format_time(state.duration)}\n"
-                f"当前位置: {self._format_time(position)}\n"
+                f"播放时长: {format_duration(state.duration)}\n"
+                f"当前位置: {format_duration(position)}\n"
                 f"播放进度: {progress}%\n"
                 f"歌词可用: {'是' if state.lyrics else '否'}\n"
                 "提示: 跳转百分之N请调用 seek(percent=N)，不要用歌词推算"
             ),
         }
-
-    @staticmethod
-    def _format_time(seconds: float) -> str:
-        return f"{int(seconds) // 60:02d}:{int(seconds) % 60:02d}"
 
     def __del__(self):
         try:

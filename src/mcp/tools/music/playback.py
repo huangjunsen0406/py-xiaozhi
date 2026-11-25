@@ -8,7 +8,6 @@ from __future__ import annotations
 import asyncio
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 from urllib.parse import urlparse
@@ -19,13 +18,14 @@ from src.audio_codecs.music_decoder import MusicDecoder, is_http_url
 from src.constants.constants import AudioConfig
 from src.logging import get_logger
 
-from .events import MusicEventPublisher, MusicLyricsData, MusicStateData
+from .events import MusicLyricsData, MusicStateData
 from .lifecycle import await_cleanup
 from .lyrics import format_lyric_display, lyric_at
-from .state import PlaybackRequest, PlaybackState
+from .state import PlaybackRequest, PlaybackState, format_duration
 
 if TYPE_CHECKING:
     from src.audio_codecs.audio_codec import AudioCodec
+    from src.mcp.tools.music.bus import MusicEventBridge
     from src.mcp.tools.music.cache import MusicCache
     from src.mcp.tools.music.download import MusicDownloader
     from src.mcp.tools.music.local_library import LocalLibrary
@@ -33,22 +33,21 @@ if TYPE_CHECKING:
 logger = get_logger()
 
 
-@dataclass
-class PlaybackDeps:
-    cache: MusicCache
-    downloader: MusicDownloader
-    library: LocalLibrary
-    events: MusicEventPublisher
-
-
 class PlaybackEngine:
     """播放状态机；状态字段挂在本实例上."""
 
-    def __init__(self, deps: PlaybackDeps) -> None:
-        self._cache = deps.cache
-        self._downloader = deps.downloader
-        self._library = deps.library
-        self._events = deps.events
+    def __init__(
+        self,
+        *,
+        cache: MusicCache,
+        downloader: MusicDownloader,
+        library: LocalLibrary,
+        events: MusicEventBridge,
+    ) -> None:
+        self._cache = cache
+        self._downloader = downloader
+        self._library = library
+        self._events = events
         self._is_speaking: Callable[[], bool] = lambda: False
         self._generation = 0
         self._codec_generation = 0
@@ -136,10 +135,6 @@ class PlaybackEngine:
         if duration > 0:
             self.total_duration = duration
         return await self.start_playback(request.source)
-
-    @staticmethod
-    def _format_time(seconds: float) -> str:
-        return f"{int(seconds) // 60:02d}:{int(seconds) % 60:02d}"
 
     async def emit_state_change(
         self,
@@ -233,6 +228,33 @@ class PlaybackEngine:
             if self._stop_task is task and task.done():
                 self._stop_task = None
 
+    async def _teardown_pipeline(
+        self,
+        *,
+        clear_codec: bool = False,
+        resolve_codec: bool = False,
+        cancel_startup: bool = False,
+    ) -> int:
+        """统一拆解播放管线：先停消费循环，再停解码器，再清空队列."""
+        await self._cancel_playback_task()
+        if cancel_startup:
+            startup = self._decode_start_task
+            if startup is not None:
+                if not startup.done():
+                    startup.cancel()
+                await asyncio.gather(startup, return_exceptions=True)
+                if self._decode_start_task is startup:
+                    self._decode_start_task = None
+        decoder, self.decoder = self.decoder, None
+        if decoder:
+            await decoder.stop()
+        cleared = await self._clear_music_queue()
+        if clear_codec:
+            codec = self._get_audio_codec() if resolve_codec else self.audio_codec
+            if codec is not None:
+                await codec.clear_music_queue()
+        return cleared
+
     async def _stop_playback(self) -> dict:
         was_playing = self.is_playing
         current_song = self.current_song
@@ -242,21 +264,10 @@ class PlaybackEngine:
         try:
             # Stop consuming before stopping the decoder: its terminal marker
             # must not turn an explicit stop into a completion or failure event.
-            await self._cancel_playback_task()
-            startup = self._decode_start_task
-            if startup is not None:
-                if not startup.done():
-                    startup.cancel()
-                await asyncio.gather(startup, return_exceptions=True)
-                if self._decode_start_task is startup:
-                    self._decode_start_task = None
-            decoder, self.decoder = self.decoder, None
-            if decoder:
-                await decoder.stop()
+            cleared = await self._teardown_pipeline(
+                clear_codec=was_playing, cancel_startup=True
+            )
             await self.cancel_prefetch()
-            cleared = await self._clear_music_queue()
-            if self.audio_codec and was_playing:
-                await self.audio_codec.clear_music_queue()
             logger.debug(f"停止时清空 {cleared} 帧音乐数据")
             self.current_lyric_index = -1
             self.api_url = None
@@ -284,13 +295,7 @@ class PlaybackEngine:
                     logger.info(f"更新暂停来源: {old} → {source}")
                 if source != "tts":
                     self._generation += 1
-                    await self._cancel_playback_task()
-                    if self.decoder:
-                        await self.decoder.stop()
-                        self.decoder = None
-                    await self._clear_music_queue()
-                    if self.audio_codec:
-                        await self.audio_codec.clear_music_queue()
+                    await self._teardown_pipeline(clear_codec=True)
                 return {"status": "info", "message": "已经处于暂停状态"}
 
             self.paused = True
@@ -298,30 +303,22 @@ class PlaybackEngine:
             if self.start_play_time > 0:
                 self.current_position = time.time() - self.start_play_time
 
-            fmt = self._format_time
-
             if source == "tts":
                 # TTS 逐句闪避：保留解码器与队列（解码器会在满队列处
                 # 自然等位），恢复零成本，不用逐句重启 ffmpeg
                 logger.info(
                     f"暂停播放(tts, 保留解码器): {self.current_song} "
-                    f"at {fmt(self.current_position)}"
+                    f"at {format_duration(self.current_position)}"
                 )
                 return {"status": "success", "message": "已暂停"}
 
             self._generation += 1
-            await self._cancel_playback_task()
-            if self.decoder:
-                await self.decoder.stop()
-                self.decoder = None
-
-            cleared = await self._clear_music_queue()
-            audio_codec = self._get_audio_codec()
-            if audio_codec:
-                # 手动暂停要立即静音：把 codec 侧音乐余量也清掉
-                await audio_codec.clear_music_queue()
+            # 手动暂停要立即静音：把 codec 侧音乐余量也清掉
+            cleared = await self._teardown_pipeline(
+                clear_codec=True, resolve_codec=True
+            )
             logger.info(
-                f"暂停播放: {self.current_song} at {fmt(self.current_position)}, "
+                f"暂停播放: {self.current_song} at {format_duration(self.current_position)}, "
                 f"来源: {source}, 清空 {cleared} 帧音乐队列"
             )
             return {"status": "success", "message": "已暂停"}
@@ -350,7 +347,7 @@ class PlaybackEngine:
                 self.last_lyric_tick = 0.0
                 logger.info(
                     f"恢复播放(tts, 解码器直连): {self.current_song} from "
-                    f"{self._format_time(self.current_position)}"
+                    f"{format_duration(self.current_position)}"
                 )
                 await self.emit_state_change("playing", self.current_song)
                 return {"status": "success", "message": "已恢复播放"}
@@ -369,9 +366,8 @@ class PlaybackEngine:
             ):
                 return {"status": "error", "message": "无法找到音频文件"}
 
-            fmt = self._format_time
             logger.info(
-                f"恢复播放: {self.current_song} from {fmt(self.current_position)}"
+                f"恢复播放: {self.current_song} from {format_duration(self.current_position)}"
             )
 
             if is_http_url(self._current_source) and self.song_id:
@@ -420,7 +416,6 @@ class PlaybackEngine:
                     self.total_duration = duration
 
             target: float | None = None
-            fmt = self._format_time
             if percent is not None and percent >= 0:
                 if self.total_duration <= 0:
                     return {
@@ -430,8 +425,8 @@ class PlaybackEngine:
                 p = max(0.0, min(100.0, float(percent)))
                 target = self.total_duration * (p / 100.0)
                 logger.info(
-                    f"按百分比跳转: {p:.0f}% → {fmt(target)} "
-                    f"(总时长 {fmt(self.total_duration)})"
+                    f"按百分比跳转: {p:.0f}% → {format_duration(target)} "
+                    f"(总时长 {format_duration(self.total_duration)})"
                 )
             elif position is not None and position >= 0:
                 target = float(position)
@@ -448,20 +443,14 @@ class PlaybackEngine:
 
             self._generation += 1
             generation = self._generation
-            await self._cancel_playback_task()
-            if self.decoder:
-                await self.decoder.stop()
-                self.decoder = None
-
-            cleared = await self._clear_music_queue()
-            audio_codec = self._get_audio_codec()
-            if audio_codec:
-                # 只清音乐播放队列；TTS 队列独立，不受跳转影响
-                await audio_codec.clear_music_queue()
+            # 只清音乐播放队列；TTS 队列独立，不受跳转影响
+            cleared = await self._teardown_pipeline(
+                clear_codec=True, resolve_codec=True
+            )
 
             if generation != self._generation:
                 return {"status": "info", "message": "播放请求已取消"}
-            logger.info(f"跳转到 {fmt(target)}，清空 {cleared} 帧音乐数据")
+            logger.info(f"跳转到 {format_duration(target)}，清空 {cleared} 帧音乐数据")
             success = await self.start_playback(
                 self._current_source,
                 target,
@@ -471,7 +460,7 @@ class PlaybackEngine:
                 return {
                     "status": "success",
                     "message": (
-                        f"已跳转到 {fmt(target)}"
+                        f"已跳转到 {format_duration(target)}"
                         + (
                             f"（约 {percent:.0f}%）"
                             if percent is not None and percent >= 0
@@ -556,11 +545,7 @@ class PlaybackEngine:
                 self.start_play_time = 0.0
                 self.current_lyric_index = -1
                 self.last_lyric_tick = 0.0
-                await self._cancel_playback_task()
-                if self.decoder:
-                    await self.decoder.stop()
-                    self.decoder = None
-                await self._clear_music_queue()
+                await self._teardown_pipeline()
                 return True
 
             media_url = await self._downloader.resolve_play_url(
@@ -616,7 +601,6 @@ class PlaybackEngine:
         headers: dict[str, str] | None,
     ) -> bool:
         generation = self._generation
-        decoder = None
         startup = None
         try:
             self.last_error = None
@@ -625,11 +609,7 @@ class PlaybackEngine:
 
             if self._is_speaking():
                 logger.info("TTS 进行中，本地音源已就绪，说完再播")
-                if self.decoder:
-                    await self.decoder.stop()
-                    self.decoder = None
-                await self._cancel_playback_task()
-                await self._clear_music_queue()
+                await self._teardown_pipeline()
                 if generation != self._generation:
                     return False
                 self.is_playing = True
@@ -640,12 +620,7 @@ class PlaybackEngine:
                 self.current_lyric_index = -1
                 return True
 
-            if self.decoder:
-                await self.decoder.stop()
-                self.decoder = None
-
-            await self._cancel_playback_task()
-            cleared = await self._clear_music_queue()
+            cleared = await self._teardown_pipeline()
             if cleared > 0:
                 logger.debug(f"开始播放前清空 {cleared} 帧音乐数据")
 
@@ -770,17 +745,14 @@ class PlaybackEngine:
         logger.warning("音乐播放失败: %s", error)
 
     async def _write_to_audio_codec(self, pcm_data: np.ndarray):
-        try:
-            audio_codec = self._get_audio_codec()
-            if not audio_codec:
-                return
-            if pcm_data.ndim > 1:
-                pcm_data = pcm_data.mean(axis=1, dtype=np.float32)
-            if pcm_data.dtype != np.float32:
-                pcm_data = pcm_data.astype(np.float32)
-            await audio_codec.write_pcm_direct(pcm_data)
-        except Exception as e:
-            logger.error(f"写入 AudioCodec 失败: {e}", exc_info=True)
+        audio_codec = self._get_audio_codec()
+        if not audio_codec:
+            return
+        if pcm_data.ndim > 1:
+            pcm_data = pcm_data.mean(axis=1, dtype=np.float32)
+        if pcm_data.dtype != np.float32:
+            pcm_data = pcm_data.astype(np.float32)
+        await audio_codec.write_pcm_direct(pcm_data)
 
     async def _handle_playback_finished(self):
         if not self.is_playing:

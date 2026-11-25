@@ -55,21 +55,15 @@ class BaseCamera(ABC):
         )
         return True
 
-    # 兼容旧名
-    def capture_with_cv2(self) -> bool:
-        return self.capture_frame()
-
     def set_explain_url(self, url: str):  # noqa: B027
         """设置视觉服务 URL（子类按需覆写）."""
 
     def set_explain_token(self, token: str):  # noqa: B027
         """设置视觉服务 token（子类按需覆写）."""
 
-    @abstractmethod
     def capture(self) -> bool:
-        """
-        捕获图像.
-        """
+        """捕获图像（OpenCV/V4L2 或 picamera2，见 capture_backend）."""
+        return self.capture_frame()
 
     @abstractmethod
     def analyze(self, question: str, image_data: bytes | None = None) -> str:

@@ -1,10 +1,13 @@
-"""EventBus control adapter; all playback ownership stays behind MusicPlayer."""
+"""EventBus bidirectional adapter; all playback ownership stays behind MusicPlayer."""
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from src.core.event_bus import Events
 from src.logging import get_logger
+
+from .events import MusicControlRequest, MusicLyricsData, MusicStateData
 
 if TYPE_CHECKING:
     from .music_player import MusicPlayer
@@ -22,8 +25,6 @@ class MusicEventBridge:
         await self._player.bind_audio_codec(codec)
 
     def set_event_bus(self, event_bus) -> None:
-        from src.core.event_bus import Events
-
         self.unsubscribe()
         self.event_bus = event_bus
         if event_bus:
@@ -35,8 +36,6 @@ class MusicEventBridge:
         if not self.event_bus:
             return
         try:
-            from src.core.event_bus import Events
-
             self.event_bus.off(Events.MUSIC_PAUSE_REQUEST, self._on_pause_request)
             self.event_bus.off(Events.MUSIC_RESUME_REQUEST, self._on_resume_request)
             self.event_bus.off(Events.AUDIO_CODEC_CHANGED, self.on_audio_codec_changed)
@@ -47,10 +46,22 @@ class MusicEventBridge:
         self.unsubscribe()
         self.event_bus = None
 
+    async def emit_state(self, data: MusicStateData) -> None:
+        await self._emit(Events.MUSIC_STATE_CHANGED, data)
+
+    async def emit_lyrics(self, data: MusicLyricsData) -> None:
+        await self._emit(Events.MUSIC_LYRICS_UPDATE, data)
+
+    async def _emit(self, event: str, data: Any) -> None:
+        if self.event_bus is None:
+            return
+        try:
+            await self.event_bus.emit(event, data)
+        except Exception as error:
+            logger.debug("发送音乐事件失败: %s", error)
+
     @staticmethod
     def _request_source(data: Any, default: str | None) -> str | None:
-        from .events import MusicControlRequest
-
         if isinstance(data, MusicControlRequest):
             return data.source
         if isinstance(data, dict):

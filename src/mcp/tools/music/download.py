@@ -52,28 +52,6 @@ class MusicDownloader:
     def set_config(self, config: dict[str, Any]) -> None:
         self._config = config
 
-    async def get_or_download(
-        self,
-        song_id: str,
-        api_url: str,
-        *,
-        filename: str | None = None,
-    ) -> Path | None:
-        """有缓存直接用，没有再下载."""
-        self._cache.prepare()
-        name = filename or f"{song_id}.mp3"
-        hit = self._cache.find_song_file(song_id)
-        if hit is not None:
-            logger.info(f"使用缓存: {hit}")
-            return hit
-
-        cache_path = self._cache.root / name
-        if cache_path.exists():
-            logger.info(f"使用缓存: {cache_path}")
-            return cache_path
-
-        return await self.download(api_url, name, song_id=song_id)
-
     @staticmethod
     def _extract_url_from_payload(data: Any) -> str | None:
         # 各家 JSON 字段不太一样，尽量抠出 url
@@ -470,6 +448,36 @@ class MusicDownloader:
                 self._prefetch_task = None
                 self._prefetch_song_id = None
 
+    @staticmethod
+    async def _terminate_process(child) -> None:
+        if child.returncode is not None:
+            return
+        try:
+            child.terminate()
+        except ProcessLookupError:
+            return
+        try:
+            await asyncio.wait_for(child.wait(), timeout=2.0)
+        except asyncio.TimeoutError:
+            try:
+                child.kill()
+            except ProcessLookupError:
+                return
+            await child.wait()
+
+    @classmethod
+    async def _cleanup_ffmpeg_process(cls, spawn, proc, communication) -> None:
+        # spawn is shielded: cancellation can precede the Process handle.
+        try:
+            child = proc if proc is not None else await spawn
+        except Exception:
+            return
+        reader = communication or asyncio.create_task(child.communicate())
+        try:
+            await cls._terminate_process(child)
+        finally:
+            await asyncio.gather(reader, return_exceptions=True)
+
     async def _ffmpeg_copy_url(
         self, media_url: str, out_path: Path, headers: dict[str, str]
     ) -> bool:
@@ -528,29 +536,8 @@ class MusicDownloader:
             logger.warning(f"FFmpeg copy 预取异常: {e}", exc_info=True)
             return False
         finally:
-
-            async def cleanup():
-                # spawn is shielded: cancellation can precede the Process handle.
-                try:
-                    child = proc if proc is not None else await spawn
-                except Exception:
-                    return
-                reader = communication or asyncio.create_task(child.communicate())
-                try:
-                    if child.returncode is None:
-                        try:
-                            child.terminate()
-                        except ProcessLookupError:
-                            pass
-                        try:
-                            await asyncio.wait_for(child.wait(), timeout=2.0)
-                        except asyncio.TimeoutError:
-                            try:
-                                child.kill()
-                            except ProcessLookupError:
-                                pass
-                            await child.wait()
-                finally:
-                    await asyncio.gather(reader, return_exceptions=True)
-
-            await await_cleanup(asyncio.create_task(cleanup()))
+            await await_cleanup(
+                asyncio.create_task(
+                    self._cleanup_ffmpeg_process(spawn, proc, communication)
+                )
+            )

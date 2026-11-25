@@ -17,7 +17,7 @@ from typing import Any
 
 from src.logging import get_logger
 from src.mcp.plugins.host import config_readonly_snapshot
-from src.mcp.tooling import McpTool, Property, PropertyList, PropertyType
+from src.mcp.tooling import McpTool, PropertyList
 from src.utils.resource_finder import get_app_root
 
 logger = get_logger()
@@ -257,6 +257,19 @@ class PluginSubprocessSession:
         )
         return result.get("value")
 
+    def _close_streams(self, proc: subprocess.Popen) -> None:
+        for stream in (proc.stdin, proc.stdout, proc.stderr):
+            if stream is None:
+                continue
+            try:
+                stream.close()
+            except Exception:
+                logger.debug(
+                    "[MCP插件:%s] 关闭子进程管道失败",
+                    self.plugin_id,
+                    exc_info=True,
+                )
+
     def terminate(self) -> None:
         proc = self._proc
         self._proc = None
@@ -275,16 +288,7 @@ class PluginSubprocessSession:
                 "[MCP插件:%s] 结束子进程: %s", self.plugin_id, e, exc_info=True
             )
         finally:
-            for stream in (proc.stdin, proc.stdout, proc.stderr):
-                if stream is not None:
-                    try:
-                        stream.close()
-                    except Exception:
-                        logger.debug(
-                            "[MCP插件:%s] 关闭子进程管道失败",
-                            self.plugin_id,
-                            exc_info=True,
-                        )
+            self._close_streams(proc)
 
     def __del__(self) -> None:
         try:
@@ -296,28 +300,9 @@ class PluginSubprocessSession:
 def _props_from_meta(prop_defs: list[dict[str, Any]] | None) -> PropertyList:
     if not prop_defs:
         return PropertyList()
-    type_map = {
-        "string": PropertyType.STRING,
-        "str": PropertyType.STRING,
-        "integer": PropertyType.INTEGER,
-        "int": PropertyType.INTEGER,
-        "boolean": PropertyType.BOOLEAN,
-        "bool": PropertyType.BOOLEAN,
-    }
-    props: list[Property] = []
-    for d in prop_defs:
-        raw = str(d.get("type", "string")).lower()
-        ptype = type_map.get(raw, PropertyType.STRING)
-        props.append(
-            Property(
-                str(d["name"]),
-                ptype,
-                default_value=d.get("default", d.get("default_value")),
-                min_value=d.get("min", d.get("min_value")),
-                max_value=d.get("max", d.get("max_value")),
-            )
-        )
-    return PropertyList(props)
+    from src.mcp.plugins.host import property_from_dict
+
+    return PropertyList([property_from_dict(d, strict=False) for d in prop_defs])
 
 
 def register_subprocess_plugin_tools(

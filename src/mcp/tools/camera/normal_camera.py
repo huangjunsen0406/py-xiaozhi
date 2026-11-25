@@ -33,12 +33,6 @@ class NormalCamera(BaseCamera):
         if token:
             logger.info("Vision service token has been set")
 
-    def capture(self) -> bool:
-        """
-        捕获图像（OpenCV/V4L2 或 picamera2，见 capture_backend）.
-        """
-        return self.capture_frame()
-
     def analyze(self, question: str, image_data: bytes | None = None) -> str:
         if not self.explain_url:
             return json.dumps(
@@ -83,7 +77,7 @@ class NormalCamera(BaseCamera):
 
             # 记录响应
             logger.info(
-                f"Explain image size={self.jpeg_data['len']}, "
+                f"Explain image size={len(buf)}, "
                 f"question={question}\n{response.text}"
             )
             return response.text

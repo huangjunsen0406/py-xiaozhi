@@ -168,13 +168,13 @@ def _setup_sys_path(plugin_root: Path, platform_tag: str) -> None:
 
 
 def _read_msg() -> dict[str, Any] | None:
-    line = sys.stdin.readline()
-    if not line:
-        return None
-    line = line.strip()
-    if not line:
-        return _read_msg()
-    return json.loads(line)
+    while True:
+        line = sys.stdin.readline()
+        if not line:
+            return None
+        line = line.strip()
+        if line:
+            return json.loads(line)
 
 
 def _write_msg(obj: dict[str, Any]) -> None:

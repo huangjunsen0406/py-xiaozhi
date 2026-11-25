@@ -26,3 +26,9 @@ class PlaybackState:
     position: float
     error: str | None
     lyrics: tuple[tuple[float, str], ...]
+
+
+def format_duration(seconds: float) -> str:
+    """将秒数格式化为 MM:SS."""
+    total = int(seconds)
+    return f"{total // 60:02d}:{total % 60:02d}"

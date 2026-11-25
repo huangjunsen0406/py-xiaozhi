@@ -11,6 +11,8 @@ from typing import Dict, List, Optional
 
 from src.logging import get_logger
 
+from .utils import clean_app_name
+
 logger = get_logger()
 
 
@@ -99,69 +101,41 @@ def scan_installed_applications() -> List[Dict[str, str]]:
     return apps
 
 
-def scan_running_applications() -> List[Dict[str, str]]:
-    """扫描Windows系统中正在运行的应用程序.
+def _build_shortcut_app(root: str, filename: str) -> dict[str, str] | None:
+    if not filename.lower().endswith(".lnk"):
+        return None
+    display_name = filename[:-4]
+    if not _should_include_app(display_name):
+        return None
+    shortcut_path = os.path.join(root, filename)
+    target_path = _resolve_shortcut_target(shortcut_path)
+    return {
+        "name": clean_app_name(display_name),
+        "display_name": display_name,
+        "path": target_path or shortcut_path,
+        "type": "shortcut",
+    }
 
-    Returns:
-        List[Dict[str, str]]: 正在运行的应用程序列表
-    """
-    if platform.system() != "Windows":
-        return []
 
-    apps = []
-
-    try:
-        # 使用tasklist命令获取进程信息
-        result = subprocess.run(
-            ["tasklist", "/fo", "csv", "/v"], capture_output=True, text=True, timeout=10
-        )
-
-        if result.returncode == 0:
-            lines = result.stdout.strip().split("\n")[1:]  # 跳过标题行
-
-            for line in lines:
-                try:
-                    # 解析CSV格式
-                    parts = [part.strip('"') for part in line.split('","')]
-                    if len(parts) >= 8:
-                        image_name = parts[0].strip('"')
-                        pid = parts[1]
-                        window_title = parts[8] if len(parts) > 8 else ""
-
-                        # 过滤掉不需要的进程
-                        if _should_include_process(image_name, window_title):
-                            display_name = _extract_app_name(image_name, window_title)
-                            clean_name = clean_app_name(display_name)
-
-                            apps.append(
-                                {
-                                    "pid": int(pid),
-                                    "name": clean_name,
-                                    "display_name": display_name,
-                                    "command": image_name,
-                                    "window_title": window_title,
-                                    "type": "application",
-                                }
-                            )
-                except (ValueError, IndexError):
-                    continue
-
-        logger.info(f"[WindowsScanner] 找到 {len(apps)} 个正在运行的应用程序")
-        return apps
-
-    except Exception as e:
-        logger.error(f"[WindowsScanner] 扫描运行应用失败: {e}", exc_info=True)
-        return []
+def _scan_start_menu_dir(start_path: str) -> list[dict[str, str]]:
+    apps: list[dict[str, str]] = []
+    for root, _dirs, files in os.walk(start_path):
+        for file in files:
+            try:
+                app = _build_shortcut_app(root, file)
+                if app is not None:
+                    apps.append(app)
+            except Exception as e:
+                logger.debug(f"[WindowsScanner] 处理快捷方式失败 {file}: {e}")
+    return apps
 
 
 def _scan_main_start_menu_apps() -> List[Dict[str, str]]:
     """
     扫描开始菜单中的主要应用程序（过滤系统组件和辅助工具）.
     """
-    apps = []
-
-    # 开始菜单目录
-    start_menu_paths = [
+    apps: list[dict[str, str]] = []
+    start_menu_paths = (
         os.path.join(
             os.environ.get("PROGRAMDATA", ""),
             "Microsoft",
@@ -176,41 +150,15 @@ def _scan_main_start_menu_apps() -> List[Dict[str, str]]:
             "Start Menu",
             "Programs",
         ),
-    ]
+    )
 
     for start_path in start_menu_paths:
-        if os.path.exists(start_path):
-            try:
-                for root, dirs, files in os.walk(start_path):
-                    for file in files:
-                        if file.lower().endswith(".lnk"):
-                            try:
-                                shortcut_path = os.path.join(root, file)
-                                display_name = file[:-4]  # 移除.lnk扩展名
-
-                                # 过滤掉不需要的应用程序
-                                if _should_include_app(display_name):
-                                    clean_name = clean_app_name(display_name)
-                                    target_path = _resolve_shortcut_target(
-                                        shortcut_path
-                                    )
-
-                                    apps.append(
-                                        {
-                                            "name": clean_name,
-                                            "display_name": display_name,
-                                            "path": target_path or shortcut_path,
-                                            "type": "shortcut",
-                                        }
-                                    )
-
-                            except Exception as e:
-                                logger.debug(
-                                    f"[WindowsScanner] 处理快捷方式失败 {file}: {e}"
-                                )
-
-            except Exception as e:
-                logger.debug(f"[WindowsScanner] 扫描开始菜单失败 {start_path}: {e}")
+        if not os.path.exists(start_path):
+            continue
+        try:
+            apps.extend(_scan_start_menu_dir(start_path))
+        except Exception as e:
+            logger.debug(f"[WindowsScanner] 扫描开始菜单失败 {start_path}: {e}")
 
     return apps
 
@@ -264,6 +212,129 @@ def _scan_main_registry_apps() -> List[Dict[str, str]]:
     return apps
 
 
+_EXCLUDE_KEYWORDS = (
+    # Microsoft系统组件
+    "microsoft visual c++",
+    "microsoft .net",
+    "microsoft office",
+    "microsoft edge webview",
+    "microsoft visual studio",
+    "microsoft redistributable",
+    "microsoft windows sdk",
+    # 系统工具和驱动
+    "uninstall",
+    "卸载",
+    "readme",
+    "help",
+    "帮助",
+    "documentation",
+    "文档",
+    "driver",
+    "驱动",
+    "update",
+    "更新",
+    "hotfix",
+    "patch",
+    "补丁",
+    # 开发工具组件
+    "development",
+    "sdk",
+    "runtime",
+    "redistributable",
+    "framework",
+    "python documentation",
+    "python test suite",
+    "python executables",
+    "java update",
+    "java development kit",
+    # 系统服务
+    "service pack",
+    "security update",
+    "language pack",
+    # 无用的快捷方式
+    "website",
+    "web site",
+    "网站",
+    "online",
+    "在线",
+    "report",
+    "报告",
+    "feedback",
+    "反馈",
+)
+
+_INCLUDE_KEYWORDS = (
+    # 浏览器
+    "chrome",
+    "firefox",
+    "edge",
+    "safari",
+    "opera",
+    "brave",
+    # 办公软件
+    "office",
+    "word",
+    "excel",
+    "powerpoint",
+    "outlook",
+    "onenote",
+    "wps",
+    "typora",
+    "notion",
+    "obsidian",
+    # 开发工具
+    "visual studio code",
+    "vscode",
+    "pycharm",
+    "idea",
+    "eclipse",
+    "git",
+    "docker",
+    "nodejs",
+    "android studio",
+    # 通信软件
+    "qq",
+    "微信",
+    "wechat",
+    "skype",
+    "zoom",
+    "teams",
+    "飞书",
+    "feishu",
+    "discord",
+    "slack",
+    "telegram",
+    # 媒体软件
+    "vlc",
+    "potplayer",
+    "网易云音乐",
+    "spotify",
+    "itunes",
+    "photoshop",
+    "premiere",
+    "after effects",
+    "illustrator",
+    # 游戏平台
+    "steam",
+    "epic",
+    "origin",
+    "uplay",
+    "battlenet",
+    # 实用工具
+    "7-zip",
+    "winrar",
+    "bandizip",
+    "everything",
+    "listary",
+    "notepad++",
+    "sublime",
+    "atom",
+)
+
+_MS_SYSTEM_KEYWORDS = ("visual c++", ".net")
+_SYSTEM_INDICATORS = ("(x64)", "(x86)")
+
+
 def _should_include_app(display_name: str, publisher: str = "") -> bool:
     """判断是否应该包含该应用程序.
 
@@ -276,229 +347,17 @@ def _should_include_app(display_name: str, publisher: str = "") -> bool:
     """
     name_lower = display_name.lower()
 
-    # 明确排除的系统组件和运行库
-    exclude_keywords = [
-        # Microsoft系统组件
-        "microsoft visual c++",
-        "microsoft .net",
-        "microsoft office",
-        "microsoft edge webview",
-        "microsoft visual studio",
-        "microsoft redistributable",
-        "microsoft windows sdk",
-        # 系统工具和驱动
-        "uninstall",
-        "卸载",
-        "readme",
-        "help",
-        "帮助",
-        "documentation",
-        "文档",
-        "driver",
-        "驱动",
-        "update",
-        "更新",
-        "hotfix",
-        "patch",
-        "补丁",
-        # 开发工具组件
-        "development",
-        "sdk",
-        "runtime",
-        "redistributable",
-        "framework",
-        "python documentation",
-        "python test suite",
-        "python executables",
-        "java update",
-        "java development kit",
-        # 系统服务
-        "service pack",
-        "security update",
-        "language pack",
-        # 无用的快捷方式
-        "website",
-        "web site",
-        "网站",
-        "online",
-        "在线",
-        "report",
-        "报告",
-        "feedback",
-        "反馈",
-    ]
+    if any(keyword in name_lower for keyword in _EXCLUDE_KEYWORDS):
+        return False
 
-    # 检查是否包含排除关键词
-    for keyword in exclude_keywords:
-        if keyword in name_lower:
+    if any(keyword in name_lower for keyword in _INCLUDE_KEYWORDS):
+        return True
+
+    if publisher and "microsoft corporation" in publisher.lower():
+        if any(k in name_lower for k in _MS_SYSTEM_KEYWORDS):
             return False
 
-    # 明确包含的知名应用程序
-    include_keywords = [
-        # 浏览器
-        "chrome",
-        "firefox",
-        "edge",
-        "safari",
-        "opera",
-        "brave",
-        # 办公软件
-        "office",
-        "word",
-        "excel",
-        "powerpoint",
-        "outlook",
-        "onenote",
-        "wps",
-        "typora",
-        "notion",
-        "obsidian",
-        # 开发工具
-        "visual studio code",
-        "vscode",
-        "pycharm",
-        "idea",
-        "eclipse",
-        "git",
-        "docker",
-        "nodejs",
-        "android studio",
-        # 通信软件
-        "qq",
-        "微信",
-        "wechat",
-        "skype",
-        "zoom",
-        "teams",
-        "飞书",
-        "feishu",
-        "discord",
-        "slack",
-        "telegram",
-        # 媒体软件
-        "vlc",
-        "potplayer",
-        "网易云音乐",
-        "spotify",
-        "itunes",
-        "photoshop",
-        "premiere",
-        "after effects",
-        "illustrator",
-        # 游戏平台
-        "steam",
-        "epic",
-        "origin",
-        "uplay",
-        "battlenet",
-        # 实用工具
-        "7-zip",
-        "winrar",
-        "bandizip",
-        "everything",
-        "listary",
-        "notepad++",
-        "sublime",
-        "atom",
-    ]
-
-    # 检查是否包含明确包含的关键词
-    for keyword in include_keywords:
-        if keyword in name_lower:
-            return True
-
-    # 如果有发布者信息，排除Microsoft发布的系统组件
-    if publisher:
-        publisher_lower = publisher.lower()
-        if "microsoft corporation" in publisher_lower and any(
-            x in name_lower
-            for x in [
-                "visual c++",
-                ".net",
-                "redistributable",
-                "runtime",
-                "framework",
-                "update",
-            ]
-        ):
-            return False
-
-    # 默认包含其他应用程序（假设是用户安装的）
-    # 但排除明显的系统组件
-    system_indicators = ["(x64)", "(x86)", "redistributable", "runtime", "framework"]
-    if any(indicator in name_lower for indicator in system_indicators):
-        return False
-
-    return True
-
-
-def _should_include_process(image_name: str, window_title: str) -> bool:
-    """判断是否应该包含该进程.
-
-    Args:
-        image_name: 进程映像名称
-        window_title: 窗口标题
-
-    Returns:
-        bool: 是否包含
-    """
-    # 排除系统进程
-    system_processes = {
-        "dwm.exe",
-        "winlogon.exe",
-        "csrss.exe",
-        "smss.exe",
-        "lsass.exe",
-        "services.exe",
-        "svchost.exe",
-        "explorer.exe",
-        "taskhostw.exe",
-        "conhost.exe",
-        "dllhost.exe",
-        "rundll32.exe",
-        "msiexec.exe",
-        "wininit.exe",
-        "lsm.exe",
-        "spoolsv.exe",
-        "audiodg.exe",
-    }
-
-    image_lower = image_name.lower()
-
-    # 排除系统进程
-    if image_lower in system_processes:
-        return False
-
-    # 排除无窗口标题的进程（通常是后台服务）
-    if not window_title or window_title == "N/A":
-        return False
-
-    # 只包含有意义的窗口标题
-    if len(window_title.strip()) < 3:
-        return False
-
-    return True
-
-
-def _extract_app_name(image_name: str, window_title: str) -> str:
-    """从进程信息中提取应用程序名称.
-
-    Args:
-        image_name: 进程映像名称
-        window_title: 窗口标题
-
-    Returns:
-        str: 应用程序名称
-    """
-    # 优先使用窗口标题
-    if window_title and window_title != "N/A" and len(window_title.strip()) > 0:
-        return window_title.strip()
-
-    # 使用进程名称（去掉.exe后缀）
-    if image_name.lower().endswith(".exe"):
-        return image_name[:-4]
-
-    return image_name
+    return not any(indicator in name_lower for indicator in _SYSTEM_INDICATORS)
 
 
 def _resolve_shortcut_target(shortcut_path: str) -> Optional[str]:
@@ -526,6 +385,3 @@ def _resolve_shortcut_target(shortcut_path: str) -> Optional[str]:
         logger.debug(f"[WindowsScanner] 解析快捷方式失败: {e}")
 
     return None
-
-
-from .utils import clean_app_name

@@ -1,9 +1,5 @@
 """音乐相关配置读取."""
 
-from src.logging import get_logger
-
-logger = get_logger()
-
 DEFAULT_SEARCH_URL = "http://search.kuwo.cn/r.s"
 DEFAULT_URL_API = "https://lxmusicapi.onrender.com"
 DEFAULT_URL_API_KEY = "share-v3"
@@ -30,7 +26,7 @@ def load_music_config(config=None) -> dict:
         "URL_API": pick(cm, "MUSIC.URL_API", DEFAULT_URL_API),
         "URL_API_KEY": pick(cm, "MUSIC.URL_API_KEY", DEFAULT_URL_API_KEY),
         "LYRICS_URL": pick(cm, "MUSIC.LYRICS_URL", DEFAULT_LYRICS_URL),
-        "DEFAULT_BR": pick(cm, "MUSIC.DEFAULT_QUALITY", "320k") or "320k",
+        "DEFAULT_BR": pick(cm, "MUSIC.DEFAULT_QUALITY", "320k"),
         "SEARCH_LIMIT": 20,
         "HEADERS": {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",

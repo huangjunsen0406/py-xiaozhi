@@ -35,7 +35,7 @@ def launch_application(app_name: str) -> bool:
             ("注册表查找", _try_registry_launch),
             ("常见路径", _try_common_paths),
             ("where命令", _try_where_command),
-            ("UWP应用", _try_uwp_launch),
+            ("UWP应用", _launch_uwp_app),
         ]
 
         for method_name, method_func in launch_methods:
@@ -182,12 +182,65 @@ def _try_where_command(app_name: str) -> bool:
     return False
 
 
-def _try_uwp_launch(app_name: str) -> bool:
-    """尝试启动UWP应用程序."""
+_UNINSTALL_REGISTRY_PATHS = (
+    r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
+    r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall",
+)
+
+
+def _query_reg_value(winreg, key, name: str) -> str:
     try:
-        return _launch_uwp_app(app_name)
-    except Exception:
-        return False
+        value = winreg.QueryValueEx(key, name)[0]
+        return str(value) if value else ""
+    except OSError:
+        return ""
+
+
+def _find_exe_in_dir(install_location: str, app_name_lower: str) -> str | None:
+    if not install_location or not os.path.exists(install_location):
+        return None
+    for root, _dirs, files in os.walk(install_location):
+        for file in files:
+            lower = file.lower()
+            if lower.endswith(".exe") and app_name_lower in lower:
+                return os.path.join(root, file)
+    return None
+
+
+def _extract_exe_from_subkey(winreg, subkey, app_name_lower: str) -> str | None:
+    display_name = _query_reg_value(winreg, subkey, "DisplayName")
+    if app_name_lower not in display_name.lower():
+        return None
+
+    install_location = _query_reg_value(winreg, subkey, "InstallLocation")
+    found = _find_exe_in_dir(install_location, app_name_lower)
+    if found:
+        return found
+
+    display_icon = _query_reg_value(winreg, subkey, "DisplayIcon")
+    if display_icon.endswith(".exe") and os.path.exists(display_icon):
+        return display_icon
+    return None
+
+
+def _search_registry_path(winreg, registry_path: str, app_name_lower: str) -> str | None:
+    try:
+        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, registry_path) as key:
+            count = winreg.QueryInfoKey(key)[0]
+            for i in range(count):
+                try:
+                    subkey_name = winreg.EnumKey(key, i)
+                    with winreg.OpenKey(key, subkey_name) as subkey:
+                        found = _extract_exe_from_subkey(
+                            winreg, subkey, app_name_lower
+                        )
+                        if found:
+                            return found
+                except OSError:
+                    continue
+    except OSError:
+        return None
+    return None
 
 
 def _find_executable_in_registry(app_name: str) -> str | None:
@@ -201,72 +254,16 @@ def _find_executable_in_registry(app_name: str) -> str | None:
     """
     try:
         import winreg
-
-        registry_paths = [
-            r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
-            r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall",
-        ]
-
-        for registry_path in registry_paths:
-            try:
-                with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, registry_path) as key:
-                    for i in range(winreg.QueryInfoKey(key)[0]):
-                        try:
-                            subkey_name = winreg.EnumKey(key, i)
-                            with winreg.OpenKey(key, subkey_name) as subkey:
-                                try:
-                                    display_name = winreg.QueryValueEx(
-                                        subkey, "DisplayName"
-                                    )[0]
-                                    if app_name.lower() in display_name.lower():
-                                        try:
-                                            install_location = winreg.QueryValueEx(
-                                                subkey, "InstallLocation"
-                                            )[0]
-                                            if install_location and os.path.exists(
-                                                install_location
-                                            ):
-                                                for root, _dirs, files in os.walk(
-                                                    install_location
-                                                ):
-                                                    for file in files:
-                                                        if (
-                                                            file.lower().endswith(
-                                                                ".exe"
-                                                            )
-                                                            and app_name.lower()
-                                                            in file.lower()
-                                                        ):
-                                                            return os.path.join(
-                                                                root, file
-                                                            )
-                                        except FileNotFoundError:
-                                            pass
-
-                                        try:
-                                            display_icon = winreg.QueryValueEx(
-                                                subkey, "DisplayIcon"
-                                            )[0]
-                                            if (
-                                                display_icon
-                                                and display_icon.endswith(".exe")
-                                                and os.path.exists(display_icon)
-                                            ):
-                                                return display_icon
-                                        except FileNotFoundError:
-                                            pass
-
-                                except FileNotFoundError:
-                                    continue
-                        except Exception:
-                            continue
-            except Exception:
-                continue
-
-        return None
-
     except ImportError:
         logger.debug("[WindowsLauncher] winreg模块不可用，跳过注册表查找")
+        return None
+
+    app_name_lower = app_name.lower()
+    try:
+        for registry_path in _UNINSTALL_REGISTRY_PATHS:
+            found = _search_registry_path(winreg, registry_path, app_name_lower)
+            if found:
+                return found
         return None
     except Exception as e:
         logger.debug(f"[WindowsLauncher] 注册表查找失败: {e}")

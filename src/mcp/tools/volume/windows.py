@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 from src.logging import get_logger
 
 logger = get_logger()
@@ -11,31 +9,15 @@ logger = get_logger()
 
 class WindowsVolumeBackend:
     def __init__(self) -> None:
-        self._module_cache: dict[str, Any] = {}
         self.volume_control = None
         self._init()
 
-    def _lazy_import(self, module_name: str, attr: str | None = None) -> Any:
-        if module_name in self._module_cache:
-            module = self._module_cache[module_name]
-        else:
-            module = __import__(
-                module_name, fromlist=["*"] if "." in module_name else []
-            )
-            self._module_cache[module_name] = module
-        if attr:
-            return getattr(module, attr)
-        return module
-
     def _init(self) -> None:
         try:
-            POINTER = self._lazy_import("ctypes", "POINTER")
-            cast = self._lazy_import("ctypes", "cast")
-            CLSCTX_ALL = self._lazy_import("comtypes", "CLSCTX_ALL")
-            AudioUtilities = self._lazy_import("pycaw.pycaw", "AudioUtilities")
-            IAudioEndpointVolume = self._lazy_import(
-                "pycaw.pycaw", "IAudioEndpointVolume"
-            )
+            from ctypes import POINTER, cast
+
+            from comtypes import CLSCTX_ALL
+            from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
 
             devices = AudioUtilities.GetSpeakers()
             interface = devices.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)

@@ -9,6 +9,8 @@ import requests
 
 from src.logging import get_logger
 
+from .state import format_duration
+
 logger = get_logger()
 
 # (时间秒, 文本)
@@ -56,13 +58,7 @@ def format_lyric_display(
     text: str, position: float, duration: float
 ) -> str:
     """拼 UI 上用的歌词行，例如 [00:12/03:45] 歌词内容."""
-    return f"[{_fmt(position)}/{_fmt(duration)}] {text}"
-
-
-def _fmt(seconds: float) -> str:
-    minutes = int(seconds) // 60
-    secs = int(seconds) % 60
-    return f"{minutes:02d}:{secs:02d}"
+    return f"[{format_duration(position)}/{format_duration(duration)}] {text}"
 
 
 def parse_kuwo_lrc_list(lrc_list: list[dict]) -> tuple[list[LyricLine], int]:

@@ -10,6 +10,7 @@ from typing import Any
 from src.constants.system import SystemConstants
 from src.logging import get_logger
 from src.mcp.plugins.registry import PluginRuntime
+from src.mcp.tool_catalog import normalize_disabled
 from src.mcp.tooling import McpTool, PropertyList
 from src.utils.config_manager import ConfigManager
 
@@ -252,11 +253,10 @@ class McpServer:
     def _disabled_tool_names(self) -> set[str]:
         """从配置读取 MCP_TOOLS.DISABLED（黑名单）."""
         try:
-            from src.mcp.tool_catalog import normalize_disabled
-
             raw = self.config.get_config("MCP_TOOLS.DISABLED", []) or []
             return set(normalize_disabled(raw))
-        except Exception:
+        except Exception as exc:
+            logger.warning("读取 MCP_TOOLS.DISABLED 失败，回退空黑名单: %s", exc)
             return set()
 
     def _iter_enabled_tools(self):

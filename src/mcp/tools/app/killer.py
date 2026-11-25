@@ -11,6 +11,7 @@ from src.logging import get_logger
 
 from .process_manager import kill_application_by_name
 from .process_manager import list_running_applications as _list_apps
+from .utils import dump_app_list_result
 
 logger = get_logger()
 
@@ -61,15 +62,26 @@ async def list_running_applications(args: dict[str, Any]) -> str:
 
         apps = await asyncio.to_thread(_list_apps, filter_name)
 
-        result = {
-            "success": True,
-            "total_count": len(apps),
-            "applications": apps[:50],
-            "message": f"找到 {len(apps)} 个正在运行的应用程序",
-        }
+        # 无过滤词时按 (name, exe) 合并同类子进程，避免 Electron 多进程撑爆 MCP/MQTT 响应
+        compact: list[dict[str, Any]] = []
+        seen_apps: set[tuple[str, str]] = set()
+        for app in apps:
+            if not filter_name:
+                key = (app["name"].lower(), app.get("exe", ""))
+                if key in seen_apps:
+                    continue
+                seen_apps.add(key)
+            compact.append({"pid": app["pid"], "name": app["name"]})
 
-        logger.info(f"[AppKiller] 列出完成，找到 {len(apps)} 个正在运行的应用程序")
-        return json.dumps(result, ensure_ascii=False, indent=2)
+        logger.info(
+            f"[AppKiller] 列出完成，找到 {len(compact)} 个正在运行的应用程序"
+            f"（原始进程 {len(apps)} 个）"
+        )
+        return dump_app_list_result(
+            compact,
+            total_count=len(compact),
+            message=f"找到 {len(compact)} 个正在运行的应用程序",
+        )
 
     except Exception as e:
         error_msg = f"列出运行中应用程序失败: {e}"

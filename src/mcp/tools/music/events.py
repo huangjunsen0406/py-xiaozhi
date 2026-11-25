@@ -49,30 +49,3 @@ class MusicControlRequest:
     """
 
     source: str = "external"
-
-
-class MusicEventPublisher:
-    """Publish complete event payloads without owning a player or engine."""
-
-    def __init__(self):
-        self.event_bus = None
-
-    async def emit_state(self, data: MusicStateData) -> None:
-        from src.core.event_bus import Events
-
-        await self._emit(Events.MUSIC_STATE_CHANGED, data)
-
-    async def emit_lyrics(self, data: MusicLyricsData) -> None:
-        from src.core.event_bus import Events
-
-        await self._emit(Events.MUSIC_LYRICS_UPDATE, data)
-
-    async def _emit(self, event: str, data) -> None:
-        if self.event_bus is None:
-            return
-        try:
-            await self.event_bus.emit(event, data)
-        except Exception as error:
-            from src.logging import get_logger
-
-            get_logger().debug("发送音乐事件失败: %s", error)
