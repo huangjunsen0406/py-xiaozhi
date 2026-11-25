@@ -56,12 +56,12 @@ async def test_normal_stop_retains_tail_and_waits_for_device_output(
     protocol = protocol_stub()
     session = ConversationSession(state, protocol, audio=codec)
     await session._handle_tts_start()
-    codec._tts_fifo.push(np.full(2400, 0.25, dtype=np.float32))
+    codec.mixer._tts_fifo.push(np.full(2400, 0.25, dtype=np.float32))
     stopping = asyncio.create_task(
         session._on_incoming_json({"type": "tts", "state": "stop"})
     )
     await asyncio.sleep(0)
-    assert codec._tts_fifo.size == 2400
+    assert codec.mixer._tts_fifo.size == 2400
     assert not stopping.done()
     assert not state.should_capture_audio()
     blocks = []
@@ -77,7 +77,7 @@ async def test_normal_stop_retains_tail_and_waits_for_device_output(
             )
             blocks.append(output.copy())
             clock.now += 0.02
-        assert codec._tts_fifo.size == 0
+        assert codec.mixer._tts_fifo.size == 0
         assert not stopping.done()
         # The samples reach the device; they were not cleared on network EOF.
         assert sum(np.count_nonzero(block > 0.2) for block in blocks) >= int(
@@ -110,22 +110,22 @@ async def test_abort_discards_queued_and_late_opus_but_accepts_next_first_frame(
     session = ConversationSession(state, manager, audio=codec)
     session.bind_events(bus)
     await session._handle_tts_start()
-    codec._tts_fifo.push(np.ones(2400, dtype=np.float32))
+    codec.mixer._tts_fifo.push(np.ones(2400, dtype=np.float32))
     manager._on_incoming_audio(packet)
     manager._on_incoming_audio(packet)
     try:
         await session.abort_speaking("user_interruption")
         await manager.wait_for_incoming_audio()
-        assert codec._tts_fifo.size == 0
+        assert codec.mixer._tts_fifo.size == 0
         manager._on_incoming_audio(packet)
         await manager.wait_for_incoming_audio()
-        assert codec._tts_fifo.size == 0
+        assert codec.mixer._tts_fifo.size == 0
         # No await between JSON and binary: start must open the gate before
         # the session's asynchronous JSON handler runs.
         manager._on_incoming_json({"type": "tts", "state": "start"})
         manager._on_incoming_audio(packet)
         await manager.wait_for_incoming_audio()
-        assert codec._tts_fifo.size == 480
+        assert codec.mixer._tts_fifo.size == 480
     finally:
         session.unbind_events()
         await manager._stop_audio_consumer()
@@ -136,10 +136,10 @@ async def test_abort_discards_queued_and_late_opus_but_accepts_next_first_frame(
 async def test_disconnect_and_error_discard_pcm_and_pending_downlink(codec, event):
     manager = ProtocolManager(EventBus())
     session = ConversationSession(StateManager(EventBus()), manager, audio=codec)
-    codec._tts_fifo.push(np.ones(2400, dtype=np.float32))
+    codec.mixer._tts_fifo.push(np.ones(2400, dtype=np.float32))
     manager._enqueue_audio(b"old")
     await getattr(session, event)()
-    assert codec._tts_fifo.size == 0
+    assert codec.mixer._tts_fifo.size == 0
     assert manager._audio_queue.empty()
     await asyncio.wait_for(manager.wait_for_incoming_audio(), 0.1)
 
@@ -150,7 +150,7 @@ async def test_new_tts_start_is_not_blocked_by_previous_playback_wait(codec):
     state = StateManager(bus)
     session = ConversationSession(state, protocol_stub(), audio=codec, event_bus=bus)
     await session._handle_tts_start()
-    codec._tts_fifo.push(np.ones(2400, dtype=np.float32))
+    codec.mixer._tts_fifo.push(np.ones(2400, dtype=np.float32))
     received = []
     bus.on(Events.SESSION_MESSAGE, lambda message: received.append(message))
     stopping = asyncio.create_task(
@@ -164,7 +164,7 @@ async def test_new_tts_start_is_not_blocked_by_previous_playback_wait(codec):
         assert session._tts_active
         assert state.device_state == DeviceState.SPEAKING
         await asyncio.wait_for(stopping, 0.2)
-        assert codec._tts_fifo.size == 2400
+        assert codec.mixer._tts_fifo.size == 2400
         assert session._tts_active
         assert state.device_state == DeviceState.SPEAKING
         assert received == [{"type": "tts", "state": "start"}]
@@ -209,7 +209,7 @@ async def test_duplicate_stop_does_not_publish_completion_before_playback(codec)
         StateManager(bus), protocol_stub(), audio=codec, event_bus=bus
     )
     await session._handle_tts_start()
-    codec._tts_fifo.push(np.ones(480, dtype=np.float32))
+    codec.mixer._tts_fifo.push(np.ones(480, dtype=np.float32))
     received = []
     bus.on(Events.SESSION_MESSAGE, lambda message: received.append(message))
     first = asyncio.create_task(
@@ -244,7 +244,7 @@ async def test_stopping_consumer_cannot_lose_stop_when_queue_is_discarded():
 
 @pytest.mark.asyncio
 async def test_failed_device_reload_releases_existing_playback_waiter(codec):
-    codec._tts_fifo.push(np.ones(480, dtype=np.float32))
+    codec.mixer._tts_fifo.push(np.ones(480, dtype=np.float32))
     codec.stream_manager = SimpleNamespace(stop=lambda: True)
     codec.device_manager.load_or_detect_devices = Mock(side_effect=OSError("unplugged"))
     codec.device_manager.config.reload_config = Mock(return_value=True)
@@ -253,7 +253,7 @@ async def test_failed_device_reload_releases_existing_playback_waiter(codec):
     assert not pending.done()
     assert await codec.reload_devices(reenumerate=False) is False
     await asyncio.wait_for(pending, 0.2)
-    assert codec._tts_fifo.size == 0
+    assert codec.mixer._tts_fifo.size == 0
 
 
 @pytest.mark.parametrize("rate", [44100, 48000])
@@ -275,12 +275,12 @@ def test_single_twenty_ms_packet_preserves_resampled_impulse_tail(
     )
     codec.device_config = SimpleNamespace(output_sample_rate=rate)
     codec.converter.setup_output_converter(24000, rate, to_channels=1)
-    codec._tts_fifo.push(source)
+    codec.mixer._tts_fifo.push(source)
     frames = rate // 50
     output = np.zeros((frames, 1), dtype=np.float32)
     codec._output_callback(output, frames, None, None)
     np.testing.assert_allclose(output[:, 0], expected[:frames], atol=1e-7)
-    assert codec._tts_fifo.size == 0
+    assert codec.mixer._tts_fifo.size == 0
 
 
 @pytest.mark.asyncio

@@ -48,6 +48,16 @@ class MemoryCodec:
     async def clear_audio_queue(self):
         pass
 
+    def get_background_track(self):
+        class _Track:
+            async def write_pcm(self, _pcm):
+                return None
+
+            async def clear(self):
+                return 0
+
+        return _Track()
+
     async def close(self):
         self.closed += 1
         self.encoded_callback = None
@@ -88,7 +98,7 @@ class MemoryViewport:
         self.closed = 0
         self.statuses = []
         self.chat = []
-        self.music = []
+        self.media = []
         self.buttons = []
         self.emotions = []
         self.auto_mode = False
@@ -106,8 +116,8 @@ class MemoryViewport:
     def set_chat_text(self, text):
         self.chat.append(text)
 
-    def set_music_line(self, text):
-        self.music.append(text)
+    def set_media_line(self, text):
+        self.media.append(text)
 
     def set_button_text(self, text):
         self.buttons.append(text)
@@ -234,22 +244,22 @@ async def test_builtin_assembly_normal_lifecycle_has_no_error_logs(
         assert core.plugins.failed_plugins() == []
         audio = core.plugins.get_plugin("audio")
         codec = audio.codec
-        music, notifications, server = (
-            core.music_player,
+        media, notifications, server = (
+            core.media_player,
             core.notification_player,
             core.mcp_server,
         )
         assert type(codec) is MemoryCodec and codec.initialized == 1
         assert core.session.audio is codec
-        assert music._engine.audio_codec is codec
+        assert media._codec is codec
         assert notifications._codec is codec
         assert len(keyboard._shortcuts) == 5 and keyboard.starts == 1
         tool_names = {tool.name for tool in server.tools}
         assert {
             "take_photo",
-            "music_player.get_status",
             "self.audio_speaker.get_volume",
         } <= tool_names
+        assert "media.pause" not in tool_names
 
         codecs = []
 
@@ -264,7 +274,7 @@ async def test_builtin_assembly_normal_lifecycle_has_no_error_logs(
         assert codecs == [None, codec]
         assert codec.reloads == [True]
         assert core.session.audio is codec
-        assert music._engine.audio_codec is codec
+        assert media._codec is codec
         assert notifications._codec is codec
         assert keyboard.starts == 1
 
@@ -315,7 +325,7 @@ async def test_builtin_assembly_normal_lifecycle_has_no_error_logs(
                     "jsonrpc": "2.0",
                     "id": 7,
                     "method": "tools/call",
-                    "params": {"name": "music_player.get_status", "arguments": {}},
+                    "params": {"name": "self.audio_speaker.get_volume", "arguments": {}},
                 },
             }
         )
@@ -325,9 +335,9 @@ async def test_builtin_assembly_normal_lifecycle_has_no_error_logs(
         assert len(responses) == 1 and responses[0]["id"] == 7
         assert "error" not in responses[0]
         assert not responses[0]["result"].get("isError", False)
-        await music.emit_state_change("stopped", "测试歌曲")
+        await media._emit_state("playing", title="测试音频")
         await core.event_bus.emit(Events.NOTIFICATION_SUBTITLE, "通知字幕")
-        assert viewport.music[-1] == "已停止: 测试歌曲"
+        assert viewport.media[-1] == "正在播放: 测试音频"
         assert viewport.chat[-1] == "通知字幕"
         await core.event_bus.emit(Events.UI_QUIT_REQUEST)
         assert await asyncio.wait_for(runtime, 2) == 0
@@ -341,10 +351,10 @@ async def test_builtin_assembly_normal_lifecycle_has_no_error_logs(
         assert not core.resource_pool._resources
         assert core.session.audio is None
         assert core.session._notification_player is None
-        assert music._engine.audio_codec is None and music._bus.event_bus is None
+        assert media._codec is None and media._event_bus is None
         assert notifications._codec is None and notifications._event_bus is None
         assert server._send_callback is None and server.get_camera() is None
-        assert core.mcp_server is core.music_player is core.notification_player is None
+        assert core.mcp_server is core.media_player is core.notification_player is None
         assert all(not handlers for handlers in core.event_bus._handlers.values())
         await asyncio.sleep(0)
         assert not [task for task in asyncio.all_tasks() - before if not task.done()]

@@ -250,38 +250,29 @@ def test_constants_import_has_no_config_manager_side_effect(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_music_player_detach_clears_runtime_bindings():
-    from src.mcp.tools.music.music_player import MusicPlayer
+async def test_media_player_detach_clears_runtime_bindings():
+    from src.media.media_player import MediaPlayer
 
-    player = MusicPlayer()
-    player._engine.audio_codec = object()  # type: ignore
-    player._bus.event_bus = object()  # type: ignore
+    player = MediaPlayer()
+    player._codec = object()  # type: ignore
+    player._event_bus = object()  # type: ignore
     await player.detach()
-    assert player._engine.audio_codec is None
-    assert player._bus.event_bus is None
+    assert player._codec is None
+    assert player._event_bus is None
 
 
-def test_music_tools_register_with_injected_player():
-    """音乐工具闭包持有注入的 MusicPlayer，无 get_music_player_instance."""
+def test_media_tools_register_with_injected_player():
+    """媒体播控工具闭包持有注入的 MediaPlayer，无全局单例."""
     from src.mcp.mcp_server import McpServer
-    from src.mcp.tools.music import register_music_tools
-    from src.mcp.tools.music.music_player import MusicPlayer
+    from src.mcp.tools.media import register_media_tools
+    from src.media.media_player import MediaPlayer
 
-    owned = MusicPlayer()
+    owned = MediaPlayer()
     server = McpServer()
-    register_music_tools(server.add_tool, owned)
+    register_media_tools(server.add_tool, owned)
 
     names = {t.name for t in server.tools}
-    assert "music_player.search_and_play" in names
-    assert "music_player.stop" in names
-
-    # 源码层：不再导出全局 get/bind
-    import src.mcp.tools.music as music_pkg
-    import src.mcp.tools.music.music_player as mp_mod
-
-    assert not hasattr(music_pkg, "get_music_player_instance")
-    assert not hasattr(mp_mod, "get_music_player_instance")
-    assert not hasattr(mp_mod, "bind_music_player")
+    assert {"media.pause", "media.resume", "media.stop", "media.seek", "media.get_status"} <= names
 
 
 def test_volume_tools_register_without_module_singleton():
@@ -328,7 +319,7 @@ def test_app_and_weather_register_not_decorator_discovery():
 
     # add_common_tools 一次装齐
     server2 = McpServer()
-    server2.add_common_tools(music_player=None)
+    server2.add_common_tools(media_player=None)
     names2 = {t.name for t in server2.tools}
     assert "self.application.launch" in names2
     assert "get_weather" in names2
@@ -362,11 +353,8 @@ def test_mcp_server_has_no_get_instance():
 def test_mcp_plugin_requires_injected_services():
     from src.plugins.mcp import McpPlugin
 
-    try:
-        McpPlugin(server=None, music_player=None)
-        assert False, "should raise"
-    except ValueError as e:
-        assert "McpServer" in str(e) or "MusicPlayer" in str(e)
+    with pytest.raises(ValueError, match="McpServer"):
+        McpPlugin(server=None)
 
 
 def test_ui_plugin_uses_view_facade_not_main_model():
@@ -383,22 +371,28 @@ def test_ui_plugin_uses_view_facade_not_main_model():
 
     p_source = inspect.getsource(presenter_mod.UiPresenter)
     assert "set_chat_text" in p_source
-    assert "set_music_line" in p_source
+    assert "set_media_line" in p_source
 
 
-def test_config_manager_initialize_and_reset():
+def test_config_manager_initialize_and_reset(tmp_path, monkeypatch):
+    from src.utils import resource_finder as rf
     from src.utils.config_manager import get_config, initialize_config, reset_config
 
+    monkeypatch.setenv(rf.ENV_DATA_DIR, str(tmp_path / "data"))
+    rf.clear_path_caches()
     reset_config()
-    with pytest.raises(RuntimeError):
-        get_config()
-    a = initialize_config()
-    b = get_config()
-    assert a is b
-    reset_config()
-    c = initialize_config()
-    assert c is not a
-    reset_config()
+    try:
+        with pytest.raises(RuntimeError):
+            get_config()
+        a = initialize_config()
+        b = get_config()
+        assert a is b
+        reset_config()
+        c = initialize_config()
+        assert c is not a
+    finally:
+        reset_config()
+        rf.clear_path_caches()
 
 
 @pytest.mark.asyncio
@@ -429,60 +423,6 @@ async def test_tui_view_manager_uses_task_manager_for_emit():
     await tm.cancel_all()
 
 
-@pytest.mark.asyncio
-async def test_music_player_lyrics_use_owned_request_and_events(monkeypatch):
-    """歌词来自完整播放请求，事件携带歌曲身份且保留节流。"""
-    from unittest.mock import AsyncMock
-
-    from src.audio_codecs.music_decoder import MusicDecoder
-    from src.mcp.tools.music.music_player import MusicPlayer
-    from src.mcp.tools.music.state import PlaybackRequest
-
-    player = MusicPlayer()
-    bus = EventBus()
-    player.set_event_bus(bus)
-    emitted = []
-    bus.on(Events.MUSIC_LYRICS_UPDATE, emitted.append)
-    monkeypatch.setattr(MusicDecoder, "get_duration", AsyncMock(return_value=100))
-    monkeypatch.setattr(player._engine, "start_playback", AsyncMock(return_value=True))
-    request = PlaybackRequest(
-        song="hello track", song_id="track", source="fake.wav",
-        lyrics=((0.0, "hello"), (5.0, "world")),
-    )
-    assert await player._engine.play(request)
-    assert not hasattr(player, "_lyrics_task")
-    await player.tick_lyrics()
-    assert len(emitted) == 1
-    assert "hello" in emitted[0].text and emitted[0].song_id == "track"
-    await player.tick_lyrics()
-    assert len(emitted) == 1
-    await player.detach()
-
-def test_lyric_at_pure_function():
-    from src.mcp.tools.music.lyrics import format_lyric_display, lyric_at
-
-    lyrics = [(0.0, "a"), (5.0, "b"), (10.0, "c")]
-    assert lyric_at(lyrics, 0.0)[1] == "a"
-    # 算法 lead=0.5：在 5.6 时进入 b 句
-    assert lyric_at(lyrics, 5.6)[1] == "b"
-    assert lyric_at(lyrics, 99.0)[1] == "c"
-    assert lyric_at([], 1.0) is None
-    assert "[00:01/03:00]" in format_lyric_display("x", 1.0, 180.0)
-
-
-def test_music_cache_paths(tmp_path):
-    from src.mcp.tools.music.cache import MusicCache
-
-    c = MusicCache(root=tmp_path / "music")
-    c.prepare()
-    p = c.path_for_song("123")
-    assert p.parent == c.root
-    assert not c.has("123")
-    p.write_bytes(b"x")
-    assert c.has("123")
-    assert c.find_song_file("123") == p
-
-
 def test_gui_activation_no_ensure_future_or_get_event_loop():
     import inspect
     from src.ui.gui import activation as act_mod
@@ -495,8 +435,11 @@ def test_gui_activation_no_ensure_future_or_get_event_loop():
 
 def test_config_manager_batch_update_single_save(tmp_path, monkeypatch):
     """批量 update_configs 只落盘一次."""
+    from src.utils import resource_finder as rf
     from src.utils.config_manager import get_config, initialize_config, reset_config
 
+    monkeypatch.setenv(rf.ENV_DATA_DIR, str(tmp_path / "data"))
+    rf.clear_path_caches()
     reset_config()
     cm = initialize_config()
     # 指向临时文件，避免污染用户配置
@@ -595,7 +538,7 @@ def test_config_manager_corrupt_file_backed_up(tmp_path, monkeypatch):
     )
     cm = ConfigManager()
     assert cm.get_config("WAKE_WORD_OPTIONS.USE_WAKE_WORD") is True
-    assert cm.get_config("MUSIC.DEFAULT_PLATFORM") == "kw"
+    assert cm.get_config("AEC_OPTIONS.MEDIA_PARALLEL") is True
     assert ConfigManager.DEFAULT_CONFIG["WAKE_WORD_OPTIONS"]["WAKE_WORD"] == before_wake
 
     backups = list(cfg_dir.glob("config.json.corrupt-*"))
@@ -605,17 +548,17 @@ def test_config_manager_corrupt_file_backed_up(tmp_path, monkeypatch):
     assert cm.config_file.exists()
     loaded = json.loads(cm.config_file.read_text(encoding="utf-8"))
     assert isinstance(loaded, dict)
-    assert "MUSIC" in loaded
+    assert "AEC_OPTIONS" in loaded
 
     reset_config()
 
 
-def test_config_manager_default_includes_music_and_window_mode():
+def test_config_manager_default_includes_media_policy_and_window_mode():
     from src.utils.config_manager import ConfigManager
 
     d = ConfigManager.DEFAULT_CONFIG
-    assert "MUSIC" in d
-    assert d["MUSIC"]["DEFAULT_PLATFORM"] == "kw"
+    assert "MUSIC" not in d
+    assert d["AEC_OPTIONS"]["MEDIA_PARALLEL"] is True
     assert d["SYSTEM_OPTIONS"]["WINDOW_SIZE_MODE"] == "default"
 
 
@@ -749,41 +692,22 @@ def test_mcp_tool_catalog_groups():
     rows = builtin_catalog_rows()
     # 分组 = tools/<pkg> 目录名（扫描 register.py，非写死名单）
     by_name = {r["name"]: r for r in rows}
-    assert "music_player.seek" in by_name
-    assert by_name["music_player.seek"]["group"] == "music"
-    assert by_name["music_player.seek"]["groupLabel"] == "music"
+    assert "media.seek" in by_name
+    assert by_name["media.seek"]["group"] == "media"
+    assert by_name["media.seek"]["groupLabel"] == "media"
     assert by_name["self.application.launch"]["group"] == "app"
     assert by_name["self.application.launch"]["groupLabel"] == "app"
     assert by_name["take_photo"]["group"] == "camera"
     assert by_name["take_screenshot"]["group"] == "screenshot"
     assert by_name["get_weather"]["groupLabel"] == "weather"
     # 无包上下文时的纯名字启发式
-    assert tool_group("music_player.seek") == "music_player"
+    assert tool_group("media.seek") == "media"
     assert tool_group("self.application.launch") == "self.application"
     assert normalize_disabled(["", " a ", "a"]) == ["a"]
 
 
-def test_music_player_init_is_lazy():
-    """MusicPlayer 构造不应立刻扫缓存目录或读满配置副作用路径."""
-    from src.mcp.tools.music.music_player import MusicPlayer
-    from src.utils.config_manager import initialize_config, reset_config
-
-    reset_config()
-    initialize_config()
-    try:
-        p = MusicPlayer()
-        assert p._config is None
-        assert p._cache._ready is False
-        assert p._cache._temp_cleaned is False
-        cfg = p.config
-        assert isinstance(cfg, dict)
-        assert "SEARCH_URL" in cfg
-    finally:
-        reset_config()
-
-
 def test_viewport_protocol_and_tui_slots():
-    """TUI 对话和音乐两行互不影响。"""
+    """TUI 对话和媒体两行互不影响。"""
     from src.core.event_bus import EventBus
     from src.ui.shared.viewport import ViewPort
     from src.ui.tui.manager import TuiViewManager
@@ -793,13 +717,13 @@ def test_viewport_protocol_and_tui_slots():
     assert isinstance(vm, ViewPort)
 
     vm.set_chat_text("你好")
-    vm.set_music_line("♪ 歌词行")
+    vm.set_media_line("♪ 副标题行")
     assert vm._chat_text == "你好"
-    assert vm._music_line == "♪ 歌词行"
+    assert vm._media_line == "♪ 副标题行"
 
     vm.set_chat_text("第二句")
     assert vm._chat_text == "第二句"
-    assert vm._music_line == "♪ 歌词行"
+    assert vm._media_line == "♪ 副标题行"
 
 
 def test_gpio_viewport_slots(caplog):
@@ -811,10 +735,10 @@ def test_gpio_viewport_slots(caplog):
     assert isinstance(vm, ViewPort)
     with caplog.at_level(logging.INFO):
         vm.set_chat_text("chat")
-        vm.set_music_line("music")
+        vm.set_media_line("media")
         vm.set_chat_text("chat2")
     messages = [record.getMessage() for record in caplog.records]
-    assert messages[-3:] == ["[对话] chat", "[音乐] music", "[对话] chat2"]
+    assert messages[-3:] == ["[对话] chat", "[媒体] media", "[对话] chat2"]
 
 
 def test_create_viewport_tui_factory():
@@ -854,7 +778,7 @@ class _FakeViewport:
     def set_chat_text(self, text: str) -> None:
         self.chat.append(text)
 
-    def set_music_line(self, text: str) -> None:
+    def set_media_line(self, text: str) -> None:
         self.music.append(text)
 
     def set_status(self, status: str, connected: bool = True) -> None:
@@ -881,9 +805,9 @@ class _FakeViewport:
 
 
 @pytest.mark.asyncio
-async def test_ui_plugin_routes_music_to_music_line():
-    """音乐走 music 行，不盖对话."""
-    from src.mcp.tools.music.events import MusicLyricsData, MusicStateData
+async def test_ui_plugin_routes_media_to_media_line():
+    """媒体状态走 media 行，不盖对话."""
+    from src.media.events import MediaStateData, MediaSubtitleData
     from src.plugins.ui import UIPlugin
 
     plugin = UIPlugin(mode="tui")
@@ -891,11 +815,11 @@ async def test_ui_plugin_routes_music_to_music_line():
     plugin.viewport = vp
     plugin._presenter.bind(vp)
 
-    await plugin._on_music_state_changed(
-        MusicStateData(state="playing", song="测试曲", position=0.0, duration=180.0)
+    await plugin._on_media_state_changed(
+        MediaStateData(state="playing", title="测试曲", position=0.0, duration=180.0)
     )
-    await plugin._on_music_lyrics_update(
-        MusicLyricsData(text="[00:01/03:00] 第一句", time_sec=1.0)
+    await plugin._on_media_subtitle_update(
+        MediaSubtitleData(text="[00:01/03:00] 第一句")
     )
     await plugin.on_incoming_json({"type": "tts", "text": "你好小智"})
 
@@ -1263,48 +1187,42 @@ async def test_event_bus_warns_on_unknown_event_name(caplog):
 
 
 @pytest.mark.asyncio
-async def test_music_player_receives_codec_via_event_bus():
-    """Audio 发布 AUDIO_CODEC_CHANGED → Music 订阅；无 set_audio_codec 直连."""
-    from src.mcp.tools.music.music_player import MusicPlayer
+async def test_media_player_receives_codec_via_event_bus():
+    """Audio 发布 AUDIO_CODEC_CHANGED → MediaPlayer 订阅；无 set_audio_codec 直连."""
+    from src.media.media_player import MediaPlayer
 
     bus = EventBus()
-    player = MusicPlayer()
-    eng = player._engine
-    player.set_event_bus(bus)
-    codec = object()
+    player = MediaPlayer()
+    player.attach(bus)
+    codec = type("FakeCodec", (), {"get_background_track": lambda self: object()})()
 
     await bus.emit(Events.AUDIO_CODEC_CHANGED, codec)
-    assert eng.audio_codec is codec
+    assert player._codec is codec
 
-    eng.is_playing = True
-    eng.current_song = "t"
+    player.is_playing = True
+    player.current_title = "t"
 
-    async def _fake_stop():
-        eng.is_playing = False
+    async def _fake_stop(**_kw):
+        player.is_playing = False
         return {"status": "success"}
 
     player.stop = _fake_stop  # type: ignore[method-assign]
 
     await bus.emit(Events.AUDIO_CODEC_CHANGED, None)
-    assert eng.audio_codec is None
-    assert eng.is_playing is False
+    assert player._codec is None
+    assert player.is_playing is False
 
     await player.detach()
 
 
-def test_music_player_has_no_set_audio_codec_api():
-    from src.mcp.tools.music.music_player import MusicPlayer
-
-    assert not hasattr(MusicPlayer, "set_audio_codec")
-    # 配置注入不引入 codec 所有权，codec 仍由音频组件发布。
+def test_media_player_has_no_set_audio_codec_api():
+    from src.media.media_player import MediaPlayer
     from src.utils.config_manager import ConfigManager
 
+    assert not hasattr(MediaPlayer, "set_audio_codec")
     config = ConfigManager.from_dict()
-    player = MusicPlayer(config=config)
-    assert player._config_source is config
-    # 状态挂在 engine；门面只暴露少量只读属性
-    assert isinstance(MusicPlayer.is_playing, property)
-    assert MusicPlayer.is_playing.fset is None
+    player = MediaPlayer(config=config)
+    assert player._config is config
 
 
 def test_audio_is_fatal_respects_degraded_env(monkeypatch):
@@ -1678,7 +1596,7 @@ def test_path_override_and_migrate(tmp_path, monkeypatch):
     import src.utils.resource_finder as rf
 
     # reset overrides
-    rf.set_path_overrides(cache=None, log=None, music=None, keywords=None)
+    rf.set_path_overrides(cache=None, log=None, keywords=None)
     rf.clear_path_caches()
 
     old_cache = tmp_path / "old_cache"
@@ -1702,19 +1620,15 @@ def test_path_override_and_migrate(tmp_path, monkeypatch):
     rf.set_path_overrides(cache=new_cache)
     assert rf.get_user_cache_dir() == new_cache.resolve()
 
-    # music defaults under cache
-    rf.set_path_overrides(music=None)
-    assert rf.get_music_cache_dir() == (new_cache / "music").resolve()
-
     # cleanup overrides for other tests
-    rf.set_path_overrides(cache=None, log=None, music=None, keywords=None)
+    rf.set_path_overrides(cache=None, log=None, keywords=None)
     rf.clear_path_caches()
 
 
 def test_env_cache_dir_overrides_config(tmp_path, monkeypatch):
     import src.utils.resource_finder as rf
 
-    rf.set_path_overrides(cache=None, log=None, music=None, keywords=None)
+    rf.set_path_overrides(cache=None, log=None, keywords=None)
     rf.clear_path_caches()
     env_dir = tmp_path / "env_cache"
     monkeypatch.setenv(rf.ENV_CACHE_DIR, str(env_dir))
@@ -1802,9 +1716,10 @@ def test_migrate_directory_skip_music_subdir(tmp_path):
     assert not (new / "music" / "song.mp3").exists()
 
 
-def test_set_path_overrides_clear_with_none(tmp_path):
+def test_set_path_overrides_clear_with_none(tmp_path, monkeypatch):
     import src.utils.resource_finder as rf
 
+    monkeypatch.setenv(rf.ENV_DATA_DIR, str(tmp_path / "data"))
     rf.clear_path_overrides(all=True)
     rf.clear_path_caches()
     d = tmp_path / "c"

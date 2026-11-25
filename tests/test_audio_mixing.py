@@ -1,17 +1,14 @@
-"""TTS/音乐分队列混音回归测试.
+"""TTS/通知/背景多轨混音回归测试.
 
-覆盖：PcmFifo 采样级语义、_pull_mixed 混音/闪避/削波。
-背景：TTS 与音乐曾共用一条 FIFO，逐句 TTS 时帧交错导致"同时播放+断续"。
+覆盖：PcmFifo 采样级语义、AudioMixer 混音/闪避/削波与轨道隔离。
 """
 
 import numpy as np
 import pytest
 
 from src.audio_codecs.audio_buffer import PcmFifo
-from src.audio_codecs.audio_codec import (
-    _MUSIC_DUCK_GAIN,
-    AudioCodec,
-)
+from src.audio_codecs.audio_codec import AudioCodec
+from src.audio_codecs.mixer import BACKGROUND_DUCK_GAIN
 
 
 class TestPcmFifo:
@@ -72,16 +69,16 @@ class TestMixing:
     def codec(self):
         return AudioCodec()
 
-    def test_music_only_full_gain(self, codec):
+    def test_background_only_full_gain(self, codec):
         n = codec._mix_chunk
-        codec._music_fifo.push(np.full(n, 0.4, dtype=np.float32))
-        out = codec._pull_mixed(n)
+        codec.mixer._background_fifo.push(np.full(n, 0.4, dtype=np.float32))
+        out = codec.mixer.pull(n).pcm
         assert np.allclose(out, 0.4)
 
     def test_tts_only(self, codec):
         n = codec._mix_chunk
-        codec._tts_fifo.push(np.full(n, 0.5, dtype=np.float32))
-        out = codec._pull_mixed(n)
+        codec.mixer.push_tts(np.full(n, 0.5, dtype=np.float32))
+        out = codec.mixer.pull(n).pcm
         assert np.allclose(out, 0.5)
 
     def test_notification_has_voice_priority_and_reports_drain_after_output(
@@ -93,57 +90,57 @@ class TestMixing:
         codec.set_notification_playback_callbacks(
             progress.append, lambda: drained.append(True)
         )
-        codec._notification_fifo.push(np.full(n, 0.5, dtype=np.float32))
-        codec._music_fifo.push(np.full(n, 0.4, dtype=np.float32))
+        codec.mixer._notification_fifo.push(np.full(n, 0.5, dtype=np.float32))
+        codec.mixer._background_fifo.push(np.full(n, 0.4, dtype=np.float32))
 
-        out = codec._pull_mixed(n)
-        assert np.allclose(out, 0.5 + _MUSIC_DUCK_GAIN * 0.4)
+        out = codec.mixer.pull(n).pcm
+        assert np.allclose(out, 0.5 + BACKGROUND_DUCK_GAIN * 0.4)
         assert progress == [n]
 
-        codec._pull_mixed(n)
-        codec._notify_notification_drained_after_output()
+        codec.mixer.pull(n)
+        codec.mixer.notify_output_rendered()
         assert drained == []
-        codec._notify_notification_drained_after_output()
+        codec.mixer.notify_output_rendered()
         assert drained == [True]
 
-    def test_tts_and_music_mixed_with_duck(self, codec):
+    def test_tts_and_background_mixed_with_duck(self, codec):
         n = codec._mix_chunk
-        codec._tts_fifo.push(np.full(n, 0.5, dtype=np.float32))
-        codec._music_fifo.push(np.full(n, 0.4, dtype=np.float32))
-        out = codec._pull_mixed(n)
-        assert np.allclose(out, 0.5 + _MUSIC_DUCK_GAIN * 0.4)
+        codec.mixer.push_tts(np.full(n, 0.5, dtype=np.float32))
+        codec.mixer._background_fifo.push(np.full(n, 0.4, dtype=np.float32))
+        out = codec.mixer.pull(n).pcm
+        assert np.allclose(out, 0.5 + BACKGROUND_DUCK_GAIN * 0.4)
 
     def test_duck_hangover_then_recover(self, codec):
         n = codec._mix_chunk
-        # 一次 TTS 后，音乐在 hangover 期内仍闪避
-        codec._tts_fifo.push(np.full(n, 0.5, dtype=np.float32))
-        codec._music_fifo.push(np.full(n, 0.4, dtype=np.float32))
-        codec._pull_mixed(n)
+        # 一次 TTS 后，背景轨在 hangover 期内仍闪避
+        codec.mixer.push_tts(np.full(n, 0.5, dtype=np.float32))
+        codec.mixer._background_fifo.push(np.full(n, 0.4, dtype=np.float32))
+        codec.mixer.pull(n)
 
-        codec._music_fifo.push(np.full(n, 0.4, dtype=np.float32))
-        out = codec._pull_mixed(n)
-        assert np.allclose(out, _MUSIC_DUCK_GAIN * 0.4)
+        codec.mixer._background_fifo.push(np.full(n, 0.4, dtype=np.float32))
+        out = codec.mixer.pull(n).pcm
+        assert np.allclose(out, BACKGROUND_DUCK_GAIN * 0.4)
 
         # hangover 耗尽后恢复全量
         for _ in range(15):
-            codec._music_fifo.push(np.full(n, 0.4, dtype=np.float32))
-            out = codec._pull_mixed(n)
+            codec.mixer._background_fifo.push(np.full(n, 0.4, dtype=np.float32))
+            out = codec.mixer.pull(n).pcm
         assert np.allclose(out, 0.4)
 
     def test_clip_protection(self, codec):
         n = codec._mix_chunk
-        codec._tts_fifo.push(np.full(n, 0.9, dtype=np.float32))
-        codec._music_fifo.push(np.full(n, 0.9, dtype=np.float32))
-        out = codec._pull_mixed(n)
+        codec.mixer.push_tts(np.full(n, 0.9, dtype=np.float32))
+        codec.mixer._background_fifo.push(np.full(n, 0.9, dtype=np.float32))
+        out = codec.mixer.pull(n).pcm
         assert out.max() <= 1.0
 
     def test_both_empty_returns_none(self, codec):
-        assert codec._pull_mixed(codec._mix_chunk) is None
+        assert codec.mixer.pull(codec._mix_chunk).pcm is None
 
     def test_clear_semantics_are_independent(self, codec):
         n = codec._mix_chunk
-        codec._tts_fifo.push(np.full(n, 0.5, dtype=np.float32))
-        codec._music_fifo.push(np.full(n, 0.4, dtype=np.float32))
-        codec._tts_fifo.clear()
-        # TTS 清空不影响音乐
-        assert codec._music_fifo.size == n
+        codec.mixer.push_tts(np.full(n, 0.5, dtype=np.float32))
+        codec.mixer._background_fifo.push(np.full(n, 0.4, dtype=np.float32))
+        codec.mixer.clear_track("tts")
+        # TTS 清空不影响背景轨
+        assert codec.mixer.track_size("background") == n

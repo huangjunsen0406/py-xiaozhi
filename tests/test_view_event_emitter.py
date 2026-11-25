@@ -273,13 +273,13 @@ def test_tui_retains_display_state_and_gpio_key1_retains_mode(monkeypatch):
     view = TuiViewManager(EventBus())
     view.set_status("ready", False)
     view.set_chat_text("first")
-    view.set_music_line("lyrics")
+    view.set_media_line("lyrics")
     view.set_chat_text("second")
     view.set_auto_mode(True)
     assert view._status == "ready"
     assert view._connected is False
     assert view._chat_text == "second"
-    assert view._music_line == "lyrics"
+    assert view._media_line == "lyrics"
     assert view._auto_mode is True
 
     gpio = GpioViewManager(EventBus())
@@ -306,7 +306,7 @@ async def test_tui_replays_updates_received_before_start(monkeypatch):
                 app.status_text,
                 app.connected,
                 app.chat_text,
-                app.music_line,
+                app.media_line,
                 app.emotion,
                 app.auto_mode,
             )
@@ -321,7 +321,7 @@ async def test_tui_replays_updates_received_before_start(monkeypatch):
     view = TuiViewManager(EventBus())
     view.set_status("listening", True)
     view.set_chat_text("hello")
-    view.set_music_line("lyrics")
+    view.set_media_line("lyrics")
     view.set_emotion("happy")
     view.set_auto_mode(True)
     await view.start()

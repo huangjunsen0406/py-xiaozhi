@@ -61,24 +61,20 @@ def test_schema_preserves_existing_paths_and_gui_contracts():
     assert schema["WAKE_WORD_OPTIONS.WAKE_WORD_LANG"].kind == "readonly"
     assert schema["SYSTEM_OPTIONS.NETWORK.WEBSOCKET_ACCESS_TOKEN"].kind == "secret"
     assert schema["SYSTEM_OPTIONS.NETWORK.MQTT_INFO.password"].kind == "secret"
-    assert schema["MUSIC.URL_API_KEY"].kind == "secret"
     assert schema["CAMERA.VLapi_key"].kind == "secret"
-    assert schema["MUSIC.DEFAULT_QUALITY"].choices == ("128k", "320k")
     assert "CAMERA.fps" not in schema
-    assert "MUSIC.DEFAULT_PLATFORM" not in schema
+    assert not any(path.startswith("MUSIC.") for path in schema)
     assert schema["WAKE_WORD_OPTIONS.KEYWORDS_SCORE"].minimum == 0.5
     assert schema["AEC_OPTIONS.FRAME_DELAY"].maximum == 20
     assert not any("WINDOW_TOGGLE" in path for path in schema)
-    assert {schema[path].effect for path in schema if path.startswith("PATHS.")} == {
-        "restart"
-    }
+    assert not any(path.startswith("PATHS.") for path in schema)
     assert all(
         field.effect in {"hot", "reconnect", "restart"} for field in schema.values()
     )
     assert all(isinstance(field.choices, tuple) for field in schema.values())
     assert {
         "AEC_OPTIONS." + name
-        for name in ("ENABLED", "MUSIC_PARALLEL", "FRAME_DELAY", "ENABLE_PREPROCESS")
+        for name in ("ENABLED", "MEDIA_PARALLEL", "FRAME_DELAY", "ENABLE_PREPROCESS")
     } <= schema.keys()
     assert {
         "WAKE_WORD_OPTIONS." + name
@@ -206,7 +202,6 @@ def test_save_preserves_unknown_config_and_typed_values(config, monkeypatch):
         ("AUDIO_DEVICES.opus_output_sample_rate", "48000"),
         ("AUDIO_DEVICES.frame_duration", "20.0"),
         ("SYSTEM_OPTIONS.NETWORK.ACTIVATION_VERSION", "v3"),
-        ("MUSIC.DEFAULT_QUALITY", "flac"),
         ("AEC_OPTIONS.FRAME_DELAY", "-1"),
         ("AEC_OPTIONS.FRAME_DELAY", "21"),
         ("AEC_OPTIONS.FRAME_DELAY", "1.5"),
@@ -318,20 +313,16 @@ def test_device_updates_override_name_form_and_clear_disabled(config):
 def test_language_is_derived_and_keywords_use_active_directory(
     config, keywords, tmp_path
 ):
-    new_directory = tmp_path / "next-start-keywords"
     draft = {
         "WAKE_WORD_OPTIONS.WAKE_WORD": "test",
         "WAKE_WORD_OPTIONS.WAKE_WORD_LANG": "zh",
-        "PATHS.KEYWORDS_DIR": str(new_directory),
     }
     ok, message = settings.save_settings(draft, config)
     assert ok, message
     keywords.converter.assert_called_once_with("test")
     assert config.get_config("WAKE_WORD_OPTIONS.WAKE_WORD_LANG") == "en"
     assert config.get_config("WAKE_WORD_OPTIONS.MODEL_PATH") == "models/en"
-    assert config.get_config("PATHS.KEYWORDS_DIR") == str(new_directory)
     assert (keywords.directory / "en_keywords.txt").read_text() == "TEST @test\n"
-    assert not new_directory.exists()
     assert list(keywords.directory.iterdir()) == [
         keywords.directory / "en_keywords.txt"
     ]

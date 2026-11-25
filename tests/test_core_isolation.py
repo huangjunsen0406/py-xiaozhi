@@ -70,7 +70,7 @@ async def test_independent_containers_need_no_process_configuration(monkeypatch)
             register_cleanup_resources(container)
             assert container.protocol.protocol.config is source
             assert container.protocol.protocol.audio_config is container.audio_config
-            assert container.music_player._config_source is source
+            assert container.media_player._config is source
             assert container.mcp_server.config is source
 
         assert first.protocol.protocol.WEBSOCKET_URL == "wss://first.example.test"

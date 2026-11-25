@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock
 import numpy as np
 import pytest
 
-from src.audio_codecs import music_decoder as module
+from src.audio_codecs import audio_decoder as module
 
 
 class Process:
@@ -44,7 +44,7 @@ class Process:
 @pytest.mark.asyncio
 @pytest.mark.parametrize("duration", [20, 40, 60])
 async def test_pcm_read_size_uses_decoder_frame_duration(duration):
-    decoder = module.MusicDecoder(sample_rate=16000, frame_duration=duration)
+    decoder = module.AudioDecoder(sample_rate=16000, frame_duration=duration)
     process = Process()
     process.stdout = AsyncMock()
     process.stdout.read.return_value = b""
@@ -56,7 +56,7 @@ async def test_pcm_read_size_uses_decoder_frame_duration(duration):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("exit_code", [0, 1])
 async def test_decoder_reports_exit_status_after_partial_pcm(exit_code):
-    decoder = module.MusicDecoder()
+    decoder = module.AudioDecoder()
     decoder._process = Process([b"\x00\x40" * 240], exit_code=exit_code)
     queue = asyncio.Queue()
     await decoder._read_pcm_stream(queue)
@@ -68,7 +68,7 @@ async def test_decoder_reports_exit_status_after_partial_pcm(exit_code):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("channels", [1, 2])
 async def test_short_reads_preserve_sample_and_channel_alignment(channels):
-    decoder = module.MusicDecoder(channels=channels)
+    decoder = module.AudioDecoder(channels=channels)
     samples = np.array([100, -200, 300, -400], dtype="<i2")
     data = samples.tobytes()
     process = Process()
@@ -87,7 +87,7 @@ async def test_short_reads_preserve_sample_and_channel_alignment(channels):
 
 @pytest.mark.asyncio
 async def test_stdout_failure_sends_terminal_and_reaps_live_process():
-    decoder = module.MusicDecoder()
+    decoder = module.AudioDecoder()
     process = Process(blocked=True)
     process.stdout = AsyncMock()
     process.stdout.read.side_effect = OSError("broken pipe")
@@ -101,7 +101,7 @@ async def test_stdout_failure_sends_terminal_and_reaps_live_process():
 
 @pytest.mark.asyncio
 async def test_truncated_pcm_is_failure():
-    decoder = module.MusicDecoder()
+    decoder = module.AudioDecoder()
     decoder._process = Process([b"\x00"])
     queue = asyncio.Queue()
     await decoder._read_pcm_stream(queue)
@@ -114,7 +114,7 @@ async def test_stop_during_version_probe_prevents_decoder_spawn(monkeypatch):
     probe = Process(blocked=True)
     spawn = AsyncMock(return_value=probe)
     monkeypatch.setattr(module.asyncio, "create_subprocess_exec", spawn)
-    decoder = module.MusicDecoder()
+    decoder = module.AudioDecoder()
     task = asyncio.create_task(
         decoder.start_decode("https://example.test/a.ogg", asyncio.Queue())
     )
@@ -148,7 +148,7 @@ async def test_stop_or_cancel_during_process_creation_reaps_late_process(
         return created[index]
 
     monkeypatch.setattr(module.asyncio, "create_subprocess_exec", spawn)
-    decoder = module.MusicDecoder()
+    decoder = module.AudioDecoder()
     task = asyncio.create_task(
         decoder.start_decode("https://example.test/a.ogg", asyncio.Queue())
     )

@@ -332,7 +332,6 @@ async def test_setup_failure_retains_codec_for_finally_registered_pool(
         await plugin.on_device_state_changed(DeviceState.LISTENING)
         plugin._on_encoded_audio(b"unusable")
         assert future.result() == {"input": [], "output": []}
-        assert not plugin._music_parallel_enabled()
         assert not plugin._should_send_microphone_audio()
         assert not plugin._accepting and not plugin._uplink
         assert plugin._silence_until == 0.0
