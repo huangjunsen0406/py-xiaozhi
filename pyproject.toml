@@ -168,8 +168,8 @@ pattern = '(?m)^\s*APP_VERSION\s*=\s*"(?P<version>[^"]+)"'
 dev-mode-dirs = ["."]
 
 [tool.hatch.build.targets.wheel]
-only-include = ["src", "assets", "models", "libs/libopus", "libs/webrtc_apm"]
-exclude = ["**/__pycache__", "**/*.pyc"]
+only-include = ["src", "assets", "models", "libs/libopus", "libs/webrtc_apm", "libs/system_loopback"]
+exclude = ["**/__pycache__", "**/*.pyc", "libs/system_loopback/native"]
 
 [tool.hatch.build.targets.wheel.sources]
 "assets" = "src/_resources/assets"

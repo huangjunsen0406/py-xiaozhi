@@ -189,6 +189,32 @@ ScrollView {
                 }
 
                 Text {
+                    text: i18n.s["settings.system.aec_reference_mode"]
+                    font.pixelSize: Theme.fontSizeSm
+                    color: Theme.textSecondary
+                    Layout.preferredWidth: 130
+                    wrapMode: Text.WordWrap
+                    opacity: aecEnabledSwitch.checked ? 1 : 0.45
+                }
+                XComboBox {
+                    id: aecReferenceModeCombo
+                    Layout.fillWidth: true
+                    enabled: aecEnabledSwitch.checked
+                    opacity: aecEnabledSwitch.checked ? 1 : 0.45
+                    model: [
+                        i18n.s["settings.system.aec_ref_self"],
+                        i18n.s["settings.system.aec_ref_system"]
+                    ]
+                    currentIndex: (settingsModel && settingsModel.aecReferenceMode === "system") ? 1 : 0
+                    onActivated: function(index) {
+                        if (settingsModel) {
+                            settingsModel.aecReferenceMode = (index === 1) ? "system" : "self"
+                        }
+                    }
+                    font.pixelSize: Theme.fontSizeSm
+                }
+
+                Text {
                     text: i18n.s["settings.system.aec_media_parallel"]
                     font.pixelSize: Theme.fontSizeSm
                     color: Theme.textSecondary

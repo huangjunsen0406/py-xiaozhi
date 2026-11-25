@@ -57,6 +57,7 @@ DISPLAY_SECTIONS = [
                 "AUDIO_DEVICES.opus_output_sample_rate",
                 "AUDIO_DEVICES.frame_duration",
                 "AEC_OPTIONS.ENABLED",
+                "AEC_OPTIONS.REFERENCE_MODE",
                 "AEC_OPTIONS.MEDIA_PARALLEL",
             )
         ],
@@ -258,6 +259,11 @@ class SettingsScreen(ModalScreen[bool]):
                 options = [
                     (opt["label"], opt["value"])
                     for opt in get_i18n().language_options()
+                ]
+            elif field.path == "AEC_OPTIONS.REFERENCE_MODE":
+                options = [
+                    (t("settings.system.aec_ref_self"), "self"),
+                    (t("settings.system.aec_ref_system"), "system"),
                 ]
             else:
                 options = [(choice, choice) for choice in field.choices]

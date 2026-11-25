@@ -130,6 +130,8 @@ class ConfigManager:
         },
         "AEC_OPTIONS": {
             "ENABLED": False,
+            # 远端参考源：self（仅消除本应用声音，零权限弹窗）| system（整机系统回环，不可用/拒权自动回退 self）
+            "REFERENCE_MODE": "self",
             # AEC 在位时 TTS 不暂停背景媒体，由混音器自动闪避并行播放（旁路则自动回退暂停）
             "MEDIA_PARALLEL": True,
             # 延迟补偿（协议帧数），实际 delay_ms = 40 + N * 帧长

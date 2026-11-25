@@ -282,6 +282,7 @@ class SettingsModel(
     mqttPublishTopic = _config_property(str, "SYSTEM_OPTIONS.NETWORK.MQTT_INFO.publish_topic", "", notify=settingsChanged)
     mqttSubscribeTopic = _config_property(str, "SYSTEM_OPTIONS.NETWORK.MQTT_INFO.subscribe_topic", "", notify=settingsChanged)
     aecEnabled = _config_property(bool, "AEC_OPTIONS.ENABLED", False, notify=settingsChanged)
+    aecReferenceMode = _config_property(str, "AEC_OPTIONS.REFERENCE_MODE", "self", notify=settingsChanged)
     aecMediaParallel = _config_property(bool, "AEC_OPTIONS.MEDIA_PARALLEL", True, notify=settingsChanged)
     aecFrameDelay = _config_property(int, "AEC_OPTIONS.FRAME_DELAY", 3, notify=settingsChanged, coerce_int=True)
     aecEnablePreprocess = _config_property(bool, "AEC_OPTIONS.ENABLE_PREPROCESS", True, notify=settingsChanged)

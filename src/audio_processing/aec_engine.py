@@ -138,6 +138,7 @@ class AecEngine:
         delay_ms: int = 60,
         enable_preprocess: bool = True,
         far_end_source: FarEndSource | None = None,
+        near_delay_ms: int = 0,
     ):
         """初始化并加载 APM；失败时 active=False（旁路）.
 
@@ -147,11 +148,19 @@ class AecEngine:
             delay_ms: 播放到采集的估计延迟
             enable_preprocess: 是否同时开高通+噪声抑制
             far_end_source: 可选自定义远端参考源（默认 SelfFarEndSource）
+            near_delay_ms: 近端因果对齐缓冲时长（ms）；系统回环采集晚于麦克风时用于保证因果
         """
         self._near_rate = int(near_rate)
         self._far_rate = int(far_rate)
         self._delay_ms = int(delay_ms)
         self._frame = self._near_rate // 100  # 10ms
+        self._near_delay_samples = max(0, (int(near_delay_ms) // 10) * self._frame)
+        self._near_delay_fifo = (
+            np.zeros(self._near_delay_samples, dtype=np.float32)
+            if self._near_delay_samples > 0
+            else None
+        )
+        self._first_near_call = True
         self._lock = threading.Lock()
         self._active = False
         self._closed = False
@@ -179,10 +188,13 @@ class AecEngine:
                 )
             )
             self._active = True
+            far_mode = getattr(self._far_end, "mode", "self")
             logger.info(
                 f"AEC 引擎已启用 | near {self._near_rate}Hz, "
                 f"far {self._far_rate}Hz→{self._near_rate}Hz, "
-                f"delay {self._delay_ms}ms, preprocess={enable_preprocess}"
+                f"ref={far_mode}, delay {self._delay_ms}ms, "
+                f"near_delay {self._near_delay_samples // self._frame * 10}ms, "
+                f"preprocess={enable_preprocess}"
             )
         except Exception as e:
             logger.warning(f"AEC 引擎初始化失败，已旁路: {e}")
@@ -214,6 +226,13 @@ class AecEngine:
     def active(self) -> bool:
         return self._active
 
+    @property
+    def far_end_mode(self) -> str:
+        """当前实际生效的远端参考模式（'self' / 'system' / 'self_fallback' / 'off'）."""
+        if not self._active or self._far_end is None:
+            return "off"
+        return str(getattr(self._far_end, "mode", "self"))
+
     def process_near(self, block: np.ndarray) -> np.ndarray:
         """处理采集帧（16kHz 单声道 float32），返回消回声后的同长数据.
 
@@ -230,16 +249,26 @@ class AecEngine:
             return block
 
         try:
-            i16 = self._float_to_i16(block)
-            out = np.empty(n, dtype=np.float32)
-
             with self._lock:
                 if not self._active:
                     return block
-                # far 先于 near：排空输出回调攒下的参考数据，保持因果
-                self._drain_far_locked()
+                # 1. 拉取远端参考样本；首次进入采集回调时裁掉启动前积压的陈旧预热样本
+                self._pull_far_locked(block_samples=n)
+
+                # 2. 系统回环模式下通过近端因果 FIFO 补偿 OS 回环晚于麦克风的负延迟
+                near_block = block
+                if self._near_delay_fifo is not None:
+                    combined = np.concatenate((self._near_delay_fifo, block))
+                    near_block = combined[:n]
+                    self._near_delay_fifo = combined[n:]
+
+                i16 = self._float_to_i16(near_block)
+                out = np.empty(n, dtype=np.float32)
+
+                # 3. 逐 10ms 交替喂入 far -> near（1:1 交织），消除长帧块（如 60ms）的突发锯齿
                 self._apm.set_stream_delay_ms(self._delay_ms)
                 for off in range(0, n, self._frame):
+                    self._feed_one_far_frame_locked()
                     ctypes.memmove(
                         self._near_in,
                         i16[off : off + self._frame].ctypes.data,
@@ -255,6 +284,10 @@ class AecEngine:
                         / 32768.0
                     )
 
+                # 若远端仍有明显富余（>=40ms 且超过当前块），追平 1 帧防止跨时钟长期堆积
+                if len(self._far_buffer) >= max(n, self._frame * 4):
+                    self._feed_one_far_frame_locked()
+
             self._fail_count = 0
             return out
         except Exception as e:
@@ -267,10 +300,15 @@ class AecEngine:
             return
         self._far_end.feed_self_output(outdata)
 
-    def _drain_far_locked(self) -> None:
-        """采集线程（已持锁）：从远端参考源排空 16kHz 样本并喂给 ProcessReverseStream."""
+    def _pull_far_locked(self, *, block_samples: int) -> None:
+        """采集线程（已持锁）：从远端参考源拉取最新 16kHz 样本并保持队列有界."""
         if self._far_end is not None:
             fresh = self._far_end.drain_16k()
+            if self._first_near_call:
+                self._first_near_call = False
+                # 启动阶段音频流尚未开启时，系统回环可能已攒下数百毫秒静音；只保留最近 1 块
+                if len(fresh) > block_samples:
+                    fresh = fresh[-block_samples:]
             if len(fresh):
                 self._far_buffer = (
                     fresh
@@ -278,23 +316,24 @@ class AecEngine:
                     else np.concatenate((self._far_buffer, fresh))
                 )
 
-        n_frames = len(self._far_buffer) // self._frame
-        if n_frames == 0:
+        # 上限保护（约 2.5 个采集块，至少 160ms）：防止跨时钟漂移造成延迟累积
+        max_keep = max(block_samples * 2 + self._frame * 4, self._frame * 16)
+        if len(self._far_buffer) > max_keep:
+            self._far_buffer = self._far_buffer[-max_keep:]
+
+    def _feed_one_far_frame_locked(self) -> None:
+        """采集线程（已持锁）：从远端缓冲取出 1 帧（10ms）送入 ProcessReverseStream."""
+        if len(self._far_buffer) < self._frame:
             return
-
-        usable = n_frames * self._frame
-        i16 = self._float_to_i16(self._far_buffer[:usable])
-        self._far_buffer = self._far_buffer[usable:]
-
-        for off in range(0, usable, self._frame):
-            ctypes.memmove(
-                self._far_in, i16[off : off + self._frame].ctypes.data, self._frame * 2
-            )
-            ret = self._apm.process_reverse_stream(
-                self._far_in, self._stream_cfg, self._stream_cfg, self._far_out
-            )
-            if ret != 0:
-                raise RuntimeError(f"process_reverse_stream 返回 {ret}")
+        frame_f32 = self._far_buffer[: self._frame]
+        self._far_buffer = self._far_buffer[self._frame :]
+        i16 = self._float_to_i16(frame_f32)
+        ctypes.memmove(self._far_in, i16.ctypes.data, self._frame * 2)
+        ret = self._apm.process_reverse_stream(
+            self._far_in, self._stream_cfg, self._stream_cfg, self._far_out
+        )
+        if ret != 0:
+            raise RuntimeError(f"process_reverse_stream 返回 {ret}")
 
     def close(self) -> None:
         """释放 APM 资源；须在音频流停止后调用."""

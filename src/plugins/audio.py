@@ -114,7 +114,12 @@ class AudioPlugin(Plugin):
             "devices": config.get_config("AUDIO_DEVICES", {}),
             "aec": {
                 key: config.get_config(f"AEC_OPTIONS.{key}")
-                for key in ("ENABLED", "FRAME_DELAY", "ENABLE_PREPROCESS")
+                for key in (
+                    "ENABLED",
+                    "REFERENCE_MODE",
+                    "FRAME_DELAY",
+                    "ENABLE_PREPROCESS",
+                )
             },
         }
 
