@@ -451,6 +451,11 @@ def get_lib_path(lib_name: str) -> Path | None:
             "linux": ["libwebrtc_apm.so", "webrtc_apm.so"],
             "win": ["webrtc_apm.dll", "libwebrtc_apm.dll"],
         },
+        "system_loopback": {
+            "mac": ["libsystem_loopback.dylib", "system_loopback.dylib"],
+            "linux": ["libsystem_loopback.so", "system_loopback.so"],
+            "win": ["system_loopback.dll", "libsystem_loopback.dll"],
+        },
     }
     prefer = preferred_names.get(lib_name, {}).get(plat_dir, [])
 
