@@ -130,6 +130,14 @@ SETTING_SECTIONS: list[tuple[str, list[SettingField]]] = [
                 effect="hot",
             ),
             SettingField(
+                "AEC_OPTIONS.REFERENCE_MODE",
+                "tui.field.aec_reference_mode",
+                kind="choice",
+                choices=("self", "system"),
+                help_key="tui.field.aec_reference_mode_help",
+                effect="hot",
+            ),
+            SettingField(
                 "AEC_OPTIONS.MEDIA_PARALLEL",
                 "tui.field.aec_media_parallel",
                 kind="bool",

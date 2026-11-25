@@ -295,14 +295,16 @@ class AudioCodec:
         self._tts_playback_until = 0.0
 
     def _setup_aec(self):
-        """按 AEC_OPTIONS.ENABLED 创建/重建 AEC 引擎（Self far）。
+        """按 AEC_OPTIONS 创建/重建 AEC 引擎（支持 self 与 system 远端参考源）。
 
         设备热重载后 far 采样率可能变化，须随 device_config 重建；
-        创建失败不抛出，引擎自身旁路（active=False）。
+        创建失败不抛出，引擎自身旁路（active=False）；
+        系统回环不可用时自动无感回退至 SelfFarEndSource。
         """
         if self._aec is not None:
             self._aec.close()
             self._aec = None
+        self._aec_reference_mode = "off"
 
         try:
             config = self.config
@@ -311,20 +313,45 @@ class AudioCodec:
                 return
 
             from src.audio_processing.aec_engine import AecEngine
+            from src.audio_processing.system_loopback_source import (
+                create_far_end_source,
+            )
 
-            frame_delay = config.get_config("AEC_OPTIONS.FRAME_DELAY", 3)
+            frame_delay = int(config.get_config("AEC_OPTIONS.FRAME_DELAY", 3))
+            requested_mode = config.get_config("AEC_OPTIONS.REFERENCE_MODE", "self")
+            far_source, actual_mode = create_far_end_source(
+                requested_mode,
+                far_rate=self.device_config.output_sample_rate,
+                target_rate=self.audio_config.INPUT_SAMPLE_RATE,
+                target_device_name=config.get_config(
+                    "AUDIO_DEVICES.output_device_name"
+                ),
+            )
+            if actual_mode == "system":
+                # OS 回环采集在混音器之后，常晚于麦克风约 1 个采集块；
+                # 通过近端因果 FIFO（>=80ms）确保 far 严格早于 near，并把 APM 延迟提示落在 80ms 附近
+                near_delay_ms = max(80, self.audio_config.FRAME_DURATION + 40)
+                delay_ms = max(20, 80 + (frame_delay - 3) * 20)
+            else:
+                near_delay_ms = 0
+                # FRAME_DELAY 以协议帧为单位，换算毫秒后叠加基础输出延迟
+                delay_ms = 40 + frame_delay * self.audio_config.FRAME_DURATION
+
             self._aec = AecEngine(
                 near_rate=self.audio_config.INPUT_SAMPLE_RATE,
                 far_rate=self.device_config.output_sample_rate,
-                # FRAME_DELAY 以协议帧为单位，换算毫秒后叠加基础输出延迟
-                delay_ms=40 + int(frame_delay) * self.audio_config.FRAME_DURATION,
+                delay_ms=delay_ms,
                 enable_preprocess=bool(
                     config.get_config("AEC_OPTIONS.ENABLE_PREPROCESS", True)
                 ),
+                far_end_source=far_source,
+                near_delay_ms=near_delay_ms,
             )
+            self._aec_reference_mode = actual_mode if self._aec.active else "off"
         except Exception as e:
             logger.warning(f"创建 AEC 引擎失败，已旁路: {e}", exc_info=True)
             self._aec = None
+            self._aec_reference_mode = "off"
 
     # === 对外接口（保持兼容） ===
 
@@ -333,6 +360,17 @@ class AudioCodec:
         """AEC 引擎是否在位且工作中（音乐并行策略等依赖此判断）."""
         aec = self._aec
         return bool(aec is not None and aec.active)
+
+    @property
+    def aec_reference_mode(self) -> str:
+        """当前实际生效的 AEC 参考模式（'off' / 'self' / 'system' / 'self_fallback'）."""
+        aec = self._aec
+        if aec is None or not aec.active:
+            return "off"
+        live = aec.far_end_mode
+        if live == "self_fallback":
+            return "self_fallback"
+        return getattr(self, "_aec_reference_mode", live)
 
     def set_encode_gate(self, gate: Callable[[], bool] | None) -> None:
         """Skip network encoding while retaining PCM listeners and AEC."""
