@@ -1,6 +1,7 @@
 import asyncio
 import threading
 import time
+from collections import deque
 from collections.abc import Callable
 from pathlib import Path
 
@@ -28,7 +29,10 @@ class WakeWordDetector:
         self._running = False
         self._paused = False
         self._detection_task = None
-        self._audio_queue: asyncio.Queue | None = None
+        self._audio_queue: deque | None = None
+        self._queue_lock = threading.Lock()
+        self._loop: asyncio.AbstractEventLoop | None = None
+        self._data_event: asyncio.Event | None = None
 
         self._last_detection_time = 0
         self._detection_cooldown = 1.5
@@ -239,28 +243,41 @@ class WakeWordDetector:
     def on_detected(self, callback: Callable):
         self.on_detected_callback = callback
 
-    def _enqueue_drop_oldest(self, item) -> None:
-        queue = self._audio_queue
-        if queue is None:
+    def _signal_data(self) -> None:
+        loop = self._loop
+        event = self._data_event
+        if loop is None or event is None:
             return
         try:
-            queue.put_nowait(item)
-        except asyncio.QueueFull:
-            try:
-                queue.get_nowait()
-                queue.put_nowait(item)
-            except (asyncio.QueueEmpty, asyncio.QueueFull):
-                pass
+            if not loop.is_closed():
+                loop.call_soon_threadsafe(event.set)
+        except RuntimeError:
+            pass
+
+    def _enqueue_drop_oldest(self, item) -> None:
+        with self._queue_lock:
+            queue = self._audio_queue
+            if queue is None:
+                return
+            queue.append(item)
+        self._signal_data()
+
+    def _pop_audio(self):
+        with self._queue_lock:
+            queue = self._audio_queue
+            if not queue:
+                return None
+            return queue.popleft()
+
+    def _has_audio(self) -> bool:
+        with self._queue_lock:
+            return bool(self._audio_queue)
 
     def _drain_audio_queue(self) -> None:
-        queue = self._audio_queue
-        if queue is None:
-            return
-        while True:
-            try:
-                queue.get_nowait()
-            except asyncio.QueueEmpty:
-                break
+        with self._queue_lock:
+            queue = self._audio_queue
+            if queue is not None:
+                queue.clear()
 
     async def _invoke_callback(self, callback, *args, label: str) -> None:
         if callback is None:
@@ -299,8 +316,11 @@ class WakeWordDetector:
             self._running = True
             self._paused = False
 
-            # Create queue in event loop
-            self._audio_queue = asyncio.Queue(maxsize=100)
+            # 跨线程安全缓冲（音频回调线程写，事件循环线程消费）
+            self._loop = asyncio.get_running_loop()
+            self._data_event = asyncio.Event()
+            with self._queue_lock:
+                self._audio_queue = deque(maxlen=100)
 
             # Create detection stream
             self._stream = self._keyword_spotter.create_stream()
@@ -335,6 +355,7 @@ class WakeWordDetector:
         task = self._detection_task
         try:
             self._enqueue_drop_oldest(_STOP_SENTINEL)
+            self._signal_data()
             # The loop also cleans itself after fatal inference errors. Keep a
             # local task reference because its finally clears the public slot.
             if task is not None and task is not asyncio.current_task():
@@ -346,7 +367,10 @@ class WakeWordDetector:
         finally:
             if self._detection_task is task:
                 self._detection_task = None
-            self._audio_queue = None
+            with self._queue_lock:
+                self._audio_queue = None
+            self._data_event = None
+            self._loop = None
             self._paused = False
             self._stopping = False
         logger.info("唤醒词检测器已停止")
@@ -385,7 +409,18 @@ class WakeWordDetector:
                         continue
                     if await self._process_audio():
                         error_count = 0
-                    await asyncio.sleep(0.005)
+                        # 让出事件循环避免连续帧占满主线程，但无新数据时不忙轮询
+                        if self._has_audio():
+                            await asyncio.sleep(0)
+                            continue
+                    event = self._data_event
+                    if event is None or not self._running or self._stopping:
+                        break
+                    event.clear()
+                    # clear 后再检查一次队列，消除丢失唤醒竞态
+                    if self._has_audio():
+                        continue
+                    await event.wait()
                 except asyncio.CancelledError:
                     break
                 except Exception as exc:
@@ -408,19 +443,19 @@ class WakeWordDetector:
         finally:
             self._running = False
             self._detach_audio()
-            self._audio_queue = None
+            with self._queue_lock:
+                self._audio_queue = None
+            self._data_event = None
+            self._loop = None
             self._paused = False
             if self._detection_task is asyncio.current_task():
                 self._detection_task = None
 
     async def _process_audio(self) -> bool:
-        if self._stopping or self._audio_queue is None:
+        if self._stopping:
             return False
-        try:
-            audio_data = self._audio_queue.get_nowait()
-        except asyncio.QueueEmpty:
-            return False
-        if audio_data is _STOP_SENTINEL or audio_data is None or len(audio_data) == 0:
+        audio_data = self._pop_audio()
+        if audio_data is None or audio_data is _STOP_SENTINEL or len(audio_data) == 0:
             return False
 
         detected_result = None
