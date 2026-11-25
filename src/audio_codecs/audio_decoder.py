@@ -1,3 +1,8 @@
+"""通用流式音频解码器（基于内置或系统 FFmpeg / FFprobe）.
+
+供 NotificationPlayer 与 MediaPlayer 共用；支持本地文件与 http(s) 音频流。
+"""
+
 import asyncio
 import subprocess
 import sys
@@ -55,8 +60,8 @@ def _ffmpeg_header_args(headers: Mapping[str, str] | None) -> list[str]:
     return args
 
 
-class MusicDecoder:
-    """只负责把音源解成 PCM；缓存预取不走这里（避免和播放进度绑死）."""
+class AudioDecoder:
+    """只负责把音频源解成 float32 PCM 帧；不涉及音源解析与缓存."""
 
     @staticmethod
     async def get_duration(
@@ -69,7 +74,7 @@ class MusicDecoder:
         try:
             ffprobe = get_ffprobe_path()
             try:
-                process = await MusicDecoder._spawn_process(
+                process = await AudioDecoder._spawn_process(
                     ffprobe,
                     "-version",
                     stdout=subprocess.DEVNULL,
@@ -101,7 +106,7 @@ class MusicDecoder:
                 ]
             )
 
-            process = await MusicDecoder._spawn_process(
+            process = await AudioDecoder._spawn_process(
                 *cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, **_SUBPROCESS_KW
             )
 
@@ -124,7 +129,7 @@ class MusicDecoder:
             logger.warning(f"解析音频时长失败: {e}", exc_info=True)
             return 0
         finally:
-            await MusicDecoder._terminate_process(process)
+            await AudioDecoder._terminate_process(process)
             if communication is not None:
                 await asyncio.gather(communication, return_exceptions=True)
 
@@ -176,7 +181,7 @@ class MusicDecoder:
                 process = await asyncio.shield(spawn_task)
             except asyncio.CancelledError:
                 process = await spawn_task
-            await MusicDecoder._terminate_process(process)
+            await AudioDecoder._terminate_process(process)
             raise
 
     async def _verify_ffmpeg(self, ffmpeg: str) -> bool:
@@ -332,7 +337,8 @@ class MusicDecoder:
                     if not self.completed_successfully:
                         self.error = (
                             f"FFmpeg exited with code {returncode}"
-                            if returncode != 0 else "Truncated PCM sample"
+                            if returncode != 0
+                            else "Truncated PCM sample"
                         )
                         logger.warning("FFmpeg 解码失败: %s", self.error)
                     break
@@ -372,7 +378,9 @@ class MusicDecoder:
         while chunk := await process.stderr.read(4096):
             tail = (tail + chunk)[-300:]
         if tail.strip():
-            logger.warning("FFmpeg: %s", tail.decode("utf-8", errors="replace").strip())
+            logger.warning(
+                "FFmpeg: %s", tail.decode("utf-8", errors="replace").strip()
+            )
 
     async def stop(self):
         self._stopped = True

@@ -6,8 +6,8 @@ from typing import Protocol
 
 import numpy as np
 
-from src.audio_codecs.audio_buffer import PcmFifo
 from src.audio_codecs.audio_converter import AudioConverter
+from src.audio_codecs.mixer import AudioMixer, AudioTrackHandle
 from src.audio_codecs.opus_codec import OpusCodec, parse_opus_toc
 from src.audio_codecs.stream_manager import AudioStreamManager
 from src.constants.constants import AudioConfig
@@ -16,17 +16,6 @@ from src.utils.audio_device import AudioDeviceManager, DeviceConfig
 from src.utils.config_manager import ConfigManager
 
 logger = get_logger()
-
-# TTS 存在时音乐的混音增益（闪避），及其保持时长（20ms 块数）
-_MUSIC_DUCK_GAIN = 0.35
-_DUCK_HOLD_CHUNKS = 10
-# 音乐写入端水位背压目标（秒）：越小暂停/插话越跟手，越大抗抖动越强
-_MUSIC_BACKLOG_TARGET_S = 0.30
-# TTS / 通知 / 音乐 FIFO 容量（秒），超限丢最旧
-_TTS_FIFO_MAX_S = 10.0
-_MUSIC_FIFO_MAX_S = 2.0
-_NOTIFICATION_FIFO_MAX_S = 2.0
-_NOTIFICATION_BACKLOG_TARGET_S = 0.30
 
 
 class AudioListener(Protocol):
@@ -70,27 +59,13 @@ class AudioCodec:
         self.converter = AudioConverter()
         self.stream_manager = None
 
-        # TTS / 通知 / 音乐分流：通知和 TTS 同级为语音，音乐在其出现时闪避。
+        # 多轨输出混音（前景：TTS/通知；背景：外部媒体自动闪避）
         self._output_lock = threading.RLock()
         self._tts_output_frames = 0.0
         self._tts_playback_until = 0.0
         self._tts_clear_generation = 0
-        self._tts_pulled_samples = 0
-        self._tts_fifo = PcmFifo(
-            int(self.audio_config.OUTPUT_SAMPLE_RATE * _TTS_FIFO_MAX_S)
-        )
-        self._music_fifo = PcmFifo(
-            int(self.audio_config.OUTPUT_SAMPLE_RATE * _MUSIC_FIFO_MAX_S)
-        )
-        self._notification_fifo = PcmFifo(
-            int(self.audio_config.OUTPUT_SAMPLE_RATE * _NOTIFICATION_FIFO_MAX_S)
-        )
+        self.mixer = AudioMixer(self.audio_config.OUTPUT_SAMPLE_RATE)
         self._mix_chunk = int(self.audio_config.OUTPUT_SAMPLE_RATE * 0.02)  # 20ms
-        self._duck_hold = 0
-        self._notification_had_audio = False
-        self._notification_drain_callbacks_remaining = 0
-        self._notification_progress_callback: Callable[[int], None] | None = None
-        self._notification_drained_callback: Callable[[], None] | None = None
 
         # 监听器（线程安全）
         self._encoded_callback: Callable | None = None
@@ -232,25 +207,27 @@ class AudioCodec:
 
         try:
             audio_converted = None
-            self._tts_pulled_samples = 0
             output_rate = (
                 self.device_config.output_sample_rate
                 if self.device_config is not None
                 else self.audio_config.OUTPUT_SAMPLE_RATE
             )
             while audio_converted is None:
-                before = self._tts_pulled_samples
-                audio_data = self._pull_mixed(self._mix_chunk)
-                if audio_data is None:
+                mixed = self.mixer.pull(
+                    self._mix_chunk,
+                    flush_silence=self._tts_output_frames > 0,
+                )
+                if mixed.pcm is None:
                     break
-                pulled = self._tts_pulled_samples - before
-                if pulled:
+                if mixed.tts_samples:
                     if self._tts_output_frames <= 0:
                         self._tts_output_frames = self.converter.pending_output_samples
                     self._tts_output_frames += (
-                        pulled * output_rate / self.audio_config.OUTPUT_SAMPLE_RATE
+                        mixed.tts_samples
+                        * output_rate
+                        / self.audio_config.OUTPUT_SAMPLE_RATE
                     )
-                audio_converted = self.converter.convert_output(audio_data, frames)
+                audio_converted = self.converter.convert_output(mixed.pcm, frames)
 
             if audio_converted is None:
                 audio_converted = self.converter.drain_output_buffer(frames)
@@ -279,11 +256,11 @@ class AudioCodec:
                     - (len(audio_converted) if audio_converted is not None else 0),
                 )
 
-            # AEC far：设备实际写出的最终 PCM（TTS+音乐混合，含静音保持连续）
+            # AEC far：设备实际写出的最终 PCM（全部轨道混合，含静音保持连续）
             if self._aec is not None and self._aec.active:
                 self._aec.feed_far(outdata)
 
-            self._notify_notification_drained_after_output()
+            self.mixer.notify_output_rendered()
 
         except Exception as e:
             logger.error(f"输出回调错误: {e}", exc_info=True)
@@ -309,94 +286,13 @@ class AudioCodec:
             to_channels=self.device_config.output_channels,
         )
 
-        # 协议输出采样率可能随配置热重载变化，FIFO/混音块随之重建
+        # 协议输出采样率可能随配置热重载变化，混音器与块大小随之重建
         # （此时音频流已停止，无并发读取）
-        self._tts_fifo = PcmFifo(
-            int(self.audio_config.OUTPUT_SAMPLE_RATE * _TTS_FIFO_MAX_S)
-        )
-        self._music_fifo = PcmFifo(
-            int(self.audio_config.OUTPUT_SAMPLE_RATE * _MUSIC_FIFO_MAX_S)
-        )
-        self._notification_fifo = PcmFifo(
-            int(self.audio_config.OUTPUT_SAMPLE_RATE * _NOTIFICATION_FIFO_MAX_S)
-        )
+        self.mixer.reset(self.audio_config.OUTPUT_SAMPLE_RATE)
         self._mix_chunk = int(self.audio_config.OUTPUT_SAMPLE_RATE * 0.02)
-        self._duck_hold = 0
         self._tts_clear_generation += 1
         self._tts_output_frames = 0.0
         self._tts_playback_until = 0.0
-        self._notification_had_audio = False
-        self._notification_drain_callbacks_remaining = 0
-
-    def _pull_mixed(self, n: int) -> np.ndarray | None:
-        """输出回调线程：从语音/通知/音乐 FIFO 各取 n 样本并混音.
-
-        规则：
-        - 三路都空 → None（上层进入静音/欠载路径）
-        - TTS 或通知在场时音乐按 _MUSIC_DUCK_GAIN 闪避，并在语音
-          帧间隙保持若干块（避免闪避增益抖动）
-        """
-        tts = self._tts_fifo.pull(n)
-        if tts is not None:
-            self._tts_pulled_samples += n
-        notification, notification_samples = self._notification_fifo.pull_with_count(n)
-        music = self._music_fifo.pull(n)
-
-        if notification is not None:
-            self._notification_had_audio = True
-            self._notification_drain_callbacks_remaining = 0
-            callback = self._notification_progress_callback
-            if callback and notification_samples:
-                try:
-                    callback(notification_samples)
-                except Exception as e:
-                    logger.debug(f"通知播放进度回调失败: {e}", exc_info=True)
-        elif self._notification_had_audio:
-            self._notification_had_audio = False
-            # 当前 converter 仍可能保有上一块通知的重采样输出；等两个设备
-            # 回调后再通知完成，确保最后一块 PCM 已写给声卡。
-            self._notification_drain_callbacks_remaining = 2
-
-        if tts is None and notification is None and music is None:
-            # Flush the last resampler samples with silence while the tracked
-            # TTS tail is still in the converter. Do not count silence as TTS.
-            if self._tts_output_frames > 0:
-                return np.zeros(n, dtype=np.float32)
-            return None
-
-        if tts is not None or notification is not None:
-            self._duck_hold = _DUCK_HOLD_CHUNKS
-        elif self._duck_hold > 0:
-            self._duck_hold -= 1
-
-        voice = tts
-        if notification is not None:
-            if voice is None:
-                voice = notification
-            else:
-                voice = np.clip(voice + notification, -1.0, 1.0)
-
-        if music is None:
-            return voice
-        if voice is None:
-            if self._duck_hold > 0:
-                music *= _MUSIC_DUCK_GAIN
-            return music
-        return np.clip(voice + music * _MUSIC_DUCK_GAIN, -1.0, 1.0)
-
-    def _notify_notification_drained_after_output(self) -> None:
-        """在设备输出后报告通知队列真正耗尽。"""
-        if self._notification_drain_callbacks_remaining <= 0:
-            return
-        self._notification_drain_callbacks_remaining -= 1
-        if self._notification_drain_callbacks_remaining > 0:
-            return
-        callback = self._notification_drained_callback
-        if callback:
-            try:
-                callback()
-            except Exception as e:
-                logger.debug(f"通知播放完成回调失败: {e}", exc_info=True)
 
     def _setup_aec(self):
         """按 AEC_OPTIONS.ENABLED 创建/重建 AEC 引擎（Self far）。
@@ -503,30 +399,27 @@ class AudioCodec:
             )
             audio_float32 = self.opus_codec.decode(opus_data, frame_size)
 
-            self._tts_fifo.push(audio_float32)
+            self.mixer.push_tts(audio_float32)
 
         except Exception as e:
             logger.warning(f"音频写入失败: {e}", exc_info=True)
 
-    async def _push_with_backpressure(
-        self, fifo: PcmFifo, pcm_float32: np.ndarray, target_s: float
-    ) -> None:
-        fifo.push(pcm_float32)
-        target = int(self.audio_config.OUTPUT_SAMPLE_RATE * target_s)
-        for _ in range(100):
-            if self._is_closing or fifo.size <= target:
-                break
-            await asyncio.sleep(0.02)
+    def get_background_track(self) -> AudioTrackHandle:
+        """获取背景媒体轨道句柄（前景发声时自动闪避）."""
+        return self.mixer.get_track_handle(
+            "background", is_closing=lambda: self._is_closing
+        )
 
-    async def write_pcm_direct(self, pcm_float32: np.ndarray):
-        """写入音乐 PCM（float32，供 MusicPlayer 使用），带水位背压.
+    def get_notification_track(self) -> AudioTrackHandle:
+        """获取通知轨道句柄（与 TTS 同级前景优先级）."""
+        return self.mixer.get_track_handle(
+            "notification", is_closing=lambda: self._is_closing
+        )
 
-        写完后若音乐缓冲超过目标水位则等待回放消耗——这是音乐链路
-        唯一的节拍来源（解码器时钟在暂停后会失准，不能作为依据）。
-        背压上限 2 秒兜底退出，FIFO 容量丢最旧保证不会无限膨胀。
-        """
-        await self._push_with_backpressure(
-            self._music_fifo, pcm_float32, _MUSIC_BACKLOG_TARGET_S
+    async def write_background_pcm(self, pcm_float32: np.ndarray):
+        """写入背景轨道 PCM（float32），带水位背压."""
+        await self.mixer.push_with_backpressure(
+            "background", pcm_float32, is_closing=lambda: self._is_closing
         )
 
     def set_notification_playback_callbacks(
@@ -535,15 +428,12 @@ class AudioCodec:
         drained_callback: Callable[[], None] | None = None,
     ) -> None:
         """设置通知播放回调（由音频线程调用，回调必须自行线程安全地转发）."""
-        self._notification_progress_callback = progress_callback
-        self._notification_drained_callback = drained_callback
-        self._notification_had_audio = False
-        self._notification_drain_callbacks_remaining = 0
+        self.mixer.set_notification_callbacks(progress_callback, drained_callback)
 
     async def write_notification_pcm(self, pcm_float32: np.ndarray):
         """写入通知 PCM，并按通知队列水位提供解码背压."""
-        await self._push_with_backpressure(
-            self._notification_fifo, pcm_float32, _NOTIFICATION_BACKLOG_TARGET_S
+        await self.mixer.push_with_backpressure(
+            "notification", pcm_float32, is_closing=lambda: self._is_closing
         )
 
     async def wait_for_tts_playback(self) -> None:
@@ -558,7 +448,7 @@ class AudioCodec:
                 if generation != self._tts_clear_generation:
                     return
                 if (
-                    self._tts_fifo.size == 0
+                    self.mixer.track_size("tts") == 0
                     and self._tts_output_frames <= 0
                     and time.monotonic() >= self._tts_playback_until
                 ):
@@ -566,29 +456,26 @@ class AudioCodec:
             await asyncio.sleep(0.01)
 
     async def clear_audio_queue(self):
-        """清空 TTS 播放队列（打断/中止时用；音乐队列不受影响）."""
+        """清空 TTS 播放队列（打断/中止时用；背景/通知队列不受影响）."""
         with self._output_lock:
             self._tts_clear_generation += 1
             self._tts_output_frames = 0.0
             self._tts_playback_until = 0.0
-            self._tts_pulled_samples = 0
             self._server_opus_logged = False
             self.converter.clear_output_buffer()
-            count = self._tts_fifo.clear()
+            count = self.mixer.clear_track("tts")
         if count > 0:
             logger.info(f"清空 TTS 队列，丢弃 {count} 样本")
 
-    async def clear_music_queue(self):
-        """清空音乐播放队列（停止/跳转时用；TTS 队列不受影响）."""
-        count = self._music_fifo.clear()
+    async def clear_background_queue(self):
+        """清空背景媒体播放队列（停止/跳转时用；TTS 队列不受影响）."""
+        count = self.mixer.clear_track("background")
         if count > 0:
-            logger.info(f"清空音乐队列，丢弃 {count} 样本")
+            logger.info(f"清空背景媒体队列，丢弃 {count} 样本")
 
     async def clear_notification_queue(self):
-        """清空通知播放队列（取消通知时用；TTS/音乐不受影响）."""
-        count = self._notification_fifo.clear()
-        self._notification_had_audio = False
-        self._notification_drain_callbacks_remaining = 0
+        """清空通知播放队列（取消通知时用；TTS/背景队列不受影响）."""
+        count = self.mixer.clear_track("notification")
         if count > 0:
             logger.info(f"清空通知队列，丢弃 {count} 样本")
 
@@ -705,7 +592,7 @@ class AudioCodec:
 
             # 2. 清空队列
             await self.clear_audio_queue()
-            await self.clear_music_queue()
+            await self.clear_background_queue()
             await self.clear_notification_queue()
 
             # 3. 释放 AEC、转换器、Opus 与监听器（须在流停止后）
@@ -735,11 +622,7 @@ class AudioCodec:
                     return
 
             # 2. 清空队列（同步版本）
-            count = (
-                self._tts_fifo.clear()
-                + self._music_fifo.clear()
-                + self._notification_fifo.clear()
-            )
+            count = self.mixer.clear_all()
             if count > 0:
                 logger.debug(f"析构函数清空了 {count} 样本音频")
 

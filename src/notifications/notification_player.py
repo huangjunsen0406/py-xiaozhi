@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
 
-from src.audio_codecs.music_decoder import MusicDecoder
+from src.audio_codecs.audio_decoder import AudioDecoder
 from src.constants.constants import AudioConfig
 from src.logging import get_logger
 
@@ -79,7 +79,7 @@ class NotificationPlayer:
         self._event_bus: EventBus | None = None
         self._codec: AudioCodec | None = None
         self._playback_codec: AudioCodec | None = None
-        self._decoder: MusicDecoder | None = None
+        self._decoder: AudioDecoder | None = None
         self._queue: asyncio.Queue | None = None
         self._consumer_task: asyncio.Task | None = None
         self._drained_event: asyncio.Event | None = None
@@ -164,7 +164,7 @@ class NotificationPlayer:
             self._drained_event = asyncio.Event()
             audio_config = getattr(self._codec, "audio_config", self.audio_config)
             self._playback_sample_rate = audio_config.OUTPUT_SAMPLE_RATE
-            self._decoder = MusicDecoder(
+            self._decoder = AudioDecoder(
                 sample_rate=audio_config.OUTPUT_SAMPLE_RATE,
                 channels=audio_config.CHANNELS,
                 frame_duration=audio_config.FRAME_DURATION,
@@ -276,7 +276,7 @@ class NotificationPlayer:
         self,
         generation: int,
         codec: AudioCodec,
-        decoder: MusicDecoder,
+        decoder: AudioDecoder,
         queue: asyncio.Queue,
     ) -> None:
         success = False
