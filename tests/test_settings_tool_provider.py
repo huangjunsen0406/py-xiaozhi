@@ -168,7 +168,7 @@ async def test_real_assembly_binds_source_and_releases_provider(
     from src.utils.resource_finder import clear_path_caches
 
     monkeypatch.setenv("XIAOZHI_DISABLE_AUDIO", "1")
-    for name in ("DATA", "CACHE", "LOG", "MUSIC_CACHE", "KEYWORDS"):
+    for name in ("DATA", "CACHE", "LOG", "KEYWORDS"):
         monkeypatch.setenv(f"XIAOZHI_{name}_DIR", str(tmp_path / name.lower()))
     clear_path_caches()
     monkeypatch.setattr("src.plugins.shortcuts.create_backend", lambda loop: None)

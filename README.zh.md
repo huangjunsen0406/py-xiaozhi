@@ -84,7 +84,8 @@ py-xiaozhi 是一个轻量级、跨平台的多模态 AI 交互主控框架，�
 - **视觉多模态** — 图像识别和处理，理解图像内容
 - **智能唤醒** — 多种唤醒词激活，免手动操作（可配置）
 - **自动对话模式** — 连续对话，提升交互流畅度
-- **MCP 工具生态** — 音乐播放、摄像头、截图、应用管理、天气查询、音量控制
+- **MCP 工具与外挂生态** — 内置摄像头、截图、应用管理、天气查询、音量控制，并支持在设置页导入外部 ZIP/目录插件（音乐、电台、播客、HA 等）
+- **通用媒体底座 & 内置 AEC** — `AudioMixer` + `AudioDecoder` + 无音源 `MediaPlayer` 三层解耦，内置三端 WebRTC APM 回声消除与自动 TTS 闪避
 - **Opus 编解码** — 音频编解码和实时重采样
 - **唤醒词检测** — 基于 Sherpa-ONNX 离线识别，支持多唤醒词和拼音匹配
 - **多界面模式** — GUI（PySide6 + QML）/ TUI / GPIO，适应不同环境
@@ -137,11 +138,14 @@ py-xiaozhi/
 │   ├── core/                   # 核心基础设施（事件总线、状态管理等）
 │   ├── plugins/                # 插件系统（音频、UI、MCP、唤醒词、快捷键）
 │   ├── protocols/              # 通信协议（WebSocket / MQTT）
-│   ├── audio_codecs/           # 音频编解码
-│   ├── audio_processing/       # 唤醒词检测
+│   ├── audio_codecs/           # 音频编解码、多轨 AudioMixer、通用 AudioDecoder
+│   ├── audio_processing/       # 内置 WebRTC APM 回声消除与唤醒词检测
 │   ├── activation/             # 设备激活
-│   ├── mcp/                    # MCP 工具系统
-│   │   └── tools/              # 工具模块（music/camera/screenshot/app/weather/volume）
+│   ├── media/                  # 无音源通用 MediaPlayer 与自主 TTS Audio Focus
+│   ├── notifications/          # 服务端单向通知流式播报与字幕同步
+│   ├── mcp/                    # MCP 工具系统与外挂插件宿主
+│   │   ├── plugins/            # 外挂插件加载器、ZIP 安装器、子进程 RPC、MediaPlayerFacade
+│   │   └── tools/              # 内置工具（camera/screenshot/app/weather/volume/media）
 │   ├── ui/                     # 用户界面
 │   │   ├── gui/                # PySide6 + QML 图形界面
 │   │   ├── tui/                # Textual 全屏终端界面

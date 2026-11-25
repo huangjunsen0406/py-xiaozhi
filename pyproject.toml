@@ -32,8 +32,6 @@ dependencies = [
     "psutil>=5.9.0",
     "py-machineid>=0.6.0",
     "platformdirs>=4.0.0",
-    # 音乐/媒体
-    "mutagen>=1.47.0",
     # 中文处理
     "pypinyin>=0.51.0",
     # 剪贴板

@@ -126,7 +126,6 @@ def test_missing_portaudio_obeys_audio_startup_policy(
         "XIAOZHI_LOG_DIR",
         "XIAOZHI_CACHE_DIR",
         "XIAOZHI_KEYWORDS_DIR",
-        "XIAOZHI_MUSIC_CACHE_DIR",
     ):
         env[name] = str(tmp_path / name.lower())
     env["PYTHONDONTWRITEBYTECODE"] = "1"

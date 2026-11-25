@@ -163,7 +163,7 @@ class MemoryTransport(Protocol):
 
 @pytest.fixture
 def boundaries(monkeypatch, tmp_path):
-    for name in ("DATA", "CACHE", "LOG", "MUSIC_CACHE", "KEYWORDS"):
+    for name in ("DATA", "CACHE", "LOG", "KEYWORDS"):
         monkeypatch.setenv(f"XIAOZHI_{name}_DIR", str(tmp_path / name.lower()))
     monkeypatch.delenv("XIAOZHI_DISABLE_AUDIO", raising=False)
     from src.utils.resource_finder import clear_path_caches

@@ -81,7 +81,8 @@ py-xiaozhi is a lightweight, cross-platform multi-modal AI interaction framework
 
 - **Real-time Voice AI** — Opus codec with auto frame detection (RFC 6716 TOC parsing), async streaming, sub-20ms latency
 - **Multi-modal Vision** — Camera capture + vision-language model integration for image understanding and scene perception
-- **MCP Tool Ecosystem** — Modular JSON-RPC 2.0 tool server: music player, camera, screenshot, app management, weather, volume control
+- **MCP Tool & Plugin Ecosystem** — Modular JSON-RPC 2.0 tool server with built-in camera, screenshot, app management, weather, and volume tools; import external ZIP/folder plugins (music, radio, podcast, HA, etc.) right from Settings
+- **Decoupled Media Foundation** — Source-agnostic `MediaPlayer` over `AudioMixer` + FFmpeg `AudioDecoder` with automatic TTS audio focus and built-in cross-platform WebRTC APM echo cancellation
 - **Cross-platform Deployment** — Windows 10+ / macOS 10.15+ / Linux (x86_64 & ARM), optimized for Raspberry Pi and edge boards
 - **Multiple UI Modes** — PySide6 + QML GUI / TUI / GPIO, adapting to desktop, headless server, and embedded environments
 - **Offline Wake Word** — Sherpa-ONNX based on-device keyword spotting with custom wake word support
@@ -147,7 +148,7 @@ not a separate device state.
 
 - **Async First**: Full system asynchronous architecture, avoiding blocking operations
 - **Memory Management**: Smart caching, garbage collection
-- **Audio Optimization**: 5ms low-latency processing, queue management, streaming transmission
+- **Audio Optimization**: Low-latency streaming pipeline with multi-track `AudioMixer`, SoXR resampling, and built-in WebRTC APM AEC
 - **Concurrency Control**: Task pool management, semaphore control, thread safety
 
 ### Security Mechanisms
@@ -166,15 +167,18 @@ py-xiaozhi/
 ├── main.py                     # Application entry point
 ├── src/
 │   ├── activation/             # Device activation
-│   ├── audio_codecs/           # Audio codecs
-│   ├── audio_processing/       # Wake word detection
+│   ├── audio_codecs/           # Audio codecs, multi-track AudioMixer, FFmpeg AudioDecoder
+│   ├── audio_processing/       # Built-in WebRTC APM AEC & wake word detection
 │   ├── bootstrap/              # Application bootstrap & dependency injection
 │   ├── constants/              # Constants
 │   ├── core/                   # Core infrastructure (event bus, state management, task management, etc.)
 │   ├── logging/                # Logging subsystem
-│   ├── mcp/                    # MCP tool system
+│   ├── mcp/                    # MCP tool system & external plugin host
 │   │   ├── mcp_server.py       # MCP server
-│   │   └── tools/              # Tool modules (music/camera/screenshot/app/weather/volume)
+│   │   ├── plugins/            # External plugin loader, ZIP installer, subprocess RPC, MediaPlayerFacade
+│   │   └── tools/              # Built-in tools (camera/screenshot/app/weather/volume/media)
+│   ├── media/                  # Source-agnostic MediaPlayer & autonomous TTS Audio Focus
+│   ├── notifications/          # One-way server notification playback & subtitles
 │   ├── plugins/                # Plugin system (audio, UI, MCP, wake word, shortcuts)
 │   ├── protocols/              # Communication protocols (WebSocket/MQTT)
 │   ├── ui/                     # User interface
