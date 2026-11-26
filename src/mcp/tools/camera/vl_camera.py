@@ -5,7 +5,6 @@ VL camera implementation using Zhipu AI.
 import base64
 import json
 
-import httpx
 from openai import OpenAI
 
 from src.logging import get_logger
@@ -32,7 +31,7 @@ class VLCamera(BaseCamera):
                 "CAMERA.Local_VL_url",
                 "https://open.bigmodel.cn/api/paas/v4/chat/completions",
             ),
-            timeout=httpx.Timeout(30.0, connect=10.0),
+            timeout=30.0,
         )
         self.model = config.get_config("CAMERA.models", "glm-4v-plus")
         logger.info(f"VL Camera initialized with model: {self.model}")
