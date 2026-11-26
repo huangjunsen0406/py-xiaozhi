@@ -26,13 +26,48 @@ Rectangle {
         anchors.leftMargin: Theme.titleButtonsOnLeft ? (macButtons.width + Theme.spacingLg) : 0
         anchors.rightMargin: Theme.titleButtonsOnLeft ? 0 : (winButtons.width + Theme.spacingMd)
 
-        onPressed: {
-            // 使用系统原生拖拽 API，兼容所有平台（包括 Linux Wayland）
+        property real _dragStartX: 0
+        property real _dragStartY: 0
+        property bool _manualDragging: false
+
+        onPressed: function(mouse) {
             let win = Window.window
-            if (win) {
+            if (!win) {
+                return
+            }
+            if (Qt.platform.os === "windows") {
+                // Windows 下避开 startSystemMove() 的 Win32 模态拖拽循环，
+                // 防止与 qasync (Qt + asyncio) 事件循环重入导致界面未响应。
+                _dragStartX = mouse.x
+                _dragStartY = mouse.y
+                _manualDragging = true
+            } else {
+                // macOS / Linux（含 Wayland）继续使用系统原生拖拽 API
                 win.startSystemMove()
             }
         }
+
+        onPositionChanged: function(mouse) {
+            if (!_manualDragging || !pressed) {
+                return
+            }
+            let win = Window.window
+            if (!win) {
+                return
+            }
+            if (win.visibility === Window.Maximized) {
+                win.showNormal()
+            }
+            let dx = mouse.x - _dragStartX
+            let dy = mouse.y - _dragStartY
+            if (dx !== 0 || dy !== 0) {
+                win.x += dx
+                win.y += dy
+            }
+        }
+
+        onReleased: _manualDragging = false
+        onCanceled: _manualDragging = false
 
         onDoubleClicked: {
             let win = Window.window

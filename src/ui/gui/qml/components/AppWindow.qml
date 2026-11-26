@@ -36,8 +36,10 @@ Window {
         border.width: root.isMaximized ? 0 : 1
         border.color: Theme.border
 
-        // 使用 layer 实现圆角裁剪
-        layer.enabled: !root.isMaximized
+        // 使用 layer 实现圆角裁剪；Windows 下跳过逐帧离屏 OpacityMask FBO，
+        // 避免高频拖拽与 GIF 动画重绘时拖垮 DWM 合成器，改用轻量 clip。
+        clip: true
+        layer.enabled: !root.isMaximized && Qt.platform.os !== "windows"
         layer.effect: OpacityMask {
             maskSource: Rectangle {
                 width: container.width

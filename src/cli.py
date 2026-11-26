@@ -58,7 +58,10 @@ def _configure_environment(mode: str) -> None:
             locale.setlocale(locale.LC_ALL, ".UTF-8")
         except locale.Error:
             pass
-    os.environ.setdefault("QSG_RHI_BACKEND", "opengl")
+    # Windows 上强行使用 OpenGL + 透明无边框窗口在高频拖拽时易触发 WGL/DWM 合成卡死，
+    # 优先使用 Qt 6 原生 Direct3D 11 后端；其余平台沿用 opengl（均可由外部环境变量覆盖）。
+    default_rhi = "d3d11" if sys.platform == "win32" else "opengl"
+    os.environ.setdefault("QSG_RHI_BACKEND", default_rhi)
     # qasync and the GUI must use the same binding as our PySide6 imports.
     os.environ["QT_API"] = "pyside6"
     os.environ.setdefault("QT_QUICK_CONTROLS_STYLE", "Basic")

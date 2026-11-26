@@ -211,10 +211,20 @@ def test_gui_environment_is_configured_before_import(monkeypatch):
     cli._configure_environment("gui")
     assert os.environ["QT_API"] == "pyside6"
     assert os.environ["QT_QPA_PLATFORM"] == "wayland;xcb"
-    assert os.environ["QSG_RHI_BACKEND"] == "opengl"
+    expected_rhi = "d3d11" if sys.platform == "win32" else "opengl"
+    assert os.environ["QSG_RHI_BACKEND"] == expected_rhi
     monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
     cli._configure_environment("gui")
     assert os.environ["QT_QPA_PLATFORM"] == "offscreen"
+
+
+def test_gui_environment_defaults_to_d3d11_on_windows(monkeypatch):
+    monkeypatch.setattr(os, "environ", dict(os.environ))
+    monkeypatch.setattr(cli.locale, "setlocale", lambda *args: None)
+    monkeypatch.setattr(cli.sys, "platform", "win32")
+    monkeypatch.delenv("QSG_RHI_BACKEND", raising=False)
+    cli._configure_environment("gui")
+    assert os.environ["QSG_RHI_BACKEND"] == "d3d11"
 
 
 def test_gui_environment_preserves_backend_and_style_but_requires_pyside(monkeypatch):
