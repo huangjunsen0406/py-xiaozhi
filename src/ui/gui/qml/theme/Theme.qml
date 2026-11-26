@@ -97,7 +97,7 @@ QtObject {
 
     // ========== 字体家族 ==========
     readonly property string fontFamily: Qt.platform.os === "osx" ? "PingFang SC" : (Qt.platform.os === "windows" ? "Microsoft YaHei UI" : "sans-serif")
-    readonly property string fontFamilyMono: Qt.platform.os === "osx" ? "SF Mono" : "monospace"
+    readonly property string fontFamilyMono: Qt.platform.os === "osx" ? "Menlo" : "monospace"
 
     // ========== 平台检测 ==========
     readonly property string currentPlatform: Qt.platform.os  // "osx", "windows", "linux"
