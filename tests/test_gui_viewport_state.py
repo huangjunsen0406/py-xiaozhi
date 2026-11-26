@@ -1,11 +1,14 @@
 """GUI writes retain model signals and QML context after removing thin routing."""
 
+from types import SimpleNamespace
+
 import pytest
 
 pytest.importorskip("PySide6.QtCore")
 
 from src.core.event_bus import EventBus
 from src.core.task_manager import TaskManager
+from src.ui.gui import manager as gui_manager
 from src.ui.gui.manager import GuiViewManager
 from src.ui.gui.qml_host import QmlAppHost
 from src.ui.gui.services import EmotionService
@@ -14,14 +17,25 @@ from src.utils.config_manager import ConfigManager
 
 
 @pytest.mark.asyncio
-async def test_gui_viewport_keeps_qml_models_and_signal_updates(monkeypatch):
+@pytest.mark.parametrize(
+    ("platform", "activate_on_start"), [("win32", True), ("darwin", False)]
+)
+async def test_gui_viewport_keeps_qml_models_and_signal_updates(
+    monkeypatch, platform, activate_on_start
+):
     contexts = []
+    activation_requests = []
+    monkeypatch.setattr(gui_manager, "sys", SimpleNamespace(platform=platform))
     monkeypatch.setattr(QmlAppHost, "create_engine", lambda self: None)
     monkeypatch.setattr(
         QmlAppHost, "inject_context", lambda self, data: contexts.append(data)
     )
     monkeypatch.setattr(QmlAppHost, "load_main", lambda self: None)
-    monkeypatch.setattr(QmlAppHost, "show_root", lambda self, **kwargs: None)
+    monkeypatch.setattr(
+        QmlAppHost,
+        "show_root",
+        lambda self, *, activate: activation_requests.append(activate),
+    )
     monkeypatch.setattr(GuiViewManager, "_setup_tray", lambda self: None)
     monkeypatch.setattr(SettingsController, "ensure_model", lambda self: None)
     monkeypatch.setattr(
@@ -40,6 +54,7 @@ async def test_gui_viewport_keeps_qml_models_and_signal_updates(monkeypatch):
     model.buttonTextChanged.connect(lambda: seen.append(("button", model.buttonText)))
     try:
         await view.start()
+        assert activation_requests == [activate_on_start]
         assert contexts[0]["mainModel"] is model
         assert contexts[0]["settingsModel"] is None
         assert isinstance(contexts[0]["emotionService"], EmotionService)

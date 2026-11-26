@@ -1,5 +1,6 @@
 """GUI ViewManager：组合 QmlAppHost / 主界面 / 设置控制器，实现 ViewPort."""
 
+import sys
 from collections.abc import Callable
 
 from PySide6.QtCore import QObject, Slot
@@ -74,8 +75,8 @@ class GuiViewManager(QObject):
             }
         )
         self._host.load_main()
-        # 冷启动只显示、不抢前台，避免 macOS 把其它全屏 App 的 Space 挤掉
-        self._host.show_root(activate=False)
+        # Windows 上主动显示主窗口，避免它留在启动器后面。
+        self._host.show_root(activate=sys.platform == "win32")
         self._setup_tray()
         self.set_emotion("neutral")
         logger.info("GuiViewManager: GUI 启动完成")
