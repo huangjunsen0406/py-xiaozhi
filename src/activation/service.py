@@ -9,7 +9,11 @@ from typing import Dict, Optional, TypedDict
 from src.activation.client import ActivationHttpClient
 from src.activation.identity import DeviceIdentity
 from src.activation.ota import OtaConfigClient
-from src.activation.side_effects import announce_code, apply_code_side_effects
+from src.activation.side_effects import (
+    announce_code,
+    apply_code_side_effects,
+    stop_code_announcement,
+)
 from src.logging import get_logger
 from src.utils.config_manager import ConfigManager
 
@@ -139,6 +143,7 @@ class ActivationService:
             self.logger.info("激活流程被取消")
             return False
         finally:
+            stop_code_announcement()
             self._activation_task = None
 
     async def _refresh_ota_after_activation(self) -> None:

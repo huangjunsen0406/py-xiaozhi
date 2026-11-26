@@ -33,9 +33,19 @@ def apply_code_side_effects(code: str, message: Optional[str] = None) -> None:
 
 
 def announce_code(code: str) -> None:
-    """仅播报（轮询重试时用）."""
+    """仅播报（轮询重试时用，不打断正在进行的播报）."""
     if not code:
         return
     from src.utils.activation_announcer import announce_activation_code
 
-    announce_activation_code(code, locale="zh-CN")
+    announce_activation_code(code, locale="zh-CN", interrupt=False)
+
+
+def stop_code_announcement() -> None:
+    """停止正在进行的激活验证码播报."""
+    try:
+        from src.utils.activation_announcer import stop_activation_announcement
+
+        stop_activation_announcement()
+    except Exception as e:
+        logger.debug(f"停止验证码播报失败: {e}")
