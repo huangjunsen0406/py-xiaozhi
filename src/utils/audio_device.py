@@ -94,9 +94,15 @@ class AudioDeviceManager:
             if not output_info:
                 raise RuntimeError("无法找到可用的输出设备")
 
-        # 3. 输入固定单声道（协议要求 + 避免阵列驱动延迟），输出保持设备声道数
+        # 3. 输入固定单声道（协议要求 + 避免阵列驱动延迟），输出限制在 1~2 声道
+        #    （Linux ALSA/Pulse/PipeWire 默认虚拟设备常上报 max_output_channels=128）
         input_channels = 1
-        output_channels = output_info["channels"]
+        raw_output_channels = int(output_info.get("channels") or 1)
+        output_channels = min(max(raw_output_channels, 1), 2)
+        if raw_output_channels > 2:
+            logger.info(
+                f"输出设备上报 {raw_output_channels} 声道，限制为 {output_channels} 声道输出"
+            )
 
         device_input_sample_rate = input_info["sample_rate"]
         device_output_sample_rate = output_info["sample_rate"]
@@ -114,6 +120,7 @@ class AudioDeviceManager:
         if (
             input_device_name != input_info["name"]
             or output_device_name != output_info["name"]
+            or audio_config.get("output_channels") != output_channels
         ):
             saved = self.config.update_configs(
                 {
