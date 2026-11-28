@@ -4,7 +4,7 @@
 block_cipher = None
 
 a = Analysis(
-    ['/Users/junsen/Desktop/workspace/py-xiaozhi/main.py'],
+    ['main.py'],
     pathex=[],
     binaries=[],
     datas=[('models', 'models'), ('scripts', 'scripts'), ('src', 'src'), ('libs', 'libs'), ('assets', 'assets')],
@@ -35,22 +35,23 @@ exe = EXE(
     runtime_tmpdir=None,
     console=False,
     disable_windowed_traceback=False,
-    icon='assets/icon.png',
+    entitlements_file='entitlements.plist',
+    icon='assets/icon.icns',
 )
-
-coll = COLLECT(exe,
-               a.binaries,
-               a.zipfiles,
-               a.datas,
-               strip=False,
-               upx=True,
-               upx_exclude=[],
-               name='py-xiaozhi')
-
+coll = COLLECT(
+    exe,
+    a.binaries,
+    a.zipfiles,
+    a.datas,
+    strip=False,
+    upx=True,
+    upx_exclude=[],
+    name='py-xiaozhi',
+)
 app = BUNDLE(
     coll,
     name='py-xiaozhi.app',
-    icon='assets/icon.png',
+    icon='assets/icon.icns',
     bundle_identifier='com.py-xiaozhi.app',
-    info_plist={'CFBundleName': 'py-xiaozhi', 'CFBundleDisplayName': '小智', 'CFBundleExecutable': 'py-xiaozhi', 'CFBundlePackageType': 'APPL', 'CFBundleVersion': '2.0.4', 'CFBundleShortVersionString': '2.0.4', 'CFBundleIdentifier': 'com.py-xiaozhi.app', 'NSPrincipalClass': 'NSApplication', 'CFBundleDevelopmentRegion': 'en', 'LSHasLocalizedDisplayName': True, 'NSHighResolutionCapable': True, 'LSMinimumSystemVersion': '10.13', 'LSApplicationCategoryType': 'public.app-category.productivity', 'NSHumanReadableCopyright': '© 2024 Company. All rights reserved.', 'LSUIElement': False, 'NSSupportsAutomaticGraphicsSwitching': True, 'NSMicrophoneUsageDescription': '此应用需要访问麦克风以实现录音功能', 'NSCameraUsageDescription': '此应用需要访问摄像头以实现拍照或视频功能', 'NSSpeechRecognitionUsageDescription': '此应用需要使用语音识别功能以理解语音指令'},
+    info_plist={'CFBundleName': 'py-xiaozhi', 'CFBundleDisplayName': '小智', 'CFBundleExecutable': 'py-xiaozhi', 'CFBundlePackageType': 'APPL', 'CFBundleVersion': '2.2.2', 'CFBundleShortVersionString': '2.2.2', 'CFBundleIdentifier': 'com.py-xiaozhi.app', 'NSPrincipalClass': 'NSApplication', 'CFBundleDevelopmentRegion': 'en', 'LSHasLocalizedDisplayName': True, 'NSHighResolutionCapable': True, 'LSMinimumSystemVersion': '10.13', 'LSApplicationCategoryType': 'public.app-category.productivity', 'NSHumanReadableCopyright': '© 2024 Company. All rights reserved.', 'LSUIElement': False, 'NSSupportsAutomaticGraphicsSwitching': True, 'NSMicrophoneUsageDescription': '此应用需要访问麦克风以实现录音功能', 'NSCameraUsageDescription': '此应用需要访问摄像头以实现拍照或视频功能', 'NSSpeechRecognitionUsageDescription': '此应用需要使用语音识别功能以理解语音指令'},
 )
